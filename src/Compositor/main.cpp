@@ -60,6 +60,7 @@ struct ClosingSurfaceVisual {
 
 struct CompositorConfig {
   flux::Color backgroundColor{0.20f, 0.50f, 0.95f, 1.0f};
+  std::optional<flux::Color> backgroundGradientEnd;
   bool animationsEnabled = true;
   std::vector<flux::compositor::WaylandServer::ShortcutBinding> shortcutBindings;
 };
@@ -127,6 +128,20 @@ std::optional<flux::Color> parseHexColor(std::string_view value) {
       static_cast<float>(*blue) / 255.f,
       1.f,
   };
+}
+
+std::optional<std::pair<flux::Color, flux::Color>> parseLinearGradient(std::string_view value) {
+  std::string text = unquote(value);
+  std::replace(text.begin(), text.end(), ',', ' ');
+  std::size_t const split = text.find_first_of(" \t");
+  if (split == std::string::npos) return std::nullopt;
+  std::string first = trim(std::string_view(text).substr(0, split));
+  std::string second = trim(std::string_view(text).substr(split + 1u));
+  if (first.empty() || second.empty()) return std::nullopt;
+  auto from = parseHexColor(first);
+  auto to = parseHexColor(second);
+  if (!from || !to) return std::nullopt;
+  return std::pair{*from, *to};
 }
 
 std::optional<bool> parseBool(std::string_view value) {
@@ -292,9 +307,20 @@ CompositorConfig loadConfig() {
     } else if (key == "background" || key == "background_color") {
       if (auto color = parseHexColor(value)) {
         config.backgroundColor = *color;
+        config.backgroundGradientEnd.reset();
       } else {
         std::fprintf(stderr,
                      "flux-compositor: ignoring invalid background color in %s:%u\n",
+                     path->c_str(),
+                     lineNumber);
+      }
+    } else if (key == "background_gradient") {
+      if (auto gradient = parseLinearGradient(value)) {
+        config.backgroundColor = gradient->first;
+        config.backgroundGradientEnd = gradient->second;
+      } else {
+        std::fprintf(stderr,
+                     "flux-compositor: ignoring invalid background gradient in %s:%u\n",
                      path->c_str(),
                      lineNumber);
       }
@@ -583,6 +609,10 @@ int main(int, char**) {
     CompositorConfig const config = loadConfig();
     wayland.setShortcutBindings(config.shortcutBindings);
     flux::Color const clearColor = config.backgroundColor;
+    flux::FillStyle const backgroundFill =
+        config.backgroundGradientEnd
+            ? flux::FillStyle::linearGradient(config.backgroundColor, *config.backgroundGradientEnd, {0.f, 0.f}, {1.f, 1.f})
+            : flux::FillStyle::solid(config.backgroundColor);
     std::unordered_map<std::uint64_t, CachedClientImage> clientImages;
     std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
     std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
@@ -605,6 +635,13 @@ int main(int, char**) {
 
       canvas->beginFrame();
       canvas->clear(clearColor);
+      if (config.backgroundGradientEnd) {
+        canvas->drawRect(flux::Rect::sharp(0.f, 0.f, static_cast<float>(output.width()), static_cast<float>(output.height())),
+                         flux::CornerRadius{0.f},
+                         backgroundFill,
+                         flux::StrokeStyle::none(),
+                         flux::ShadowStyle::none());
+      }
       auto committedSurfaces = wayland.committedSurfaces();
       std::unordered_set<std::uint64_t> liveSurfaceIds;
       liveSurfaceIds.reserve(committedSurfaces.size());
