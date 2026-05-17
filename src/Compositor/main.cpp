@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <csignal>
 #include <cctype>
 #include <cstdio>
@@ -65,6 +66,7 @@ struct CompositorConfig {
   std::optional<std::string> wallpaperPath;
   flux::ImageFillMode wallpaperMode = flux::ImageFillMode::Cover;
   bool animationsEnabled = true;
+  bool hardwareCursorEnabled = true;
   std::vector<flux::compositor::WaylandServer::ShortcutBinding> shortcutBindings;
 };
 
@@ -367,6 +369,15 @@ CompositorConfig loadConfig() {
                      path->c_str(),
                      lineNumber);
       }
+    } else if (key == "hardware_cursor") {
+      if (auto enabled = parseBool(value)) {
+        config.hardwareCursorEnabled = *enabled;
+      } else {
+        std::fprintf(stderr,
+                     "flux-compositor: ignoring invalid hardware_cursor value in %s:%u\n",
+                     path->c_str(),
+                     lineNumber);
+      }
     }
   }
   std::fprintf(stderr, "flux-compositor: loaded config %s\n", path->c_str());
@@ -519,6 +530,45 @@ void drawArrowCursor(flux::Canvas& canvas, float cursorX, float cursorY) {
   canvas.drawPath(cursor,
                   flux::FillStyle::solid(flux::Colors::white),
                   flux::StrokeStyle::solid(flux::Colors::black, 1.f));
+}
+
+std::uint32_t premulArgb(std::uint8_t a, std::uint8_t r, std::uint8_t g, std::uint8_t b) {
+  auto premul = [a](std::uint8_t c) {
+    return static_cast<std::uint8_t>((static_cast<unsigned int>(c) * static_cast<unsigned int>(a)) / 255u);
+  };
+  return (static_cast<std::uint32_t>(a) << 24u) |
+         (static_cast<std::uint32_t>(premul(r)) << 16u) |
+         (static_cast<std::uint32_t>(premul(g)) << 8u) |
+         static_cast<std::uint32_t>(premul(b));
+}
+
+std::vector<std::uint32_t> makeHardwareArrowCursor(std::uint32_t width, std::uint32_t height) {
+  std::vector<std::uint32_t> pixels(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0u);
+  std::uint32_t const black = premulArgb(255, 0, 0, 0);
+  std::uint32_t const white = premulArgb(255, 255, 255, 255);
+  int const cursorH = std::min<int>(static_cast<int>(height), 28);
+  int const cursorW = std::min<int>(static_cast<int>(width), 20);
+  auto put = [&](int x, int y, std::uint32_t color) {
+    if (x >= 0 && y >= 0 && x < static_cast<int>(width) && y < static_cast<int>(height)) {
+      pixels[static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x)] = color;
+    }
+  };
+  for (int y = 0; y < cursorH; ++y) {
+    int right = std::min(y / 2 + 2, cursorW - 1);
+    for (int x = 0; x <= right; ++x) put(x, y, white);
+  }
+  for (int y = 0; y < cursorH; ++y) {
+    int right = std::min(y / 2 + 2, cursorW - 1);
+    put(0, y, black);
+    put(right, y, black);
+  }
+  for (int x = 0; x < std::min(cursorW, 8); ++x) put(x, cursorH - 1, black);
+  for (int y = 13; y < std::min<int>(cursorH, 26); ++y) {
+    for (int x = 7; x < 12; ++x) put(x, y, white);
+    put(7, y, black);
+    put(12, y, black);
+  }
+  return pixels;
 }
 
 void drawLineCursor(flux::Canvas& canvas, flux::Point from, flux::Point to, float width = 2.f) {
@@ -694,6 +744,17 @@ int main(int, char**) {
     std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
     std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
     CachedClientImage cursorImage;
+    bool hardwareArrowCursor = false;
+    std::uint32_t const hardwareCursorWidth = output.cursorWidth();
+    std::uint32_t const hardwareCursorHeight = output.cursorHeight();
+    std::vector<std::uint32_t> hardwareCursorPixels;
+    if (config.hardwareCursorEnabled && hardwareCursorWidth > 0 && hardwareCursorHeight > 0) {
+      hardwareCursorPixels = makeHardwareArrowCursor(hardwareCursorWidth, hardwareCursorHeight);
+      hardwareArrowCursor = output.setCursorImage(hardwareCursorPixels, hardwareCursorWidth, hardwareCursorHeight);
+      if (!hardwareArrowCursor) {
+        std::fprintf(stderr, "flux-compositor: hardware cursor unavailable; using software cursor\n");
+      }
+    }
     while (gRunning.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
       device->pollEvents(0);
       wayland.dispatch();
@@ -913,6 +974,7 @@ int main(int, char**) {
                          flux::ShadowStyle::none());
       }
       if (auto cursorSurface = wayland.cursorSurface()) {
+        if (hardwareArrowCursor) output.hideCursor();
         updateCachedImage(wayland, *canvas, *cursorSurface, cursorImage);
         if (cursorImage.image) {
           float const cursorSourceWidth = cursorSurface->sourceWidth > 0.f
@@ -935,7 +997,17 @@ int main(int, char**) {
         cursorImage = {};
         float const cursorX = wayland.pointerX();
         float const cursorY = wayland.pointerY();
-        drawFallbackCursor(*canvas, wayland.cursorShape(), cursorX, cursorY);
+        if (hardwareArrowCursor && wayland.cursorShape() == flux::compositor::CursorShape::Arrow) {
+          std::int32_t const cursorXi = static_cast<std::int32_t>(std::lround(cursorX));
+          std::int32_t const cursorYi = static_cast<std::int32_t>(std::lround(cursorY));
+          if (!output.moveCursor(cursorXi, cursorYi)) {
+            (void)output.setCursorImage(hardwareCursorPixels, hardwareCursorWidth, hardwareCursorHeight);
+            (void)output.moveCursor(cursorXi, cursorYi);
+          }
+        } else {
+          if (hardwareArrowCursor) output.hideCursor();
+          drawFallbackCursor(*canvas, wayland.cursorShape(), cursorX, cursorY);
+        }
       }
       for (auto it = clientImages.begin(); it != clientImages.end();) {
         if (liveSurfaceIds.contains(it->first)) {
@@ -955,6 +1027,7 @@ int main(int, char**) {
       wayland.sendFrameCallbacks(monotonicMilliseconds());
     }
 
+    output.hideCursor();
     return 0;
   } catch (std::exception const& e) {
     std::fprintf(stderr, "flux-compositor: %s\n", e.what());

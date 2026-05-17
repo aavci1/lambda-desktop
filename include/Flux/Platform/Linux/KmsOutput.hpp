@@ -86,12 +86,21 @@ public:
   [[nodiscard]] std::uint32_t width() const noexcept;
   [[nodiscard]] std::uint32_t height() const noexcept;
   [[nodiscard]] std::uint32_t refreshRateMilliHz() const noexcept;
+  [[nodiscard]] std::uint32_t cursorWidth() const noexcept;
+  [[nodiscard]] std::uint32_t cursorHeight() const noexcept;
 
   [[nodiscard]] VkSurfaceKHR createVulkanSurface(VkInstance instance) const;
 
   /// Lightweight vblank pacing approximation used by phase-1 compositor code.
   /// The KMS Window path still uses its existing frame scheduling.
   void waitForVblank() const;
+  [[nodiscard]] bool setCursorImage(std::span<std::uint32_t const> premultipliedArgbPixels,
+                                    std::uint32_t width,
+                                    std::uint32_t height,
+                                    std::int32_t hotspotX = 0,
+                                    std::int32_t hotspotY = 0) const;
+  [[nodiscard]] bool moveCursor(std::int32_t x, std::int32_t y) const;
+  void hideCursor() const;
 
 private:
   class Impl;
