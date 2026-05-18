@@ -1,7 +1,5 @@
-#include <Flux/Core/Color.hpp>
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Graphics/Image.hpp>
 #include <Flux/Graphics/VulkanContext.hpp>
 #include <Flux/Platform/Linux/KmsOutput.hpp>
 
@@ -22,16 +20,12 @@
 #include <cmath>
 #include <csignal>
 #include <cstdio>
-#include <cstdlib>
 #include <exception>
 #include <memory>
-#include <optional>
-#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-#include <unistd.h>
 #include <vulkan/vulkan.h>
 
 namespace {
