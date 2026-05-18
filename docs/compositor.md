@@ -478,7 +478,7 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 - `wl_pointer`, `wl_keyboard`, `wl_touch` implementations with focus tracking and event dispatch. Pointer and keyboard are started; touch is still stubbed.
 - Current manual test setup needs read access to `/dev/input/event*`, for example `sudo setfacl -m u:$(id -un):rw /dev/input/event*`. This is a development checkpoint; proper seat/session input-device brokering is still pending.
 - libxkbcommon for keyboard layout handling (default: US layout; configuration deferred).
-- Cursor rendering: the compositor draws the cursor at the pointer position. Hardware cursor planes are a phase-5 optimization.
+- Cursor rendering: the compositor draws client-provided cursor surfaces and system-theme cursor-shape cursors at the pointer position. Hardware cursor planes are used when the cursor image fits the KMS cursor plane.
 - Multiple xdg_toplevel windows in z-order.
 - Click-to-focus.
 - Drag title bar to move window.
@@ -507,11 +507,9 @@ For the compositor, the concrete type could be different — call it `flux_compo
 
 **No framework change is required for this**; the abstraction is already in place. This is a check that the existing design composes for the compositor's needs.
 
-**2. Cursor preference protocol.** Flux's existing `Cursor` enum (in `Flux/UI/Cursor.hpp`) is fine for the compositor's chrome. Clients communicate their cursor preference via `wl_pointer.set_cursor` which carries a buffer; the compositor renders that buffer at the pointer position. This means **a client's cursor is itself a small image** that needs to be importable as a Flux Image — same path as DMABUF import (phase 2) or SHM.
+**2. Cursor preference protocol.** Flux's existing `Cursor` enum (in `Flux/UI/Cursor.hpp`) maps to compositor-side `CursorShape` values. Clients can either send `wl_pointer.set_cursor` with a cursor surface or use `wp_cursor_shape_v1`. The compositor snapshots SHM cursor surfaces through the same committed-surface path as normal SHM buffers and uses Xcursor theme images for compositor-owned cursor shapes. No new Flux image API was required.
 
-If the existing `Image::fromExternalVulkan` is sufficient for cursor buffers from SHM and DMABUF, nothing new is needed. SHM-backed cursors (the common case) need an `Image::fromSharedMemory(...)` or similar; this might be a new factory on `Image`. **TODO at implementation time:** decide whether to add `Image::fromSharedMemory` or to copy SHM buffers into a Flux-managed image at the boundary.
-
-Metal parity: SHM-backed images don't have a Mac analog (Mac apps don't use SHM). If a `fromSharedMemory` API is added, it's Linux-only.
+Metal parity: none required. This is Linux compositor protocol handling and KMS cursor-plane upload, not a cross-platform Flux UI feature.
 
 **3. Frame callbacks.** Wayland clients need `wl_surface.frame` callbacks to pace their rendering. The compositor sends these after each successful presentation. This is a Wayland protocol concern, not a framework concern — but it touches the integration with Flux's animation clock. The compositor receives "I presented this frame, you can fire callbacks for surfaces that were in it" from somewhere; that signal needs to come from the existing render path. Probably just calling a callback after `RenderTarget::endFrame` returns.
 
@@ -539,8 +537,8 @@ Window management state is held in the compositor, not in Wayland. Wayland tells
 - ✓ Snap-to-half works from Super+Left/Super+Right and dragging from the titlebar restores the previous size without losing the cursor/titlebar grab.
 - ✓ Double-clicking the titlebar maximizes/restores the window.
 - ✓ Super+Q closes the focused window; the compositor close button sends xdg_toplevel close on click release.
-- ✗ xdg-popup-based menus (right-click in supported clients) appear and dismiss correctly. Deferred after the experimental popup demo froze the test laptop.
-- ✗ A non-trivial third-party client works: `foot` (the terminal). It should be usable: open, type, close, focus interactions.
+- ◐ xdg-popup-based menus appear and dismiss correctly. The smoke demo creates, renders, repositions, outside-click-dismisses, and Escape-dismisses popups without an input grab; full popup input-grab semantics and broader real-app menu validation remain pending.
+- ◐ A non-trivial third-party client works: `foot` launches and basic terminal interaction works, including `Ctrl+C` routing to the terminal. Right-click menu behavior still needs broader validation.
 
 ### 6.7 LOC estimate
 
@@ -671,7 +669,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 - ◐ Window animations feel smooth (60+ FPS during animations, no jank). Initial open animation, close fade-out, server-driven snap/maximize geometry animation, snap preview overlay, and live resize stabilization are implemented; broader animation polish remains pending.
 - ◐ Configuration via the config file works for keybindings and basic preferences. Background color/gradient/wallpaper, animation-toggle parsing, compositor keybinding overrides, and hot reload are implemented.
 - ◐ Hardware cursor works on the test hardware (AMD Vega supports cursor planes). Themed compositor cursors and compatible client-provided cursor surfaces use the KMS cursor plane; cursor surfaces that require compositor scaling still use the software path. Built-in compositor cursor artwork has been removed.
-- ✗ User documentation explains how to build, install, configure, and use the compositor.
+- ◐ User documentation explains how to build, configure, use, and test the compositor. Install/session-manager packaging docs remain pending.
 - ✗ The compositor can be used as the primary desktop on the CachyOS development box.
 
 ### 8.5 LOC estimate
@@ -766,7 +764,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_subcompositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, basic subsurface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, double-click maximize/restore, shortcuts, title text, close-on-click-release, and non-grabbing xdg-popup rendering/dismissal are implemented with a popup smoke demo. Popup input grabs remain deferred. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed with smoke demos where useful. Current Wayland globals, including core surfaces and xdg-shell/decoration, live in `src/Compositor/Wayland/Globals/`; window/input-management lives in `src/Compositor/Window/WindowManager.cpp`; server lifecycle, snapshots, frame scheduling, and destroy cleanup live in dedicated `src/Compositor/Wayland/` files. |
-| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme with no built-in cursor artwork, compatible cursor images use a KMS cursor plane, and frame pacing waits for DRM vblank when available; adaptive sync/triple buffering and docs remain pending. |
+| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme with no built-in cursor artwork, compatible cursor images use a KMS cursor plane, frame pacing waits for DRM vblank when available, and user/testing docs exist; adaptive sync/triple buffering and install/session docs remain pending. |
 
 ### 12.1 Framework changes log
 
@@ -805,17 +803,16 @@ Updated each time a Flux change lands in service of compositor work:
 Tracked as work proceeds. Removed when answered.
 
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
-- Phase 3: What is the safest way to reintroduce xdg_popup support after the first experimental popup demo froze the test laptop?
 - Phase 4: `wp_presentation_time` currently uses a compositor-sampled `CLOCK_MONOTONIC` timestamp after `canvas->present()`. Hardware-derived presentation timestamps and refresh counters should be surfaced from the render/output path when video/game smoothness work needs that precision.
 - Phase 5: Does multi-output land in v1 or post-v1?
 
 ### 12.3 Remaining implementation work
 
 - Real-app validation: continue testing `foot` and add GTK/Qt/browser coverage when those apps are available.
-- Popup hardening: full popup input-grab semantics and real-app menu behavior remain pending.
+- Popup hardening: full popup input-grab semantics and broader real-app menu behavior remain pending; non-grabbing popup placement is now deterministic unit-tested.
 - Presentation timing: replace the initial `wp_presentation_time` feedback with hardware-derived timestamps, refresh counters, and sync-output association.
 - Frame pacing: adaptive sync and triple-buffering remain pending.
 - Idle behavior: `zwp_idle_inhibit_manager_v1` tracks inhibitors, but actual idle blanking is not implemented.
 - Input/session polish: development still uses manual `/dev/input/event*` ACLs; proper seat/session brokering is still pending.
 - Multi-output: still undecided for v1 versus post-v1.
-- User documentation: build, install, configuration, and daily-use docs still need to be written.
+- User documentation: install/session-manager packaging docs still need to be written.
