@@ -40,11 +40,13 @@ std::uint32_t monotonicMilliseconds() {
 } // namespace
 
 int main(int, char**) {
-  std::signal(SIGINT, onSignal);
   std::signal(SIGTERM, onSignal);
 
   try {
     auto device = flux::platform::KmsDevice::open();
+    // Ctrl+C belongs to the focused Wayland client. The compositor exits via
+    // SIGTERM or its configured terminate shortcut.
+    std::signal(SIGINT, SIG_IGN);
     auto outputs = device->outputs();
     if (outputs.empty()) {
       std::fprintf(stderr, "flux-compositor: no connected KMS outputs\n");

@@ -320,7 +320,7 @@ Around 50 LOC including the framework change usage. Most of phase 1's work is in
 
 - ✗ `flux-compositor` binary builds clean on CachyOS.
 - ✓ Running it from TTY1 turns the screen blue.
-- ✓ Ctrl+C exits cleanly; TTY returns.
+- ✓ The compositor exits cleanly through SIGTERM or its configured terminate shortcut; Ctrl+C is reserved for focused Wayland clients.
 - ✗ CPU usage is low when content is static.
 - ✗ No kernel errors in `journalctl -k` during a typical run.
 - ✗ `kill -9` from TTY2 doesn't require a reboot — DRM master is released, TTY returns.
@@ -762,7 +762,7 @@ This section is updated as work progresses. Entries record completion of each ph
 
 | Phase | Status | Started | Completed | Notes |
 |-------|--------|---------|-----------|-------|
-| Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and Ctrl+C verified on hardware; kernel-log, CPU-idle, and kill-path checks pending. |
+| Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and explicit compositor termination are verified on hardware; Ctrl+C is ignored by the compositor so terminal clients can use it, while kernel-log, CPU-idle, and kill-path checks remain pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_subcompositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, basic subsurface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, double-click maximize/restore, shortcuts, title text, close-on-click-release, and non-grabbing xdg-popup rendering/dismissal are implemented with a popup smoke demo. Popup input grabs remain deferred. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed with smoke demos where useful. |
