@@ -15,6 +15,8 @@
 namespace flux::compositor {
 
 void WaylandServer::Impl::destroySurface(Surface* surface) {
+  bool const activatePrevious = keyboardFocus_ == surface && surfaceIsXdgToplevel(surface);
+  removeSurfaceFromFocusOrder(this, surface);
   if (pointerFocus_ == surface) pointerFocus_ = nullptr;
   if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
   if (primarySelectionSource_ &&
@@ -91,6 +93,7 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   }
   surface->frameCallbacks.clear();
   eraseResource(surfaces_, surface);
+  if (activatePrevious) activateMostRecentToplevel(this, 0);
 }
 
 void WaylandServer::Impl::destroySubsurface(Subsurface* subsurface) {
@@ -110,13 +113,19 @@ void WaylandServer::Impl::destroyXdgPositioner(XdgPositioner* positioner) {
 }
 
 void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
-  if (toplevel && toplevel->xdgSurface && surfaceIsXdgToplevel(toplevel->xdgSurface->surface)) {
-    toplevel->xdgSurface->surface->role = SurfaceRole::None;
+  Surface* surface = toplevel && toplevel->xdgSurface ? toplevel->xdgSurface->surface : nullptr;
+  bool const activatePrevious = keyboardFocus_ == surface && surfaceIsXdgToplevel(surface);
+  if (surfaceIsXdgToplevel(surface)) {
+    removeSurfaceFromFocusOrder(this, surface);
+    if (pointerFocus_ == surface) pointerFocus_ = nullptr;
+    if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
+    surface->role = SurfaceRole::None;
   }
   while (auto* decoration = decorationFor(this, toplevel)) {
     wl_resource_destroy(decoration->resource);
   }
   eraseResource(toplevels_, toplevel);
+  if (activatePrevious) activateMostRecentToplevel(this, 0);
 }
 
 void WaylandServer::Impl::destroyXdgPopup(XdgPopup* popup) {

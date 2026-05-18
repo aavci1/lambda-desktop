@@ -143,6 +143,7 @@ struct WaylandServer::Impl {
   std::string displayNameFile_;
   WaylandOutputInfo output_;
   std::vector<std::unique_ptr<Surface>> surfaces_;
+  std::vector<Surface*> focusOrder_;
   std::vector<std::unique_ptr<Subsurface>> subsurfaces_;
   std::vector<std::unique_ptr<XdgPositioner>> xdgPositioners_;
   std::vector<std::unique_ptr<XdgSurface>> xdgSurfaces_;
@@ -460,6 +461,9 @@ void setConfiguredFrameSize(WaylandServer::Impl::Surface* surface, std::int32_t 
 void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* surface);
 void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface);
 void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface);
+void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs);
+void removeSurfaceFromFocusOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
+void activateMostRecentToplevel(WaylandServer::Impl* server, std::uint32_t timeMs);
 WaylandServer::Impl::ToplevelDecoration* decorationFor(WaylandServer::Impl* server,
                                                        WaylandServer::Impl::XdgToplevel* toplevel);
 WaylandServer::Impl::XdgToplevel* toplevelForSurface(WaylandServer::Impl* server,

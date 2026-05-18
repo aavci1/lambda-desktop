@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <ctime>
 #include <memory>
 #include <optional>
 #include <wayland-server-core.h>
@@ -128,6 +129,13 @@ WindowGeometry initialToplevelPlacement(WaylandServer::Impl* server) {
       .width = 0,
       .height = 0,
   };
+}
+
+std::uint32_t monotonicMilliseconds() {
+  timespec now{};
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  return static_cast<std::uint32_t>(static_cast<std::uint64_t>(now.tv_sec) * 1000ull +
+                                    static_cast<std::uint64_t>(now.tv_nsec) / 1'000'000ull);
 }
 
 void sendDecorationConfigure(WaylandServer::Impl::ToplevelDecoration* decoration) {
@@ -330,17 +338,17 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
   auto toplevel = std::make_unique<WaylandServer::Impl::XdgToplevel>();
   toplevel->server = xdgSurface->server;
   toplevel->xdgSurface = xdgSurface;
-  xdgSurface->surface->role = SurfaceRole::XdgToplevel;
-  if (xdgSurface->server->cursorSurface_ == xdgSurface->surface) xdgSurface->server->cursorSurface_ = nullptr;
-  WindowGeometry const placement = initialToplevelPlacement(xdgSurface->server);
-  xdgSurface->surface->windowX = placement.x;
-  xdgSurface->surface->windowY = placement.y;
   wl_resource* toplevelResource = wl_resource_create(client, &xdg_toplevel_interface,
                                                      wl_resource_get_version(resource), id);
   if (!toplevelResource) {
     wl_client_post_no_memory(client);
     return;
   }
+  xdgSurface->surface->role = SurfaceRole::XdgToplevel;
+  if (xdgSurface->server->cursorSurface_ == xdgSurface->surface) xdgSurface->server->cursorSurface_ = nullptr;
+  WindowGeometry const placement = initialToplevelPlacement(xdgSurface->server);
+  xdgSurface->surface->windowX = placement.x;
+  xdgSurface->surface->windowY = placement.y;
   toplevel->resource = toplevelResource;
   auto* raw = toplevel.get();
   xdgSurface->server->toplevels_.push_back(std::move(toplevel));
@@ -350,6 +358,7 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
                                  destroyResourceCallback<WaylandServer::Impl::XdgToplevel,
                                                          WaylandServer::Impl,
                                                          &WaylandServer::Impl::destroyXdgToplevel>);
+  focusSurface(xdgSurface->server, xdgSurface->surface, monotonicMilliseconds());
   sendToplevelConfigureInternal(xdgSurface->server, raw, 0, 0, false);
 }
 

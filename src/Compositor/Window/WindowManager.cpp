@@ -341,6 +341,35 @@ void raiseSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
   server->surfaces_.push_back(std::move(item));
 }
 
+void removeSurfaceFromFocusOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
+  if (!server || !surface) return;
+  server->focusOrder_.erase(std::remove(server->focusOrder_.begin(), server->focusOrder_.end(), surface),
+                            server->focusOrder_.end());
+}
+
+void noteFocusedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
+  if (!server || !isManagedToplevel(surface)) return;
+  removeSurfaceFromFocusOrder(server, surface);
+  server->focusOrder_.push_back(surface);
+}
+
+WaylandServer::Impl::Surface* mostRecentToplevel(WaylandServer::Impl* server) {
+  if (!server) return nullptr;
+  for (auto it = server->focusOrder_.rbegin(); it != server->focusOrder_.rend(); ++it) {
+    if (isManagedToplevel(*it)) return *it;
+  }
+  for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
+    if (isManagedToplevel(it->get())) return it->get();
+  }
+  return nullptr;
+}
+
+void activateMostRecentToplevel(WaylandServer::Impl* server, std::uint32_t timeMs) {
+  WaylandServer::Impl::Surface* target = mostRecentToplevel(server);
+  if (!target) return;
+  focusSurface(server, target, timeMs);
+}
+
 bool resourceBelongsToSurfaceClient(wl_resource* resource, WaylandServer::Impl::Surface const* surface) {
   return resource && surface && surface->resource &&
          wl_resource_get_client(resource) == wl_resource_get_client(surface->resource);
@@ -427,11 +456,15 @@ bool dismissPopup(WaylandServer::Impl::XdgPopup* popup) {
                                                    ? popup->xdgSurface->surface->id
                                                    : 0));
   popup->dismissed = true;
+  bool const restoreToplevelFocus = popup->xdgSurface &&
+                                    popup->xdgSurface->surface &&
+                                    popup->server->keyboardFocus_ == popup->xdgSurface->surface;
   if (popup->xdgSurface && popup->xdgSurface->surface) {
     if (popup->server->pointerFocus_ == popup->xdgSurface->surface) popup->server->pointerFocus_ = nullptr;
     if (popup->server->keyboardFocus_ == popup->xdgSurface->surface) popup->server->keyboardFocus_ = nullptr;
   }
   if (popup->resource) xdg_popup_send_popup_done(popup->resource);
+  if (restoreToplevelFocus) activateMostRecentToplevel(popup->server, 0);
   popup->server->flushClients();
   return true;
 }
@@ -459,6 +492,7 @@ void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     }
   }
   server->keyboardFocus_ = next;
+  noteFocusedToplevel(server, next);
   if (next) {
     wl_array keys;
     wl_array_init(&keys);
@@ -508,14 +542,22 @@ void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
   sendPointerFocus(server, surfaceAt(server, server->pointerX_, server->pointerY_), timeMs);
 }
 
-WaylandServer::Impl::Surface* previousToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* current) {
-  WaylandServer::Impl::Surface* previous = nullptr;
-  for (auto const& surface : server->surfaces_) {
-    if (!isManagedToplevel(surface.get())) continue;
-    if (surface.get() == current) return previous;
-    previous = surface.get();
+WaylandServer::Impl::Surface* previousFocusedToplevel(WaylandServer::Impl* server,
+                                                      WaylandServer::Impl::Surface* current) {
+  if (!server) return nullptr;
+  auto currentIt = std::find(server->focusOrder_.begin(), server->focusOrder_.end(), current);
+  if (currentIt != server->focusOrder_.end()) {
+    for (auto it = std::make_reverse_iterator(currentIt); it != server->focusOrder_.rend(); ++it) {
+      if (isManagedToplevel(*it)) return *it;
+    }
   }
-  return previous;
+  for (auto it = server->focusOrder_.rbegin(); it != server->focusOrder_.rend(); ++it) {
+    if (*it != current && isManagedToplevel(*it)) return *it;
+  }
+  for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
+    if (it->get() != current && isManagedToplevel(it->get())) return it->get();
+  }
+  return nullptr;
 }
 
 WaylandServer::Impl::XdgToplevel* focusedToplevel(WaylandServer::Impl* server) {
@@ -536,14 +578,7 @@ bool closeFocusedToplevel(WaylandServer::Impl* server) {
 }
 
 bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs) {
-  WaylandServer::Impl::Surface* target = previousToplevel(server, server->keyboardFocus_);
-  if (!target) {
-    for (auto const& surface : server->surfaces_) {
-      if (isManagedToplevel(surface.get())) {
-        target = surface.get();
-      }
-    }
-  }
+  WaylandServer::Impl::Surface* target = previousFocusedToplevel(server, server->keyboardFocus_);
   if (!target || target == server->keyboardFocus_) return false;
   focusSurface(server, target, timeMs);
   return true;
