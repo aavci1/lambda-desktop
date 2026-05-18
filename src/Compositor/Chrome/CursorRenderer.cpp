@@ -1,8 +1,11 @@
 #include "Compositor/Chrome/CursorRenderer.hpp"
 
+#include "Compositor/Surface/SurfaceRenderer.hpp"
+
 #include <Flux/Core/Geometry.hpp>
 
 #include <algorithm>
+#include <cmath>
 
 namespace flux::compositor {
 namespace {
@@ -131,6 +134,53 @@ void drawFallbackCursor(Canvas& canvas, CursorShape shape, float cursorX, float 
   case CursorShape::Arrow:
     drawArrowCursor(canvas, cursorX, cursorY);
     return;
+  }
+}
+
+void drawCompositorCursor(WaylandServer& wayland,
+                          Canvas& canvas,
+                          platform::KmsOutput const& output,
+                          CachedClientImage& cursorImage,
+                          bool hardwareArrowCursor,
+                          std::vector<std::uint32_t> const& hardwareCursorPixels,
+                          std::uint32_t hardwareCursorWidth,
+                          std::uint32_t hardwareCursorHeight) {
+  if (auto cursorSurface = wayland.cursorSurface()) {
+    if (hardwareArrowCursor) output.hideCursor();
+    updateCachedImage(wayland, canvas, *cursorSurface, cursorImage);
+    if (cursorImage.image) {
+      float const cursorSourceWidth = cursorSurface->sourceWidth > 0.f
+                                          ? cursorSurface->sourceWidth
+                                          : static_cast<float>(cursorImage.image->size().width);
+      float const cursorSourceHeight = cursorSurface->sourceHeight > 0.f
+                                           ? cursorSurface->sourceHeight
+                                           : static_cast<float>(cursorImage.image->size().height);
+      canvas.drawImage(*cursorImage.image,
+                       Rect::sharp(cursorSurface->sourceX,
+                                   cursorSurface->sourceY,
+                                   cursorSourceWidth,
+                                   cursorSourceHeight),
+                       Rect::sharp(static_cast<float>(cursorSurface->x),
+                                   static_cast<float>(cursorSurface->y),
+                                   static_cast<float>(cursorSurface->width),
+                                   static_cast<float>(cursorSurface->height)));
+    }
+    return;
+  }
+
+  cursorImage = {};
+  float const cursorX = wayland.pointerX();
+  float const cursorY = wayland.pointerY();
+  if (hardwareArrowCursor && wayland.cursorShape() == CursorShape::Arrow) {
+    std::int32_t const cursorXi = static_cast<std::int32_t>(std::lround(cursorX));
+    std::int32_t const cursorYi = static_cast<std::int32_t>(std::lround(cursorY));
+    if (!output.moveCursor(cursorXi, cursorYi)) {
+      (void)output.setCursorImage(hardwareCursorPixels, hardwareCursorWidth, hardwareCursorHeight);
+      (void)output.moveCursor(cursorXi, cursorYi);
+    }
+  } else {
+    if (hardwareArrowCursor) output.hideCursor();
+    drawFallbackCursor(canvas, wayland.cursorShape(), cursorX, cursorY);
   }
 }
 

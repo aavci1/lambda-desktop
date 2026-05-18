@@ -200,42 +200,14 @@ int main(int, char**) {
       if (auto snapPreview = wayland.snapPreview()) {
         flux::compositor::drawSnapPreview(*canvas, *snapPreview);
       }
-      if (auto cursorSurface = wayland.cursorSurface()) {
-        if (hardwareArrowCursor) output.hideCursor();
-        flux::compositor::updateCachedImage(wayland, *canvas, *cursorSurface, cursorImage);
-        if (cursorImage.image) {
-          float const cursorSourceWidth = cursorSurface->sourceWidth > 0.f
-                                              ? cursorSurface->sourceWidth
-                                              : static_cast<float>(cursorImage.image->size().width);
-          float const cursorSourceHeight = cursorSurface->sourceHeight > 0.f
-                                               ? cursorSurface->sourceHeight
-                                               : static_cast<float>(cursorImage.image->size().height);
-          canvas->drawImage(*cursorImage.image,
-                            flux::Rect::sharp(cursorSurface->sourceX,
-                                              cursorSurface->sourceY,
-                                              cursorSourceWidth,
-                                              cursorSourceHeight),
-                            flux::Rect::sharp(static_cast<float>(cursorSurface->x),
-                                              static_cast<float>(cursorSurface->y),
-                                              static_cast<float>(cursorSurface->width),
-                                              static_cast<float>(cursorSurface->height)));
-        }
-      } else {
-        cursorImage = {};
-        float const cursorX = wayland.pointerX();
-        float const cursorY = wayland.pointerY();
-        if (hardwareArrowCursor && wayland.cursorShape() == flux::compositor::CursorShape::Arrow) {
-          std::int32_t const cursorXi = static_cast<std::int32_t>(std::lround(cursorX));
-          std::int32_t const cursorYi = static_cast<std::int32_t>(std::lround(cursorY));
-          if (!output.moveCursor(cursorXi, cursorYi)) {
-            (void)output.setCursorImage(hardwareCursorPixels, hardwareCursorWidth, hardwareCursorHeight);
-            (void)output.moveCursor(cursorXi, cursorYi);
-          }
-        } else {
-          if (hardwareArrowCursor) output.hideCursor();
-          flux::compositor::drawFallbackCursor(*canvas, wayland.cursorShape(), cursorX, cursorY);
-        }
-      }
+      flux::compositor::drawCompositorCursor(wayland,
+                                             *canvas,
+                                             output,
+                                             cursorImage,
+                                             hardwareArrowCursor,
+                                             hardwareCursorPixels,
+                                             hardwareCursorWidth,
+                                             hardwareCursorHeight);
       for (auto it = clientImages.begin(); it != clientImages.end();) {
         if (liveSurfaceIds.contains(it->first)) {
           ++it;
