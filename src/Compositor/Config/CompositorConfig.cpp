@@ -283,6 +283,12 @@ std::optional<std::string> configPath() {
   return std::nullopt;
 }
 
+void applyEnvironmentOverrides(CompositorConfig& config) {
+  if (char const* outputEnv = std::getenv("FLUX_COMPOSITOR_OUTPUT"); outputEnv && *outputEnv) {
+    config.outputSelector = trim(outputEnv);
+  }
+}
+
 std::string defaultConfigToml() {
   return R"(# Flux compositor configuration.
 #
@@ -352,7 +358,10 @@ CompositorConfig loadConfig() {
   CompositorConfig config;
   config.shortcutBindings = defaultShortcutBindings();
   auto path = configPath();
-  if (!path) return config;
+  if (!path) {
+    applyEnvironmentOverrides(config);
+    return config;
+  }
 
   toml::table table;
   try {
@@ -363,6 +372,7 @@ CompositorConfig loadConfig() {
                  "flux-compositor: ignoring invalid config %s: %s\n",
                  path->c_str(),
                  message.c_str());
+    applyEnvironmentOverrides(config);
     return config;
   }
 
@@ -487,9 +497,7 @@ CompositorConfig loadConfig() {
     }
   }
 
-  if (char const* outputEnv = std::getenv("FLUX_COMPOSITOR_OUTPUT"); outputEnv && *outputEnv) {
-    config.outputSelector = trim(outputEnv);
-  }
+  applyEnvironmentOverrides(config);
 
   std::fprintf(stderr, "flux-compositor: loaded config %s\n", path->c_str());
   return config;

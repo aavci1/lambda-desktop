@@ -274,3 +274,20 @@ TEST_CASE("compositor config allows output environment override") {
 
   std::filesystem::remove(path);
 }
+
+TEST_CASE("compositor config applies output environment override when config is invalid") {
+  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  auto const path = tempConfigPath();
+  std::ofstream file(path);
+  file << "scale = nope\n";
+  file.close();
+  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("FLUX_COMPOSITOR_OUTPUT", "DP-1", 1);
+
+  auto const config = flux::compositor::loadConfigWithMetadata().config;
+  REQUIRE(config.outputSelector);
+  CHECK(*config.outputSelector == "DP-1");
+
+  std::filesystem::remove(path);
+}
