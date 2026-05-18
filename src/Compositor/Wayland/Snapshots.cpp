@@ -1,0 +1,220 @@
+#include "Compositor/Wayland/WaylandServerImpl.hpp"
+
+#include "Compositor/Wayland/Globals/LinuxDmabuf.hpp"
+#include "Compositor/Window/WindowGeometry.hpp"
+
+#include <drm_fourcc.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
+#include <algorithm>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
+#include <optional>
+#include <vector>
+
+namespace flux::compositor {
+namespace {
+
+constexpr std::int32_t kTitleBarHeight = kCompositorTitleBarHeight;
+
+bool surfaceIsRenderable(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->width > 0 && surface->height > 0 &&
+         (!surface->rgbaPixels.empty() || surface->dmabufBuffer);
+}
+
+CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
+                                            WaylandServer::Impl::Surface const* surface,
+                                            std::int32_t x,
+                                            std::int32_t y,
+                                            bool withChrome) {
+  CommittedSurfaceSnapshot snapshot{
+      .id = surface->id,
+      .x = x,
+      .y = y,
+      .width = displayWidth(surface),
+      .height = displayHeight(surface),
+      .bufferWidth = surface->width,
+      .bufferHeight = surface->height,
+      .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
+      .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
+      .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
+      .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
+      .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface),
+      .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface),
+      .titleBarHeight = withChrome && !surface->layerSurface && !surface->popup ? kTitleBarHeight : 0,
+      .title = withChrome && !surface->layerSurface && !surface->popup ? titleForSurface(server, surface) : std::string{},
+      .focused = server->keyboardFocus_ == surface,
+      .activeSizing = server->resizeSurface_ == surface ||
+                      surface->geometryAnimationActive ||
+                      surface->awaitingConfigureCommit,
+      .serial = surface->serial,
+      .rgbaPixels = surface->rgbaPixels,
+      .dmabufFormat = 0,
+      .dmabufPlanes = {},
+  };
+  if (surface->dmabufBuffer) {
+    snapshot.dmabufFormat = surface->dmabufBuffer->format;
+    snapshot.dmabufPlanes.reserve(surface->dmabufBuffer->planes.size());
+    for (DmabufPlane const& plane : surface->dmabufBuffer->planes) {
+      snapshot.dmabufPlanes.push_back({
+          .offset = plane.offset,
+          .stride = plane.stride,
+          .modifier = plane.modifier,
+      });
+    }
+  }
+  return snapshot;
+}
+
+void appendSubsurfaceSnapshots(WaylandServer::Impl const* server,
+                               std::vector<CommittedSurfaceSnapshot>& snapshots,
+                               WaylandServer::Impl::Surface const* parent,
+                               std::int32_t parentX,
+                               std::int32_t parentY) {
+  for (auto const& subsurface : server->subsurfaces_) {
+    if (!subsurface || subsurface->parent != parent || !subsurface->surface) continue;
+    WaylandServer::Impl::Surface const* surface = subsurface->surface;
+    if (!surfaceIsRenderable(surface)) continue;
+    std::int32_t const x = parentX + subsurface->x;
+    std::int32_t const y = parentY + subsurface->y;
+    snapshots.push_back(snapshotForSurface(server, surface, x, y, false));
+    appendSubsurfaceSnapshots(server, snapshots, surface, x, y);
+  }
+}
+
+} // namespace
+
+std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() const {
+  std::vector<CommittedSurfaceSnapshot> snapshots;
+  snapshots.reserve(surfaces_.size());
+  for (auto const& surface : surfaces_) {
+    if (!surface->toplevel) continue;
+    if (surface->xdgPopup && surface->xdgPopup->dismissed) continue;
+    if (surfaceIsRenderable(surface.get())) {
+      snapshots.push_back(snapshotForSurface(this, surface.get(), surface->windowX, surface->windowY, true));
+    }
+    appendSubsurfaceSnapshots(this, snapshots, surface.get(), surface->windowX, surface->windowY);
+  }
+  return snapshots;
+}
+
+std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() const {
+  Surface* surface = cursorSurface_;
+  if (!surface || surface->width <= 0 || surface->height <= 0) return std::nullopt;
+  if (surface->rgbaPixels.empty() && !surface->dmabufBuffer) return std::nullopt;
+
+  CommittedSurfaceSnapshot snapshot{
+      .id = surface->id,
+      .x = static_cast<std::int32_t>(pointerX_) - cursorHotspotX_,
+      .y = static_cast<std::int32_t>(pointerY_) - cursorHotspotY_,
+      .width = surface->width,
+      .height = surface->height,
+      .bufferWidth = surface->width,
+      .bufferHeight = surface->height,
+      .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
+      .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
+      .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
+      .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
+      .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface),
+      .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface),
+      .titleBarHeight = 0,
+      .title = {},
+      .focused = false,
+      .activeSizing = false,
+      .serial = surface->serial,
+      .rgbaPixels = surface->rgbaPixels,
+      .dmabufFormat = 0,
+      .dmabufPlanes = {},
+  };
+  if (surface->dmabufBuffer) {
+    snapshot.dmabufFormat = surface->dmabufBuffer->format;
+    snapshot.dmabufPlanes.reserve(surface->dmabufBuffer->planes.size());
+    for (DmabufPlane const& plane : surface->dmabufBuffer->planes) {
+      snapshot.dmabufPlanes.push_back({
+          .offset = plane.offset,
+          .stride = plane.stride,
+          .modifier = plane.modifier,
+      });
+    }
+  }
+  return snapshot;
+}
+
+std::vector<int> WaylandServer::Impl::duplicateDmabufFds(std::uint64_t surfaceId) const {
+  auto surface = std::find_if(surfaces_.begin(), surfaces_.end(),
+                              [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });
+  if (surface == surfaces_.end() || !(*surface)->dmabufBuffer) return {};
+
+  std::vector<int> fds;
+  fds.reserve((*surface)->dmabufBuffer->planes.size());
+  for (DmabufPlane const& plane : (*surface)->dmabufBuffer->planes) {
+    int copied = dup(plane.fd);
+    if (copied < 0) {
+      for (int fd : fds) close(fd);
+      return {};
+    }
+    fds.push_back(copied);
+  }
+  return fds;
+}
+
+std::optional<SnapPreviewSnapshot> WaylandServer::Impl::snapPreview() const {
+  return snapPreviewForDrag(this);
+}
+
+bool WaylandServer::Impl::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const {
+  auto surface = std::find_if(surfaces_.begin(), surfaces_.end(),
+                              [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });
+  if (surface == surfaces_.end() || !(*surface)->dmabufBuffer) return false;
+
+  DmabufBuffer const& buffer = *(*surface)->dmabufBuffer;
+  if (buffer.width <= 0 || buffer.height <= 0 || buffer.planes.size() != 1) return false;
+  if (!isSupportedDmabufFormat(buffer.format)) return false;
+
+  DmabufPlane const& plane = buffer.planes.front();
+  if (plane.fd < 0 || plane.stride < static_cast<std::uint32_t>(buffer.width) * 4u) return false;
+  if (plane.modifier != DRM_FORMAT_MOD_LINEAR && plane.modifier != DRM_FORMAT_MOD_INVALID) return false;
+
+  std::size_t const rowBytes = static_cast<std::size_t>(buffer.width) * 4u;
+  std::size_t const dataSize = static_cast<std::size_t>(plane.offset) +
+                               static_cast<std::size_t>(plane.stride) *
+                                   static_cast<std::size_t>(buffer.height);
+  void* mapping = mmap(nullptr, dataSize, PROT_READ, MAP_SHARED, plane.fd, 0);
+  if (mapping == MAP_FAILED) {
+    std::fprintf(stderr, "flux-compositor: dmabuf CPU fallback mmap failed: %s\n", std::strerror(errno));
+    return false;
+  }
+
+  out.resize(static_cast<std::size_t>(buffer.width) * static_cast<std::size_t>(buffer.height) * 4u);
+  auto const* base = static_cast<std::uint8_t const*>(mapping) + plane.offset;
+  for (std::int32_t y = 0; y < buffer.height; ++y) {
+    auto const* src = base + static_cast<std::size_t>(y) * plane.stride;
+    auto* dst = out.data() + static_cast<std::size_t>(y) * rowBytes;
+    for (std::int32_t x = 0; x < buffer.width; ++x) {
+      std::uint8_t const b0 = src[static_cast<std::size_t>(x) * 4u + 0u];
+      std::uint8_t const b1 = src[static_cast<std::size_t>(x) * 4u + 1u];
+      std::uint8_t const b2 = src[static_cast<std::size_t>(x) * 4u + 2u];
+      std::uint8_t const b3 = src[static_cast<std::size_t>(x) * 4u + 3u];
+      if (buffer.format == DRM_FORMAT_ARGB8888 || buffer.format == DRM_FORMAT_XRGB8888) {
+        dst[static_cast<std::size_t>(x) * 4u + 0u] = b2;
+        dst[static_cast<std::size_t>(x) * 4u + 1u] = b1;
+        dst[static_cast<std::size_t>(x) * 4u + 2u] = b0;
+        dst[static_cast<std::size_t>(x) * 4u + 3u] =
+            buffer.format == DRM_FORMAT_XRGB8888 ? 255u : b3;
+      } else {
+        dst[static_cast<std::size_t>(x) * 4u + 0u] = b0;
+        dst[static_cast<std::size_t>(x) * 4u + 1u] = b1;
+        dst[static_cast<std::size_t>(x) * 4u + 2u] = b2;
+        dst[static_cast<std::size_t>(x) * 4u + 3u] =
+            buffer.format == DRM_FORMAT_XBGR8888 ? 255u : b3;
+      }
+    }
+  }
+
+  munmap(mapping, dataSize);
+  return true;
+}
+
+} // namespace flux::compositor

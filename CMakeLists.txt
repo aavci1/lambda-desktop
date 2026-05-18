@@ -568,6 +568,7 @@ if(FLUX_BUILD_COMPOSITOR)
   add_executable(flux-compositor
     src/Compositor/Chrome/CursorRenderer.cpp
     src/Compositor/Chrome/WindowChromeRenderer.cpp
+    src/Compositor/CompositorRuntime.cpp
     src/Compositor/Config/AppliedCompositorConfig.cpp
     src/Compositor/Config/CompositorConfig.cpp
     src/Compositor/Input/KmsInputBridge.cpp
@@ -588,6 +589,10 @@ if(FLUX_BUILD_COMPOSITOR)
     src/Compositor/Wayland/Globals/Viewporter.cpp
     src/Compositor/Wayland/Globals/XdgOutput.cpp
     src/Compositor/Wayland/Globals/XdgShell.cpp
+    src/Compositor/Wayland/Destroy.cpp
+    src/Compositor/Wayland/FrameScheduler.cpp
+    src/Compositor/Wayland/ServerLifecycle.cpp
+    src/Compositor/Wayland/Snapshots.cpp
     src/Compositor/Window/WindowGeometry.cpp
     src/Compositor/Window/WindowManager.cpp
     src/Compositor/main.cpp
