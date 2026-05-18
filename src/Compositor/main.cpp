@@ -87,9 +87,49 @@ int main(int, char**) {
     flux::compositor::AppliedCompositorConfig appliedConfig =
         flux::compositor::applyCompositorConfig(loadedConfig.config, *canvas);
     wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
+    wayland.setPreferredScale(appliedConfig.config.scale);
+    canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
+    canvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
+    if (FILE* sizeLog = std::fopen("compositor-sizes.log", "w")) {
+      std::fprintf(sizeLog,
+                   "output physical=%ux%u logical=%dx%d scale=%.2f\n",
+                   output.width(),
+                   output.height(),
+                   wayland.logicalOutputWidth(),
+                   wayland.logicalOutputHeight(),
+                   wayland.preferredScale());
+      std::fclose(sizeLog);
+    }
+    std::fprintf(stderr,
+                 "flux-compositor: output physical=%ux%u logical=%dx%d scale=%.2f\n",
+                 output.width(),
+                 output.height(),
+                 wayland.logicalOutputWidth(),
+                 wayland.logicalOutputHeight(),
+                 wayland.preferredScale());
     auto applyConfig = [&] {
       appliedConfig = flux::compositor::applyCompositorConfig(loadedConfig.config, *canvas);
       wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
+      wayland.setPreferredScale(appliedConfig.config.scale);
+      canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
+      canvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
+      if (FILE* sizeLog = std::fopen("compositor-sizes.log", "a")) {
+        std::fprintf(sizeLog,
+                     "output physical=%ux%u logical=%dx%d scale=%.2f\n",
+                     output.width(),
+                     output.height(),
+                     wayland.logicalOutputWidth(),
+                     wayland.logicalOutputHeight(),
+                     wayland.preferredScale());
+        std::fclose(sizeLog);
+      }
+      std::fprintf(stderr,
+                   "flux-compositor: output physical=%ux%u logical=%dx%d scale=%.2f\n",
+                   output.width(),
+                   output.height(),
+                   wayland.logicalOutputWidth(),
+                   wayland.logicalOutputHeight(),
+                   wayland.preferredScale());
     };
     flux::compositor::SurfaceRenderState surfaceRenderState;
     flux::compositor::CachedClientImage cursorImage;
@@ -125,7 +165,10 @@ int main(int, char**) {
       wayland.updateAnimations(monotonicMilliseconds(), appliedConfig.config.animationsEnabled);
 
       canvas->beginFrame();
-      flux::compositor::drawCompositorBackground(*canvas, appliedConfig, output.width(), output.height());
+      flux::compositor::drawCompositorBackground(*canvas,
+                                                 appliedConfig,
+                                                 static_cast<std::uint32_t>(wayland.logicalOutputWidth()),
+                                                 static_cast<std::uint32_t>(wayland.logicalOutputHeight()));
       auto committedSurfaces = wayland.committedSurfaces();
       std::unordered_set<std::uint64_t> liveSurfaceIds;
       liveSurfaceIds.reserve(committedSurfaces.size());

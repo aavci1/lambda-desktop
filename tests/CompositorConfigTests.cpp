@@ -49,6 +49,7 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   file << "background = \"#112233\"\n";
   file << "wallpaper = \"/tmp/wallpaper.png\"\n";
   file << "wallpaper_mode = \"contain\"\n";
+  file << "scale = 1.5\n";
   file << "animations = false\n";
   file << "hardware_cursor = false\n";
   file << "[keybindings]\n";
@@ -65,6 +66,7 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   CHECK(config.backgroundColor.b == doctest::Approx(51.f / 255.f));
   CHECK(config.wallpaperPath == "/tmp/wallpaper.png");
   CHECK(config.wallpaperMode == flux::ImageFillMode::Fit);
+  CHECK(config.scale == doctest::Approx(1.5f));
   CHECK_FALSE(config.animationsEnabled);
   CHECK_FALSE(config.hardwareCursorEnabled);
 

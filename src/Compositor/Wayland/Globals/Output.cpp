@@ -3,6 +3,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
@@ -13,6 +14,18 @@ void outputRelease(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
+void outputResourceDestroyed(wl_resource* resource) {
+  auto* server = static_cast<WaylandServer::Impl*>(wl_resource_get_user_data(resource));
+  if (!server) return;
+  auto& resources = server->outputResources_;
+  resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
+}
+
+std::int32_t integerOutputScale(float scale) {
+  float const rounded = std::round(scale);
+  return std::abs(scale - rounded) < 0.001f ? std::max(1, static_cast<std::int32_t>(rounded)) : 1;
+}
+
 } // namespace
 
 void bindOutput(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
@@ -20,18 +33,25 @@ void bindOutput(wl_client* client, void* data, std::uint32_t version, std::uint3
   WaylandOutputInfo const& output = server->output_;
   wl_resource* resource = wl_resource_create(client, &wl_output_interface, std::min(version, 4u), id);
   static struct wl_output_interface const outputImpl{outputRelease};
-  wl_resource_set_implementation(resource, &outputImpl, nullptr, nullptr);
+  wl_resource_set_implementation(resource, &outputImpl, server, outputResourceDestroyed);
+  server->outputResources_.push_back(resource);
   wl_output_send_geometry(resource, 0, 0, output.physicalWidthMm, output.physicalHeightMm,
                           WL_OUTPUT_SUBPIXEL_UNKNOWN, "Flux", output.name.c_str(),
                           WL_OUTPUT_TRANSFORM_NORMAL);
   wl_output_send_mode(resource, WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED,
                       output.width, output.height, output.refreshMilliHz);
-  if (version >= 2) wl_output_send_scale(resource, 1);
+  if (version >= 2) wl_output_send_scale(resource, integerOutputScale(server->preferredScale()));
   if (version >= 4) {
     wl_output_send_name(resource, output.name.c_str());
     wl_output_send_description(resource, "Flux compositor output");
   }
   if (version >= 2) wl_output_send_done(resource);
+
+  for (auto const& surface : server->surfaces_) {
+    if (surface && surface->resource && wl_resource_get_client(surface->resource) == client) {
+      wl_surface_send_enter(surface->resource, resource);
+    }
+  }
 }
 
 } // namespace flux::compositor

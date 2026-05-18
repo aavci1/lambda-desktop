@@ -271,11 +271,36 @@ void setConfiguredFrameSize(WaylandServer::Impl::Surface* surface, std::int32_t 
   surface->frameHeight = height;
 }
 
+std::int32_t committedDisplayWidth(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  if (surface->destinationSet) return surface->destinationWidth;
+  if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceWidth);
+  return std::max(1, surface->width / std::max(1, surface->scale));
+}
+
+std::int32_t committedDisplayHeight(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  if (surface->destinationSet) return surface->destinationHeight;
+  if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceHeight);
+  return std::max(1, surface->height / std::max(1, surface->scale));
+}
+
+void clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
+  if (!surface || !surface->awaitingConfigureCommit) return;
+  if (committedDisplayWidth(surface) != surface->awaitingConfigureWidth ||
+      committedDisplayHeight(surface) != surface->awaitingConfigureHeight) {
+    return;
+  }
+  surface->awaitingConfigureCommit = false;
+  surface->awaitingConfigureWidth = 0;
+  surface->awaitingConfigureHeight = 0;
+}
+
 void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* surface) {
   if (!surface) return;
   flux::detail::resizeTrace(
       "compositor",
-      "%s surface=%llu window=%d,%d frame=%dx%d activeSizing=%d buffer=%dx%d "
+      "%s surface=%llu window=%d,%d frame=%dx%d activeSizing=%d awaiting=%d %dx%d buffer=%dx%d scale=%d "
       "source=%d %.1f,%.1f %.1fx%.1f dest=%d %dx%d serial=%llu snapped=%d maximized=%d anim=%d\n",
       event,
       static_cast<unsigned long long>(surface->id),
@@ -283,9 +308,15 @@ void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* s
       surface->windowY,
       surface->frameWidth,
       surface->frameHeight,
-      (surface->server->resizeSurface_ == surface || surface->geometryAnimationActive) ? 1 : 0,
+      (surface->server->resizeSurface_ == surface ||
+       surface->geometryAnimationActive ||
+       surface->awaitingConfigureCommit) ? 1 : 0,
+      surface->awaitingConfigureCommit ? 1 : 0,
+      surface->awaitingConfigureWidth,
+      surface->awaitingConfigureHeight,
       surface->width,
       surface->height,
+      surface->scale,
       surface->sourceSet ? 1 : 0,
       surface->sourceX,
       surface->sourceY,
@@ -336,7 +367,9 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
     }
   }
 
-  if (surface->server->resizeSurface_ == surface || surface->geometryAnimationActive) {
+  if (surface->server->resizeSurface_ == surface ||
+      surface->geometryAnimationActive ||
+      surface->awaitingConfigureCommit) {
     if (surface->frameWidth <= 0 || surface->frameHeight <= 0) {
       if (surface->server->resizeSurface_ == surface &&
           surface->server->resizeLastWidth_ > 0 &&
@@ -368,8 +401,8 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
     surface->frameWidth = static_cast<std::int32_t>(surface->sourceWidth);
     surface->frameHeight = static_cast<std::int32_t>(surface->sourceHeight);
   } else {
-    surface->frameWidth = surface->width;
-    surface->frameHeight = surface->height;
+    surface->frameWidth = committedDisplayWidth(surface);
+    surface->frameHeight = committedDisplayHeight(surface);
   }
 
   return true;
@@ -426,6 +459,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->width = shmBuffer->width;
         surface->height = shmBuffer->height;
         if (!applyViewportState(surface)) return;
+        clearMatchedConfigureCommit(surface);
         applyLayerGeometry(surface->layerSurface);
         surface->dmabufBuffer = nullptr;
         ++surface->serial;
@@ -437,6 +471,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->width = dmabufBuffer->width;
         surface->height = dmabufBuffer->height;
         if (!applyViewportState(surface)) return;
+        clearMatchedConfigureCommit(surface);
         applyLayerGeometry(surface->layerSurface);
         surface->dmabufBuffer = dmabufBuffer;
         ++surface->serial;
@@ -456,6 +491,9 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     surface->width = 0;
     surface->height = 0;
     setConfiguredFrameSize(surface, 0, 0);
+    surface->awaitingConfigureCommit = false;
+    surface->awaitingConfigureWidth = 0;
+    surface->awaitingConfigureHeight = 0;
     surface->dmabufBuffer = nullptr;
     ++surface->serial;
     traceResizeSurface("commit-empty", surface);
@@ -531,6 +569,11 @@ void sendToplevelConfigure(WaylandServer::Impl* server,
                            std::int32_t width,
                            std::int32_t height) {
   if (!toplevel || !toplevel->resource || !toplevel->xdgSurface || !toplevel->xdgSurface->resource) return;
+  if (auto* surface = toplevel->xdgSurface->surface; surface && width > 0 && height > 0) {
+    surface->awaitingConfigureCommit = true;
+    surface->awaitingConfigureWidth = width;
+    surface->awaitingConfigureHeight = height;
+  }
   wl_array states;
   wl_array_init(&states);
   xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
@@ -554,6 +597,23 @@ std::int32_t displayHeight(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->frameHeight > 0 ? surface->frameHeight : surface ? surface->height : 0;
 }
 
+std::uint32_t preferredScale120(float scale) {
+  return static_cast<std::uint32_t>(std::clamp(std::lround(scale * 120.f), 60l, 480l));
+}
+
+std::int32_t integerOutputScale(float scale) {
+  float const rounded = std::round(scale);
+  return std::abs(scale - rounded) < 0.001f ? std::max(1, static_cast<std::int32_t>(rounded)) : 1;
+}
+
+std::int32_t scaledLogicalSize(std::int32_t physicalSize, float scale) {
+  return std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(physicalSize) / std::max(0.5f, scale))));
+}
+
+bool isManagedToplevel(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->toplevel && !surface->popup && !surface->layerSurface && !surface->subsurface;
+}
+
 WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surface) {
   return {
       .x = surface ? surface->windowX : 0,
@@ -565,8 +625,8 @@ WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surface) {
 
 OutputGeometry outputGeometryFor(WaylandServer::Impl const* server) {
   return {
-      .width = server ? server->output_.width : 0,
-      .height = server ? server->output_.height : 0,
+      .width = server ? server->logicalOutputWidth() : 0,
+      .height = server ? server->logicalOutputHeight() : 0,
   };
 }
 
@@ -630,17 +690,17 @@ void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface) {
   if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT)) {
     surface->windowX = layerSurface->marginLeft;
   } else if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT)) {
-    surface->windowX = layerSurface->server->output_.width - width - layerSurface->marginRight;
+    surface->windowX = layerSurface->server->logicalOutputWidth() - width - layerSurface->marginRight;
   } else {
-    surface->windowX = (layerSurface->server->output_.width - width) / 2;
+    surface->windowX = (layerSurface->server->logicalOutputWidth() - width) / 2;
   }
 
   if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP)) {
     surface->windowY = layerSurface->marginTop;
   } else if (hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM)) {
-    surface->windowY = layerSurface->server->output_.height - height - layerSurface->marginBottom;
+    surface->windowY = layerSurface->server->logicalOutputHeight() - height - layerSurface->marginBottom;
   } else {
-    surface->windowY = (layerSurface->server->output_.height - height) / 2;
+    surface->windowY = (layerSurface->server->logicalOutputHeight() - height) / 2;
   }
 }
 
@@ -652,13 +712,13 @@ void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface) {
       hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) &&
       hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT)) {
     width = static_cast<std::uint32_t>(
-        std::max(1, layerSurface->server->output_.width - layerSurface->marginLeft - layerSurface->marginRight));
+        std::max(1, layerSurface->server->logicalOutputWidth() - layerSurface->marginLeft - layerSurface->marginRight));
   }
   if (height == 0 &&
       hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) &&
       hasAnchor(layerSurface->anchor, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM)) {
     height = static_cast<std::uint32_t>(
-        std::max(1, layerSurface->server->output_.height - layerSurface->marginTop - layerSurface->marginBottom));
+        std::max(1, layerSurface->server->logicalOutputHeight() - layerSurface->marginTop - layerSurface->marginBottom));
   }
   zwlr_layer_surface_v1_send_configure(layerSurface->resource,
                                        layerSurface->server->nextConfigureSerial_++,
@@ -841,7 +901,8 @@ void xdgSurfaceDestroy(wl_client*, wl_resource* resource) {
 
 void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
-  if (xdgSurface->surface->layerSurface || xdgSurface->surface->subsurface) {
+  if (xdgSurface->surface->toplevel || xdgSurface->surface->popup ||
+      xdgSurface->surface->layerSurface || xdgSurface->surface->subsurface) {
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
     return;
   }
@@ -921,8 +982,8 @@ void configurePopup(WaylandServer::Impl::XdgPopup* popup, WaylandServer::Impl::X
     y -= height / 2;
   }
 
-  x = std::clamp(x, 0, std::max(0, popup->server->output_.width - width));
-  y = std::clamp(y, 0, std::max(0, popup->server->output_.height - height));
+  x = std::clamp(x, 0, std::max(0, popup->server->logicalOutputWidth() - width));
+  y = std::clamp(y, 0, std::max(0, popup->server->logicalOutputHeight() - height));
   surface->windowX = x;
   surface->windowY = y;
   setConfiguredFrameSize(surface, width, height);
@@ -948,7 +1009,14 @@ void xdgPopupDestroy(wl_client*, wl_resource* resource) {
 
 void xdgPopupGrab(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t) {
   auto* popup = resourceData<WaylandServer::Impl::XdgPopup>(resource);
-  if (popup) popup->grabbed = true;
+  if (!popup) return;
+  popup->grabbed = true;
+  std::fprintf(stderr,
+               "flux-compositor: xdg_popup grab surface=%llu parent=%llu\n",
+               static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
+                                                   ? popup->xdgSurface->surface->id
+                                                   : 0),
+               static_cast<unsigned long long>(popup->parentSurface ? popup->parentSurface->id : 0));
 }
 
 void xdgPopupReposition(wl_client*, wl_resource* resource, wl_resource* positionerResource, std::uint32_t token) {
@@ -1009,6 +1077,14 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
                                  destroyResourceCallback<WaylandServer::Impl::XdgPopup,
                                                          WaylandServer::Impl,
                                                          &WaylandServer::Impl::destroyXdgPopup>);
+  std::fprintf(stderr,
+               "flux-compositor: xdg_popup created surface=%llu parent=%llu geometry=%d,%d %dx%d\n",
+               static_cast<unsigned long long>(xdgSurface->surface->id),
+               static_cast<unsigned long long>(raw->parentSurface ? raw->parentSurface->id : 0),
+               raw->configuredX,
+               raw->configuredY,
+               raw->configuredWidth,
+               raw->configuredHeight);
   sendPopupConfigure(raw);
 }
 
@@ -1251,7 +1327,7 @@ void fractionalScaleManagerGetFractionalScale(wl_client* client, wl_resource* re
   surface->fractionalScale = raw;
   server->fractionalScales_.push_back(std::move(fractionalScale));
   wl_resource_set_implementation(fractionalScaleResource, &fractionalScaleImpl, raw, destroyResourceCallback<WaylandServer::Impl::FractionalScale, WaylandServer::Impl, &WaylandServer::Impl::destroyFractionalScale>);
-  wp_fractional_scale_v1_send_preferred_scale(fractionalScaleResource, 120);
+  wp_fractional_scale_v1_send_preferred_scale(fractionalScaleResource, preferredScale120(server->preferredScale_));
 }
 
 struct wp_fractional_scale_manager_v1_interface const fractionalScaleManagerImpl{
@@ -2274,6 +2350,18 @@ int WaylandServer::Impl::eventFd() const noexcept {
   return display_ ? wl_event_loop_get_fd(wl_display_get_event_loop(display_)) : -1;
 }
 
+float WaylandServer::Impl::preferredScale() const noexcept {
+  return preferredScale_;
+}
+
+std::int32_t WaylandServer::Impl::logicalOutputWidth() const noexcept {
+  return scaledLogicalSize(output_.width, preferredScale_);
+}
+
+std::int32_t WaylandServer::Impl::logicalOutputHeight() const noexcept {
+  return scaledLogicalSize(output_.height, preferredScale_);
+}
+
 std::size_t WaylandServer::Impl::toplevelCount() const noexcept {
   return toplevels_.size();
 }
@@ -2305,7 +2393,9 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .titleBarHeight = withChrome && !surface->layerSurface && !surface->popup ? kTitleBarHeight : 0,
       .title = withChrome && !surface->layerSurface && !surface->popup ? titleForSurface(server, surface) : std::string{},
       .focused = server->keyboardFocus_ == surface,
-      .activeSizing = server->resizeSurface_ == surface || surface->geometryAnimationActive,
+      .activeSizing = server->resizeSurface_ == surface ||
+                      surface->geometryAnimationActive ||
+                      surface->awaitingConfigureCommit,
       .serial = surface->serial,
       .rgbaPixels = surface->rgbaPixels,
       .dmabufFormat = 0,
@@ -2439,7 +2529,7 @@ WaylandServer::Impl::Surface* titlebarAt(WaylandServer::Impl* server, float x, f
     WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
-    if (!surface || !surface->toplevel || width <= 0 || height <= 0) continue;
+    if (!isManagedToplevel(surface) || width <= 0 || height <= 0) continue;
     float const left = static_cast<float>(surface->windowX);
     float const top = static_cast<float>(surface->windowY - kTitleBarHeight);
     float const right = left + static_cast<float>(width);
@@ -2454,7 +2544,7 @@ WaylandServer::Impl::Surface* closeButtonAt(WaylandServer::Impl* server, float x
     WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
-    if (!surface || !surface->toplevel || width <= 0 || height <= 0) continue;
+    if (!isManagedToplevel(surface) || width <= 0 || height <= 0) continue;
     float const left = static_cast<float>(surface->windowX + width - kCloseButtonInset - kCloseButtonSize);
     float const top = static_cast<float>(surface->windowY - kTitleBarHeight + kCloseButtonInset);
     float const right = left + static_cast<float>(kCloseButtonSize);
@@ -2470,7 +2560,7 @@ WaylandServer::Impl::Surface* resizeGripAt(WaylandServer::Impl* server, float x,
     WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
-    if (!surface || !surface->toplevel || width <= 0 || height <= 0) continue;
+    if (!isManagedToplevel(surface) || width <= 0 || height <= 0) continue;
     float const left = static_cast<float>(surface->windowX);
     float const top = static_cast<float>(surface->windowY);
     float const right = left + static_cast<float>(width);
@@ -2498,12 +2588,18 @@ void raiseSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
   server->surfaces_.push_back(std::move(item));
 }
 
+bool resourceBelongsToSurfaceClient(wl_resource* resource, WaylandServer::Impl::Surface const* surface) {
+  return resource && surface && surface->resource &&
+         wl_resource_get_client(resource) == wl_resource_get_client(surface->resource);
+}
+
 void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next, std::uint32_t timeMs) {
   if (server->pointerFocus_ == next) {
     if (!next) return;
     wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(next->windowX));
     wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(next->windowY));
     for (wl_resource* pointer : server->pointerResources_) {
+      if (!resourceBelongsToSurfaceClient(pointer, next)) continue;
       wl_pointer_send_motion(pointer, timeMs, x, y);
       if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
     }
@@ -2511,9 +2607,11 @@ void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   }
 
   std::uint32_t serial = server->nextInputSerial_++;
-  if (server->pointerFocus_) {
+  WaylandServer::Impl::Surface* previous = server->pointerFocus_;
+  if (previous) {
     for (wl_resource* pointer : server->pointerResources_) {
-      wl_pointer_send_leave(pointer, serial, server->pointerFocus_->resource);
+      if (!resourceBelongsToSurfaceClient(pointer, previous)) continue;
+      wl_pointer_send_leave(pointer, serial, previous->resource);
       if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
     }
   }
@@ -2525,6 +2623,7 @@ void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(next->windowY));
     server->pointerEnterSerial_ = serial;
     for (wl_resource* pointer : server->pointerResources_) {
+      if (!resourceBelongsToSurfaceClient(pointer, next)) continue;
       wl_pointer_send_enter(pointer, serial, next->resource, x, y);
       if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
     }
@@ -2568,6 +2667,11 @@ bool surfaceBelongsToPopup(WaylandServer::Impl::Surface* surface, WaylandServer:
 
 bool dismissPopup(WaylandServer::Impl::XdgPopup* popup) {
   if (!popup || popup->dismissed) return false;
+  std::fprintf(stderr,
+               "flux-compositor: xdg_popup dismissed surface=%llu\n",
+               static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
+                                                   ? popup->xdgSurface->surface->id
+                                                   : 0));
   popup->dismissed = true;
   if (popup->xdgSurface && popup->xdgSurface->surface) {
     popup->xdgSurface->surface->toplevel = false;
@@ -2594,9 +2698,11 @@ std::uint32_t keyboardModifierMask(WaylandServer::Impl* server);
 void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next) {
   if (server->keyboardFocus_ == next) return;
   std::uint32_t serial = server->nextInputSerial_++;
-  if (server->keyboardFocus_) {
+  WaylandServer::Impl::Surface* previous = server->keyboardFocus_;
+  if (previous) {
     for (wl_resource* keyboard : server->keyboardResources_) {
-      wl_keyboard_send_leave(keyboard, serial, server->keyboardFocus_->resource);
+      if (!resourceBelongsToSurfaceClient(keyboard, previous)) continue;
+      wl_keyboard_send_leave(keyboard, serial, previous->resource);
     }
   }
   server->keyboardFocus_ = next;
@@ -2605,6 +2711,7 @@ void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     wl_array_init(&keys);
     std::uint32_t const modifiers = keyboardModifierMask(server);
     for (wl_resource* keyboard : server->keyboardResources_) {
+      if (!resourceBelongsToSurfaceClient(keyboard, next)) continue;
       wl_keyboard_send_enter(keyboard, serial, next->resource, &keys);
       wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, modifiers, 0, 0, 0);
     }
@@ -2627,8 +2734,10 @@ std::uint32_t keyboardModifierMask(WaylandServer::Impl* server) {
 }
 
 void sendKeyboardModifiers(WaylandServer::Impl* server) {
+  if (!server->keyboardFocus_) return;
   std::uint32_t const depressed = keyboardModifierMask(server);
   for (wl_resource* keyboard : server->keyboardResources_) {
+    if (!resourceBelongsToSurfaceClient(keyboard, server->keyboardFocus_)) continue;
     wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, depressed, 0, 0, 0);
   }
 }
@@ -2643,7 +2752,7 @@ void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
 WaylandServer::Impl::Surface* previousToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* current) {
   WaylandServer::Impl::Surface* previous = nullptr;
   for (auto const& surface : server->surfaces_) {
-    if (!surface || !surface->toplevel) continue;
+    if (!isManagedToplevel(surface.get())) continue;
     if (surface.get() == current) return previous;
     previous = surface.get();
   }
@@ -2651,7 +2760,12 @@ WaylandServer::Impl::Surface* previousToplevel(WaylandServer::Impl* server, Wayl
 }
 
 WaylandServer::Impl::XdgToplevel* focusedToplevel(WaylandServer::Impl* server) {
-  return toplevelForSurface(server, server->keyboardFocus_);
+  if (!server->keyboardFocus_) return nullptr;
+  if (auto* toplevel = toplevelForSurface(server, server->keyboardFocus_)) return toplevel;
+  if (auto* popup = server->keyboardFocus_->xdgPopup; popup && popup->parentSurface) {
+    return toplevelForSurface(server, popup->parentSurface);
+  }
+  return nullptr;
 }
 
 bool closeFocusedToplevel(WaylandServer::Impl* server) {
@@ -2665,7 +2779,7 @@ bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs) {
   WaylandServer::Impl::Surface* target = previousToplevel(server, server->keyboardFocus_);
   if (!target) {
     for (auto const& surface : server->surfaces_) {
-      if (surface && surface->toplevel) {
+      if (isManagedToplevel(surface.get())) {
         target = surface.get();
       }
     }
@@ -2684,7 +2798,7 @@ std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const*
       .x = preview->x,
       .y = 0,
       .width = preview->width,
-      .height = std::max(kMinWindowHeight, server->output_.height),
+      .height = std::max(kMinWindowHeight, server->logicalOutputHeight()),
   };
 }
 
@@ -2772,9 +2886,9 @@ void toggleMaximizedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::S
         std::max(kMinWindowWidth, surface->restoreWidth > 0 ? surface->restoreWidth : surface->width);
     std::int32_t const restoreHeight =
         std::max(kMinWindowHeight, surface->restoreHeight > 0 ? surface->restoreHeight : surface->height);
-    std::int32_t const restoreX = std::clamp(surface->restoreX, 0, std::max(0, server->output_.width - restoreWidth));
+    std::int32_t const restoreX = std::clamp(surface->restoreX, 0, std::max(0, server->logicalOutputWidth() - restoreWidth));
     std::int32_t const restoreY =
-        std::clamp(surface->restoreY, kTitleBarHeight, std::max(kTitleBarHeight, server->output_.height - restoreHeight));
+        std::clamp(surface->restoreY, kTitleBarHeight, std::max(kTitleBarHeight, server->logicalOutputHeight() - restoreHeight));
     surface->maximized = false;
     surface->snapped = false;
     startGeometryAnimation(server, surface, restoreX, restoreY, restoreWidth, restoreHeight);
@@ -2787,8 +2901,8 @@ void toggleMaximizedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::S
     surface->restoreWidth = displayWidth(surface);
     surface->restoreHeight = displayHeight(surface);
   }
-  std::int32_t const width = std::max(kMinWindowWidth, server->output_.width);
-  std::int32_t const height = std::max(kMinWindowHeight, server->output_.height - kTitleBarHeight);
+  std::int32_t const width = std::max(kMinWindowWidth, server->logicalOutputWidth());
+  std::int32_t const height = std::max(kMinWindowHeight, server->logicalOutputHeight() - kTitleBarHeight);
   surface->maximized = true;
   surface->snapped = false;
   startGeometryAnimation(server, surface, 0, kTitleBarHeight, width, height);
@@ -2855,8 +2969,8 @@ void updateDrag(WaylandServer::Impl* server) {
   if (!server->dragSurface_) return;
   WaylandServer::Impl::Surface* surface = server->dragSurface_;
   restoreSnappedForDrag(server, surface);
-  int const maxX = std::max(0, server->output_.width - displayWidth(surface));
-  int const maxY = std::max(kTitleBarHeight, server->output_.height - displayHeight(surface));
+  int const maxX = std::max(0, server->logicalOutputWidth() - displayWidth(surface));
+  int const maxY = std::max(kTitleBarHeight, server->logicalOutputHeight() - displayHeight(surface));
   surface->windowX = std::clamp(static_cast<int>(server->pointerX_ - server->dragOffsetX_), 0, maxX);
   surface->windowY = std::clamp(static_cast<int>(server->pointerY_ - server->dragOffsetY_), kTitleBarHeight, maxY);
 }
@@ -2914,8 +3028,13 @@ void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_
     sendRelativePointerMotion(this, dx, dy, timeMs);
     return;
   }
-  pointerX_ = std::clamp(pointerX_ + static_cast<float>(dx), 0.f, std::max(0.f, static_cast<float>(output_.width - 1)));
-  pointerY_ = std::clamp(pointerY_ + static_cast<float>(dy), 0.f, std::max(0.f, static_cast<float>(output_.height - 1)));
+  float const scale = std::max(0.5f, preferredScale_);
+  pointerX_ = std::clamp(pointerX_ + static_cast<float>(dx) / scale,
+                         0.f,
+                         std::max(0.f, static_cast<float>(logicalOutputWidth() - 1)));
+  pointerY_ = std::clamp(pointerY_ + static_cast<float>(dy) / scale,
+                         0.f,
+                         std::max(0.f, static_cast<float>(logicalOutputHeight() - 1)));
   if (auto* constraint = activePointerConstraint(this);
       constraint && constraint->kind == PointerConstraint::Kind::Confine && constraint->surface) {
     pointerX_ = std::clamp(pointerX_,
@@ -2946,8 +3065,13 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
       constraint && constraint->kind == PointerConstraint::Kind::Lock) {
     return;
   }
-  pointerX_ = std::clamp(static_cast<float>(x), 0.f, std::max(0.f, static_cast<float>(output_.width - 1)));
-  pointerY_ = std::clamp(static_cast<float>(y), 0.f, std::max(0.f, static_cast<float>(output_.height - 1)));
+  float const scale = std::max(0.5f, preferredScale_);
+  pointerX_ = std::clamp(static_cast<float>(x) / scale,
+                         0.f,
+                         std::max(0.f, static_cast<float>(logicalOutputWidth() - 1)));
+  pointerY_ = std::clamp(static_cast<float>(y) / scale,
+                         0.f,
+                         std::max(0.f, static_cast<float>(logicalOutputHeight() - 1)));
   if (auto* constraint = activePointerConstraint(this);
       constraint && constraint->kind == PointerConstraint::Kind::Confine && constraint->surface) {
     pointerX_ = std::clamp(pointerX_,
@@ -3057,18 +3181,21 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         flushClients();
       }
       closePressSurface_ = nullptr;
+      sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       return;
     } else if (resizeSurface_) {
       updateResize(this);
       traceResizeSurface("end-resize", resizeSurface_);
       resizeSurface_ = nullptr;
       resizeEdges_ = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
+      sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       return;
     } else if (dragSurface_) {
       if (auto preview = snapPreviewForDrag(this)) {
         snapToplevel(this, dragSurface_, preview->x == 0);
       }
       dragSurface_ = nullptr;
+      sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       return;
     }
   }
@@ -3081,6 +3208,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
   if (!pointerFocus_) return;
   std::uint32_t serial = nextInputSerial_++;
   for (wl_resource* pointer : pointerResources_) {
+    if (!resourceBelongsToSurfaceClient(pointer, pointerFocus_)) continue;
     wl_pointer_send_button(pointer,
                            serial,
                            timeMs,
@@ -3093,6 +3221,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
 void WaylandServer::Impl::handlePointerAxis(double dx, double dy, std::uint32_t timeMs) {
   if (!pointerFocus_) return;
   for (wl_resource* pointer : pointerResources_) {
+    if (!resourceBelongsToSurfaceClient(pointer, pointerFocus_)) continue;
     if (dx != 0.0) {
       wl_pointer_send_axis(pointer, timeMs, WL_POINTER_AXIS_HORIZONTAL_SCROLL, wl_fixed_from_double(dx));
     }
@@ -3111,6 +3240,7 @@ void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std
   if (!keyboardFocus_) return;
   std::uint32_t serial = nextInputSerial_++;
   for (wl_resource* keyboard : keyboardResources_) {
+    if (!resourceBelongsToSurfaceClient(keyboard, keyboardFocus_)) continue;
     wl_keyboard_send_key(keyboard,
                          serial,
                          timeMs,
@@ -3184,6 +3314,24 @@ void WaylandServer::Impl::flushClients() {
 
 void WaylandServer::Impl::setShortcutBindings(std::vector<ShortcutBinding> bindings) {
   shortcutBindings_ = std::move(bindings);
+}
+
+void WaylandServer::Impl::setPreferredScale(float scale) {
+  preferredScale_ = std::clamp(scale, 0.5f, 4.f);
+  std::int32_t const integerScale = integerOutputScale(preferredScale_);
+  for (wl_resource* output : outputResources_) {
+    if (output && wl_resource_get_version(output) >= 2) {
+      wl_output_send_scale(output, integerScale);
+      wl_output_send_done(output);
+    }
+  }
+  std::uint32_t const preferred = preferredScale120(preferredScale_);
+  for (auto const& fractionalScale : fractionalScales_) {
+    if (fractionalScale && fractionalScale->resource) {
+      wp_fractional_scale_v1_send_preferred_scale(fractionalScale->resource, preferred);
+    }
+  }
+  flushClients();
 }
 
 void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
@@ -3283,6 +3431,11 @@ wl_resource* WaylandServer::Impl::createSurface(wl_client* client, std::uint32_t
   auto* raw = surface.get();
   surfaces_.push_back(std::move(surface));
   wl_resource_set_implementation(resource, &surfaceImpl, raw, destroyResourceCallback<WaylandServer::Impl::Surface, WaylandServer::Impl, &WaylandServer::Impl::destroySurface>);
+  for (wl_resource* output : outputResources_) {
+    if (output && wl_resource_get_client(output) == client) {
+      wl_surface_send_enter(resource, output);
+    }
+  }
   return resource;
 }
 
@@ -3565,6 +3718,18 @@ int WaylandServer::eventFd() const noexcept {
   return impl_->eventFd();
 }
 
+float WaylandServer::preferredScale() const noexcept {
+  return impl_->preferredScale();
+}
+
+std::int32_t WaylandServer::logicalOutputWidth() const noexcept {
+  return impl_->logicalOutputWidth();
+}
+
+std::int32_t WaylandServer::logicalOutputHeight() const noexcept {
+  return impl_->logicalOutputHeight();
+}
+
 std::size_t WaylandServer::toplevelCount() const noexcept {
   return impl_->toplevelCount();
 }
@@ -3599,6 +3764,10 @@ void WaylandServer::flushClients() {
 
 void WaylandServer::setShortcutBindings(std::vector<ShortcutBinding> bindings) {
   impl_->setShortcutBindings(std::move(bindings));
+}
+
+void WaylandServer::setPreferredScale(float scale) {
+  impl_->setPreferredScale(scale);
 }
 
 void WaylandServer::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {

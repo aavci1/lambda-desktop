@@ -7,6 +7,7 @@
 #include <fstream>
 #include <linux/input-event-codes.h>
 #include <optional>
+#include <charconv>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -91,6 +92,16 @@ std::optional<bool> parseBool(std::string_view value) {
   if (text == "true" || text == "yes" || text == "on" || text == "1") return true;
   if (text == "false" || text == "no" || text == "off" || text == "0") return false;
   return std::nullopt;
+}
+
+std::optional<float> parseScale(std::string_view value) {
+  std::string text = unquote(value);
+  float scale = 1.f;
+  auto const* begin = text.data();
+  auto const* end = text.data() + text.size();
+  auto [ptr, error] = std::from_chars(begin, end, scale);
+  if (error != std::errc{} || ptr != end || scale < 0.5f || scale > 4.f) return std::nullopt;
+  return scale;
 }
 
 std::string lowerAscii(std::string value) {
@@ -283,6 +294,15 @@ CompositorConfig loadConfig() {
       } else {
         std::fprintf(stderr,
                      "flux-compositor: ignoring invalid wallpaper mode in %s:%u\n",
+                     path->c_str(),
+                     lineNumber);
+      }
+    } else if (key == "scale" || key == "output_scale" || key == "fractional_scale") {
+      if (auto scale = parseScale(value)) {
+        config.scale = *scale;
+      } else {
+        std::fprintf(stderr,
+                     "flux-compositor: ignoring invalid scale value in %s:%u\n",
                      path->c_str(),
                      lineNumber);
       }

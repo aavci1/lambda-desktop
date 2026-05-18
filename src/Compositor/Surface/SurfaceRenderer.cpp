@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
 #include <exception>
 #include <unistd.h>
@@ -25,11 +26,18 @@ float easeOutCubic(float value) {
   return 1.f - inverse * inverse * inverse;
 }
 
-} // namespace
+void appendSizeLog(char const* format, ...) {
+  FILE* file = std::fopen("compositor-sizes.log", "a");
+  if (!file) return;
+  va_list args;
+  va_start(args, format);
+  std::vfprintf(file, format, args);
+  va_end(args);
+  std::fclose(file);
+}
 
-bool shouldTraceRenderSnapshot(CommittedSurfaceSnapshot const& current,
-                               SurfaceVisualState const& visual) {
-  if (!detail::resizeTraceEnabled()) return false;
+bool renderSnapshotChanged(CommittedSurfaceSnapshot const& current,
+                           SurfaceVisualState const& visual) {
   if (!visual.hasLastSnapshot) return true;
   auto const& previous = visual.lastSnapshot;
   return current.x != previous.x || current.y != previous.y ||
@@ -41,6 +49,13 @@ bool shouldTraceRenderSnapshot(CommittedSurfaceSnapshot const& current,
          current.sourceWidth != previous.sourceWidth || current.sourceHeight != previous.sourceHeight ||
          current.destinationWidth != previous.destinationWidth ||
          current.destinationHeight != previous.destinationHeight;
+}
+
+} // namespace
+
+bool shouldTraceRenderSnapshot(CommittedSurfaceSnapshot const& current,
+                               SurfaceVisualState const& visual) {
+  return detail::resizeTraceEnabled() && renderSnapshotChanged(current, visual);
 }
 
 void drawSurfaceImage(Canvas& canvas,
@@ -152,6 +167,50 @@ void drawCommittedSurface(WaylandServer& wayland,
   updateCachedImage(wayland, canvas, surface, cached);
   if (!cached.image) return;
 
+  bool const snapshotChanged = renderSnapshotChanged(surface, visual);
+  if (snapshotChanged) {
+    auto const imageSize = cached.image->size();
+    appendSizeLog(
+        "render surface=%llu logical=%d,%d %dx%d buffer=%dx%d image=%dx%d "
+        "source=%.1f,%.1f %.1fx%.1f dest=%dx%d outputScale=%.2f serial=%llu\n",
+        static_cast<unsigned long long>(surface.id),
+        surface.x,
+        surface.y,
+        surface.width,
+        surface.height,
+        surface.bufferWidth,
+        surface.bufferHeight,
+        static_cast<int>(imageSize.width),
+        static_cast<int>(imageSize.height),
+        surface.sourceX,
+        surface.sourceY,
+        surface.sourceWidth,
+        surface.sourceHeight,
+        surface.destinationWidth,
+        surface.destinationHeight,
+        wayland.preferredScale(),
+        static_cast<unsigned long long>(surface.serial));
+    std::fprintf(stderr,
+                 "flux-compositor: render surface=%llu logical=%d,%d %dx%d buffer=%dx%d image=%dx%d "
+                 "source=%.1f,%.1f %.1fx%.1f dest=%dx%d outputScale=%.2f serial=%llu\n",
+                 static_cast<unsigned long long>(surface.id),
+                 surface.x,
+                 surface.y,
+                 surface.width,
+                 surface.height,
+                 surface.bufferWidth,
+                 surface.bufferHeight,
+                 static_cast<int>(imageSize.width),
+                 static_cast<int>(imageSize.height),
+                 surface.sourceX,
+                 surface.sourceY,
+                 surface.sourceWidth,
+                 surface.sourceHeight,
+                 surface.destinationWidth,
+                 surface.destinationHeight,
+                 wayland.preferredScale(),
+                 static_cast<unsigned long long>(surface.serial));
+  }
   if (shouldTraceRenderSnapshot(surface, visual)) {
     auto const imageSize = cached.image->size();
     detail::resizeTrace(

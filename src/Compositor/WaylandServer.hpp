@@ -94,6 +94,9 @@ public:
 
   [[nodiscard]] char const* socketName() const noexcept;
   [[nodiscard]] int eventFd() const noexcept;
+  [[nodiscard]] float preferredScale() const noexcept;
+  [[nodiscard]] std::int32_t logicalOutputWidth() const noexcept;
+  [[nodiscard]] std::int32_t logicalOutputHeight() const noexcept;
   [[nodiscard]] std::size_t toplevelCount() const noexcept;
   [[nodiscard]] std::vector<CommittedSurfaceSnapshot> committedSurfaces() const;
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
@@ -104,6 +107,7 @@ public:
   void dispatch();
   void flushClients();
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);
+  void setPreferredScale(float scale);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   void sendFrameCallbacks(std::uint32_t timeMs);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);

@@ -17,6 +17,7 @@ struct CompositorConfig {
   std::optional<Color> backgroundGradientEnd;
   std::optional<std::string> wallpaperPath;
   ImageFillMode wallpaperMode = ImageFillMode::Cover;
+  float scale = 2.0f;
   bool animationsEnabled = true;
   bool hardwareCursorEnabled = true;
   std::vector<WaylandServer::ShortcutBinding> shortcutBindings;

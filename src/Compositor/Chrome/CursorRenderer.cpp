@@ -172,8 +172,9 @@ void drawCompositorCursor(WaylandServer& wayland,
   float const cursorX = wayland.pointerX();
   float const cursorY = wayland.pointerY();
   if (hardwareArrowCursor && wayland.cursorShape() == CursorShape::Arrow) {
-    std::int32_t const cursorXi = static_cast<std::int32_t>(std::lround(cursorX));
-    std::int32_t const cursorYi = static_cast<std::int32_t>(std::lround(cursorY));
+    float const outputScale = wayland.preferredScale();
+    std::int32_t const cursorXi = static_cast<std::int32_t>(std::lround(cursorX * outputScale));
+    std::int32_t const cursorYi = static_cast<std::int32_t>(std::lround(cursorY * outputScale));
     (void)output.setCursorImage(hardwareCursorPixels, hardwareCursorWidth, hardwareCursorHeight);
     if (!output.moveCursor(cursorXi, cursorYi)) {
       (void)output.setCursorImage(hardwareCursorPixels, hardwareCursorWidth, hardwareCursorHeight);

@@ -980,6 +980,22 @@ void KmsApplication::initializeConsole() {
   if (ioctl(ttyFd_, KDGETMODE, &previousConsoleMode_) != 0) {
     previousConsoleMode_ = KD_TEXT;
   }
+  if (tcgetattr(ttyFd_, &previousTermios_) == 0) {
+    termios compositorTermios = previousTermios_;
+    compositorTermios.c_iflag &= static_cast<tcflag_t>(~(BRKINT | ICRNL | INPCK | ISTRIP | IXON));
+    compositorTermios.c_oflag &= static_cast<tcflag_t>(~OPOST);
+    compositorTermios.c_cflag |= CS8;
+    compositorTermios.c_lflag &= static_cast<tcflag_t>(~(ECHO | ICANON | IEXTEN | ISIG));
+    compositorTermios.c_cc[VMIN] = 0;
+    compositorTermios.c_cc[VTIME] = 0;
+    if (tcsetattr(ttyFd_, TCSAFLUSH, &compositorTermios) == 0) {
+      terminalConfigured_ = true;
+    } else {
+      debugLog("tcsetattr compositor mode failed: %s", std::strerror(errno));
+    }
+  } else {
+    debugLog("tcgetattr failed: %s", std::strerror(errno));
+  }
   vt_stat state{};
   if (ioctl(ttyFd_, VT_GETSTATE, &state) == 0) {
     ourVt_ = state.v_active;
@@ -1022,10 +1038,17 @@ void KmsApplication::restoreConsole() {
       }
     }
   }
+  if (terminalConfigured_) {
+    if (tcsetattr(ttyFd_, TCSAFLUSH, &previousTermios_) != 0) {
+      debugLog("tcsetattr restore failed: %s", std::strerror(errno));
+    }
+    tcflush(ttyFd_, TCIFLUSH);
+  }
   if (vtForeground_ && ioctl(ttyFd_, KDSETMODE, KD_TEXT) != 0) {
     debugLog("KDSETMODE(KD_TEXT) during shutdown failed: %s", std::strerror(errno));
   }
   consoleInitialized_ = false;
+  terminalConfigured_ = false;
   vtProcessMode_ = false;
   debugLog("console restore complete");
 }
@@ -1096,6 +1119,16 @@ void KmsApplication::releaseDrmMasterForVt(bool acknowledge) {
     drmMaster_ = false;
   }
   if (ttyFd_ >= 0) {
+    if (terminalConfigured_) {
+      if (tcsetattr(ttyFd_, TCSAFLUSH, &previousTermios_) != 0) {
+        debugLog("tcsetattr restore during VT release failed: %s", std::strerror(errno));
+      }
+      tcflush(ttyFd_, TCIFLUSH);
+      terminalConfigured_ = false;
+    }
+    if (ioctl(ttyFd_, KDSETMODE, KD_TEXT) != 0) {
+      debugLog("KDSETMODE(KD_TEXT) during VT release failed: %s", std::strerror(errno));
+    }
     if (acknowledge && vtProcessMode_ && ioctl(ttyFd_, VT_RELDISP, 1) != 0) {
       debugLog("VT_RELDISP release failed: %s", std::strerror(errno));
     }
@@ -1124,6 +1157,20 @@ void KmsApplication::acquireDrmMasterForVt(bool acknowledge) {
   }
   if (ttyFd_ >= 0 && ioctl(ttyFd_, KDSETMODE, KD_GRAPHICS) != 0) {
     debugLog("KDSETMODE(KD_GRAPHICS) after VT acquire failed: %s", std::strerror(errno));
+  }
+  if (ttyFd_ >= 0 && !terminalConfigured_) {
+    termios compositorTermios = previousTermios_;
+    compositorTermios.c_iflag &= static_cast<tcflag_t>(~(BRKINT | ICRNL | INPCK | ISTRIP | IXON));
+    compositorTermios.c_oflag &= static_cast<tcflag_t>(~OPOST);
+    compositorTermios.c_cflag |= CS8;
+    compositorTermios.c_lflag &= static_cast<tcflag_t>(~(ECHO | ICANON | IEXTEN | ISIG));
+    compositorTermios.c_cc[VMIN] = 0;
+    compositorTermios.c_cc[VTIME] = 0;
+    if (tcsetattr(ttyFd_, TCSAFLUSH, &compositorTermios) == 0) {
+      terminalConfigured_ = true;
+    } else {
+      debugLog("tcsetattr compositor mode after VT acquire failed: %s", std::strerror(errno));
+    }
   }
   vtForeground_ = true;
   for (KmsWindow* window : windows_) {

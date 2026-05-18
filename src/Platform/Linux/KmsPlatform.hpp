@@ -7,6 +7,7 @@
 #include <Flux/UI/Events.hpp>
 
 #include <linux/vt.h>
+#include <termios.h>
 #include <xf86drmMode.h>
 
 #include <atomic>
@@ -137,9 +138,11 @@ private:
   bool signalHandlersInstalled_ = false;
   bool drmMaster_ = false;
   bool consoleInitialized_ = false;
+  bool terminalConfigured_ = false;
   bool vtProcessMode_ = false;
   bool vtForeground_ = true;
   int previousConsoleMode_ = 0;
+  termios previousTermios_{};
   vt_mode previousVtMode_{};
   int ourVt_ = 0;
   std::int64_t nextActiveVtPollMs_ = 0;

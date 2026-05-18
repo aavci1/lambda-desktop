@@ -38,7 +38,7 @@ void xdgOutputManagerGetXdgOutput(wl_client* client,
 
   WaylandOutputInfo const& output = server->output_;
   zxdg_output_v1_send_logical_position(xdgOutput, 0, 0);
-  zxdg_output_v1_send_logical_size(xdgOutput, output.width, output.height);
+  zxdg_output_v1_send_logical_size(xdgOutput, server->logicalOutputWidth(), server->logicalOutputHeight());
   if (version >= ZXDG_OUTPUT_V1_NAME_SINCE_VERSION) {
     zxdg_output_v1_send_name(xdgOutput, output.name.c_str());
   }

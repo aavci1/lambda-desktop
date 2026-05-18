@@ -605,6 +605,7 @@ private:
     self->dpiScaleX_ = safeScale(static_cast<float>(factor));
     self->dpiScaleY_ = self->dpiScaleX_;
     wl_surface_set_buffer_scale(self->surface_, factor);
+    self->updateViewportDestination();
     if (self->fluxWindow_) self->fluxWindow_->updateCanvasDpiScale(self->dpiScaleX_, self->dpiScaleY_);
     Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
                                                           .handle = self->handle_,
@@ -749,6 +750,7 @@ private:
     dpiScaleX_ = scale;
     dpiScaleY_ = scale;
     wl_surface_set_buffer_scale(surface_, static_cast<std::int32_t>(std::max(1.f, std::round(scale))));
+    updateViewportDestination();
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
                                                           .handle = handle_,

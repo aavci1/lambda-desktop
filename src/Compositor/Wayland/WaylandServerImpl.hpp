@@ -51,6 +51,9 @@ struct WaylandServer::Impl {
 
   [[nodiscard]] char const* socketName() const noexcept;
   [[nodiscard]] int eventFd() const noexcept;
+  [[nodiscard]] float preferredScale() const noexcept;
+  [[nodiscard]] std::int32_t logicalOutputWidth() const noexcept;
+  [[nodiscard]] std::int32_t logicalOutputHeight() const noexcept;
   [[nodiscard]] std::size_t toplevelCount() const noexcept;
   [[nodiscard]] std::vector<CommittedSurfaceSnapshot> committedSurfaces() const;
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
@@ -61,6 +64,7 @@ struct WaylandServer::Impl {
   void dispatch();
   void flushClients();
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);
+  void setPreferredScale(float scale);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   void sendFrameCallbacks(std::uint32_t timeMs);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
@@ -154,6 +158,7 @@ struct WaylandServer::Impl {
   Surface* dndTarget_ = nullptr;
   DataOffer* dndOffer_ = nullptr;
   std::vector<wl_resource*> seatResources_;
+  std::vector<wl_resource*> outputResources_;
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;
   Surface* pointerFocus_ = nullptr;
@@ -194,6 +199,7 @@ struct WaylandServer::Impl {
   std::uint64_t nextActivationTokenId_ = 1;
   std::uint32_t nextConfigureSerial_ = 1;
   std::uint32_t nextInputSerial_ = 1;
+  float preferredScale_ = 2.0f;
   Surface* lastActivationSurface_ = nullptr;
   std::uint32_t lastActivationTimeMs_ = 0;
 };
@@ -250,6 +256,9 @@ struct WaylandServer::Impl::Surface {
   std::int32_t geometryAnimationTargetHeight = 0;
   std::int32_t geometryAnimationLastConfigureWidth = 0;
   std::int32_t geometryAnimationLastConfigureHeight = 0;
+  bool awaitingConfigureCommit = false;
+  std::int32_t awaitingConfigureWidth = 0;
+  std::int32_t awaitingConfigureHeight = 0;
   std::int32_t restoreX = 96;
   std::int32_t restoreY = 96;
   std::int32_t restoreWidth = 0;
