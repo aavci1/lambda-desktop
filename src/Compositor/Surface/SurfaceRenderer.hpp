@@ -4,6 +4,7 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Image.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -43,5 +44,14 @@ void updateCachedImage(WaylandServer& wayland,
                        Canvas& canvas,
                        CommittedSurfaceSnapshot const& surface,
                        CachedClientImage& cached);
+
+void drawCommittedSurface(WaylandServer& wayland,
+                          Canvas& canvas,
+                          TextSystem& textSystem,
+                          CommittedSurfaceSnapshot const& surface,
+                          SurfaceVisualState& visual,
+                          CachedClientImage& cached,
+                          std::chrono::steady_clock::time_point frameTime,
+                          bool animationsEnabled);
 
 } // namespace flux::compositor

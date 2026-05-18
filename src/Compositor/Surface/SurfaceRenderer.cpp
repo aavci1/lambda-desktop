@@ -1,15 +1,31 @@
 #include "Compositor/Surface/SurfaceRenderer.hpp"
 
+#include "Compositor/Chrome/WindowChromeRenderer.hpp"
 #include "Detail/ResizeTrace.hpp"
 
 #include <Flux/Core/Geometry.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <exception>
 #include <unistd.h>
 #include <vector>
 
 namespace flux::compositor {
+namespace {
+
+float clamp01(float value) {
+  return std::clamp(value, 0.f, 1.f);
+}
+
+float easeOutCubic(float value) {
+  float const t = clamp01(value);
+  float const inverse = 1.f - t;
+  return 1.f - inverse * inverse * inverse;
+}
+
+} // namespace
 
 bool shouldTraceRenderSnapshot(CommittedSurfaceSnapshot const& current,
                                SurfaceVisualState const& visual) {
@@ -122,6 +138,95 @@ void updateCachedImage(WaylandServer& wayland,
       }
     }
   }
+}
+
+void drawCommittedSurface(WaylandServer& wayland,
+                          Canvas& canvas,
+                          TextSystem& textSystem,
+                          CommittedSurfaceSnapshot const& surface,
+                          SurfaceVisualState& visual,
+                          CachedClientImage& cached,
+                          std::chrono::steady_clock::time_point frameTime,
+                          bool animationsEnabled) {
+  if (visual.firstSeen.time_since_epoch().count() == 0) visual.firstSeen = frameTime;
+  updateCachedImage(wayland, canvas, surface, cached);
+  if (!cached.image) return;
+
+  if (shouldTraceRenderSnapshot(surface, visual)) {
+    auto const imageSize = cached.image->size();
+    detail::resizeTrace(
+        "compositor-render",
+        "render-snapshot surface=%llu window=%d,%d frame=%dx%d buffer=%dx%d "
+        "image=%dx%d source=%.1f,%.1f %.1fx%.1f dest=%dx%d serial=%llu\n",
+        static_cast<unsigned long long>(surface.id),
+        surface.x,
+        surface.y,
+        surface.width,
+        surface.height,
+        surface.bufferWidth,
+        surface.bufferHeight,
+        static_cast<int>(imageSize.width),
+        static_cast<int>(imageSize.height),
+        surface.sourceX,
+        surface.sourceY,
+        surface.sourceWidth,
+        surface.sourceHeight,
+        surface.destinationWidth,
+        surface.destinationHeight,
+        static_cast<unsigned long long>(surface.serial));
+  }
+  visual.lastSnapshot = surface;
+  visual.hasLastSnapshot = true;
+
+  float const windowX = static_cast<float>(surface.x);
+  float const windowY = static_cast<float>(surface.y);
+  float const windowWidth = static_cast<float>(surface.width);
+  float const windowHeight = static_cast<float>(surface.height);
+  float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
+  float const animationMs = static_cast<float>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
+  float const openProgress = animationsEnabled ? easeOutCubic(animationMs / 140.f) : 1.f;
+  float const openScale = 0.965f + 0.035f * openProgress;
+  float const openOpacity = openProgress;
+  float const outerHeight = windowHeight + titleBarHeight;
+  Point const pivot{windowX + windowWidth * 0.5f, windowY - titleBarHeight + outerHeight * 0.5f};
+  canvas.save();
+  canvas.setOpacity(canvas.opacity() * openOpacity);
+  if (openScale < 1.f) {
+    canvas.translate(pivot.x, pivot.y);
+    canvas.scale(openScale);
+    canvas.translate(-pivot.x, -pivot.y);
+  }
+  drawWindowChrome(canvas, textSystem, surface);
+  float const sourceWidth = surface.sourceWidth > 0.f
+                                ? surface.sourceWidth
+                                : static_cast<float>(cached.image->size().width);
+  float const sourceHeight = surface.sourceHeight > 0.f
+                                 ? surface.sourceHeight
+                                 : static_cast<float>(cached.image->size().height);
+  bool const staleResizeBuffer =
+      surface.activeSizing &&
+      (surface.destinationWidth != static_cast<int>(std::lround(windowWidth)) ||
+       surface.destinationHeight != static_cast<int>(std::lround(windowHeight)));
+  float const contentWidth = staleResizeBuffer
+                                 ? static_cast<float>(surface.destinationWidth)
+                                 : windowWidth;
+  float const contentHeight = staleResizeBuffer
+                                  ? static_cast<float>(surface.destinationHeight)
+                                  : windowHeight;
+  canvas.save();
+  canvas.clipRect(Rect::sharp(windowX, windowY, windowWidth, windowHeight));
+  canvas.drawImage(*cached.image,
+                   Rect::sharp(surface.sourceX,
+                               surface.sourceY,
+                               sourceWidth,
+                               sourceHeight),
+                   Rect::sharp(windowX,
+                               windowY,
+                               contentWidth,
+                               contentHeight));
+  canvas.restore();
+  canvas.restore();
 }
 
 } // namespace flux::compositor

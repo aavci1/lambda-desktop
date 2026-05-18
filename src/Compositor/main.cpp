@@ -10,7 +10,6 @@
 #include "Compositor/Input/KmsInputBridge.hpp"
 #include "Compositor/Surface/SurfaceRenderer.hpp"
 #include "Compositor/WaylandServer.hpp"
-#include "Detail/ResizeTrace.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
@@ -163,86 +162,15 @@ int main(int, char**) {
       for (auto const& clientSurface : committedSurfaces) {
         liveSurfaceIds.insert(clientSurface.id);
         auto& visual = surfaceVisuals[clientSurface.id];
-        if (visual.firstSeen.time_since_epoch().count() == 0) visual.firstSeen = frameTime;
         auto& cached = clientImages[clientSurface.id];
-        flux::compositor::updateCachedImage(wayland, *canvas, clientSurface, cached);
-        if (!cached.image) continue;
-        bool const traceSnapshot = flux::compositor::shouldTraceRenderSnapshot(clientSurface, visual);
-        if (traceSnapshot) {
-          auto const imageSize = cached.image->size();
-          flux::detail::resizeTrace(
-              "compositor-render",
-              "render-snapshot surface=%llu window=%d,%d frame=%dx%d buffer=%dx%d "
-              "image=%dx%d source=%.1f,%.1f %.1fx%.1f dest=%dx%d serial=%llu\n",
-              static_cast<unsigned long long>(clientSurface.id),
-              clientSurface.x,
-              clientSurface.y,
-              clientSurface.width,
-              clientSurface.height,
-              clientSurface.bufferWidth,
-              clientSurface.bufferHeight,
-              static_cast<int>(imageSize.width),
-              static_cast<int>(imageSize.height),
-              clientSurface.sourceX,
-              clientSurface.sourceY,
-              clientSurface.sourceWidth,
-              clientSurface.sourceHeight,
-              clientSurface.destinationWidth,
-              clientSurface.destinationHeight,
-              static_cast<unsigned long long>(clientSurface.serial));
-        }
-        visual.lastSnapshot = clientSurface;
-        visual.hasLastSnapshot = true;
-
-        float const windowX = static_cast<float>(clientSurface.x);
-        float const windowY = static_cast<float>(clientSurface.y);
-        float const windowWidth = static_cast<float>(clientSurface.width);
-        float const windowHeight = static_cast<float>(clientSurface.height);
-        float const titleBarHeight = static_cast<float>(clientSurface.titleBarHeight);
-        float const animationMs = static_cast<float>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
-        float const openProgress = appliedConfig.config.animationsEnabled ? easeOutCubic(animationMs / 140.f) : 1.f;
-        float const openScale = 0.965f + 0.035f * openProgress;
-        float const openOpacity = openProgress;
-        float const outerHeight = windowHeight + titleBarHeight;
-        flux::Point const pivot{windowX + windowWidth * 0.5f, windowY - titleBarHeight + outerHeight * 0.5f};
-        canvas->save();
-        canvas->setOpacity(canvas->opacity() * openOpacity);
-        if (openScale < 1.f) {
-          canvas->translate(pivot.x, pivot.y);
-          canvas->scale(openScale);
-          canvas->translate(-pivot.x, -pivot.y);
-        }
-        flux::compositor::drawWindowChrome(*canvas, textSystem, clientSurface);
-        float const sourceWidth = clientSurface.sourceWidth > 0.f
-                                      ? clientSurface.sourceWidth
-                                      : static_cast<float>(cached.image->size().width);
-        float const sourceHeight = clientSurface.sourceHeight > 0.f
-                                       ? clientSurface.sourceHeight
-                                       : static_cast<float>(cached.image->size().height);
-        bool const staleResizeBuffer =
-            clientSurface.activeSizing &&
-            (clientSurface.destinationWidth != static_cast<int>(std::lround(windowWidth)) ||
-             clientSurface.destinationHeight != static_cast<int>(std::lround(windowHeight)));
-        float const contentWidth = staleResizeBuffer
-                                       ? static_cast<float>(clientSurface.destinationWidth)
-                                       : windowWidth;
-        float const contentHeight = staleResizeBuffer
-                                        ? static_cast<float>(clientSurface.destinationHeight)
-                                        : windowHeight;
-        canvas->save();
-        canvas->clipRect(flux::Rect::sharp(windowX, windowY, windowWidth, windowHeight));
-        canvas->drawImage(*cached.image,
-                          flux::Rect::sharp(clientSurface.sourceX,
-                                            clientSurface.sourceY,
-                                            sourceWidth,
-                                            sourceHeight),
-                          flux::Rect::sharp(windowX,
-                                            windowY,
-                                            contentWidth,
-                                            contentHeight));
-        canvas->restore();
-        canvas->restore();
+        flux::compositor::drawCommittedSurface(wayland,
+                                               *canvas,
+                                               textSystem,
+                                               clientSurface,
+                                               visual,
+                                               cached,
+                                               frameTime,
+                                               appliedConfig.config.animationsEnabled);
       }
       for (auto const& [surfaceId, visual] : surfaceVisuals) {
         if (liveSurfaceIds.contains(surfaceId)) continue;
