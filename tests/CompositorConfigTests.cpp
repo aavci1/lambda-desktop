@@ -93,6 +93,7 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   CHECK(config.backgroundColor.r == doctest::Approx(17.f / 255.f));
   CHECK(config.backgroundColor.g == doctest::Approx(34.f / 255.f));
   CHECK(config.backgroundColor.b == doctest::Approx(51.f / 255.f));
+  CHECK(config.backgroundColor.a == doctest::Approx(1.f));
   CHECK(config.wallpaperPath == "/tmp/wallpaper.png");
   CHECK(config.wallpaperMode == flux::ImageFillMode::Fit);
   CHECK(config.scale == doctest::Approx(1.5f));
@@ -106,6 +107,31 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   CHECK(snapLeft->ctrl);
   CHECK(snapLeft->alt);
   CHECK_FALSE(snapLeft->meta);
+
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("compositor config parses shorthand and alpha colors") {
+  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  auto const path = tempConfigPath();
+  std::ofstream file(path);
+  file << "background_gradient = \"#1234 #01020380\"\n";
+  file.close();
+  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+
+  auto loaded = flux::compositor::loadConfigWithMetadata();
+  auto const& config = loaded.config;
+  CHECK(config.backgroundColor.r == doctest::Approx(17.f / 255.f));
+  CHECK(config.backgroundColor.g == doctest::Approx(34.f / 255.f));
+  CHECK(config.backgroundColor.b == doctest::Approx(51.f / 255.f));
+  CHECK(config.backgroundColor.a == doctest::Approx(68.f / 255.f));
+  REQUIRE(config.backgroundGradientEnd);
+  CHECK(config.backgroundGradientEnd->r == doctest::Approx(1.f / 255.f));
+  CHECK(config.backgroundGradientEnd->g == doctest::Approx(2.f / 255.f));
+  CHECK(config.backgroundGradientEnd->b == doctest::Approx(3.f / 255.f));
+  CHECK(config.backgroundGradientEnd->a == doctest::Approx(128.f / 255.f));
 
   std::filesystem::remove(path);
 }
