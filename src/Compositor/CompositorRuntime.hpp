@@ -4,6 +4,10 @@
 
 namespace flux::compositor {
 
-int runKmsCompositor(std::atomic<bool>& running);
+struct KmsCompositorOptions {
+  bool listOutputs = false;
+};
+
+int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options = {});
 
 } // namespace flux::compositor

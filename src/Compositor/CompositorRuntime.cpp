@@ -14,9 +14,14 @@
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
 #include <chrono>
+#include <charconv>
+#include <cctype>
 #include <cstdio>
 #include <exception>
 #include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -32,9 +37,56 @@ std::uint32_t monotonicMilliseconds() {
   return static_cast<std::uint32_t>(now.count());
 }
 
+std::string lowerAscii(std::string_view value) {
+  std::string result(value);
+  for (char& c : result) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return result;
+}
+
+std::optional<std::size_t> parseOutputIndex(std::string_view selector, std::size_t count) {
+  std::size_t index = 0;
+  auto const* begin = selector.data();
+  auto const* end = selector.data() + selector.size();
+  auto [ptr, error] = std::from_chars(begin, end, index);
+  if (error != std::errc{} || ptr != end || index >= count) return std::nullopt;
+  return index;
+}
+
+void printOutputs(std::vector<flux::platform::KmsOutput> const& outputs) {
+  std::fprintf(stderr, "flux-compositor: connected KMS outputs:\n");
+  for (std::size_t i = 0; i < outputs.size(); ++i) {
+    auto const& output = outputs[i];
+    std::fprintf(stderr,
+                 "flux-compositor:   [%zu] %s %ux%u @ %.3f Hz\n",
+                 i,
+                 output.name().c_str(),
+                 output.width(),
+                 output.height(),
+                 static_cast<double>(output.refreshRateMilliHz()) / 1000.0);
+  }
+}
+
+std::optional<std::size_t> selectOutputIndex(std::vector<flux::platform::KmsOutput> const& outputs,
+                                             std::optional<std::string> const& selector) {
+  if (outputs.empty()) return std::nullopt;
+  if (!selector || selector->empty()) return 0u;
+
+  for (std::size_t i = 0; i < outputs.size(); ++i) {
+    if (outputs[i].name() == *selector) return i;
+  }
+
+  std::string const normalized = lowerAscii(*selector);
+  for (std::size_t i = 0; i < outputs.size(); ++i) {
+    if (lowerAscii(outputs[i].name()) == normalized) return i;
+  }
+  if (normalized == "primary" || normalized == "first") return 0u;
+  if ((normalized == "secondary" || normalized == "second") && outputs.size() > 1u) return 1u;
+  return parseOutputIndex(*selector, outputs.size());
+}
+
 } // namespace
 
-int runKmsCompositor(std::atomic<bool>& running) {
+int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
   try {
     auto device = flux::platform::KmsDevice::open();
     auto outputs = device->outputs();
@@ -42,8 +94,20 @@ int runKmsCompositor(std::atomic<bool>& running) {
       std::fprintf(stderr, "flux-compositor: no connected KMS outputs\n");
       return 1;
     }
+    printOutputs(outputs);
+    if (options.listOutputs) return 0;
 
-    flux::platform::KmsOutput const& output = outputs.front();
+    LoadedCompositorConfig loadedConfig = loadConfigWithMetadata();
+    auto outputIndex = selectOutputIndex(outputs, loadedConfig.config.outputSelector);
+    if (!outputIndex) {
+      std::fprintf(stderr,
+                   "flux-compositor: output selector \"%s\" did not match any connected output\n",
+                   loadedConfig.config.outputSelector ? loadedConfig.config.outputSelector->c_str() : "");
+      printOutputs(outputs);
+      return 1;
+    }
+
+    flux::platform::KmsOutput const& output = outputs[*outputIndex];
     WaylandServer wayland({
         .name = output.name(),
         .width = static_cast<std::int32_t>(output.width()),
@@ -73,7 +137,6 @@ int runKmsCompositor(std::atomic<bool>& running) {
                  output.height(),
                  output.name().c_str());
 
-    LoadedCompositorConfig loadedConfig = loadConfigWithMetadata();
     AppliedCompositorConfig appliedConfig = applyCompositorConfig(loadedConfig.config, *canvas);
     wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
     wayland.setPreferredScale(appliedConfig.config.scale);
@@ -135,7 +198,12 @@ int runKmsCompositor(std::atomic<bool>& running) {
       device->pollEvents(0);
       wayland.dispatch();
       if (configChanged(loadedConfig)) {
+        auto const previousOutputSelector = loadedConfig.config.outputSelector;
         loadedConfig = loadConfigWithMetadata();
+        if (loadedConfig.config.outputSelector != previousOutputSelector) {
+          std::fprintf(stderr,
+                       "flux-compositor: output selector changed; restart required to move compositor outputs\n");
+        }
         applyConfig();
       }
       if (!device->isVtForeground()) {

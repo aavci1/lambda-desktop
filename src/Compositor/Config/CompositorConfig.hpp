@@ -19,6 +19,7 @@ struct CompositorConfig {
   ImageFillMode wallpaperMode = ImageFillMode::Cover;
   std::optional<std::string> cursorTheme;
   int cursorSize = 0;
+  std::optional<std::string> outputSelector;
   float scale = 2.0f;
   bool animationsEnabled = true;
   bool hardwareCursorEnabled = true;

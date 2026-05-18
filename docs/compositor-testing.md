@@ -22,13 +22,25 @@ sudo setfacl -m "u:$USER:rw" /dev/input/event*
 ./build-kms-compositor/flux-compositor 2>&1 | tee compositor.log
 ```
 
+To see connected connector names and indexes:
+
+```sh
+./build-kms-compositor/flux-compositor --list-outputs
+```
+
+To run on a secondary monitor without full multi-output:
+
+```sh
+./build-kms-compositor/flux-compositor --output secondary 2>&1 | tee compositor.log
+```
+
 To test a specific config file, use:
 
 ```sh
 ./build-kms-compositor/flux-compositor --config /path/to/config.toml 2>&1 | tee compositor.log
 ```
 
-Expected result: the configured background appears, the system cursor is visible, moving the mouse moves the cursor, and `Ctrl+Alt+Backspace` exits the compositor.
+Expected result: the selected output logs as connected, the configured background appears on that output, the system cursor is visible, moving the mouse moves the cursor, and `Ctrl+Alt+Backspace` exits the compositor.
 
 ## Core Demo Tests
 

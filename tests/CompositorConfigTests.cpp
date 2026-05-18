@@ -47,6 +47,8 @@ std::filesystem::path tempConfigPath() {
 
 TEST_CASE("compositor config creates a default file when missing") {
   ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  unsetenv("FLUX_COMPOSITOR_OUTPUT");
   auto const path = std::filesystem::temp_directory_path() /
                     ("flux-compositor-config-test-dir-" +
                      std::to_string(static_cast<unsigned long long>(getpid()))) /
@@ -69,6 +71,8 @@ TEST_CASE("compositor config creates a default file when missing") {
 
 TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  unsetenv("FLUX_COMPOSITOR_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "background = \"#112233\"\n";
@@ -108,6 +112,8 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
 
 TEST_CASE("compositor config reports file changes") {
   ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  unsetenv("FLUX_COMPOSITOR_OUTPUT");
   auto const path = tempConfigPath();
   {
     std::ofstream file(path);
@@ -123,12 +129,15 @@ TEST_CASE("compositor config reports file changes") {
 
 TEST_CASE("compositor config parses gradient aliases and scale aliases") {
   ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  unsetenv("FLUX_COMPOSITOR_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "background_gradient = \"#010203,#a0b0c0\"\n";
   file << "wallpaper_mode = \"tile\"\n";
   file << "cursor_theme = \"Adwaita\"\n";
   file << "cursor_size = \"32\"\n";
+  file << "output = \"HDMI-A-1\"\n";
   file << "output_scale = 1.25\n";
   file << "animations = \"off\"\n";
   file << "hardware_cursor = \"on\"\n";
@@ -148,6 +157,8 @@ TEST_CASE("compositor config parses gradient aliases and scale aliases") {
   REQUIRE(config.cursorTheme);
   CHECK(*config.cursorTheme == "Adwaita");
   CHECK(config.cursorSize == 32);
+  REQUIRE(config.outputSelector);
+  CHECK(*config.outputSelector == "HDMI-A-1");
   CHECK(config.scale == doctest::Approx(1.25f));
   CHECK_FALSE(config.animationsEnabled);
   CHECK(config.hardwareCursorEnabled);
@@ -157,6 +168,8 @@ TEST_CASE("compositor config parses gradient aliases and scale aliases") {
 
 TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  unsetenv("FLUX_COMPOSITOR_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "background = \"nope\"\n";
@@ -199,6 +212,8 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
 
 TEST_CASE("compositor config supports shortcut aliases and replacement") {
   ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  unsetenv("FLUX_COMPOSITOR_OUTPUT");
   auto const path = tempConfigPath();
   std::ofstream file(path);
   file << "[keybindings]\n";
@@ -232,6 +247,23 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
   CHECK(terminate->ctrl);
   CHECK(terminate->alt);
   CHECK(terminate->key == KEY_DELETE);
+
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("compositor config allows output environment override") {
+  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  auto const path = tempConfigPath();
+  std::ofstream file(path);
+  file << "output = \"HDMI-A-1\"\n";
+  file.close();
+  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  setenv("FLUX_COMPOSITOR_OUTPUT", "secondary", 1);
+
+  auto const config = flux::compositor::loadConfigWithMetadata().config;
+  REQUIRE(config.outputSelector);
+  CHECK(*config.outputSelector == "secondary");
 
   std::filesystem::remove(path);
 }

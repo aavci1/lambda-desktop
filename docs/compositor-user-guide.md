@@ -30,6 +30,18 @@ Run from a real TTY. The compositor owns the selected KMS output until it exits.
 ./build-kms-compositor/flux-compositor 2>&1 | tee compositor.log
 ```
 
+List connected KMS outputs:
+
+```sh
+./build-kms-compositor/flux-compositor --list-outputs
+```
+
+Run on a specific output by connector name, 0-based index, `primary`, or `secondary`:
+
+```sh
+./build-kms-compositor/flux-compositor --output secondary 2>&1 | tee compositor.log
+```
+
 Use a specific config file without changing the environment:
 
 ```sh
@@ -39,6 +51,7 @@ Use a specific config file without changing the environment:
 Expected startup behavior:
 
 - The output switches to the Flux compositor.
+- The compositor logs all connected KMS outputs and the selected output.
 - A background is drawn from the compositor config.
 - The cursor uses the system Xcursor theme or a client-provided cursor surface.
 - The compositor writes the selected physical size, logical size, and scale to stderr and `compositor-sizes.log`.
@@ -93,6 +106,7 @@ background = "#3380f2"
 # wallpaper_mode = "cover" # cover, contain, stretch, center, tile
 # cursor_theme = "Adwaita" # unset uses XCURSOR_THEME or system default
 # cursor_size = 24 # unset uses XCURSOR_SIZE or 24
+# output = "HDMI-A-1" # connector name, 0-based index, primary, or secondary
 
 scale = 2.0
 animations = true
@@ -109,6 +123,8 @@ terminate = "ctrl+alt+backspace"
 ```
 
 `scale` is compositor-level output scale. The compositor advertises a logical output size to clients and sends fractional-scale protocol updates when clients support them. Integer scales such as `1.0` and `2.0` are the safest baselines; `1.25` and `1.5` exercise fractional scaling.
+
+`output` selects which connected KMS connector the single-output compositor owns. Use `--list-outputs` to see connector names and indexes. Changing this key while the compositor is running is logged, but moving to another output requires restarting the compositor.
 
 `wallpaper_mode` accepts `cover`, `contain`, `stretch`, `center`, and `tile`.
 
@@ -159,7 +175,7 @@ Set them before launching the compositor if you need to force a theme or size.
 
 ## Current Limitations
 
-- Single output only.
+- Single active output only. The selected output is configurable, but multi-monitor desktop layout is not implemented.
 - No display-manager, login, lock screen, workspaces, or XWayland.
 - Input device permissions are still manual unless your session grants ACLs.
 - Popup support works for the test demos and uses popup-first pointer hit testing. The popup demo has visible hover/click validation. Broader `foot`/GTK/Qt/browser menu behavior still needs real-app validation with app configs that actually open popups.
@@ -173,5 +189,5 @@ Set them before launching the compositor if you need to force a theme or size.
 - Hardware-derived presentation-time feedback and refresh counters.
 - Adaptive sync and triple-buffering.
 - Proper input/session brokering instead of manual `/dev/input/event*` ACLs.
-- Multi-output decision and implementation if it lands in v1.
+- Full multi-output desktop layout if it lands in v1.
 - Install/session-manager packaging documentation.

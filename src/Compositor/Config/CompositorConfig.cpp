@@ -291,6 +291,7 @@ background = "#3380f2"
 # wallpaper_mode = "cover" # cover, contain, stretch, center, tile
 # cursor_theme = "Adwaita" # unset uses XCURSOR_THEME or system default
 # cursor_size = 24 # unset uses XCURSOR_SIZE or 24
+# output = "HDMI-A-1" # connector name, 0-based index, "primary", or "secondary"
 
 scale = 2.0
 animations = true
@@ -440,6 +441,20 @@ CompositorConfig loadConfig() {
     }
   }
 
+  auto parseOutputSelector = [&](char const* key) -> bool {
+    if (auto selector = configString(table, key)) {
+      selector = trim(*selector);
+      if (!selector->empty()) {
+        config.outputSelector = *selector;
+        return true;
+      }
+      std::fprintf(stderr, "flux-compositor: ignoring empty output selector in %s\n", path->c_str());
+      return true;
+    }
+    return false;
+  };
+  if (!parseOutputSelector("output") && !parseOutputSelector("output_name")) parseOutputSelector("kms_output");
+
   auto parseScaleKey = [&](char const* key) -> bool {
     if (!table.contains(key)) return false;
     if (auto scale = configFloat(table, key); scale && *scale >= 0.5f && *scale <= 4.f) {
@@ -465,6 +480,10 @@ CompositorConfig loadConfig() {
     } else {
       std::fprintf(stderr, "flux-compositor: ignoring invalid hardware_cursor value in %s\n", path->c_str());
     }
+  }
+
+  if (char const* outputEnv = std::getenv("FLUX_COMPOSITOR_OUTPUT"); outputEnv && *outputEnv) {
+    config.outputSelector = trim(outputEnv);
   }
 
   std::fprintf(stderr, "flux-compositor: loaded config %s\n", path->c_str());

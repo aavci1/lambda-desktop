@@ -15,12 +15,14 @@ void onSignal(int) {
 }
 
 void printUsage(char const* argv0) {
-  std::printf("Usage: %s [--config PATH] [--help]\n", argv0 ? argv0 : "flux-compositor");
+  std::printf("Usage: %s [--config PATH] [--output NAME_OR_INDEX] [--list-outputs] [--help]\n",
+              argv0 ? argv0 : "flux-compositor");
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
+  flux::compositor::KmsCompositorOptions options{};
   for (int i = 1; i < argc; ++i) {
     std::string_view const arg(argv[i] ? argv[i] : "");
     if (arg == "--help" || arg == "-h") {
@@ -35,6 +37,18 @@ int main(int argc, char** argv) {
       setenv("FLUX_COMPOSITOR_CONFIG", argv[++i], 1);
       continue;
     }
+    if (arg == "--output") {
+      if (i + 1 >= argc) {
+        std::fprintf(stderr, "flux-compositor: --output requires a connector name or index\n");
+        return 2;
+      }
+      setenv("FLUX_COMPOSITOR_OUTPUT", argv[++i], 1);
+      continue;
+    }
+    if (arg == "--list-outputs") {
+      options.listOutputs = true;
+      continue;
+    }
     std::fprintf(stderr, "flux-compositor: unknown option %s\n", arg.data());
     printUsage(argv[0]);
     return 2;
@@ -44,5 +58,5 @@ int main(int argc, char** argv) {
   // Ctrl+C belongs to the focused Wayland client. The compositor exits via
   // SIGTERM or its configured terminate shortcut.
   std::signal(SIGINT, SIG_IGN);
-  return flux::compositor::runKmsCompositor(gRunning);
+  return flux::compositor::runKmsCompositor(gRunning, options);
 }

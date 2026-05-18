@@ -4,7 +4,7 @@
 **Repository:** `flux-compositor` is currently built from this repository as `flux-compositor` while the Flux-side KMS API settles.
 **Scope:** a Linux Wayland compositor built on Flux. Launched from a TTY, owns the display, hosts Wayland clients, manages windows, exits on signal.
 
-**Out of scope, deliberately:** display-manager functionality (greeter, PAM, login). Session lifecycle (the compositor *is* a session, it doesn't manage sessions). Lock screen. Logout. Multi-monitor. Tab grouping. Window gluing. Accessibility. Input methods. Touch-specific shell behaviors. Form factors beyond desktop. These are all real concerns and all explicitly outside this spec.
+**Out of scope, deliberately:** display-manager functionality (greeter, PAM, login). Session lifecycle (the compositor *is* a session, it doesn't manage sessions). Lock screen. Logout. Full multi-monitor desktop layout. Tab grouping. Window gluing. Accessibility. Input methods. Touch-specific shell behaviors. Form factors beyond desktop. These are all real concerns and all explicitly outside this spec.
 
 ---
 
@@ -31,9 +31,9 @@ These hold across all phases. Implementation may surface reasons to revise; if s
 
 One process. The compositor is a single executable, `flux-compositor`, launched from a TTY. It owns the display via KMS for the duration of its run. It exits on SIGINT/SIGTERM. There is no system service, no privileged-client model, no state machine for session phases. It is a user-session compositor, the same way Sway is.
 
-### 1.2 Single output (v1)
+### 1.2 Single selected output (v1)
 
-The compositor handles exactly one output (the primary monitor). Multi-output is not in v1. The KMS code paths in Flux already enumerate outputs, but the compositor picks the first connected one and ignores the rest.
+The compositor handles exactly one active output. Full multi-output layout is not in v1. The KMS code paths in Flux enumerate connected outputs, and the compositor can select one by connector name, 0-based index, `primary`, or `secondary` through `--output`, `FLUX_COMPOSITOR_OUTPUT`, or `output = "..."` in the config.
 
 ### 1.3 Vulkan-only
 
@@ -646,7 +646,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 ### 8.2 Scope
 
 - **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in, close fade-out, server-driven snap/maximize geometry animation, and snap preview overlay are implemented. Titlebar drag to the top edge maximizes; Super+Up maximizes and Super+Down restores maximized/snapped windows.
-- **Configuration file:** `~/.config/flux-compositor/config.toml`. The compositor creates this file with defaults on first launch when it does not exist; `FLUX_COMPOSITOR_CONFIG=/path/to/config.toml` can override the path for testing. Keybindings, window-management preferences, animation toggles, and output scaling live here. Current parsing and hot reload support `background = "#RRGGBB"`, `background_gradient = "#RRGGBB,#RRGGBB"`, `wallpaper = "/path/to/file.webp"`, `wallpaper_mode = "cover"` (`cover`, `contain`, `stretch`, `center`, or `tile`), `scale = 2.0`, `animations = false`, `hardware_cursor = false`, and a `[keybindings]` section for compositor shortcuts.
+- **Configuration file:** `~/.config/flux-compositor/config.toml`. The compositor creates this file with defaults on first launch when it does not exist; `FLUX_COMPOSITOR_CONFIG=/path/to/config.toml` can override the path for testing. Keybindings, window-management preferences, animation toggles, output selection, and output scaling live here. Current parsing and hot reload support `background = "#RRGGBB"`, `background_gradient = "#RRGGBB,#RRGGBB"`, `wallpaper = "/path/to/file.webp"`, `wallpaper_mode = "cover"` (`cover`, `contain`, `stretch`, `center`, or `tile`), `output = "HDMI-A-1"` or `output = "secondary"`, `scale = 2.0`, `animations = false`, `hardware_cursor = false`, and a `[keybindings]` section for compositor shortcuts. Changing output selection requires restarting the compositor.
   Supported keybinding actions are `close`, `cycle_focus`, `snap_left`, `snap_right`, `maximize`, `restore`, and `terminate`; bindings use strings such as `"Super+Q"` or `"Ctrl+Alt+Backspace"`.
 - **Hardware cursor:** use KMS cursor planes when supported. The compositor loads the system Xcursor theme for its default/cursor-shape cursors and uploads themed or client-provided cursor pixels to the KMS cursor plane when they fit without compositor-side scaling. If the cursor plane cannot be used, the same themed cursor image is drawn in software; there is no built-in fallback cursor artwork.
 - **Frame timing improvements:** adaptive sync if the hardware supports it (FreeSync). Triple-buffering when beneficial. Initial KMS vblank pacing uses `drmWaitVBlank` when available and falls back to timer pacing if the driver rejects it.
