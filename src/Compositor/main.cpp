@@ -87,6 +87,27 @@ float easeOutCubic(float value) {
   return 1.f - inverse * inverse * inverse;
 }
 
+bool resizeTraceEnabled() {
+  static bool const enabled = [] {
+    char const* value = std::getenv("FLUX_COMPOSITOR_RESIZE_TRACE");
+    return value && value[0] != '\0' && std::strcmp(value, "0") != 0;
+  }();
+  return enabled;
+}
+
+bool shouldTraceRenderSnapshot(flux::compositor::CommittedSurfaceSnapshot const& current,
+                               SurfaceVisualState const& visual) {
+  if (!resizeTraceEnabled()) return false;
+  if (!visual.hasLastSnapshot) return true;
+  auto const& previous = visual.lastSnapshot;
+  return current.x != previous.x || current.y != previous.y ||
+         current.width != previous.width || current.height != previous.height ||
+         current.bufferWidth != previous.bufferWidth || current.bufferHeight != previous.bufferHeight ||
+         current.serial != previous.serial ||
+         current.sourceX != previous.sourceX || current.sourceY != previous.sourceY ||
+         current.sourceWidth != previous.sourceWidth || current.sourceHeight != previous.sourceHeight;
+}
+
 std::string trim(std::string_view value) {
   std::size_t begin = 0;
   while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin]))) ++begin;
@@ -802,6 +823,27 @@ int main(int, char**) {
         auto& cached = clientImages[clientSurface.id];
         updateCachedImage(wayland, *canvas, clientSurface, cached);
         if (!cached.image) continue;
+        bool const traceSnapshot = shouldTraceRenderSnapshot(clientSurface, visual);
+        if (traceSnapshot) {
+          auto const imageSize = cached.image->size();
+          std::fprintf(stderr,
+                       "resize-trace: render-snapshot surface=%llu window=%d,%d frame=%dx%d buffer=%dx%d "
+                       "image=%dx%d source=%.1f,%.1f %.1fx%.1f serial=%llu\n",
+                       static_cast<unsigned long long>(clientSurface.id),
+                       clientSurface.x,
+                       clientSurface.y,
+                       clientSurface.width,
+                       clientSurface.height,
+                       clientSurface.bufferWidth,
+                       clientSurface.bufferHeight,
+                       static_cast<int>(imageSize.width),
+                       static_cast<int>(imageSize.height),
+                       clientSurface.sourceX,
+                       clientSurface.sourceY,
+                       clientSurface.sourceWidth,
+                       clientSurface.sourceHeight,
+                       static_cast<unsigned long long>(clientSurface.serial));
+        }
         visual.lastSnapshot = clientSurface;
         visual.hasLastSnapshot = true;
 

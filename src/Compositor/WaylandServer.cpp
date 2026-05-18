@@ -589,6 +589,48 @@ bool isIntegerSize(float value) {
   return std::floor(value) == value;
 }
 
+bool resizeTraceEnabled() {
+  static bool const enabled = [] {
+    char const* value = std::getenv("FLUX_COMPOSITOR_RESIZE_TRACE");
+    return value && value[0] != '\0' && std::strcmp(value, "0") != 0;
+  }();
+  return enabled;
+}
+
+void setConfiguredFrameSize(WaylandServer::Surface* surface, std::int32_t width, std::int32_t height) {
+  if (!surface) return;
+  surface->frameWidth = width;
+  surface->frameHeight = height;
+}
+
+void traceResizeSurface(char const* event, WaylandServer::Surface const* surface) {
+  if (!resizeTraceEnabled() || !surface) return;
+  std::fprintf(stderr,
+               "resize-trace: %s surface=%llu window=%d,%d frame=%dx%d activeSizing=%d buffer=%dx%d "
+               "source=%d %.1f,%.1f %.1fx%.1f dest=%d %dx%d serial=%llu snapped=%d maximized=%d anim=%d\n",
+               event,
+               static_cast<unsigned long long>(surface->id),
+               surface->windowX,
+               surface->windowY,
+               surface->frameWidth,
+               surface->frameHeight,
+               (surface->server->resizeSurface_ == surface || surface->geometryAnimationActive) ? 1 : 0,
+               surface->width,
+               surface->height,
+               surface->sourceSet ? 1 : 0,
+               surface->sourceX,
+               surface->sourceY,
+               surface->sourceWidth,
+               surface->sourceHeight,
+               surface->destinationSet ? 1 : 0,
+               surface->destinationWidth,
+               surface->destinationHeight,
+               static_cast<unsigned long long>(surface->serial),
+               surface->snapped ? 1 : 0,
+               surface->maximized ? 1 : 0,
+               surface->geometryAnimationActive ? 1 : 0);
+}
+
 bool applyViewportState(WaylandServer::Surface* surface) {
   surface->sourceSet = surface->pendingSourceSet;
   surface->sourceX = surface->pendingSourceX;
@@ -600,8 +642,7 @@ bool applyViewportState(WaylandServer::Surface* surface) {
   surface->destinationHeight = surface->pendingDestinationHeight;
 
   if (surface->width <= 0 || surface->height <= 0) {
-    surface->frameWidth = 0;
-    surface->frameHeight = 0;
+    setConfiguredFrameSize(surface, 0, 0);
     return true;
   }
 
@@ -624,6 +665,23 @@ bool applyViewportState(WaylandServer::Surface* surface) {
       }
       return false;
     }
+  }
+
+  if (surface->server->resizeSurface_ == surface || surface->geometryAnimationActive) {
+    if (surface->frameWidth <= 0 || surface->frameHeight <= 0) {
+      if (surface->server->resizeSurface_ == surface &&
+          surface->server->resizeLastWidth_ > 0 &&
+          surface->server->resizeLastHeight_ > 0) {
+        setConfiguredFrameSize(surface, surface->server->resizeLastWidth_, surface->server->resizeLastHeight_);
+      } else if (surface->geometryAnimationActive &&
+                 surface->geometryAnimationTargetWidth > 0 &&
+                 surface->geometryAnimationTargetHeight > 0) {
+        setConfiguredFrameSize(surface,
+                               surface->geometryAnimationTargetWidth,
+                               surface->geometryAnimationTargetHeight);
+      }
+    }
+    return true;
   }
 
   if (surface->destinationSet) {
@@ -678,6 +736,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         applyLayerGeometry(surface->layerSurface);
         surface->dmabufBuffer = nullptr;
         ++surface->serial;
+        traceResizeSurface("commit-shm", surface);
       }
     } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->currentBuffer)) {
       if (dmabufBuffer->width > 0 && dmabufBuffer->height > 0 && !dmabufBuffer->planes.empty()) {
@@ -688,6 +747,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         applyLayerGeometry(surface->layerSurface);
         surface->dmabufBuffer = dmabufBuffer;
         ++surface->serial;
+        traceResizeSurface("commit-dmabuf", surface);
         std::fprintf(stderr,
                      "flux-compositor: received %dx%d DMABUF buffer format=0x%08x stride=%u modifier=0x%016llx\n",
                      dmabufBuffer->width,
@@ -702,10 +762,10 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     surface->rgbaPixels.clear();
     surface->width = 0;
     surface->height = 0;
-    surface->frameWidth = 0;
-    surface->frameHeight = 0;
+    setConfiguredFrameSize(surface, 0, 0);
     surface->dmabufBuffer = nullptr;
     ++surface->serial;
+    traceResizeSurface("commit-empty", surface);
   }
 }
 
@@ -1032,6 +1092,16 @@ void sendToplevelConfigure(WaylandServer* server,
   wl_array_init(&states);
   xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
   wl_array_release(&states);
+  if (resizeTraceEnabled()) {
+    std::fprintf(stderr,
+                 "resize-trace: configure surface=%llu size=%dx%d serial=%u\n",
+                 static_cast<unsigned long long>(toplevel->xdgSurface->surface
+                                                     ? toplevel->xdgSurface->surface->id
+                                                     : 0),
+                 width,
+                 height,
+                 server->nextConfigureSerial_);
+  }
   xdg_surface_send_configure(toplevel->xdgSurface->resource, server->nextConfigureSerial_++);
 }
 
@@ -3131,8 +3201,7 @@ void restoreSnappedForDrag(WaylandServer* server, WaylandServer::Surface* surfac
                                 maxX);
   surface->windowY =
       std::clamp(static_cast<int>(std::lround(server->pointerY_ - server->dragOffsetY_)), kTitleBarHeight, maxY);
-  surface->frameWidth = restoreWidth;
-  surface->frameHeight = restoreHeight;
+  setConfiguredFrameSize(surface, restoreWidth, restoreHeight);
   surface->snapped = false;
   surface->maximized = false;
   surface->geometryAnimationActive = false;
@@ -3284,8 +3353,22 @@ void updateResize(WaylandServer* server) {
   if (nextWidth == server->resizeLastWidth_ && nextHeight == server->resizeLastHeight_) return;
   server->resizeLastWidth_ = nextWidth;
   server->resizeLastHeight_ = nextHeight;
-  surface->frameWidth = nextWidth;
-  surface->frameHeight = nextHeight;
+  setConfiguredFrameSize(surface, nextWidth, nextHeight);
+  if (resizeTraceEnabled()) {
+    std::fprintf(stderr,
+                 "resize-trace: update-resize surface=%llu pointer=%.1f,%.1f window=%d,%d size=%dx%d "
+                 "delta=%.1f,%.1f edges=%u\n",
+                 static_cast<unsigned long long>(surface->id),
+                 server->pointerX_,
+                 server->pointerY_,
+                 surface->windowX,
+                 surface->windowY,
+                 nextWidth,
+                 nextHeight,
+                 dx,
+                 dy,
+                 server->resizeEdges_);
+  }
   sendToplevelConfigure(server, toplevelForSurface(server, surface), nextWidth, nextHeight);
 }
 
@@ -3397,6 +3480,19 @@ void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std:
         resizeLastWidth_ = resizeStartWidth_;
         resizeLastHeight_ = resizeStartHeight_;
         resizeEdges_ = resizeEdges;
+        if (resizeTraceEnabled()) {
+          std::fprintf(stderr,
+                       "resize-trace: begin-resize surface=%llu pointer=%.1f,%.1f edges=%u startWindow=%d,%d "
+                       "startSize=%dx%d\n",
+                       static_cast<unsigned long long>(resizeTarget->id),
+                       pointerX_,
+                       pointerY_,
+                       resizeEdges_,
+                       resizeStartWindowX_,
+                       resizeStartWindowY_,
+                       resizeStartWidth_,
+                       resizeStartHeight_);
+        }
         return;
       }
       Surface* chromeTarget = titlebarAt(this, pointerX_, pointerY_);
@@ -3429,6 +3525,7 @@ void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std:
       return;
     } else if (resizeSurface_) {
       updateResize(this);
+      traceResizeSurface("end-resize", resizeSurface_);
       resizeSurface_ = nullptr;
       resizeEdges_ = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
       return;
@@ -3575,8 +3672,8 @@ void WaylandServer::updateAnimations(std::uint32_t timeMs, bool animationsEnable
 
     surface->windowX = nextX;
     surface->windowY = nextY;
-    surface->frameWidth = nextWidth;
-    surface->frameHeight = nextHeight;
+    setConfiguredFrameSize(surface.get(), nextWidth, nextHeight);
+    traceResizeSurface("animation-frame", surface.get());
     if (nextWidth != surface->geometryAnimationLastConfigureWidth ||
         nextHeight != surface->geometryAnimationLastConfigureHeight) {
       surface->geometryAnimationLastConfigureWidth = nextWidth;
@@ -3588,8 +3685,9 @@ void WaylandServer::updateAnimations(std::uint32_t timeMs, bool animationsEnable
     if (linearProgress >= 1.f) {
       surface->windowX = surface->geometryAnimationTargetX;
       surface->windowY = surface->geometryAnimationTargetY;
-      surface->frameWidth = surface->geometryAnimationTargetWidth;
-      surface->frameHeight = surface->geometryAnimationTargetHeight;
+      setConfiguredFrameSize(surface.get(),
+                             surface->geometryAnimationTargetWidth,
+                             surface->geometryAnimationTargetHeight);
       surface->geometryAnimationActive = false;
       if (surface->frameWidth != surface->geometryAnimationLastConfigureWidth ||
           surface->frameHeight != surface->geometryAnimationLastConfigureHeight) {
@@ -3767,8 +3865,6 @@ void WaylandServer::destroyDmabufBuffer(DmabufBuffer* buffer) {
       surface->dmabufBuffer = nullptr;
       surface->width = 0;
       surface->height = 0;
-      surface->frameWidth = 0;
-      surface->frameHeight = 0;
       surface->rgbaPixels.clear();
       ++surface->serial;
     }
