@@ -78,6 +78,13 @@ target_include_directories(libtess2 PUBLIC
   $<BUILD_INTERFACE:${libtess2_SOURCE_DIR}/Include>
 )
 
+FetchContent_Declare(tomlplusplus
+  GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+  GIT_TAG v3.4.0
+  GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(tomlplusplus)
+
 option(FLUX_ENABLE_DEFAULT_EVENT_LOGGING
   "Print built-in Application event handlers to stdout (disable for quiet or embedded builds)."
   OFF)
@@ -566,12 +573,23 @@ if(FLUX_BUILD_COMPOSITOR)
     src/Compositor/Input/KmsInputBridge.cpp
     src/Compositor/Surface/SurfaceRenderer.cpp
     src/Compositor/Wayland/Globals/Activation.cpp
+    src/Compositor/Wayland/Globals/Core.cpp
+    src/Compositor/Wayland/Globals/CursorShape.cpp
+    src/Compositor/Wayland/Globals/FractionalScale.cpp
+    src/Compositor/Wayland/Globals/IdleInhibit.cpp
+    src/Compositor/Wayland/Globals/LayerShell.cpp
     src/Compositor/Wayland/Globals/LinuxDmabuf.cpp
     src/Compositor/Wayland/Globals/Output.cpp
+    src/Compositor/Wayland/Globals/PointerExtensions.cpp
+    src/Compositor/Wayland/Globals/Presentation.cpp
     src/Compositor/Wayland/Globals/Seat.cpp
+    src/Compositor/Wayland/Globals/Selection.cpp
     src/Compositor/Wayland/Globals/Shm.cpp
+    src/Compositor/Wayland/Globals/Viewporter.cpp
     src/Compositor/Wayland/Globals/XdgOutput.cpp
+    src/Compositor/Wayland/Globals/XdgShell.cpp
     src/Compositor/Window/WindowGeometry.cpp
+    src/Compositor/Window/WindowManager.cpp
     src/Compositor/main.cpp
     src/Compositor/WaylandServer.cpp
   )
@@ -584,7 +602,11 @@ if(FLUX_BUILD_COMPOSITOR)
     -Wextra
     -Wpedantic
   )
-  target_link_libraries(flux-compositor PRIVATE flux PkgConfig::WAYLAND_SERVER PkgConfig::LIBDRM)
+  target_link_libraries(flux-compositor PRIVATE
+    flux
+    tomlplusplus::tomlplusplus
+    PkgConfig::WAYLAND_SERVER
+    PkgConfig::LIBDRM)
 
   add_executable(flux-compositor-shm-demo
     src/Compositor/ShmDemoClient.cpp
@@ -876,6 +898,7 @@ if(FLUX_BUILD_TESTS)
 
   target_link_libraries(flux_tests PRIVATE
     flux
+    tomlplusplus::tomlplusplus
     doctest::doctest
   )
   if(FLUX_PLATFORM_LINUX_WAYLAND OR FLUX_PLATFORM_LINUX_KMS)

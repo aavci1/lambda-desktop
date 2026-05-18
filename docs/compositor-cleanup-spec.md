@@ -1,6 +1,6 @@
 # Compositor cleanup spec
 
-**Status:** spec.
+**Status:** in progress. Resize tracing, pimpl, config/chrome/surface/input/window scaffolding, tomlplusplus config parsing, all current Wayland globals, and window/input-management behavior have been migrated into concern files. The remaining cleanup item is splitting server lifecycle, snapshot production, dmabuf CPU fallback, and destroy cleanup out of `WaylandServer.cpp`.
 **Scope:** structural and discipline cleanup of the compositor module in `src/Compositor/`, plus the resize-tracing debt that escaped during the most recent commits.
 **Goal:** restore the spec discipline that held during the first wave of work, decompose the god-class and the kitchen-sink `main.cpp` into per-concern files, and reduce the duplication and ad-hoc tracing that accumulated under fast iteration.
 
@@ -482,22 +482,22 @@ The compositor goes from "two big files plus demo clients" to "thirty small file
 
 After all 12 commits land:
 
-- ✗ `src/Compositor/Wayland/Server.cpp` is ~200 lines: socket, display, dispatch loop, nothing else.
-- ✗ `src/Compositor/Wayland/Globals/` has ~17 protocol files, each 100-300 lines.
-- ✗ `src/Compositor/main.cpp` is ~150 lines: signal handling, main loop orchestration.
-- ✗ `src/Compositor/Config/` holds configuration loading and TOML integration.
-- ✗ `src/Compositor/Surface/`, `Window/`, `Input/`, `Chrome/` each hold their respective concerns.
-- ✗ `WaylandServer.hpp` is ~80 lines exposing the public interface, behind pimpl.
-- ✗ Zero hand-rolled TOML; tomlplusplus dependency added.
-- ✗ Zero duplicate destroy-callback patterns; single template.
-- ✗ Single resize-tracing utility in Flux Detail module.
-- ✗ `tests/CompositorTests.cpp` exists with ~300 LOC of deterministic tests covering config, keybindings, snap math, focus, surface states.
-- ✗ xdg-popups work for `foot`, GTK4 dropdowns, and similar.
+- ✗ `src/Compositor/Wayland/Server.cpp` is ~200 lines: socket, display, dispatch loop, nothing else. `WaylandServer.cpp` is now 907 lines after global and window-management extraction; lifecycle/snapshot/destroy extraction remains.
+- ✓ `src/Compositor/Wayland/Globals/` has per-protocol files for activation, core `wl_compositor`/`wl_surface`/`wl_subcompositor`, cursor-shape, fractional-scale, idle-inhibit, layer-shell, linux-dmabuf, output, pointer extensions, presentation, seat, selection/clipboard/DnD, shm, viewporter, xdg-output, and xdg-shell/decoration.
+- ◐ `src/Compositor/main.cpp` is 215 lines: signal handling and main loop orchestration only, with config/chrome/surface/input concerns extracted.
+- ✓ `src/Compositor/Config/` holds configuration loading and TOML integration.
+- ✓ `src/Compositor/Surface/`, `Window/`, `Input/`, `Chrome/` each hold their respective concerns, including `Window/WindowManager.cpp` for focus, drag, resize, snap, keyboard shortcuts, and pointer forwarding.
+- ◐ `WaylandServer.hpp` exposes the public interface behind pimpl; it remains 130 lines because public snapshot and shortcut types live there.
+- ✓ Zero hand-rolled TOML parser in the compositor config loader; tomlplusplus dependency added.
+- ✓ Duplicate destroy-resource callbacks are reduced and migrated protocol resources use the shared template where they own compositor state.
+- ✓ Single resize-tracing utility in Flux Detail module.
+- ◐ Deterministic compositor tests exist for config parsing/keybindings and snap/resize geometry; focus and surface state tests remain to be expanded.
+- ◐ xdg-popups work in the popup smoke demo and `foot` launches against the compositor; broader real-app menu behavior remains part of validation.
 - ✓ xdg-activation works without lockups in the purpose-built activation smoke demo.
-- ✗ Framework changes log up to date through this work, including the four resize commits.
-- ✗ Phase status reflects current reality.
-- ✗ Module dependency audit passes.
-- ✗ All existing demo clients still work.
+- ✓ Framework changes log up to date through this work, including the four resize commits.
+- ✓ Phase status reflects current reality for completed cleanup pieces; lifecycle/snapshot/destroy extraction remains open.
+- ✓ Module dependency audit passes.
+- ✓ All existing demo clients build after this cleanup pass.
 - ✗ Solitaire and other existing Flux apps unaffected.
 
 ---

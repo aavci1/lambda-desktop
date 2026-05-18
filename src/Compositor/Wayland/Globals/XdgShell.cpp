@@ -1,0 +1,530 @@
+#include "Compositor/Wayland/Globals/XdgShell.hpp"
+
+#include "Compositor/Wayland/ResourceTemplates.hpp"
+#include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Detail/ResizeTrace.hpp"
+#include "xdg-decoration-unstable-v1-server-protocol.h"
+#include "xdg-shell-server-protocol.h"
+
+#include <algorithm>
+#include <cstdio>
+#include <memory>
+#include <wayland-server-core.h>
+
+namespace flux::compositor {
+
+WaylandServer::Impl::ToplevelDecoration* decorationFor(WaylandServer::Impl* server,
+                                                       WaylandServer::Impl::XdgToplevel* toplevel) {
+  auto found = std::find_if(server->toplevelDecorations_.begin(), server->toplevelDecorations_.end(),
+                            [toplevel](auto const& decoration) { return decoration->toplevel == toplevel; });
+  return found == server->toplevelDecorations_.end() ? nullptr : found->get();
+}
+
+WaylandServer::Impl::XdgToplevel* toplevelForSurface(WaylandServer::Impl* server,
+                                                     WaylandServer::Impl::Surface* surface) {
+  auto found = std::find_if(server->toplevels_.begin(), server->toplevels_.end(),
+                            [surface](auto const& toplevel) {
+                              return toplevel->xdgSurface && toplevel->xdgSurface->surface == surface;
+                            });
+  return found == server->toplevels_.end() ? nullptr : found->get();
+}
+
+std::string titleForSurface(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface) {
+  auto found = std::find_if(server->toplevels_.begin(), server->toplevels_.end(),
+                            [surface](auto const& toplevel) {
+                              return toplevel->xdgSurface && toplevel->xdgSurface->surface == surface;
+                            });
+  if (found == server->toplevels_.end()) return "Window";
+  if (!(*found)->title.empty()) return (*found)->title;
+  if (!(*found)->appId.empty()) return (*found)->appId;
+  return "Window";
+}
+
+void sendToplevelConfigure(WaylandServer::Impl* server,
+                           WaylandServer::Impl::XdgToplevel* toplevel,
+                           std::int32_t width,
+                           std::int32_t height) {
+  if (!toplevel || !toplevel->resource || !toplevel->xdgSurface || !toplevel->xdgSurface->resource) return;
+  if (auto* surface = toplevel->xdgSurface->surface; surface && width > 0 && height > 0) {
+    surface->awaitingConfigureCommit = true;
+    surface->awaitingConfigureWidth = width;
+    surface->awaitingConfigureHeight = height;
+  }
+  wl_array states;
+  wl_array_init(&states);
+  xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
+  wl_array_release(&states);
+  flux::detail::resizeTrace("compositor",
+                            "configure surface=%llu size=%dx%d serial=%u\n",
+                            static_cast<unsigned long long>(toplevel->xdgSurface->surface
+                                                                ? toplevel->xdgSurface->surface->id
+                                                                : 0),
+                            width,
+                            height,
+                            server->nextConfigureSerial_);
+  xdg_surface_send_configure(toplevel->xdgSurface->resource, server->nextConfigureSerial_++);
+}
+
+namespace {
+
+extern struct zxdg_toplevel_decoration_v1_interface const xdgToplevelDecorationImpl;
+extern struct xdg_surface_interface const xdgSurfaceImpl;
+extern struct xdg_toplevel_interface const xdgToplevelImpl;
+
+void sendDecorationConfigure(WaylandServer::Impl::ToplevelDecoration* decoration) {
+  zxdg_toplevel_decoration_v1_send_configure(decoration->resource, decoration->mode);
+  if (decoration->toplevel && decoration->toplevel->xdgSurface && decoration->toplevel->xdgSurface->resource) {
+    xdg_surface_send_configure(decoration->toplevel->xdgSurface->resource,
+                               decoration->server->nextConfigureSerial_++);
+  }
+}
+
+void xdgDecorationManagerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void xdgDecorationManagerGetToplevelDecoration(wl_client* client,
+                                               wl_resource* resource,
+                                               std::uint32_t id,
+                                               wl_resource* toplevelResource) {
+  auto* server = serverFrom(resource);
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(toplevelResource);
+  if (decorationFor(server, toplevel)) {
+    wl_resource_post_error(resource,
+                           ZXDG_TOPLEVEL_DECORATION_V1_ERROR_ALREADY_CONSTRUCTED,
+                           "xdg_toplevel already has a decoration object");
+    return;
+  }
+
+  auto decoration = std::make_unique<WaylandServer::Impl::ToplevelDecoration>();
+  decoration->server = server;
+  decoration->toplevel = toplevel;
+  wl_resource* decorationResource = wl_resource_create(client,
+                                                       &zxdg_toplevel_decoration_v1_interface,
+                                                       wl_resource_get_version(resource),
+                                                       id);
+  if (!decorationResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  decoration->resource = decorationResource;
+  auto* raw = decoration.get();
+  server->toplevelDecorations_.push_back(std::move(decoration));
+  wl_resource_set_implementation(decorationResource,
+                                 &xdgToplevelDecorationImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::ToplevelDecoration,
+                                                         WaylandServer::Impl,
+                                                         &WaylandServer::Impl::destroyToplevelDecoration>);
+  sendDecorationConfigure(raw);
+}
+
+struct zxdg_decoration_manager_v1_interface const xdgDecorationManagerImpl{
+    .destroy = xdgDecorationManagerDestroy,
+    .get_toplevel_decoration = xdgDecorationManagerGetToplevelDecoration,
+};
+
+void xdgToplevelDecorationDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void xdgToplevelDecorationSetMode(wl_client*, wl_resource* resource, std::uint32_t mode) {
+  auto* decoration = resourceData<WaylandServer::Impl::ToplevelDecoration>(resource);
+  if (mode != ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE && mode != ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE) {
+    wl_resource_post_error(resource, ZXDG_TOPLEVEL_DECORATION_V1_ERROR_INVALID_MODE,
+                           "invalid xdg-decoration mode %u", mode);
+    return;
+  }
+  decoration->mode = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+  sendDecorationConfigure(decoration);
+}
+
+void xdgToplevelDecorationUnsetMode(wl_client*, wl_resource* resource) {
+  auto* decoration = resourceData<WaylandServer::Impl::ToplevelDecoration>(resource);
+  decoration->mode = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+  sendDecorationConfigure(decoration);
+}
+
+struct zxdg_toplevel_decoration_v1_interface const xdgToplevelDecorationImpl{
+    .destroy = xdgToplevelDecorationDestroy,
+    .set_mode = xdgToplevelDecorationSetMode,
+    .unset_mode = xdgToplevelDecorationUnsetMode,
+};
+
+void xdgWmBaseDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void xdgPositionerDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void xdgPositionerSetSize(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
+  positioner->width = width;
+  positioner->height = height;
+}
+
+void xdgPositionerSetAnchorRect(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y,
+                                std::int32_t width, std::int32_t height) {
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
+  positioner->anchorRectX = x;
+  positioner->anchorRectY = y;
+  positioner->anchorRectWidth = width;
+  positioner->anchorRectHeight = height;
+}
+
+void xdgPositionerSetAnchor(wl_client*, wl_resource* resource, std::uint32_t anchor) {
+  resourceData<WaylandServer::Impl::XdgPositioner>(resource)->anchor = anchor;
+}
+
+void xdgPositionerSetGravity(wl_client*, wl_resource* resource, std::uint32_t gravity) {
+  resourceData<WaylandServer::Impl::XdgPositioner>(resource)->gravity = gravity;
+}
+
+void xdgPositionerSetConstraintAdjustment(wl_client*, wl_resource* resource, std::uint32_t adjustment) {
+  resourceData<WaylandServer::Impl::XdgPositioner>(resource)->constraintAdjustment = adjustment;
+}
+
+void xdgPositionerSetOffset(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y) {
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
+  positioner->offsetX = x;
+  positioner->offsetY = y;
+}
+
+struct xdg_positioner_interface const positionerImpl{
+    .destroy = xdgPositionerDestroy,
+    .set_size = xdgPositionerSetSize,
+    .set_anchor_rect = xdgPositionerSetAnchorRect,
+    .set_anchor = xdgPositionerSetAnchor,
+    .set_gravity = xdgPositionerSetGravity,
+    .set_constraint_adjustment = xdgPositionerSetConstraintAdjustment,
+    .set_offset = xdgPositionerSetOffset,
+    .set_reactive = [](wl_client*, wl_resource*) {},
+    .set_parent_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
+    .set_parent_configure = [](wl_client*, wl_resource*, std::uint32_t) {},
+};
+
+void xdgWmBaseCreatePositioner(wl_client* client, wl_resource* resource, std::uint32_t id) {
+  auto* server = serverFrom(resource);
+  auto positioner = std::make_unique<WaylandServer::Impl::XdgPositioner>();
+  positioner->server = server;
+  wl_resource* positionerResource = wl_resource_create(client, &xdg_positioner_interface, 6, id);
+  if (!positionerResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  positioner->resource = positionerResource;
+  auto* raw = positioner.get();
+  server->xdgPositioners_.push_back(std::move(positioner));
+  wl_resource_set_implementation(positionerResource,
+                                 &positionerImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::XdgPositioner,
+                                                         WaylandServer::Impl,
+                                                         &WaylandServer::Impl::destroyXdgPositioner>);
+}
+
+void xdgWmBaseGetXdgSurface(wl_client* client, wl_resource* resource, std::uint32_t id,
+                            wl_resource* surfaceResource) {
+  auto* server = serverFrom(resource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
+  auto xdgSurface = std::make_unique<WaylandServer::Impl::XdgSurface>();
+  xdgSurface->server = server;
+  xdgSurface->surface = surface;
+  wl_resource* xdgResource = wl_resource_create(client, &xdg_surface_interface,
+                                                wl_resource_get_version(resource), id);
+  xdgSurface->resource = xdgResource;
+  auto* raw = xdgSurface.get();
+  server->xdgSurfaces_.push_back(std::move(xdgSurface));
+  wl_resource_set_implementation(xdgResource,
+                                 &xdgSurfaceImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::XdgSurface,
+                                                         WaylandServer::Impl,
+                                                         &WaylandServer::Impl::destroyXdgSurface>);
+}
+
+void xdgWmBasePong(wl_client*, wl_resource*, std::uint32_t) {}
+
+struct xdg_wm_base_interface const xdgWmBaseImpl{
+    .destroy = xdgWmBaseDestroy,
+    .create_positioner = xdgWmBaseCreatePositioner,
+    .get_xdg_surface = xdgWmBaseGetXdgSurface,
+    .pong = xdgWmBasePong,
+};
+
+void xdgSurfaceDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32_t id) {
+  auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
+  if (xdgSurface->surface->toplevel || xdgSurface->surface->popup ||
+      xdgSurface->surface->layerSurface || xdgSurface->surface->subsurface) {
+    wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
+    return;
+  }
+  auto toplevel = std::make_unique<WaylandServer::Impl::XdgToplevel>();
+  toplevel->server = xdgSurface->server;
+  toplevel->xdgSurface = xdgSurface;
+  xdgSurface->surface->toplevel = true;
+  xdgSurface->surface->cursor = false;
+  if (xdgSurface->server->cursorSurface_ == xdgSurface->surface) xdgSurface->server->cursorSurface_ = nullptr;
+  xdgSurface->surface->windowX = 80 + static_cast<std::int32_t>(xdgSurface->server->toplevels_.size()) * 36;
+  xdgSurface->surface->windowY = 80 + static_cast<std::int32_t>(xdgSurface->server->toplevels_.size()) * 36;
+  wl_resource* toplevelResource = wl_resource_create(client, &xdg_toplevel_interface,
+                                                     wl_resource_get_version(resource), id);
+  toplevel->resource = toplevelResource;
+  auto* raw = toplevel.get();
+  xdgSurface->server->toplevels_.push_back(std::move(toplevel));
+  wl_resource_set_implementation(toplevelResource,
+                                 &xdgToplevelImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::XdgToplevel,
+                                                         WaylandServer::Impl,
+                                                         &WaylandServer::Impl::destroyXdgToplevel>);
+  wl_array states;
+  wl_array_init(&states);
+  xdg_toplevel_send_configure(toplevelResource, 0, 0, &states);
+  wl_array_release(&states);
+  xdg_surface_send_configure(resource, xdgSurface->server->nextConfigureSerial_++);
+}
+
+std::int32_t popupAnchorX(WaylandServer::Impl::XdgPositioner const* positioner) {
+  std::int32_t x = positioner->anchorRectX;
+  if (positioner->anchor == XDG_POSITIONER_ANCHOR_TOP ||
+      positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM ||
+      positioner->anchor == XDG_POSITIONER_ANCHOR_NONE) {
+    x += positioner->anchorRectWidth / 2;
+  } else if (positioner->anchor == XDG_POSITIONER_ANCHOR_TOP_RIGHT ||
+             positioner->anchor == XDG_POSITIONER_ANCHOR_RIGHT ||
+             positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT) {
+    x += positioner->anchorRectWidth;
+  }
+  return x + positioner->offsetX;
+}
+
+std::int32_t popupAnchorY(WaylandServer::Impl::XdgPositioner const* positioner) {
+  std::int32_t y = positioner->anchorRectY;
+  if (positioner->anchor == XDG_POSITIONER_ANCHOR_LEFT ||
+      positioner->anchor == XDG_POSITIONER_ANCHOR_RIGHT ||
+      positioner->anchor == XDG_POSITIONER_ANCHOR_NONE) {
+    y += positioner->anchorRectHeight / 2;
+  } else if (positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM_LEFT ||
+             positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM ||
+             positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT) {
+    y += positioner->anchorRectHeight;
+  }
+  return y + positioner->offsetY;
+}
+
+void configurePopup(WaylandServer::Impl::XdgPopup* popup, WaylandServer::Impl::XdgPositioner const* positioner) {
+  if (!popup || !popup->xdgSurface || !popup->xdgSurface->surface || !positioner) return;
+  WaylandServer::Impl::Surface* surface = popup->xdgSurface->surface;
+  WaylandServer::Impl::Surface const* parent = popup->parentSurface;
+  std::int32_t const width = std::max(1, positioner->width);
+  std::int32_t const height = std::max(1, positioner->height);
+  std::int32_t x = (parent ? parent->windowX : 0) + popupAnchorX(positioner);
+  std::int32_t y = (parent ? parent->windowY : 0) + popupAnchorY(positioner);
+  if (positioner->gravity == XDG_POSITIONER_GRAVITY_LEFT ||
+      positioner->gravity == XDG_POSITIONER_GRAVITY_TOP_LEFT ||
+      positioner->gravity == XDG_POSITIONER_GRAVITY_BOTTOM_LEFT) {
+    x -= width;
+  } else if (positioner->gravity == XDG_POSITIONER_GRAVITY_NONE ||
+             positioner->gravity == XDG_POSITIONER_GRAVITY_TOP ||
+             positioner->gravity == XDG_POSITIONER_GRAVITY_BOTTOM) {
+    x -= width / 2;
+  }
+  if (positioner->gravity == XDG_POSITIONER_GRAVITY_TOP ||
+      positioner->gravity == XDG_POSITIONER_GRAVITY_TOP_LEFT ||
+      positioner->gravity == XDG_POSITIONER_GRAVITY_TOP_RIGHT) {
+    y -= height;
+  } else if (positioner->gravity == XDG_POSITIONER_GRAVITY_NONE ||
+             positioner->gravity == XDG_POSITIONER_GRAVITY_LEFT ||
+             positioner->gravity == XDG_POSITIONER_GRAVITY_RIGHT) {
+    y -= height / 2;
+  }
+
+  x = std::clamp(x, 0, std::max(0, popup->server->logicalOutputWidth() - width));
+  y = std::clamp(y, 0, std::max(0, popup->server->logicalOutputHeight() - height));
+  surface->windowX = x;
+  surface->windowY = y;
+  setConfiguredFrameSize(surface, width, height);
+  popup->configuredX = parent ? x - parent->windowX : x;
+  popup->configuredY = parent ? y - parent->windowY : y;
+  popup->configuredWidth = width;
+  popup->configuredHeight = height;
+}
+
+void sendPopupConfigure(WaylandServer::Impl::XdgPopup* popup) {
+  if (!popup || !popup->resource || !popup->xdgSurface || !popup->xdgSurface->resource) return;
+  xdg_popup_send_configure(popup->resource,
+                           popup->configuredX,
+                           popup->configuredY,
+                           popup->configuredWidth,
+                           popup->configuredHeight);
+  xdg_surface_send_configure(popup->xdgSurface->resource, popup->server->nextConfigureSerial_++);
+}
+
+void xdgPopupDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void xdgPopupGrab(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t) {
+  auto* popup = resourceData<WaylandServer::Impl::XdgPopup>(resource);
+  if (!popup) return;
+  popup->grabbed = true;
+  std::fprintf(stderr,
+               "flux-compositor: xdg_popup grab surface=%llu parent=%llu\n",
+               static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
+                                                   ? popup->xdgSurface->surface->id
+                                                   : 0),
+               static_cast<unsigned long long>(popup->parentSurface ? popup->parentSurface->id : 0));
+}
+
+void xdgPopupReposition(wl_client*, wl_resource* resource, wl_resource* positionerResource, std::uint32_t token) {
+  auto* popup = resourceData<WaylandServer::Impl::XdgPopup>(resource);
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(positionerResource);
+  if (!popup || !positioner || popup->dismissed) return;
+  configurePopup(popup, positioner);
+  if (wl_resource_get_version(resource) >= XDG_POPUP_REPOSITIONED_SINCE_VERSION) {
+    xdg_popup_send_repositioned(resource, token);
+  }
+  sendPopupConfigure(popup);
+}
+
+struct xdg_popup_interface const xdgPopupImpl{
+    .destroy = xdgPopupDestroy,
+    .grab = xdgPopupGrab,
+    .reposition = xdgPopupReposition,
+};
+
+void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t id,
+                        wl_resource* parentResource, wl_resource* positionerResource) {
+  auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(positionerResource);
+  if (!xdgSurface || !xdgSurface->surface || !positioner ||
+      positioner->width <= 0 || positioner->height <= 0 ||
+      positioner->anchorRectWidth <= 0 || positioner->anchorRectHeight <= 0) {
+    wl_resource_post_error(resource, XDG_WM_BASE_ERROR_INVALID_POSITIONER, "invalid xdg_popup positioner");
+    return;
+  }
+  if (xdgSurface->surface->toplevel || xdgSurface->surface->layerSurface || xdgSurface->surface->cursor ||
+      xdgSurface->surface->subsurface) {
+    wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
+    return;
+  }
+
+  auto* parentXdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(parentResource);
+  auto popup = std::make_unique<WaylandServer::Impl::XdgPopup>();
+  popup->server = xdgSurface->server;
+  popup->xdgSurface = xdgSurface;
+  popup->parentSurface = parentXdgSurface ? parentXdgSurface->surface : nullptr;
+  wl_resource* popupResource = wl_resource_create(client, &xdg_popup_interface, wl_resource_get_version(resource), id);
+  if (!popupResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  popup->resource = popupResource;
+  auto* raw = popup.get();
+  xdgSurface->surface->toplevel = true;
+  xdgSurface->surface->popup = true;
+  xdgSurface->surface->cursor = false;
+  xdgSurface->surface->xdgPopup = raw;
+  if (xdgSurface->server->cursorSurface_ == xdgSurface->surface) xdgSurface->server->cursorSurface_ = nullptr;
+  configurePopup(raw, positioner);
+  xdgSurface->server->popups_.push_back(std::move(popup));
+  wl_resource_set_implementation(popupResource,
+                                 &xdgPopupImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::XdgPopup,
+                                                         WaylandServer::Impl,
+                                                         &WaylandServer::Impl::destroyXdgPopup>);
+  std::fprintf(stderr,
+               "flux-compositor: xdg_popup created surface=%llu parent=%llu geometry=%d,%d %dx%d\n",
+               static_cast<unsigned long long>(xdgSurface->surface->id),
+               static_cast<unsigned long long>(raw->parentSurface ? raw->parentSurface->id : 0),
+               raw->configuredX,
+               raw->configuredY,
+               raw->configuredWidth,
+               raw->configuredHeight);
+  sendPopupConfigure(raw);
+}
+
+void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t) {
+  resourceData<WaylandServer::Impl::XdgSurface>(resource)->configured = true;
+}
+
+struct xdg_surface_interface const xdgSurfaceImpl{
+    .destroy = xdgSurfaceDestroy,
+    .get_toplevel = xdgSurfaceGetToplevel,
+    .get_popup = xdgSurfaceGetPopup,
+    .set_window_geometry = [](wl_client*, wl_resource*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {},
+    .ack_configure = xdgSurfaceAckConfigure,
+};
+
+void xdgToplevelDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void xdgToplevelSetTitle(wl_client*, wl_resource* resource, char const* title) {
+  resourceData<WaylandServer::Impl::XdgToplevel>(resource)->title = title ? title : "";
+}
+
+void xdgToplevelSetAppId(wl_client*, wl_resource* resource, char const* appId) {
+  resourceData<WaylandServer::Impl::XdgToplevel>(resource)->appId = appId ? appId : "";
+}
+
+void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t, std::uint32_t edges) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
+  auto* server = toplevel->server;
+  auto* surface = toplevel->xdgSurface->surface;
+  std::int32_t const width = displayWidth(surface);
+  std::int32_t const height = displayHeight(surface);
+  if (edges == XDG_TOPLEVEL_RESIZE_EDGE_NONE || width <= 0 || height <= 0) return;
+  server->resizeSurface_ = surface;
+  server->resizeStartX_ = server->pointerX_;
+  server->resizeStartY_ = server->pointerY_;
+  server->resizeStartWindowX_ = surface->windowX;
+  server->resizeStartWindowY_ = surface->windowY;
+  server->resizeStartWidth_ = width;
+  server->resizeStartHeight_ = height;
+  server->resizeLastWidth_ = width;
+  server->resizeLastHeight_ = height;
+  server->resizeEdges_ = edges;
+  surface->snapped = false;
+}
+
+struct xdg_toplevel_interface const xdgToplevelImpl{
+    .destroy = xdgToplevelDestroy,
+    .set_parent = [](wl_client*, wl_resource*, wl_resource*) {},
+    .set_title = xdgToplevelSetTitle,
+    .set_app_id = xdgToplevelSetAppId,
+    .show_window_menu = [](wl_client*, wl_resource*, wl_resource*, std::uint32_t, std::int32_t, std::int32_t) {},
+    .move = [](wl_client*, wl_resource*, wl_resource*, std::uint32_t) {},
+    .resize = xdgToplevelResize,
+    .set_max_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
+    .set_min_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
+    .set_maximized = [](wl_client*, wl_resource*) {},
+    .unset_maximized = [](wl_client*, wl_resource*) {},
+    .set_fullscreen = [](wl_client*, wl_resource*, wl_resource*) {},
+    .unset_fullscreen = [](wl_client*, wl_resource*) {},
+    .set_minimized = [](wl_client*, wl_resource*) {},
+};
+
+} // namespace
+
+void bindXdgWmBase(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client, &xdg_wm_base_interface, std::min(version, 6u), id);
+  wl_resource_set_implementation(resource, &xdgWmBaseImpl, data, nullptr);
+}
+
+void bindXdgDecorationManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client, &zxdg_decoration_manager_v1_interface,
+                                             std::min(version, 1u), id);
+  wl_resource_set_implementation(resource, &xdgDecorationManagerImpl, data, nullptr);
+}
+
+} // namespace flux::compositor

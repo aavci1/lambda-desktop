@@ -404,6 +404,28 @@ struct WaylandServer::Impl::ActivationToken {
 
 WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, float y);
 std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const* server);
+std::int32_t displayWidth(WaylandServer::Impl::Surface const* surface);
+std::int32_t displayHeight(WaylandServer::Impl::Surface const* surface);
+void setConfiguredFrameSize(WaylandServer::Impl::Surface* surface, std::int32_t width, std::int32_t height);
+void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* surface);
+void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface);
+void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface);
+WaylandServer::Impl::ToplevelDecoration* decorationFor(WaylandServer::Impl* server,
+                                                       WaylandServer::Impl::XdgToplevel* toplevel);
+WaylandServer::Impl::XdgToplevel* toplevelForSurface(WaylandServer::Impl* server,
+                                                     WaylandServer::Impl::Surface* surface);
+std::string titleForSurface(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface);
+void sendToplevelConfigure(WaylandServer::Impl* server,
+                           WaylandServer::Impl::XdgToplevel* toplevel,
+                           std::int32_t width,
+                           std::int32_t height);
+WaylandServer::Impl::PointerConstraint* activePointerConstraint(WaylandServer::Impl* server);
+void updatePointerConstraintsForFocus(WaylandServer::Impl* server);
+void sendPrimarySelectionForFocus(WaylandServer::Impl* server);
+void sendSelectionForFocus(WaylandServer::Impl* server);
+WaylandServer::Impl::DataDevice* dataDeviceForClient(WaylandServer::Impl* server, wl_client* client);
+void clearDnd(WaylandServer::Impl* server, bool destroyOffer = true);
+void updateDndTarget(WaylandServer::Impl* server, WaylandServer::Impl::Surface* target, std::uint32_t timeMs);
 
 struct WaylandServer::Impl::XdgPositioner {
   WaylandServer::Impl* server = nullptr;

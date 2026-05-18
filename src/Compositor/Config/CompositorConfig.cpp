@@ -12,6 +12,8 @@
 #include <string_view>
 #include <unordered_map>
 
+#include <toml++/toml.hpp>
+
 namespace flux::compositor {
 namespace {
 
@@ -21,16 +23,6 @@ std::string trim(std::string_view value) {
   std::size_t end = value.size();
   while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1u]))) --end;
   return std::string(value.substr(begin, end - begin));
-}
-
-std::string stripTomlComment(std::string_view line) {
-  bool inString = false;
-  for (std::size_t i = 0; i < line.size(); ++i) {
-    char const c = line[i];
-    if (c == '"' && (i == 0 || line[i - 1u] != '\\')) inString = !inString;
-    if (c == '#' && !inString) return std::string(line.substr(0, i));
-  }
-  return std::string(line);
 }
 
 std::string unquote(std::string_view value) {
@@ -118,6 +110,24 @@ std::optional<ImageFillMode> parseImageFillMode(std::string_view value) {
   if (text == "cover") return ImageFillMode::Cover;
   if (text == "center" || text == "none") return ImageFillMode::Center;
   if (text == "tile" || text == "repeat") return ImageFillMode::Tile;
+  return std::nullopt;
+}
+
+std::optional<bool> configBool(toml::table const& table, char const* key) {
+  if (auto value = table[key].value<bool>()) return *value;
+  if (auto value = table[key].value<std::string>()) return parseBool(*value);
+  return std::nullopt;
+}
+
+std::optional<std::string> configString(toml::table const& table, char const* key) {
+  if (auto value = table[key].value<std::string>()) return *value;
+  return std::nullopt;
+}
+
+std::optional<float> configFloat(toml::table const& table, char const* key) {
+  if (auto value = table[key].value<double>()) return static_cast<float>(*value);
+  if (auto value = table[key].value<int64_t>()) return static_cast<float>(*value);
+  if (auto value = table[key].value<std::string>()) return parseScale(*value);
   return std::nullopt;
 }
 
@@ -297,100 +307,115 @@ CompositorConfig loadConfig() {
   config.shortcutBindings = defaultShortcutBindings();
   auto path = configPath();
   if (!path) return config;
-  std::ifstream file(*path);
-  if (!file) return config;
 
-  std::string line;
-  std::string section;
-  unsigned int lineNumber = 0;
-  while (std::getline(file, line)) {
-    ++lineNumber;
-    std::string clean = trim(stripTomlComment(line));
-    if (clean.empty()) continue;
-    if (clean.front() == '[') {
-      if (clean.size() >= 2 && clean.back() == ']') {
-        section = lowerAscii(trim(std::string_view(clean).substr(1, clean.size() - 2u)));
-      }
-      continue;
-    }
-    std::size_t const equals = clean.find('=');
-    if (equals == std::string::npos) continue;
-    std::string key = lowerAscii(trim(std::string_view(clean).substr(0, equals)));
-    std::string value = trim(std::string_view(clean).substr(equals + 1u));
-    if (section == "keybindings") {
-      if (auto action = shortcutActionForKey(key)) {
-        if (auto binding = parseShortcut(*action, value)) {
-          replaceShortcutBinding(config.shortcutBindings, *binding);
+  toml::table table;
+  try {
+    table = toml::parse_file(*path);
+  } catch (toml::parse_error const& error) {
+    auto const message = std::string(error.description());
+    std::fprintf(stderr,
+                 "flux-compositor: ignoring invalid config %s: %s\n",
+                 path->c_str(),
+                 message.c_str());
+    return config;
+  }
+
+  if (auto* keybindings = table["keybindings"].as_table()) {
+    for (auto&& [key, node] : *keybindings) {
+      std::string actionName = lowerAscii(std::string(key.str()));
+      if (auto action = shortcutActionForKey(actionName)) {
+        if (auto value = node.value<std::string>(); value) {
+          if (auto binding = parseShortcut(*action, *value)) {
+            replaceShortcutBinding(config.shortcutBindings, *binding);
+          } else {
+            std::fprintf(stderr,
+                         "flux-compositor: ignoring invalid keybinding %s in %s\n",
+                         actionName.c_str(),
+                         path->c_str());
+          }
         } else {
           std::fprintf(stderr,
-                       "flux-compositor: ignoring invalid keybinding in %s:%u\n",
-                       path->c_str(),
-                       lineNumber);
+                       "flux-compositor: ignoring non-string keybinding %s in %s\n",
+                       actionName.c_str(),
+                       path->c_str());
         }
-      }
-    } else if (key == "background" || key == "background_color") {
-      if (auto color = parseHexColor(value)) {
-        config.backgroundColor = *color;
-        config.backgroundGradientEnd.reset();
-      } else {
-        std::fprintf(stderr,
-                     "flux-compositor: ignoring invalid background color in %s:%u\n",
-                     path->c_str(),
-                     lineNumber);
-      }
-    } else if (key == "background_gradient") {
-      if (auto gradient = parseLinearGradient(value)) {
-        config.backgroundColor = gradient->first;
-        config.backgroundGradientEnd = gradient->second;
-      } else {
-        std::fprintf(stderr,
-                     "flux-compositor: ignoring invalid background gradient in %s:%u\n",
-                     path->c_str(),
-                     lineNumber);
-      }
-    } else if (key == "wallpaper" || key == "wallpaper_path") {
-      std::string wallpaper = unquote(value);
-      if (!wallpaper.empty()) {
-        config.wallpaperPath = wallpaper;
-      }
-    } else if (key == "wallpaper_mode" || key == "wallpaper_fit") {
-      if (auto mode = parseImageFillMode(value)) {
-        config.wallpaperMode = *mode;
-      } else {
-        std::fprintf(stderr,
-                     "flux-compositor: ignoring invalid wallpaper mode in %s:%u\n",
-                     path->c_str(),
-                     lineNumber);
-      }
-    } else if (key == "scale" || key == "output_scale" || key == "fractional_scale") {
-      if (auto scale = parseScale(value)) {
-        config.scale = *scale;
-      } else {
-        std::fprintf(stderr,
-                     "flux-compositor: ignoring invalid scale value in %s:%u\n",
-                     path->c_str(),
-                     lineNumber);
-      }
-    } else if (key == "animations") {
-      if (auto enabled = parseBool(value)) {
-        config.animationsEnabled = *enabled;
-      } else {
-        std::fprintf(stderr,
-                     "flux-compositor: ignoring invalid animations value in %s:%u\n",
-                     path->c_str(),
-                     lineNumber);
-      }
-    } else if (key == "hardware_cursor") {
-      if (auto enabled = parseBool(value)) {
-        config.hardwareCursorEnabled = *enabled;
-      } else {
-        std::fprintf(stderr,
-                     "flux-compositor: ignoring invalid hardware_cursor value in %s:%u\n",
-                     path->c_str(),
-                     lineNumber);
       }
     }
   }
+
+  auto parseColorKey = [&](char const* key) -> std::optional<Color> {
+    if (auto value = configString(table, key)) return parseHexColor(*value);
+    return std::nullopt;
+  };
+
+  if (auto color = parseColorKey("background")) {
+    config.backgroundColor = *color;
+    config.backgroundGradientEnd.reset();
+  } else if (auto color = parseColorKey("background_color")) {
+    config.backgroundColor = *color;
+    config.backgroundGradientEnd.reset();
+  } else if (table.contains("background") || table.contains("background_color")) {
+    std::fprintf(stderr, "flux-compositor: ignoring invalid background color in %s\n", path->c_str());
+  }
+
+  if (auto value = configString(table, "background_gradient")) {
+    if (auto gradient = parseLinearGradient(*value)) {
+      config.backgroundColor = gradient->first;
+      config.backgroundGradientEnd = gradient->second;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid background gradient in %s\n", path->c_str());
+    }
+  }
+
+  auto parseWallpaper = [&](char const* key) -> bool {
+    if (auto wallpaper = configString(table, key); wallpaper && !wallpaper->empty()) {
+      config.wallpaperPath = *wallpaper;
+      return true;
+    }
+    return false;
+  };
+  if (!parseWallpaper("wallpaper")) parseWallpaper("wallpaper_path");
+
+  auto parseWallpaperMode = [&](char const* key) -> bool {
+    if (auto value = configString(table, key)) {
+      if (auto mode = parseImageFillMode(*value)) {
+        config.wallpaperMode = *mode;
+        return true;
+      }
+      std::fprintf(stderr, "flux-compositor: ignoring invalid wallpaper mode in %s\n", path->c_str());
+      return true;
+    }
+    return false;
+  };
+  if (!parseWallpaperMode("wallpaper_mode")) parseWallpaperMode("wallpaper_fit");
+
+  auto parseScaleKey = [&](char const* key) -> bool {
+    if (!table.contains(key)) return false;
+    if (auto scale = configFloat(table, key); scale && *scale >= 0.5f && *scale <= 4.f) {
+      config.scale = *scale;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid scale value in %s\n", path->c_str());
+    }
+    return true;
+  };
+  if (!parseScaleKey("scale") && !parseScaleKey("output_scale")) parseScaleKey("fractional_scale");
+
+  if (table.contains("animations")) {
+    if (auto enabled = configBool(table, "animations")) {
+      config.animationsEnabled = *enabled;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid animations value in %s\n", path->c_str());
+    }
+  }
+
+  if (table.contains("hardware_cursor")) {
+    if (auto enabled = configBool(table, "hardware_cursor")) {
+      config.hardwareCursorEnabled = *enabled;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid hardware_cursor value in %s\n", path->c_str());
+    }
+  }
+
   std::fprintf(stderr, "flux-compositor: loaded config %s\n", path->c_str());
   return config;
 }
