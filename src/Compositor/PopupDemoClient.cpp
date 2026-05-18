@@ -37,6 +37,7 @@ struct DemoClient {
   wl_display* display = nullptr;
   wl_registry* registry = nullptr;
   wl_compositor* compositor = nullptr;
+  wl_subcompositor* subcompositor = nullptr;
   wl_shm* shm = nullptr;
   xdg_wm_base* wmBase = nullptr;
   wl_surface* surface = nullptr;
@@ -44,6 +45,9 @@ struct DemoClient {
   xdg_toplevel* toplevel = nullptr;
   Buffer parentBuffer;
   bool configured = false;
+  wl_surface* childSurface = nullptr;
+  wl_subsurface* childSubsurface = nullptr;
+  Buffer childBuffer;
   wl_surface* popupSurface = nullptr;
   xdg_surface* popupXdgSurface = nullptr;
   xdg_popup* popup = nullptr;
@@ -189,12 +193,26 @@ void createPopup(DemoClient& client) {
   std::fprintf(stderr, "flux-compositor-popup-demo: requested popup; waiting for configure\n");
 }
 
+void createSubsurface(DemoClient& client) {
+  if (client.childSubsurface) return;
+  client.childSurface = wl_compositor_create_surface(client.compositor);
+  client.childSubsurface = wl_subcompositor_get_subsurface(client.subcompositor, client.childSurface, client.surface);
+  wl_subsurface_set_position(client.childSubsurface, 18, 18);
+  client.childBuffer = createBuffer(client.shm, "flux-compositor-popup-demo-child", 72, 48, true);
+  commitBuffer(client.childSurface, client.childBuffer);
+  wl_display_flush(client.display);
+  std::fprintf(stderr, "flux-compositor-popup-demo: committed child subsurface buffer\n");
+}
+
 void registryGlobal(void* data, wl_registry* registry, std::uint32_t name, char const* interface,
                     std::uint32_t version) {
   auto* client = static_cast<DemoClient*>(data);
   if (std::strcmp(interface, wl_compositor_interface.name) == 0) {
     client->compositor = static_cast<wl_compositor*>(
         wl_registry_bind(registry, name, &wl_compositor_interface, std::min(version, 4u)));
+  } else if (std::strcmp(interface, wl_subcompositor_interface.name) == 0) {
+    client->subcompositor = static_cast<wl_subcompositor*>(
+        wl_registry_bind(registry, name, &wl_subcompositor_interface, std::min(version, 1u)));
   } else if (std::strcmp(interface, wl_shm_interface.name) == 0) {
     client->shm = static_cast<wl_shm*>(wl_registry_bind(registry, name, &wl_shm_interface, 1));
   } else if (std::strcmp(interface, xdg_wm_base_interface.name) == 0) {
@@ -213,10 +231,14 @@ void destroyClient(DemoClient& client) {
   if (client.popup) xdg_popup_destroy(client.popup);
   if (client.popupXdgSurface) xdg_surface_destroy(client.popupXdgSurface);
   if (client.popupSurface) wl_surface_destroy(client.popupSurface);
+  destroyBuffer(client.childBuffer);
+  if (client.childSubsurface) wl_subsurface_destroy(client.childSubsurface);
+  if (client.childSurface) wl_surface_destroy(client.childSurface);
   destroyBuffer(client.parentBuffer);
   if (client.toplevel) xdg_toplevel_destroy(client.toplevel);
   if (client.xdgSurface) xdg_surface_destroy(client.xdgSurface);
   if (client.surface) wl_surface_destroy(client.surface);
+  if (client.subcompositor) wl_subcompositor_destroy(client.subcompositor);
   if (client.wmBase) xdg_wm_base_destroy(client.wmBase);
   if (client.shm) wl_shm_destroy(client.shm);
   if (client.compositor) wl_compositor_destroy(client.compositor);
@@ -237,8 +259,8 @@ int main() {
     if (!flux::compositor::demo::roundtripWithTimeout(client.display, 3000)) {
       throw std::runtime_error("registry roundtrip timed out");
     }
-    if (!client.compositor || !client.shm || !client.wmBase) {
-      throw std::runtime_error("compositor is missing wl_compositor, wl_shm, or xdg_wm_base");
+    if (!client.compositor || !client.subcompositor || !client.shm || !client.wmBase) {
+      throw std::runtime_error("compositor is missing wl_compositor, wl_subcompositor, wl_shm, or xdg_wm_base");
     }
 
     client.surface = wl_compositor_create_surface(client.compositor);
@@ -258,9 +280,10 @@ int main() {
         createBuffer(client.shm, "flux-compositor-popup-demo-parent", kParentWidth, kParentHeight, false);
     commitBuffer(client.surface, client.parentBuffer);
     wl_display_flush(client.display);
+    createSubsurface(client);
     createPopup(client);
     std::fprintf(stderr,
-                 "flux-compositor-popup-demo: expect a parent window and a small popup rectangle; click outside the popup or press Escape to dismiss it\n");
+                 "flux-compositor-popup-demo: expect a parent window, a small child rectangle, and a popup rectangle; click outside the popup or press Escape to dismiss it\n");
 
     while (gRunning.load(std::memory_order_relaxed)) {
       if (flux::compositor::demo::dispatchWithTimeout(client.display, 250) < 0) break;

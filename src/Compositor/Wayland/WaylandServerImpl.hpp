@@ -20,6 +20,7 @@ namespace flux::compositor {
 
 struct WaylandServer::Impl {
   struct Surface;
+  struct Subsurface;
   struct XdgPositioner;
   struct XdgSurface;
   struct XdgToplevel;
@@ -70,6 +71,7 @@ struct WaylandServer::Impl {
 
   wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
   void destroySurface(Surface* surface);
+  void destroySubsurface(Subsurface* subsurface);
   void destroyXdgPositioner(XdgPositioner* positioner);
   void destroyXdgSurface(XdgSurface* surface);
   void destroyXdgToplevel(XdgToplevel* toplevel);
@@ -97,6 +99,7 @@ struct WaylandServer::Impl {
 
   wl_display* display_ = nullptr;
   wl_global* compositorGlobal_ = nullptr;
+  wl_global* subcompositorGlobal_ = nullptr;
   wl_global* shmGlobal_ = nullptr;
   wl_global* outputGlobal_ = nullptr;
   wl_global* seatGlobal_ = nullptr;
@@ -119,6 +122,7 @@ struct WaylandServer::Impl {
   std::string displayNameFile_;
   WaylandOutputInfo output_;
   std::vector<std::unique_ptr<Surface>> surfaces_;
+  std::vector<std::unique_ptr<Subsurface>> subsurfaces_;
   std::vector<std::unique_ptr<XdgPositioner>> xdgPositioners_;
   std::vector<std::unique_ptr<XdgSurface>> xdgSurfaces_;
   std::vector<std::unique_ptr<XdgToplevel>> toplevels_;
@@ -208,6 +212,7 @@ struct WaylandServer::Impl::Surface {
   std::int32_t windowY = 96;
   bool toplevel = false;
   bool popup = false;
+  bool subsurface = false;
   bool cursor = false;
   std::uint64_t serial = 0;
   std::vector<std::uint8_t> rgbaPixels;
@@ -254,9 +259,19 @@ struct WaylandServer::Impl::Surface {
   FractionalScale* fractionalScale = nullptr;
   LayerSurface* layerSurface = nullptr;
   XdgPopup* xdgPopup = nullptr;
+  Subsurface* subsurfaceRole = nullptr;
   std::vector<PresentationFeedback*> pendingPresentationFeedbacks;
   std::vector<PresentationFeedback*> presentationFeedbacks;
   std::vector<wl_resource*> frameCallbacks;
+};
+
+struct WaylandServer::Impl::Subsurface {
+  WaylandServer::Impl* server = nullptr;
+  wl_resource* resource = nullptr;
+  Surface* surface = nullptr;
+  Surface* parent = nullptr;
+  std::int32_t x = 0;
+  std::int32_t y = 0;
 };
 
 struct WaylandServer::Impl::Viewport {

@@ -65,6 +65,7 @@ void inertDestroy(wl_client*, wl_resource* resource) {
 }
 
 extern struct zxdg_toplevel_decoration_v1_interface const xdgToplevelDecorationImpl;
+extern struct wl_subsurface_interface const subsurfaceImpl;
 extern struct xdg_surface_interface const xdgSurfaceImpl;
 extern struct xdg_toplevel_interface const xdgToplevelImpl;
 extern struct wp_viewport_interface const viewportImpl;
@@ -116,6 +117,79 @@ struct wl_compositor_interface const compositorImpl{
     .create_surface = compositorCreateSurface,
     .create_region = compositorCreateRegion,
     .release = inertDestroy,
+};
+
+void subcompositorDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void subsurfaceDestroy(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void subsurfaceSetPosition(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y) {
+  auto* subsurface = resourceData<WaylandServer::Impl::Subsurface>(resource);
+  if (!subsurface) return;
+  subsurface->x = x;
+  subsurface->y = y;
+}
+
+void subsurfacePlaceAbove(wl_client*, wl_resource*, wl_resource*) {}
+void subsurfacePlaceBelow(wl_client*, wl_resource*, wl_resource*) {}
+void subsurfaceSetSync(wl_client*, wl_resource*) {}
+void subsurfaceSetDesync(wl_client*, wl_resource*) {}
+
+struct wl_subsurface_interface const subsurfaceImpl{
+    .destroy = subsurfaceDestroy,
+    .set_position = subsurfaceSetPosition,
+    .place_above = subsurfacePlaceAbove,
+    .place_below = subsurfacePlaceBelow,
+    .set_sync = subsurfaceSetSync,
+    .set_desync = subsurfaceSetDesync,
+};
+
+void subcompositorGetSubsurface(wl_client* client,
+                                wl_resource* resource,
+                                std::uint32_t id,
+                                wl_resource* surfaceResource,
+                                wl_resource* parentResource) {
+  auto* server = serverFrom(resource);
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
+  auto* parent = resourceData<WaylandServer::Impl::Surface>(parentResource);
+  if (!server || !surface || !parent || surface == parent) {
+    wl_resource_post_error(resource, WL_SUBCOMPOSITOR_ERROR_BAD_SURFACE, "invalid subsurface or parent surface");
+    return;
+  }
+  if (surface->toplevel || surface->popup || surface->layerSurface || surface->cursor || surface->subsurface) {
+    wl_resource_post_error(resource, WL_SUBCOMPOSITOR_ERROR_BAD_SURFACE, "wl_surface already has another role");
+    return;
+  }
+
+  auto subsurface = std::make_unique<WaylandServer::Impl::Subsurface>();
+  subsurface->server = server;
+  subsurface->surface = surface;
+  subsurface->parent = parent;
+  wl_resource* subsurfaceResource = wl_resource_create(client, &wl_subsurface_interface, 1, id);
+  if (!subsurfaceResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  subsurface->resource = subsurfaceResource;
+  auto* raw = subsurface.get();
+  surface->subsurface = true;
+  surface->subsurfaceRole = raw;
+  server->subsurfaces_.push_back(std::move(subsurface));
+  wl_resource_set_implementation(subsurfaceResource,
+                                 &subsurfaceImpl,
+                                 raw,
+                                 destroyResourceCallback<WaylandServer::Impl::Subsurface,
+                                                         WaylandServer::Impl,
+                                                         &WaylandServer::Impl::destroySubsurface>);
+}
+
+struct wl_subcompositor_interface const subcompositorImpl{
+    .destroy = subcompositorDestroy,
+    .get_subsurface = subcompositorGetSubsurface,
 };
 
 void surfaceDestroy(wl_client*, wl_resource* resource) {
@@ -767,8 +841,8 @@ void xdgSurfaceDestroy(wl_client*, wl_resource* resource) {
 
 void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
-  if (xdgSurface->surface->layerSurface) {
-    wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has a layer-shell role");
+  if (xdgSurface->surface->layerSurface || xdgSurface->surface->subsurface) {
+    wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
     return;
   }
   auto toplevel = std::make_unique<WaylandServer::Impl::XdgToplevel>();
@@ -904,7 +978,8 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_INVALID_POSITIONER, "invalid xdg_popup positioner");
     return;
   }
-  if (xdgSurface->surface->toplevel || xdgSurface->surface->layerSurface || xdgSurface->surface->cursor) {
+  if (xdgSurface->surface->toplevel || xdgSurface->surface->layerSurface || xdgSurface->surface->cursor ||
+      xdgSurface->surface->subsurface) {
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
     return;
   }
@@ -1002,6 +1077,15 @@ struct xdg_toplevel_interface const xdgToplevelImpl{
 void bindCompositor(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource = wl_resource_create(client, &wl_compositor_interface, std::min(version, 5u), id);
   wl_resource_set_implementation(resource, &compositorImpl, data, nullptr);
+}
+
+void bindSubcompositor(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
+  wl_resource* resource = wl_resource_create(client, &wl_subcompositor_interface, std::min(version, 1u), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  wl_resource_set_implementation(resource, &subcompositorImpl, data, nullptr);
 }
 
 void bindXdgWmBase(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
@@ -1395,7 +1479,7 @@ void layerShellGetLayerSurface(wl_client* client, wl_resource* resource, std::ui
                                char const* nameSpace) {
   auto* server = serverFrom(resource);
   auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
-  if (!surface || surface->toplevel || surface->layerSurface || surface->cursor) {
+  if (!surface || surface->toplevel || surface->layerSurface || surface->cursor || surface->subsurface) {
     wl_resource_post_error(resource, ZWLR_LAYER_SHELL_V1_ERROR_ROLE, "wl_surface already has a role");
     return;
   }
@@ -2127,6 +2211,7 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   if (!display_) throw std::runtime_error("wl_display_create failed");
 
   compositorGlobal_ = wl_global_create(display_, &wl_compositor_interface, 5, this, bindCompositor);
+  subcompositorGlobal_ = wl_global_create(display_, &wl_subcompositor_interface, 1, this, bindSubcompositor);
   shmGlobal_ = wl_global_create(display_, &wl_shm_interface, 1, this, bindShm);
   outputGlobal_ = wl_global_create(display_, &wl_output_interface, 4, this, bindOutput);
   seatGlobal_ = wl_global_create(display_, &wl_seat_interface, 7, this, bindSeat);
@@ -2153,11 +2238,12 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
       wl_global_create(display_, &zwp_primary_selection_device_manager_v1_interface, 1, this, bindPrimarySelectionManager);
   dataDeviceManagerGlobal_ = wl_global_create(display_, &wl_data_device_manager_interface, 3, this, bindDataDeviceManager);
   activationGlobal_ = wl_global_create(display_, &xdg_activation_v1_interface, 1, this, bindActivation);
-  if (!compositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ || !xdgWmBaseGlobal_ ||
-      !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ || !viewporterGlobal_ ||
-      !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ || !idleInhibitManagerGlobal_ ||
-      !layerShellGlobal_ || !presentationGlobal_ || !relativePointerManagerGlobal_ || !pointerConstraintsGlobal_ ||
-      !primarySelectionManagerGlobal_ || !dataDeviceManagerGlobal_ || !activationGlobal_) {
+  if (!compositorGlobal_ || !subcompositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ ||
+      !xdgWmBaseGlobal_ || !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ ||
+      !viewporterGlobal_ || !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ ||
+      !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_ || !relativePointerManagerGlobal_ ||
+      !pointerConstraintsGlobal_ || !primarySelectionManagerGlobal_ || !dataDeviceManagerGlobal_ ||
+      !activationGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -2192,49 +2278,79 @@ std::size_t WaylandServer::Impl::toplevelCount() const noexcept {
   return toplevels_.size();
 }
 
+bool surfaceIsRenderable(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->width > 0 && surface->height > 0 &&
+         (!surface->rgbaPixels.empty() || surface->dmabufBuffer);
+}
+
+CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
+                                            WaylandServer::Impl::Surface const* surface,
+                                            std::int32_t x,
+                                            std::int32_t y,
+                                            bool withChrome) {
+  CommittedSurfaceSnapshot snapshot{
+      .id = surface->id,
+      .x = x,
+      .y = y,
+      .width = displayWidth(surface),
+      .height = displayHeight(surface),
+      .bufferWidth = surface->width,
+      .bufferHeight = surface->height,
+      .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
+      .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
+      .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
+      .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
+      .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface),
+      .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface),
+      .titleBarHeight = withChrome && !surface->layerSurface && !surface->popup ? kTitleBarHeight : 0,
+      .title = withChrome && !surface->layerSurface && !surface->popup ? titleForSurface(server, surface) : std::string{},
+      .focused = server->keyboardFocus_ == surface,
+      .activeSizing = server->resizeSurface_ == surface || surface->geometryAnimationActive,
+      .serial = surface->serial,
+      .rgbaPixels = surface->rgbaPixels,
+      .dmabufFormat = 0,
+      .dmabufPlanes = {},
+  };
+  if (surface->dmabufBuffer) {
+    snapshot.dmabufFormat = surface->dmabufBuffer->format;
+    snapshot.dmabufPlanes.reserve(surface->dmabufBuffer->planes.size());
+    for (DmabufPlane const& plane : surface->dmabufBuffer->planes) {
+      snapshot.dmabufPlanes.push_back({
+          .offset = plane.offset,
+          .stride = plane.stride,
+          .modifier = plane.modifier,
+      });
+    }
+  }
+  return snapshot;
+}
+
+void appendSubsurfaceSnapshots(WaylandServer::Impl const* server,
+                               std::vector<CommittedSurfaceSnapshot>& snapshots,
+                               WaylandServer::Impl::Surface const* parent,
+                               std::int32_t parentX,
+                               std::int32_t parentY) {
+  for (auto const& subsurface : server->subsurfaces_) {
+    if (!subsurface || subsurface->parent != parent || !subsurface->surface) continue;
+    WaylandServer::Impl::Surface const* surface = subsurface->surface;
+    if (!surfaceIsRenderable(surface)) continue;
+    std::int32_t const x = parentX + subsurface->x;
+    std::int32_t const y = parentY + subsurface->y;
+    snapshots.push_back(snapshotForSurface(server, surface, x, y, false));
+    appendSubsurfaceSnapshots(server, snapshots, surface, x, y);
+  }
+}
+
 std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() const {
   std::vector<CommittedSurfaceSnapshot> snapshots;
   snapshots.reserve(surfaces_.size());
   for (auto const& surface : surfaces_) {
     if (!surface->toplevel) continue;
     if (surface->xdgPopup && surface->xdgPopup->dismissed) continue;
-    if (surface->width <= 0 || surface->height <= 0) continue;
-    if (surface->rgbaPixels.empty() && !surface->dmabufBuffer) continue;
-    CommittedSurfaceSnapshot snapshot{
-        .id = surface->id,
-        .x = surface->windowX,
-        .y = surface->windowY,
-        .width = displayWidth(surface.get()),
-        .height = displayHeight(surface.get()),
-        .bufferWidth = surface->width,
-        .bufferHeight = surface->height,
-        .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
-        .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
-        .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
-        .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
-        .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface.get()),
-        .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface.get()),
-        .titleBarHeight = surface->layerSurface || surface->popup ? 0 : kTitleBarHeight,
-        .title = surface->layerSurface || surface->popup ? std::string{} : titleForSurface(this, surface.get()),
-        .focused = keyboardFocus_ == surface.get(),
-        .activeSizing = resizeSurface_ == surface.get() || surface->geometryAnimationActive,
-        .serial = surface->serial,
-        .rgbaPixels = surface->rgbaPixels,
-        .dmabufFormat = 0,
-        .dmabufPlanes = {},
-    };
-    if (surface->dmabufBuffer) {
-      snapshot.dmabufFormat = surface->dmabufBuffer->format;
-      snapshot.dmabufPlanes.reserve(surface->dmabufBuffer->planes.size());
-      for (DmabufPlane const& plane : surface->dmabufBuffer->planes) {
-        snapshot.dmabufPlanes.push_back({
-            .offset = plane.offset,
-            .stride = plane.stride,
-            .modifier = plane.modifier,
-        });
-      }
+    if (surfaceIsRenderable(surface.get())) {
+      snapshots.push_back(snapshotForSurface(this, surface.get(), surface->windowX, surface->windowY, true));
     }
-    snapshots.push_back(std::move(snapshot));
+    appendSubsurfaceSnapshots(this, snapshots, surface.get(), surface->windowX, surface->windowY);
   }
   return snapshots;
 }
@@ -3194,6 +3310,14 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   for (auto& popup : popups_) {
     if (popup->parentSurface == surface) popup->parentSurface = nullptr;
   }
+  for (auto it = subsurfaces_.begin(); it != subsurfaces_.end();) {
+    if ((*it)->surface == surface || (*it)->parent == surface) {
+      wl_resource_destroy((*it)->resource);
+      it = subsurfaces_.begin();
+    } else {
+      ++it;
+    }
+  }
   if (dndOrigin_ == surface || dndTarget_ == surface) clearDnd(this);
   for (auto& device : cursorShapeDevices_) {
     if (device->pointer && wl_resource_get_client(device->pointer) == wl_resource_get_client(surface->resource)) {
@@ -3239,6 +3363,14 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   }
   surface->frameCallbacks.clear();
   eraseResource(surfaces_, surface);
+}
+
+void WaylandServer::Impl::destroySubsurface(Subsurface* subsurface) {
+  if (subsurface && subsurface->surface && subsurface->surface->subsurfaceRole == subsurface) {
+    subsurface->surface->subsurfaceRole = nullptr;
+    subsurface->surface->subsurface = false;
+  }
+  eraseResource(subsurfaces_, subsurface);
 }
 
 void WaylandServer::Impl::destroyXdgSurface(XdgSurface* surface) {

@@ -400,7 +400,7 @@ The xdg_surface configure/ack-configure cycle has well-defined invariants. Test 
 
 ## 5. The hardware-locking bugs
 
-xdg-popups and xdg-activation were deferred because their first implementations locked the test laptop. The safe first stage is now implemented and hardware-smoked: popups render and dismiss without input grabs, and activation can raise/focus a target window without lockups. Popup input grabs and real-app menu behavior remain pending.
+xdg-popups and xdg-activation were deferred because their first implementations locked the test laptop. The safe first stage is now implemented and hardware-smoked: popups render and dismiss without input grabs, activation can raise/focus a target window without lockups, and `wl_subcompositor`/basic subsurfaces are present so clients such as `foot` can start real popup/menu testing. Popup input grabs and real-app menu behavior remain pending.
 
 After the per-protocol decomposition (Commits 4-7), reintroducing xdg-popups is contained: a new file in `Wayland/Globals/XdgPopup.cpp`, with no risk to other protocols. The implementation can have aggressive sanity-checking that, if it goes wrong, fails to construct the popup rather than spinning the compositor.
 

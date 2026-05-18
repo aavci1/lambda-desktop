@@ -82,7 +82,7 @@ void pointerSetCursor(wl_client*, wl_resource* resource, std::uint32_t, wl_resou
   }
 
   auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
-  if (!surface || surface->toplevel) return;
+  if (!surface || surface->toplevel || surface->subsurface) return;
   surface->cursor = true;
   server->cursorSurface_ = surface;
   server->cursorHotspotX_ = hotspotX;
