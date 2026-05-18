@@ -146,22 +146,44 @@ std::vector<WaylandServer::ShortcutBinding> defaultShortcutBindings() {
 
 std::optional<std::uint32_t> keyCodeForName(std::string const& token) {
   static std::unordered_map<std::string, std::uint32_t> const keyCodes{
+      {"a", KEY_A},
       {"backspace", KEY_BACKSPACE},
+      {"b", KEY_B},
+      {"c", KEY_C},
+      {"d", KEY_D},
       {"delete", KEY_DELETE},
       {"down", KEY_DOWN},
+      {"e", KEY_E},
       {"enter", KEY_ENTER},
       {"escape", KEY_ESC},
       {"esc", KEY_ESC},
+      {"f", KEY_F},
+      {"g", KEY_G},
+      {"h", KEY_H},
+      {"i", KEY_I},
+      {"j", KEY_J},
+      {"k", KEY_K},
+      {"l", KEY_L},
       {"left", KEY_LEFT},
+      {"m", KEY_M},
+      {"n", KEY_N},
+      {"o", KEY_O},
+      {"p", KEY_P},
       {"q", KEY_Q},
+      {"r", KEY_R},
       {"right", KEY_RIGHT},
+      {"s", KEY_S},
       {"space", KEY_SPACE},
+      {"t", KEY_T},
       {"tab", KEY_TAB},
+      {"u", KEY_U},
       {"up", KEY_UP},
+      {"v", KEY_V},
+      {"w", KEY_W},
+      {"x", KEY_X},
+      {"y", KEY_Y},
+      {"z", KEY_Z},
   };
-  if (token.size() == 1 && token[0] >= 'a' && token[0] <= 'z') {
-    return static_cast<std::uint32_t>(KEY_A + (token[0] - 'a'));
-  }
   auto found = keyCodes.find(token);
   if (found == keyCodes.end()) return std::nullopt;
   return found->second;

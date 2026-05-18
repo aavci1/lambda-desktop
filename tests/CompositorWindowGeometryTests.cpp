@@ -86,3 +86,48 @@ TEST_CASE("compositor resize geometry clamps minimum size and adjusts anchored e
   CHECK(minClamped.width == flux::compositor::kCompositorMinWindowWidth);
   CHECK(minClamped.height == flux::compositor::kCompositorMinWindowHeight);
 }
+
+TEST_CASE("compositor maximized geometry uses the same top inset as snap") {
+  flux::compositor::OutputGeometry const output{.width = 1366, .height = 768};
+
+  auto maximized = flux::compositor::maximizedWindowGeometry(output);
+  CHECK(maximized.x == 0);
+  CHECK(maximized.y == flux::compositor::kCompositorTitleBarHeight);
+  CHECK(maximized.width == 1366);
+  CHECK(maximized.height == 740);
+}
+
+TEST_CASE("compositor geometry stays valid on tiny outputs") {
+  flux::compositor::OutputGeometry const output{.width = 120, .height = 80};
+
+  auto left = flux::compositor::snappedWindowGeometry(output, true);
+  CHECK(left.width == flux::compositor::kCompositorMinWindowWidth);
+  CHECK(left.height == flux::compositor::kCompositorMinWindowHeight);
+  CHECK(left.y == flux::compositor::kCompositorTitleBarHeight);
+
+  auto maximized = flux::compositor::maximizedWindowGeometry(output);
+  CHECK(maximized.width == flux::compositor::kCompositorMinWindowWidth);
+  CHECK(maximized.height == flux::compositor::kCompositorMinWindowHeight);
+}
+
+TEST_CASE("compositor snap preview edge threshold is inclusive") {
+  flux::compositor::OutputGeometry const output{.width = 1000, .height = 700};
+
+  auto left = flux::compositor::snapPreviewGeometry({
+      .x = flux::compositor::kCompositorSnapEdgeThreshold,
+      .y = 100,
+      .width = 300,
+      .height = 200,
+  }, output);
+  REQUIRE(left);
+  CHECK(left->x == 0);
+
+  auto top = flux::compositor::snapPreviewGeometry({
+      .x = 300,
+      .y = flux::compositor::kCompositorTitleBarHeight + flux::compositor::kCompositorSnapEdgeThreshold,
+      .width = 300,
+      .height = 200,
+  }, output);
+  REQUIRE(top);
+  CHECK(top->width == output.width);
+}
