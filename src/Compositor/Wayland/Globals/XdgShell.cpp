@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/XdgShell.hpp"
 
+#include "Compositor/Window/WindowGeometry.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Detail/ResizeTrace.hpp"
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <wayland-server-core.h>
 
 namespace flux::compositor {
@@ -291,70 +293,66 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
   xdg_surface_send_configure(resource, xdgSurface->server->nextConfigureSerial_++);
 }
 
-std::int32_t popupAnchorX(WaylandServer::Impl::XdgPositioner const* positioner) {
-  std::int32_t x = positioner->anchorRectX;
-  if (positioner->anchor == XDG_POSITIONER_ANCHOR_TOP ||
-      positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM ||
-      positioner->anchor == XDG_POSITIONER_ANCHOR_NONE) {
-    x += positioner->anchorRectWidth / 2;
-  } else if (positioner->anchor == XDG_POSITIONER_ANCHOR_TOP_RIGHT ||
-             positioner->anchor == XDG_POSITIONER_ANCHOR_RIGHT ||
-             positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT) {
-    x += positioner->anchorRectWidth;
+PopupAnchor popupAnchor(std::uint32_t anchor) {
+  switch (anchor) {
+  case XDG_POSITIONER_ANCHOR_TOP: return PopupAnchor::Top;
+  case XDG_POSITIONER_ANCHOR_BOTTOM: return PopupAnchor::Bottom;
+  case XDG_POSITIONER_ANCHOR_LEFT: return PopupAnchor::Left;
+  case XDG_POSITIONER_ANCHOR_RIGHT: return PopupAnchor::Right;
+  case XDG_POSITIONER_ANCHOR_TOP_LEFT: return PopupAnchor::TopLeft;
+  case XDG_POSITIONER_ANCHOR_BOTTOM_LEFT: return PopupAnchor::BottomLeft;
+  case XDG_POSITIONER_ANCHOR_TOP_RIGHT: return PopupAnchor::TopRight;
+  case XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT: return PopupAnchor::BottomRight;
+  default: return PopupAnchor::None;
   }
-  return x + positioner->offsetX;
 }
 
-std::int32_t popupAnchorY(WaylandServer::Impl::XdgPositioner const* positioner) {
-  std::int32_t y = positioner->anchorRectY;
-  if (positioner->anchor == XDG_POSITIONER_ANCHOR_LEFT ||
-      positioner->anchor == XDG_POSITIONER_ANCHOR_RIGHT ||
-      positioner->anchor == XDG_POSITIONER_ANCHOR_NONE) {
-    y += positioner->anchorRectHeight / 2;
-  } else if (positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM_LEFT ||
-             positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM ||
-             positioner->anchor == XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT) {
-    y += positioner->anchorRectHeight;
+PopupGravity popupGravity(std::uint32_t gravity) {
+  switch (gravity) {
+  case XDG_POSITIONER_GRAVITY_TOP: return PopupGravity::Top;
+  case XDG_POSITIONER_GRAVITY_BOTTOM: return PopupGravity::Bottom;
+  case XDG_POSITIONER_GRAVITY_LEFT: return PopupGravity::Left;
+  case XDG_POSITIONER_GRAVITY_RIGHT: return PopupGravity::Right;
+  case XDG_POSITIONER_GRAVITY_TOP_LEFT: return PopupGravity::TopLeft;
+  case XDG_POSITIONER_GRAVITY_BOTTOM_LEFT: return PopupGravity::BottomLeft;
+  case XDG_POSITIONER_GRAVITY_TOP_RIGHT: return PopupGravity::TopRight;
+  case XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT: return PopupGravity::BottomRight;
+  default: return PopupGravity::None;
   }
-  return y + positioner->offsetY;
 }
 
 void configurePopup(WaylandServer::Impl::XdgPopup* popup, WaylandServer::Impl::XdgPositioner const* positioner) {
   if (!popup || !popup->xdgSurface || !popup->xdgSurface->surface || !positioner) return;
   WaylandServer::Impl::Surface* surface = popup->xdgSurface->surface;
   WaylandServer::Impl::Surface const* parent = popup->parentSurface;
-  std::int32_t const width = std::max(1, positioner->width);
-  std::int32_t const height = std::max(1, positioner->height);
-  std::int32_t x = (parent ? parent->windowX : 0) + popupAnchorX(positioner);
-  std::int32_t y = (parent ? parent->windowY : 0) + popupAnchorY(positioner);
-  if (positioner->gravity == XDG_POSITIONER_GRAVITY_LEFT ||
-      positioner->gravity == XDG_POSITIONER_GRAVITY_TOP_LEFT ||
-      positioner->gravity == XDG_POSITIONER_GRAVITY_BOTTOM_LEFT) {
-    x -= width;
-  } else if (positioner->gravity == XDG_POSITIONER_GRAVITY_NONE ||
-             positioner->gravity == XDG_POSITIONER_GRAVITY_TOP ||
-             positioner->gravity == XDG_POSITIONER_GRAVITY_BOTTOM) {
-    x -= width / 2;
-  }
-  if (positioner->gravity == XDG_POSITIONER_GRAVITY_TOP ||
-      positioner->gravity == XDG_POSITIONER_GRAVITY_TOP_LEFT ||
-      positioner->gravity == XDG_POSITIONER_GRAVITY_TOP_RIGHT) {
-    y -= height;
-  } else if (positioner->gravity == XDG_POSITIONER_GRAVITY_NONE ||
-             positioner->gravity == XDG_POSITIONER_GRAVITY_LEFT ||
-             positioner->gravity == XDG_POSITIONER_GRAVITY_RIGHT) {
-    y -= height / 2;
-  }
+  auto const geometry = positionedPopupGeometry({
+      .parent = parent ? std::optional<WindowGeometry>{WindowGeometry{
+                             .x = parent->windowX,
+                             .y = parent->windowY,
+                             .width = parent->frameWidth,
+                             .height = parent->frameHeight,
+                         }}
+                       : std::nullopt,
+      .output = {.width = popup->server->logicalOutputWidth(), .height = popup->server->logicalOutputHeight()},
+      .anchorRectX = positioner->anchorRectX,
+      .anchorRectY = positioner->anchorRectY,
+      .anchorRectWidth = positioner->anchorRectWidth,
+      .anchorRectHeight = positioner->anchorRectHeight,
+      .width = positioner->width,
+      .height = positioner->height,
+      .offsetX = positioner->offsetX,
+      .offsetY = positioner->offsetY,
+      .anchor = popupAnchor(positioner->anchor),
+      .gravity = popupGravity(positioner->gravity),
+  });
 
-  x = std::clamp(x, 0, std::max(0, popup->server->logicalOutputWidth() - width));
-  y = std::clamp(y, 0, std::max(0, popup->server->logicalOutputHeight() - height));
-  surface->windowX = x;
-  surface->windowY = y;
-  setConfiguredFrameSize(surface, width, height);
-  popup->configuredX = parent ? x - parent->windowX : x;
-  popup->configuredY = parent ? y - parent->windowY : y;
-  popup->configuredWidth = width;
-  popup->configuredHeight = height;
+  surface->windowX = geometry.window.x;
+  surface->windowY = geometry.window.y;
+  setConfiguredFrameSize(surface, geometry.window.width, geometry.window.height);
+  popup->configuredX = geometry.configureX;
+  popup->configuredY = geometry.configureY;
+  popup->configuredWidth = geometry.configureWidth;
+  popup->configuredHeight = geometry.configureHeight;
 }
 
 void sendPopupConfigure(WaylandServer::Impl::XdgPopup* popup) {

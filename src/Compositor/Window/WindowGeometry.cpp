@@ -89,4 +89,75 @@ WindowGeometry resizedWindowGeometry(ResizeDragGeometry const& geometry) {
   return next;
 }
 
+namespace {
+
+std::int32_t popupAnchorX(PopupPositionerGeometry const& geometry) {
+  std::int32_t x = geometry.anchorRectX;
+  if (geometry.anchor == PopupAnchor::Top ||
+      geometry.anchor == PopupAnchor::Bottom ||
+      geometry.anchor == PopupAnchor::None) {
+    x += geometry.anchorRectWidth / 2;
+  } else if (geometry.anchor == PopupAnchor::TopRight ||
+             geometry.anchor == PopupAnchor::Right ||
+             geometry.anchor == PopupAnchor::BottomRight) {
+    x += geometry.anchorRectWidth;
+  }
+  return x + geometry.offsetX;
+}
+
+std::int32_t popupAnchorY(PopupPositionerGeometry const& geometry) {
+  std::int32_t y = geometry.anchorRectY;
+  if (geometry.anchor == PopupAnchor::Left ||
+      geometry.anchor == PopupAnchor::Right ||
+      geometry.anchor == PopupAnchor::None) {
+    y += geometry.anchorRectHeight / 2;
+  } else if (geometry.anchor == PopupAnchor::BottomLeft ||
+             geometry.anchor == PopupAnchor::Bottom ||
+             geometry.anchor == PopupAnchor::BottomRight) {
+    y += geometry.anchorRectHeight;
+  }
+  return y + geometry.offsetY;
+}
+
+} // namespace
+
+PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry) {
+  std::int32_t const width = std::max(1, geometry.width);
+  std::int32_t const height = std::max(1, geometry.height);
+  std::int32_t const parentX = geometry.parent ? geometry.parent->x : 0;
+  std::int32_t const parentY = geometry.parent ? geometry.parent->y : 0;
+  std::int32_t x = parentX + popupAnchorX(geometry);
+  std::int32_t y = parentY + popupAnchorY(geometry);
+
+  if (geometry.gravity == PopupGravity::Left ||
+      geometry.gravity == PopupGravity::TopLeft ||
+      geometry.gravity == PopupGravity::BottomLeft) {
+    x -= width;
+  } else if (geometry.gravity == PopupGravity::None ||
+             geometry.gravity == PopupGravity::Top ||
+             geometry.gravity == PopupGravity::Bottom) {
+    x -= width / 2;
+  }
+  if (geometry.gravity == PopupGravity::Top ||
+      geometry.gravity == PopupGravity::TopLeft ||
+      geometry.gravity == PopupGravity::TopRight) {
+    y -= height;
+  } else if (geometry.gravity == PopupGravity::None ||
+             geometry.gravity == PopupGravity::Left ||
+             geometry.gravity == PopupGravity::Right) {
+    y -= height / 2;
+  }
+
+  x = std::clamp(x, 0, std::max(0, geometry.output.width - width));
+  y = std::clamp(y, 0, std::max(0, geometry.output.height - height));
+
+  return PopupGeometry{
+      .window = {.x = x, .y = y, .width = width, .height = height},
+      .configureX = geometry.parent ? x - parentX : x,
+      .configureY = geometry.parent ? y - parentY : y,
+      .configureWidth = width,
+      .configureHeight = height,
+  };
+}
+
 } // namespace flux::compositor

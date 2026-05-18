@@ -131,3 +131,65 @@ TEST_CASE("compositor snap preview edge threshold is inclusive") {
   REQUIRE(top);
   CHECK(top->width == output.width);
 }
+
+TEST_CASE("compositor popup geometry uses anchor gravity and parent-relative configure") {
+  flux::compositor::PopupPositionerGeometry const positioner{
+      .parent = flux::compositor::WindowGeometry{.x = 200, .y = 100, .width = 500, .height = 400},
+      .output = {.width = 1280, .height = 720},
+      .anchorRectX = 40,
+      .anchorRectY = 30,
+      .anchorRectWidth = 120,
+      .anchorRectHeight = 24,
+      .width = 240,
+      .height = 180,
+      .offsetX = 8,
+      .offsetY = 6,
+      .anchor = flux::compositor::PopupAnchor::BottomRight,
+      .gravity = flux::compositor::PopupGravity::BottomLeft,
+  };
+
+  auto popup = flux::compositor::positionedPopupGeometry(positioner);
+  CHECK(popup.window.x == 128);
+  CHECK(popup.window.y == 160);
+  CHECK(popup.window.width == 240);
+  CHECK(popup.window.height == 180);
+  CHECK(popup.configureX == -72);
+  CHECK(popup.configureY == 60);
+  CHECK(popup.configureWidth == 240);
+  CHECK(popup.configureHeight == 180);
+}
+
+TEST_CASE("compositor popup geometry clamps to output") {
+  flux::compositor::PopupPositionerGeometry const positioner{
+      .parent = flux::compositor::WindowGeometry{.x = 700, .y = 500, .width = 300, .height = 200},
+      .output = {.width = 800, .height = 600},
+      .anchorRectX = 280,
+      .anchorRectY = 180,
+      .anchorRectWidth = 40,
+      .anchorRectHeight = 40,
+      .width = 220,
+      .height = 160,
+      .anchor = flux::compositor::PopupAnchor::BottomRight,
+      .gravity = flux::compositor::PopupGravity::BottomRight,
+  };
+
+  auto popup = flux::compositor::positionedPopupGeometry(positioner);
+  CHECK(popup.window.x == 580);
+  CHECK(popup.window.y == 440);
+  CHECK(popup.configureX == -120);
+  CHECK(popup.configureY == -60);
+}
+
+TEST_CASE("compositor popup geometry clamps empty size to one pixel") {
+  flux::compositor::PopupPositionerGeometry const positioner{
+      .output = {.width = 100, .height = 100},
+      .width = 0,
+      .height = -10,
+  };
+
+  auto popup = flux::compositor::positionedPopupGeometry(positioner);
+  CHECK(popup.window.width == 1);
+  CHECK(popup.window.height == 1);
+  CHECK(popup.configureWidth == 1);
+  CHECK(popup.configureHeight == 1);
+}

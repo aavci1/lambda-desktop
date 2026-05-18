@@ -18,6 +18,30 @@ enum class ResizeEdge : std::uint8_t {
   Right = 1u << 3u,
 };
 
+enum class PopupAnchor : std::uint8_t {
+  None,
+  Top,
+  Bottom,
+  Left,
+  Right,
+  TopLeft,
+  BottomLeft,
+  TopRight,
+  BottomRight,
+};
+
+enum class PopupGravity : std::uint8_t {
+  None,
+  Top,
+  Bottom,
+  Left,
+  Right,
+  TopLeft,
+  BottomLeft,
+  TopRight,
+  BottomRight,
+};
+
 [[nodiscard]] constexpr ResizeEdge operator|(ResizeEdge lhs, ResizeEdge rhs) {
   return static_cast<ResizeEdge>(static_cast<std::uint8_t>(lhs) | static_cast<std::uint8_t>(rhs));
 }
@@ -57,11 +81,35 @@ struct RestoreDragGeometry {
   OutputGeometry output{};
 };
 
+struct PopupPositionerGeometry {
+  std::optional<WindowGeometry> parent;
+  OutputGeometry output{};
+  std::int32_t anchorRectX = 0;
+  std::int32_t anchorRectY = 0;
+  std::int32_t anchorRectWidth = 0;
+  std::int32_t anchorRectHeight = 0;
+  std::int32_t width = 0;
+  std::int32_t height = 0;
+  std::int32_t offsetX = 0;
+  std::int32_t offsetY = 0;
+  PopupAnchor anchor = PopupAnchor::None;
+  PopupGravity gravity = PopupGravity::None;
+};
+
+struct PopupGeometry {
+  WindowGeometry window{};
+  std::int32_t configureX = 0;
+  std::int32_t configureY = 0;
+  std::int32_t configureWidth = 0;
+  std::int32_t configureHeight = 0;
+};
+
 [[nodiscard]] std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window,
                                                                OutputGeometry output);
 [[nodiscard]] WindowGeometry snappedWindowGeometry(OutputGeometry output, bool leftHalf);
 [[nodiscard]] WindowGeometry maximizedWindowGeometry(OutputGeometry output);
 [[nodiscard]] WindowGeometry restoredDragGeometry(RestoreDragGeometry const& geometry);
 [[nodiscard]] WindowGeometry resizedWindowGeometry(ResizeDragGeometry const& geometry);
+[[nodiscard]] PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry);
 
 } // namespace flux::compositor
