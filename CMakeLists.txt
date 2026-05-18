@@ -554,6 +554,7 @@ if(FLUX_BUILD_COMPOSITOR)
     src/Compositor/Wayland/Globals/Output.cpp
     src/Compositor/Wayland/Globals/Seat.cpp
     src/Compositor/Wayland/Globals/Shm.cpp
+    src/Compositor/Wayland/Globals/XdgOutput.cpp
     src/Compositor/Window/WindowGeometry.cpp
     src/Compositor/main.cpp
     src/Compositor/WaylandServer.cpp
