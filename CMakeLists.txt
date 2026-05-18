@@ -547,6 +547,7 @@ if(FLUX_BUILD_COMPOSITOR)
     src/Compositor/Chrome/CursorRenderer.cpp
     src/Compositor/Chrome/WindowChromeRenderer.cpp
     src/Compositor/Config/CompositorConfig.cpp
+    src/Compositor/Input/KmsInputBridge.cpp
     src/Compositor/Surface/SurfaceRenderer.cpp
     src/Compositor/Window/WindowGeometry.cpp
     src/Compositor/main.cpp
