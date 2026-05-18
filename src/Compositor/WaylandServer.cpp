@@ -1,6 +1,7 @@
 #include "Compositor/WaylandServer.hpp"
 
 #include "Compositor/Wayland/ResourceTemplates.hpp"
+#include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "cursor-shape-v1-server-protocol.h"
 #include "fractional-scale-v1-server-protocol.h"
@@ -43,9 +44,9 @@ namespace {
 
 constexpr std::int32_t kTitleBarHeight = 28;
 constexpr std::int32_t kResizeGripSize = 14;
-constexpr std::int32_t kSnapEdgeThreshold = 32;
-constexpr std::int32_t kMinWindowWidth = 160;
-constexpr std::int32_t kMinWindowHeight = 120;
+constexpr std::int32_t kSnapEdgeThreshold = kCompositorSnapEdgeThreshold;
+constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
+constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
 constexpr std::uint32_t kInvalidModifierIndex = ~0u;
 constexpr std::int32_t kCloseButtonSize = 18;
@@ -998,6 +999,45 @@ std::int32_t displayWidth(WaylandServer::Surface const* surface) {
 
 std::int32_t displayHeight(WaylandServer::Surface const* surface) {
   return surface && surface->frameHeight > 0 ? surface->frameHeight : surface ? surface->height : 0;
+}
+
+WindowGeometry windowGeometryFor(WaylandServer::Surface const* surface) {
+  return {
+      .x = surface ? surface->windowX : 0,
+      .y = surface ? surface->windowY : 0,
+      .width = displayWidth(surface),
+      .height = displayHeight(surface),
+  };
+}
+
+OutputGeometry outputGeometryFor(WaylandServer const* server) {
+  return {
+      .width = server ? server->output_.width : 0,
+      .height = server ? server->output_.height : 0,
+  };
+}
+
+ResizeEdge resizeEdgesFromXdg(std::uint32_t edges) {
+  switch (edges) {
+  case XDG_TOPLEVEL_RESIZE_EDGE_TOP:
+    return ResizeEdge::Top;
+  case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM:
+    return ResizeEdge::Bottom;
+  case XDG_TOPLEVEL_RESIZE_EDGE_LEFT:
+    return ResizeEdge::Left;
+  case XDG_TOPLEVEL_RESIZE_EDGE_RIGHT:
+    return ResizeEdge::Right;
+  case XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT:
+    return ResizeEdge::Top | ResizeEdge::Left;
+  case XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT:
+    return ResizeEdge::Top | ResizeEdge::Right;
+  case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT:
+    return ResizeEdge::Bottom | ResizeEdge::Left;
+  case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT:
+    return ResizeEdge::Bottom | ResizeEdge::Right;
+  default:
+    return ResizeEdge::None;
+  }
 }
 
 bool hasAnchor(std::uint32_t anchor, std::uint32_t edge) {
@@ -3005,21 +3045,13 @@ bool cycleFocus(WaylandServer* server, std::uint32_t timeMs) {
 std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer const* server) {
   WaylandServer::Surface const* surface = server->dragSurface_;
   if (!surface) return std::nullopt;
-  std::int32_t const surfaceWidth = displayWidth(surface);
-  if (surfaceWidth <= 0) return std::nullopt;
-  bool const leftHalf = surface->windowX <= kSnapEdgeThreshold;
-  bool const rightHalf = surface->windowX + surfaceWidth >= server->output_.width - kSnapEdgeThreshold;
-  if (!leftHalf && !rightHalf) {
-    return std::nullopt;
-  }
-
-  std::int32_t const width = std::max(kMinWindowWidth, server->output_.width / 2);
-  std::int32_t const height = std::max(kMinWindowHeight, server->output_.height);
+  auto preview = snapPreviewGeometry(windowGeometryFor(surface), outputGeometryFor(server));
+  if (!preview) return std::nullopt;
   return SnapPreviewSnapshot{
-      .x = leftHalf ? 0 : std::max(0, server->output_.width - width),
+      .x = preview->x,
       .y = 0,
-      .width = width,
-      .height = height,
+      .width = preview->width,
+      .height = std::max(kMinWindowHeight, server->output_.height),
   };
 }
 
@@ -3059,16 +3091,15 @@ void snapToplevel(WaylandServer* server, WaylandServer::Surface* surface, bool l
     surface->restoreWidth = displayWidth(surface);
     surface->restoreHeight = displayHeight(surface);
   }
-  std::int32_t const width = std::max(kMinWindowWidth, server->output_.width / 2);
-  std::int32_t const height = std::max(kMinWindowHeight, server->output_.height - kTitleBarHeight);
+  WindowGeometry const target = snappedWindowGeometry(outputGeometryFor(server), leftHalf);
   surface->snapped = true;
   surface->maximized = false;
   startGeometryAnimation(server,
                          surface,
-                         leftHalf ? 0 : std::max(0, server->output_.width - width),
-                         kTitleBarHeight,
-                         width,
-                         height);
+                         target.x,
+                         target.y,
+                         target.width,
+                         target.height);
 }
 
 void snapFocusedToplevel(WaylandServer* server, bool leftHalf) {
@@ -3077,30 +3108,28 @@ void snapFocusedToplevel(WaylandServer* server, bool leftHalf) {
 
 void restoreSnappedForDrag(WaylandServer* server, WaylandServer::Surface* surface) {
   if (!surface || (!surface->snapped && !surface->maximized)) return;
-  std::int32_t const snappedWidth = std::max(1, displayWidth(surface));
-  std::int32_t const restoreWidth =
-      std::max(kMinWindowWidth, surface->restoreWidth > 0 ? surface->restoreWidth : surface->width);
-  std::int32_t const restoreHeight =
-      std::max(kMinWindowHeight, surface->restoreHeight > 0 ? surface->restoreHeight : surface->height);
-  float const horizontalRatio =
-      std::clamp((server->pointerX_ - static_cast<float>(surface->windowX)) / static_cast<float>(snappedWidth),
-                 0.f,
-                 1.f);
-  int const maxX = std::max(0, server->output_.width - restoreWidth);
-  int const maxY = std::max(kTitleBarHeight, server->output_.height - restoreHeight);
-  surface->windowX = std::clamp(static_cast<int>(std::lround(server->pointerX_ -
-                                                             horizontalRatio * static_cast<float>(restoreWidth))),
-                                0,
-                                maxX);
-  surface->windowY =
-      std::clamp(static_cast<int>(std::lround(server->pointerY_ - server->dragOffsetY_)), kTitleBarHeight, maxY);
-  setConfiguredFrameSize(surface, restoreWidth, restoreHeight);
+  WindowGeometry const restored = restoredDragGeometry({
+      .pointerX = server->pointerX_,
+      .pointerY = server->pointerY_,
+      .dragOffsetY = server->dragOffsetY_,
+      .snappedWindow = windowGeometryFor(surface),
+      .restoreWindow = {
+          .x = surface->restoreX,
+          .y = surface->restoreY,
+          .width = surface->restoreWidth > 0 ? surface->restoreWidth : surface->width,
+          .height = surface->restoreHeight > 0 ? surface->restoreHeight : surface->height,
+      },
+      .output = outputGeometryFor(server),
+  });
+  surface->windowX = restored.x;
+  surface->windowY = restored.y;
+  setConfiguredFrameSize(surface, restored.width, restored.height);
   surface->snapped = false;
   surface->maximized = false;
   surface->geometryAnimationActive = false;
   server->dragOffsetX_ = server->pointerX_ - static_cast<float>(surface->windowX);
   server->dragOffsetY_ = server->pointerY_ - static_cast<float>(surface->windowY);
-  sendToplevelConfigure(server, toplevelForSurface(server, surface), restoreWidth, restoreHeight);
+  sendToplevelConfigure(server, toplevelForSurface(server, surface), restored.width, restored.height);
 }
 
 void toggleMaximizedToplevel(WaylandServer* server, WaylandServer::Surface* surface) {
@@ -3206,47 +3235,30 @@ void updateResize(WaylandServer* server) {
 
   float const dx = server->pointerX_ - server->resizeStartX_;
   float const dy = server->pointerY_ - server->resizeStartY_;
-  bool const left = server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_LEFT ||
-                    server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT ||
-                    server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT;
-  bool const right = server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_RIGHT ||
-                     server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT ||
-                     server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
-  bool const top = server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_TOP ||
-                   server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT ||
-                   server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT;
-  bool const bottom = server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM ||
-                      server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT ||
-                      server->resizeEdges_ == XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
+  ResizeEdge const edges = resizeEdgesFromXdg(server->resizeEdges_);
+  bool const left = hasResizeEdge(edges, ResizeEdge::Left);
+  bool const top = hasResizeEdge(edges, ResizeEdge::Top);
+  WindowGeometry const next = resizedWindowGeometry({
+      .startPointerX = server->resizeStartX_,
+      .startPointerY = server->resizeStartY_,
+      .pointerX = server->pointerX_,
+      .pointerY = server->pointerY_,
+      .startWindow = {
+          .x = server->resizeStartWindowX_,
+          .y = server->resizeStartWindowY_,
+          .width = server->resizeStartWidth_,
+          .height = server->resizeStartHeight_,
+      },
+      .edges = edges,
+      .output = outputGeometryFor(server),
+  });
 
-  std::int32_t nextWidth = server->resizeStartWidth_;
-  std::int32_t nextHeight = server->resizeStartHeight_;
-  std::int32_t nextX = server->resizeStartWindowX_;
-  std::int32_t nextY = server->resizeStartWindowY_;
-  if (right) nextWidth = server->resizeStartWidth_ + static_cast<std::int32_t>(std::lround(dx));
-  if (bottom) nextHeight = server->resizeStartHeight_ + static_cast<std::int32_t>(std::lround(dy));
-  if (left) {
-    nextWidth = server->resizeStartWidth_ - static_cast<std::int32_t>(std::lround(dx));
-    nextX = server->resizeStartWindowX_ + (server->resizeStartWidth_ - nextWidth);
-  }
-  if (top) {
-    nextHeight = server->resizeStartHeight_ - static_cast<std::int32_t>(std::lround(dy));
-    nextY = server->resizeStartWindowY_ + (server->resizeStartHeight_ - nextHeight);
-  }
-
-  nextWidth = std::max(kMinWindowWidth, nextWidth);
-  nextHeight = std::max(kMinWindowHeight, nextHeight);
-  if (left) nextX = server->resizeStartWindowX_ + (server->resizeStartWidth_ - nextWidth);
-  if (top) nextY = server->resizeStartWindowY_ + (server->resizeStartHeight_ - nextHeight);
-  nextX = std::clamp(nextX, 0, std::max(0, server->output_.width - kMinWindowWidth));
-  nextY = std::clamp(nextY, kTitleBarHeight, std::max(kTitleBarHeight, server->output_.height - kMinWindowHeight));
-
-  if (left) surface->windowX = nextX;
-  if (top) surface->windowY = nextY;
-  if (nextWidth == server->resizeLastWidth_ && nextHeight == server->resizeLastHeight_) return;
-  server->resizeLastWidth_ = nextWidth;
-  server->resizeLastHeight_ = nextHeight;
-  setConfiguredFrameSize(surface, nextWidth, nextHeight);
+  if (left) surface->windowX = next.x;
+  if (top) surface->windowY = next.y;
+  if (next.width == server->resizeLastWidth_ && next.height == server->resizeLastHeight_) return;
+  server->resizeLastWidth_ = next.width;
+  server->resizeLastHeight_ = next.height;
+  setConfiguredFrameSize(surface, next.width, next.height);
   flux::detail::resizeTrace("compositor",
                             "update-resize surface=%llu pointer=%.1f,%.1f window=%d,%d size=%dx%d "
                             "delta=%.1f,%.1f edges=%u\n",
@@ -3255,12 +3267,12 @@ void updateResize(WaylandServer* server) {
                             server->pointerY_,
                             surface->windowX,
                             surface->windowY,
-                            nextWidth,
-                            nextHeight,
+                            next.width,
+                            next.height,
                             dx,
                             dy,
                             server->resizeEdges_);
-  sendToplevelConfigure(server, toplevelForSurface(server, surface), nextWidth, nextHeight);
+  sendToplevelConfigure(server, toplevelForSurface(server, surface), next.width, next.height);
 }
 
 void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t timeMs) {

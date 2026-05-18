@@ -547,6 +547,7 @@ if(FLUX_BUILD_COMPOSITOR)
     src/Compositor/Chrome/CursorRenderer.cpp
     src/Compositor/Chrome/WindowChromeRenderer.cpp
     src/Compositor/Config/CompositorConfig.cpp
+    src/Compositor/Window/WindowGeometry.cpp
     src/Compositor/main.cpp
     src/Compositor/WaylandServer.cpp
   )
@@ -807,7 +808,9 @@ if(FLUX_BUILD_TESTS)
   if(FLUX_PLATFORM_LINUX_WAYLAND OR FLUX_PLATFORM_LINUX_KMS)
     list(APPEND _flux_test_sources
       src/Compositor/Config/CompositorConfig.cpp
+      src/Compositor/Window/WindowGeometry.cpp
       tests/CompositorConfigTests.cpp
+      tests/CompositorWindowGeometryTests.cpp
       tests/VulkanRenderTargetTests.cpp
     )
   endif()

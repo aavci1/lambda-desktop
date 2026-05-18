@@ -1,0 +1,81 @@
+#include "Compositor/Window/WindowGeometry.hpp"
+
+#include <doctest/doctest.h>
+
+TEST_CASE("compositor snap geometry uses full output height minus title bar") {
+  flux::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
+
+  auto left = flux::compositor::snappedWindowGeometry(output, true);
+  CHECK(left.x == 0);
+  CHECK(left.y == flux::compositor::kCompositorTitleBarHeight);
+  CHECK(left.width == 960);
+  CHECK(left.height == 1052);
+
+  auto right = flux::compositor::snappedWindowGeometry(output, false);
+  CHECK(right.x == 960);
+  CHECK(right.y == flux::compositor::kCompositorTitleBarHeight);
+  CHECK(right.width == 960);
+  CHECK(right.height == 1052);
+}
+
+TEST_CASE("compositor snap preview appears only near horizontal output edges") {
+  flux::compositor::OutputGeometry const output{.width = 1280, .height = 720};
+  CHECK(flux::compositor::snapPreviewGeometry({.x = 64, .y = 50, .width = 400, .height = 240}, output) == std::nullopt);
+
+  auto left = flux::compositor::snapPreviewGeometry({.x = 16, .y = 50, .width = 400, .height = 240}, output);
+  REQUIRE(left);
+  CHECK(left->x == 0);
+  CHECK(left->width == 640);
+
+  auto right = flux::compositor::snapPreviewGeometry({.x = 900, .y = 50, .width = 360, .height = 240}, output);
+  REQUIRE(right);
+  CHECK(right->x == 640);
+  CHECK(right->width == 640);
+}
+
+TEST_CASE("compositor restored drag geometry keeps title bar under cursor") {
+  flux::compositor::WindowGeometry const restored = flux::compositor::restoredDragGeometry({
+      .pointerX = 480.f,
+      .pointerY = 80.f,
+      .dragOffsetY = 20.f,
+      .snappedWindow = {.x = 0, .y = 28, .width = 960, .height = 1052},
+      .restoreWindow = {.x = 200, .y = 120, .width = 500, .height = 400},
+      .output = {.width = 1920, .height = 1080},
+  });
+
+  CHECK(restored.x == 230);
+  CHECK(restored.y == 60);
+  CHECK(restored.width == 500);
+  CHECK(restored.height == 400);
+}
+
+TEST_CASE("compositor resize geometry clamps minimum size and adjusts anchored edges") {
+  using flux::compositor::ResizeEdge;
+  auto resized = flux::compositor::resizedWindowGeometry({
+      .startPointerX = 400.f,
+      .startPointerY = 300.f,
+      .pointerX = 700.f,
+      .pointerY = 500.f,
+      .startWindow = {.x = 100, .y = 100, .width = 640, .height = 480},
+      .edges = ResizeEdge::Right | ResizeEdge::Bottom,
+      .output = {.width = 1920, .height = 1080},
+  });
+  CHECK(resized.x == 100);
+  CHECK(resized.y == 100);
+  CHECK(resized.width == 940);
+  CHECK(resized.height == 680);
+
+  auto minClamped = flux::compositor::resizedWindowGeometry({
+      .startPointerX = 100.f,
+      .startPointerY = 100.f,
+      .pointerX = 800.f,
+      .pointerY = 700.f,
+      .startWindow = {.x = 240, .y = 180, .width = 300, .height = 200},
+      .edges = ResizeEdge::Left | ResizeEdge::Top,
+      .output = {.width = 1024, .height = 768},
+  });
+  CHECK(minClamped.x == 380);
+  CHECK(minClamped.y == 260);
+  CHECK(minClamped.width == flux::compositor::kCompositorMinWindowWidth);
+  CHECK(minClamped.height == flux::compositor::kCompositorMinWindowHeight);
+}
