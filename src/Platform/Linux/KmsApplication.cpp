@@ -608,16 +608,20 @@ void KmsApplication::reEnumerateConnectors() {
   for (KmsConnector const& connector : connectors_) previousById.emplace(connector.connectorId, connector);
   for (KmsConnector const& connector : next) nextById.emplace(connector.connectorId, connector);
 
+  bool const hasApplication = ::flux::Application::hasInstance();
+
   for (KmsConnector const& connector : connectors_) {
     if (nextById.contains(connector.connectorId)) continue;
     debugLog("KMS output removed: %s", connector.name.c_str());
-    ::flux::Application::instance().eventQueue().post(
-        WindowLifecycleEvent{.kind = WindowLifecycleEvent::Kind::OutputRemoved,
-                             .handle = 0,
-                             .window = nullptr,
-                             .outputName = connector.name});
+    if (hasApplication) {
+      ::flux::Application::instance().eventQueue().post(
+          WindowLifecycleEvent{.kind = WindowLifecycleEvent::Kind::OutputRemoved,
+                               .handle = 0,
+                               .window = nullptr,
+                               .outputName = connector.name});
+    }
     for (KmsWindow* window : windows_) {
-      if (window && window->connectorId() == connector.connectorId) {
+      if (hasApplication && window && window->connectorId() == connector.connectorId) {
         ::flux::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::CloseRequest,
                                                                       .handle = window->handle(),
                                                                       .size = {},
@@ -632,11 +636,13 @@ void KmsApplication::reEnumerateConnectors() {
     auto previous = previousById.find(connector.connectorId);
     if (previous == previousById.end()) {
       debugLog("KMS output added: %s", connector.name.c_str());
-      ::flux::Application::instance().eventQueue().post(
-          WindowLifecycleEvent{.kind = WindowLifecycleEvent::Kind::OutputAdded,
-                               .handle = 0,
-                               .window = nullptr,
-                               .outputName = connector.name});
+      if (hasApplication) {
+        ::flux::Application::instance().eventQueue().post(
+            WindowLifecycleEvent{.kind = WindowLifecycleEvent::Kind::OutputAdded,
+                                 .handle = 0,
+                                 .window = nullptr,
+                                 .outputName = connector.name});
+      }
       continue;
     }
     bool const modeChanged = connectorModeChanged(previous->second, connector);
@@ -647,7 +653,7 @@ void KmsApplication::reEnumerateConnectors() {
     for (KmsWindow* window : windows_) {
       if (!window || window->connectorId() != connector.connectorId) continue;
       window->updateConnector(connector);
-      if (dpiChanged) {
+      if (hasApplication && dpiChanged) {
         ::flux::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
                                                                       .handle = window->handle(),
                                                                       .size = {},
@@ -655,7 +661,7 @@ void KmsApplication::reEnumerateConnectors() {
                                                                       .dpiX = 1.f,
                                                                       .dpiY = 1.f});
       }
-      if (modeChanged) {
+      if (hasApplication && modeChanged) {
         ::flux::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::Resize,
                                                                       .handle = window->handle(),
                                                                       .size = window->currentSize(),
@@ -667,7 +673,9 @@ void KmsApplication::reEnumerateConnectors() {
   }
 
   connectors_ = std::move(next);
-  ::flux::Application::instance().eventQueue().dispatch();
+  if (hasApplication) {
+    ::flux::Application::instance().eventQueue().dispatch();
+  }
 }
 
 void KmsApplication::setApplicationName(std::string name) {
