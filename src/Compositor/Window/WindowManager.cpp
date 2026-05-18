@@ -32,6 +32,10 @@ bool isManagedToplevel(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->toplevel && !surface->popup && !surface->layerSurface && !surface->subsurface;
 }
 
+bool containsPoint(float x, float y, float left, float top, float right, float bottom) {
+  return x >= left && x < right && y >= top && y < bottom;
+}
+
 WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surface) {
   return {
       .x = surface ? surface->windowX : 0,
@@ -127,6 +131,22 @@ std::optional<WindowGeometry> popupScreenBounds(WaylandServer::Impl* server, Way
   return popupScreenGeometry(parentToChild);
 }
 
+bool popupContainsPoint(WaylandServer::Impl* server, float x, float y) {
+  for (auto it = server->popups_.rbegin(); it != server->popups_.rend(); ++it) {
+    auto const bounds = popupScreenBounds(server, it->get());
+    if (!bounds) continue;
+    if (containsPoint(x,
+                      y,
+                      static_cast<float>(bounds->x),
+                      static_cast<float>(bounds->y),
+                      static_cast<float>(bounds->x + bounds->width),
+                      static_cast<float>(bounds->y + bounds->height))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 } // namespace
 
 WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, float y) {
@@ -158,46 +178,78 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
 }
 
 WaylandServer::Impl::Surface* titlebarAt(WaylandServer::Impl* server, float x, float y) {
+  if (popupContainsPoint(server, x, y)) return nullptr;
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
-    if (!isManagedToplevel(surface) || width <= 0 || height <= 0) continue;
+    if (!surface || surface->popup || width <= 0 || height <= 0) continue;
+    float const contentLeft = static_cast<float>(surface->windowX);
+    float const contentTop = static_cast<float>(surface->windowY);
+    float const contentRight = contentLeft + static_cast<float>(width);
+    float const contentBottom = contentTop + static_cast<float>(height);
+    if (!isManagedToplevel(surface)) {
+      if (surface->toplevel && containsPoint(x, y, contentLeft, contentTop, contentRight, contentBottom)) return nullptr;
+      continue;
+    }
     float const left = static_cast<float>(surface->windowX);
     float const top = static_cast<float>(surface->windowY - kTitleBarHeight);
     float const right = left + static_cast<float>(width);
     float const bottom = static_cast<float>(surface->windowY);
-    if (x >= left && x < right && y >= top && y < bottom) return surface;
+    float const frameBottom = bottom + static_cast<float>(height);
+    if (!containsPoint(x, y, left, top, right, frameBottom)) continue;
+    return containsPoint(x, y, left, top, right, bottom) ? surface : nullptr;
   }
   return nullptr;
 }
 
 WaylandServer::Impl::Surface* closeButtonAt(WaylandServer::Impl* server, float x, float y) {
+  if (popupContainsPoint(server, x, y)) return nullptr;
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
-    if (!isManagedToplevel(surface) || width <= 0 || height <= 0) continue;
-    float const left = static_cast<float>(surface->windowX + width - kCloseButtonInset - kCloseButtonSize);
-    float const top = static_cast<float>(surface->windowY - kTitleBarHeight + kCloseButtonInset);
+    if (!surface || surface->popup || width <= 0 || height <= 0) continue;
+    float const contentLeft = static_cast<float>(surface->windowX);
+    float const contentTop = static_cast<float>(surface->windowY);
+    float const contentRight = contentLeft + static_cast<float>(width);
+    float const contentBottom = contentTop + static_cast<float>(height);
+    if (!isManagedToplevel(surface)) {
+      if (surface->toplevel && containsPoint(x, y, contentLeft, contentTop, contentRight, contentBottom)) return nullptr;
+      continue;
+    }
+    float const frameLeft = static_cast<float>(surface->windowX);
+    float const frameTop = static_cast<float>(surface->windowY - kTitleBarHeight);
+    float const frameRight = frameLeft + static_cast<float>(width);
+    float const frameBottom = static_cast<float>(surface->windowY + height);
+    if (!containsPoint(x, y, frameLeft, frameTop, frameRight, frameBottom)) continue;
+    float const left = frameRight - static_cast<float>(kCloseButtonInset + kCloseButtonSize);
+    float const top = frameTop + static_cast<float>(kCloseButtonInset);
     float const right = left + static_cast<float>(kCloseButtonSize);
     float const bottom = top + static_cast<float>(kCloseButtonSize);
-    if (x >= left && x < right && y >= top && y < bottom) return surface;
+    return containsPoint(x, y, left, top, right, bottom) ? surface : nullptr;
   }
   return nullptr;
 }
 
 WaylandServer::Impl::Surface* resizeGripAt(WaylandServer::Impl* server, float x, float y, std::uint32_t& edges) {
   edges = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
+  if (popupContainsPoint(server, x, y)) return nullptr;
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
-    if (!isManagedToplevel(surface) || width <= 0 || height <= 0) continue;
+    if (!surface || surface->popup || width <= 0 || height <= 0) continue;
     float const left = static_cast<float>(surface->windowX);
+    float const frameTop = static_cast<float>(surface->windowY - (isManagedToplevel(surface) ? kTitleBarHeight : 0));
     float const top = static_cast<float>(surface->windowY);
     float const right = left + static_cast<float>(width);
     float const bottom = top + static_cast<float>(height);
+    if (!isManagedToplevel(surface)) {
+      if (surface->toplevel && containsPoint(x, y, left, top, right, bottom)) return nullptr;
+      continue;
+    }
+    if (!containsPoint(x, y, left, frameTop, right, bottom)) continue;
     bool const nearLeft = x >= left && x < left + kResizeGripSize;
     bool const nearRight = x >= right - kResizeGripSize && x < right;
     bool const nearTop = y >= top && y < top + kResizeGripSize;
@@ -206,7 +258,7 @@ WaylandServer::Impl::Surface* resizeGripAt(WaylandServer::Impl* server, float x,
     else if (nearRight && nearTop) edges = XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT;
     else if (nearLeft && nearBottom) edges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT;
     else if (nearRight && nearBottom) edges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
-    else continue;
+    else return nullptr;
     return surface;
   }
   return nullptr;
