@@ -805,7 +805,11 @@ if(FLUX_BUILD_TESTS)
     list(APPEND _flux_test_sources tests/MetalCanvasTests.mm)
   endif()
   if(FLUX_PLATFORM_LINUX_WAYLAND OR FLUX_PLATFORM_LINUX_KMS)
-    list(APPEND _flux_test_sources tests/VulkanRenderTargetTests.cpp)
+    list(APPEND _flux_test_sources
+      src/Compositor/Config/CompositorConfig.cpp
+      tests/CompositorConfigTests.cpp
+      tests/VulkanRenderTargetTests.cpp
+    )
   endif()
   add_executable(flux_tests ${_flux_test_sources})
 
