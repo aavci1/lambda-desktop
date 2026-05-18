@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <chrono>
 #include <atomic>
+#include <cerrno>
 #include <cstring>
+#include <cstdio>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -78,6 +80,7 @@ public:
   KmsConnector connector_{};
   mutable CursorBuffer cursorBuffer_{};
   mutable bool cursorVisible_ = false;
+  mutable bool vblankWaitDisabled_ = false;
 };
 
 KmsOutput::Impl::~Impl() {
@@ -133,6 +136,17 @@ VkSurfaceKHR KmsOutput::createVulkanSurface(VkInstance instance) const {
 }
 
 void KmsOutput::waitForVblank() const {
+  if (impl_ && !impl_->vblankWaitDisabled_) {
+    drmVBlank vblank{};
+    vblank.request.type = DRM_VBLANK_RELATIVE;
+    vblank.request.sequence = 1;
+    if (drmWaitVBlank(impl_->drmFd(), &vblank) == 0) return;
+    impl_->vblankWaitDisabled_ = true;
+    std::fprintf(stderr,
+                 "[flux:kms] drmWaitVBlank failed for connector %s: %s; falling back to timer pacing.\n",
+                 impl_->connector_.name.c_str(),
+                 std::strerror(errno));
+  }
   std::this_thread::sleep_for(frameInterval(refreshRateMilliHz()));
 }
 
