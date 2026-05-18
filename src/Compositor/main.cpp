@@ -103,6 +103,7 @@ bool shouldTraceRenderSnapshot(flux::compositor::CommittedSurfaceSnapshot const&
   return current.x != previous.x || current.y != previous.y ||
          current.width != previous.width || current.height != previous.height ||
          current.bufferWidth != previous.bufferWidth || current.bufferHeight != previous.bufferHeight ||
+         current.activeSizing != previous.activeSizing ||
          current.serial != previous.serial ||
          current.sourceX != previous.sourceX || current.sourceY != previous.sourceY ||
          current.sourceWidth != previous.sourceWidth || current.sourceHeight != previous.sourceHeight;
@@ -968,6 +969,10 @@ int main(int, char**) {
         float const sourceHeight = clientSurface.sourceHeight > 0.f
                                        ? clientSurface.sourceHeight
                                        : static_cast<float>(cached.image->size().height);
+        float const contentWidth = clientSurface.activeSizing ? sourceWidth : windowWidth;
+        float const contentHeight = clientSurface.activeSizing ? sourceHeight : windowHeight;
+        canvas->save();
+        canvas->clipRect(flux::Rect::sharp(windowX, windowY, windowWidth, windowHeight));
         canvas->drawImage(*cached.image,
                           flux::Rect::sharp(clientSurface.sourceX,
                                             clientSurface.sourceY,
@@ -975,8 +980,9 @@ int main(int, char**) {
                                             sourceHeight),
                           flux::Rect::sharp(windowX,
                                             windowY,
-                                            windowWidth,
-                                            windowHeight));
+                                            contentWidth,
+                                            contentHeight));
+        canvas->restore();
         canvas->restore();
       }
       for (auto const& [surfaceId, visual] : surfaceVisuals) {

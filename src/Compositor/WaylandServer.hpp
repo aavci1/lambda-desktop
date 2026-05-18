@@ -56,6 +56,7 @@ struct CommittedSurfaceSnapshot {
   std::int32_t titleBarHeight = 0;
   std::string title;
   bool focused = false;
+  bool activeSizing = false;
   std::uint64_t serial = 0;
   std::vector<std::uint8_t> rgbaPixels;
   std::uint32_t dmabufFormat = 0;
