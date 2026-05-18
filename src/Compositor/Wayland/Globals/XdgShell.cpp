@@ -15,6 +15,54 @@
 
 namespace flux::compositor {
 
+namespace {
+
+void appendToplevelState(wl_array* states, std::uint32_t state) {
+  auto* value = static_cast<std::uint32_t*>(wl_array_add(states, sizeof(std::uint32_t)));
+  if (value) *value = state;
+}
+
+void fillToplevelStates(WaylandServer::Impl* server,
+                        WaylandServer::Impl::XdgToplevel* toplevel,
+                        wl_array* states) {
+  if (!server || !toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface || !states) return;
+  WaylandServer::Impl::Surface* surface = toplevel->xdgSurface->surface;
+  if (surface->maximized) appendToplevelState(states, XDG_TOPLEVEL_STATE_MAXIMIZED);
+  if (server->resizeSurface_ == surface) appendToplevelState(states, XDG_TOPLEVEL_STATE_RESIZING);
+  if (server->keyboardFocus_ == surface) appendToplevelState(states, XDG_TOPLEVEL_STATE_ACTIVATED);
+}
+
+void sendToplevelConfigureInternal(WaylandServer::Impl* server,
+                                   WaylandServer::Impl::XdgToplevel* toplevel,
+                                   std::int32_t width,
+                                   std::int32_t height,
+                                   bool awaitSizedCommit) {
+  if (!toplevel || !toplevel->resource || !toplevel->xdgSurface || !toplevel->xdgSurface->resource) return;
+  if (awaitSizedCommit) {
+    if (auto* surface = toplevel->xdgSurface->surface; surface && width > 0 && height > 0) {
+      surface->awaitingConfigureCommit = true;
+      surface->awaitingConfigureWidth = width;
+      surface->awaitingConfigureHeight = height;
+    }
+  }
+  wl_array states;
+  wl_array_init(&states);
+  fillToplevelStates(server, toplevel, &states);
+  xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
+  wl_array_release(&states);
+  flux::detail::resizeTrace("compositor",
+                            "configure surface=%llu size=%dx%d serial=%u\n",
+                            static_cast<unsigned long long>(toplevel->xdgSurface->surface
+                                                                ? toplevel->xdgSurface->surface->id
+                                                                : 0),
+                            width,
+                            height,
+                            server->nextConfigureSerial_);
+  xdg_surface_send_configure(toplevel->xdgSurface->resource, server->nextConfigureSerial_++);
+}
+
+} // namespace
+
 WaylandServer::Impl::ToplevelDecoration* decorationFor(WaylandServer::Impl* server,
                                                        WaylandServer::Impl::XdgToplevel* toplevel) {
   auto found = std::find_if(server->toplevelDecorations_.begin(), server->toplevelDecorations_.end(),
@@ -46,25 +94,16 @@ void sendToplevelConfigure(WaylandServer::Impl* server,
                            WaylandServer::Impl::XdgToplevel* toplevel,
                            std::int32_t width,
                            std::int32_t height) {
-  if (!toplevel || !toplevel->resource || !toplevel->xdgSurface || !toplevel->xdgSurface->resource) return;
-  if (auto* surface = toplevel->xdgSurface->surface; surface && width > 0 && height > 0) {
-    surface->awaitingConfigureCommit = true;
-    surface->awaitingConfigureWidth = width;
-    surface->awaitingConfigureHeight = height;
-  }
-  wl_array states;
-  wl_array_init(&states);
-  xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
-  wl_array_release(&states);
-  flux::detail::resizeTrace("compositor",
-                            "configure surface=%llu size=%dx%d serial=%u\n",
-                            static_cast<unsigned long long>(toplevel->xdgSurface->surface
-                                                                ? toplevel->xdgSurface->surface->id
-                                                                : 0),
-                            width,
-                            height,
-                            server->nextConfigureSerial_);
-  xdg_surface_send_configure(toplevel->xdgSurface->resource, server->nextConfigureSerial_++);
+  sendToplevelConfigureInternal(server, toplevel, width, height, true);
+}
+
+void sendToplevelStateConfigure(WaylandServer::Impl* server,
+                                WaylandServer::Impl::XdgToplevel* toplevel) {
+  if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
+  WaylandServer::Impl::Surface* surface = toplevel->xdgSurface->surface;
+  std::int32_t const width = surface->frameWidth > 0 ? surface->frameWidth : 0;
+  std::int32_t const height = surface->frameHeight > 0 ? surface->frameHeight : 0;
+  sendToplevelConfigureInternal(server, toplevel, width, height, false);
 }
 
 namespace {
@@ -236,6 +275,10 @@ void xdgWmBaseGetXdgSurface(wl_client* client, wl_resource* resource, std::uint3
   xdgSurface->surface = surface;
   wl_resource* xdgResource = wl_resource_create(client, &xdg_surface_interface,
                                                 wl_resource_get_version(resource), id);
+  if (!xdgResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   xdgSurface->resource = xdgResource;
   auto* raw = xdgSurface.get();
   server->xdgSurfaces_.push_back(std::move(xdgSurface));
@@ -277,6 +320,10 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
   xdgSurface->surface->windowY = 80 + static_cast<std::int32_t>(xdgSurface->server->toplevels_.size()) * 36;
   wl_resource* toplevelResource = wl_resource_create(client, &xdg_toplevel_interface,
                                                      wl_resource_get_version(resource), id);
+  if (!toplevelResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   toplevel->resource = toplevelResource;
   auto* raw = toplevel.get();
   xdgSurface->server->toplevels_.push_back(std::move(toplevel));
@@ -286,11 +333,7 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
                                  destroyResourceCallback<WaylandServer::Impl::XdgToplevel,
                                                          WaylandServer::Impl,
                                                          &WaylandServer::Impl::destroyXdgToplevel>);
-  wl_array states;
-  wl_array_init(&states);
-  xdg_toplevel_send_configure(toplevelResource, 0, 0, &states);
-  wl_array_release(&states);
-  xdg_surface_send_configure(resource, xdgSurface->server->nextConfigureSerial_++);
+  sendToplevelConfigureInternal(xdgSurface->server, raw, 0, 0, false);
 }
 
 PopupAnchor popupAnchor(std::uint32_t anchor) {
@@ -516,6 +559,10 @@ struct xdg_toplevel_interface const xdgToplevelImpl{
 
 void bindXdgWmBase(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource = wl_resource_create(client, &xdg_wm_base_interface, std::min(version, 6u), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &xdgWmBaseImpl, data, nullptr);
 }
 

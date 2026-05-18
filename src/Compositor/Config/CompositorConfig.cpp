@@ -49,16 +49,35 @@ std::optional<unsigned int> hexByte(std::string_view value, std::size_t offset) 
 
 std::optional<Color> parseHexColor(std::string_view value) {
   std::string text = unquote(value);
-  if (text.size() != 7 || text[0] != '#') return std::nullopt;
-  auto red = hexByte(text, 1);
-  auto green = hexByte(text, 3);
-  auto blue = hexByte(text, 5);
-  if (!red || !green || !blue) return std::nullopt;
+  if (text.empty() || text[0] != '#') return std::nullopt;
+  std::optional<unsigned int> red;
+  std::optional<unsigned int> green;
+  std::optional<unsigned int> blue;
+  std::optional<unsigned int> alpha = 255u;
+  if (text.size() == 4 || text.size() == 5) {
+    red = hexDigit(text[1]);
+    green = hexDigit(text[2]);
+    blue = hexDigit(text[3]);
+    if (text.size() == 5) alpha = hexDigit(text[4]);
+    if (!red || !green || !blue || !alpha) return std::nullopt;
+    red = (*red << 4u) | *red;
+    green = (*green << 4u) | *green;
+    blue = (*blue << 4u) | *blue;
+    alpha = (*alpha << 4u) | *alpha;
+  } else if (text.size() == 7 || text.size() == 9) {
+    red = hexByte(text, 1);
+    green = hexByte(text, 3);
+    blue = hexByte(text, 5);
+    if (text.size() == 9) alpha = hexByte(text, 7);
+    if (!red || !green || !blue || !alpha) return std::nullopt;
+  } else {
+    return std::nullopt;
+  }
   return Color{
       static_cast<float>(*red) / 255.f,
       static_cast<float>(*green) / 255.f,
       static_cast<float>(*blue) / 255.f,
-      1.f,
+      static_cast<float>(*alpha) / 255.f,
   };
 }
 

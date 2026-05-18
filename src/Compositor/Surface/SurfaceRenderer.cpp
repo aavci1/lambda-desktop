@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdarg>
 #include <cstdio>
 #include <exception>
 #include <memory>
@@ -25,16 +24,6 @@ float easeOutCubic(float value) {
   float const t = clamp01(value);
   float const inverse = 1.f - t;
   return 1.f - inverse * inverse * inverse;
-}
-
-void appendSizeLog(char const* format, ...) {
-  FILE* file = std::fopen("compositor-sizes.log", "a");
-  if (!file) return;
-  va_list args;
-  va_start(args, format);
-  std::vfprintf(file, format, args);
-  va_end(args);
-  std::fclose(file);
 }
 
 bool renderSnapshotChanged(CommittedSurfaceSnapshot const& current,
@@ -173,50 +162,6 @@ void drawCommittedSurface(WaylandServer& wayland,
   updateCachedImage(wayland, canvas, surface, cached);
   if (!cached.image) return;
 
-  bool const snapshotChanged = renderSnapshotChanged(surface, visual);
-  if (snapshotChanged) {
-    auto const imageSize = cached.image->size();
-    appendSizeLog(
-        "render surface=%llu logical=%d,%d %dx%d buffer=%dx%d image=%dx%d "
-        "source=%.1f,%.1f %.1fx%.1f dest=%dx%d outputScale=%.2f serial=%llu\n",
-        static_cast<unsigned long long>(surface.id),
-        surface.x,
-        surface.y,
-        surface.width,
-        surface.height,
-        surface.bufferWidth,
-        surface.bufferHeight,
-        static_cast<int>(imageSize.width),
-        static_cast<int>(imageSize.height),
-        surface.sourceX,
-        surface.sourceY,
-        surface.sourceWidth,
-        surface.sourceHeight,
-        surface.destinationWidth,
-        surface.destinationHeight,
-        wayland.preferredScale(),
-        static_cast<unsigned long long>(surface.serial));
-    std::fprintf(stderr,
-                 "flux-compositor: render surface=%llu logical=%d,%d %dx%d buffer=%dx%d image=%dx%d "
-                 "source=%.1f,%.1f %.1fx%.1f dest=%dx%d outputScale=%.2f serial=%llu\n",
-                 static_cast<unsigned long long>(surface.id),
-                 surface.x,
-                 surface.y,
-                 surface.width,
-                 surface.height,
-                 surface.bufferWidth,
-                 surface.bufferHeight,
-                 static_cast<int>(imageSize.width),
-                 static_cast<int>(imageSize.height),
-                 surface.sourceX,
-                 surface.sourceY,
-                 surface.sourceWidth,
-                 surface.sourceHeight,
-                 surface.destinationWidth,
-                 surface.destinationHeight,
-                 wayland.preferredScale(),
-                 static_cast<unsigned long long>(surface.serial));
-  }
   if (shouldTraceRenderSnapshot(surface, visual)) {
     auto const imageSize = cached.image->size();
     detail::resizeTrace(

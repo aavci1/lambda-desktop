@@ -142,16 +142,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     wayland.setPreferredScale(appliedConfig.config.scale);
     canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
     canvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
-    if (FILE* sizeLog = std::fopen("compositor-sizes.log", "w")) {
-      std::fprintf(sizeLog,
-                   "output physical=%ux%u logical=%dx%d scale=%.2f\n",
-                   output.width(),
-                   output.height(),
-                   wayland.logicalOutputWidth(),
-                   wayland.logicalOutputHeight(),
-                   wayland.preferredScale());
-      std::fclose(sizeLog);
-    }
     std::fprintf(stderr,
                  "flux-compositor: output physical=%ux%u logical=%dx%d scale=%.2f\n",
                  output.width(),
@@ -166,16 +156,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       wayland.setPreferredScale(appliedConfig.config.scale);
       canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
       canvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
-      if (FILE* sizeLog = std::fopen("compositor-sizes.log", "a")) {
-        std::fprintf(sizeLog,
-                     "output physical=%ux%u logical=%dx%d scale=%.2f\n",
-                     output.width(),
-                     output.height(),
-                     wayland.logicalOutputWidth(),
-                     wayland.logicalOutputHeight(),
-                     wayland.preferredScale());
-        std::fclose(sizeLog);
-      }
       std::fprintf(stderr,
                    "flux-compositor: output physical=%ux%u logical=%dx%d scale=%.2f\n",
                    output.width(),

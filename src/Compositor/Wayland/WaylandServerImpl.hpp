@@ -425,6 +425,8 @@ void sendToplevelConfigure(WaylandServer::Impl* server,
                            WaylandServer::Impl::XdgToplevel* toplevel,
                            std::int32_t width,
                            std::int32_t height);
+void sendToplevelStateConfigure(WaylandServer::Impl* server,
+                                WaylandServer::Impl::XdgToplevel* toplevel);
 WaylandServer::Impl::PointerConstraint* activePointerConstraint(WaylandServer::Impl* server);
 void updatePointerConstraintsForFocus(WaylandServer::Impl* server);
 void sendPrimarySelectionForFocus(WaylandServer::Impl* server);
