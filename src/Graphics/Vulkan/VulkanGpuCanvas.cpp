@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdarg>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -247,6 +248,30 @@ void hashStops(std::uint64_t &h, std::array<GradientStop, kMaxGradientStops> con
     hashValue(h, stops[i].position);
     hashColor(h, stops[i].color);
   }
+}
+
+bool waylandResizeTrace() {
+  char const *value = std::getenv("FLUX_WAYLAND_RESIZE_TRACE");
+  return value && *value && std::strcmp(value, "0") != 0;
+}
+
+void waylandResizeTraceLog(char const *format, ...) {
+  va_list args;
+  va_start(args, format);
+  va_list stderrArgs;
+  va_copy(stderrArgs, args);
+  std::vfprintf(stderr, format, stderrArgs);
+  va_end(stderrArgs);
+
+  char const *path = std::getenv("FLUX_WAYLAND_RESIZE_TRACE_LOG");
+  if (!path || !*path) {
+    path = "/tmp/flux-wayland-resize.log";
+  }
+  if (FILE *file = std::fopen(path, "a")) {
+    std::vfprintf(file, format, args);
+    std::fclose(file);
+  }
+  va_end(args);
 }
 
 std::uint64_t hashFill(FillStyle const &fill) {
@@ -958,10 +983,31 @@ public:
     height_ = std::max(1, height);
     int const fbW = std::max(1, static_cast<int>(std::lround(static_cast<float>(width_) * dpiScaleX_)));
     int const fbH = std::max(1, static_cast<int>(std::lround(static_cast<float>(height_) * dpiScaleY_)));
-    if (fbW != framebufferWidth_ || fbH != framebufferHeight_) {
-      framebufferWidth_ = fbW;
-      framebufferHeight_ = fbH;
+    bool const framebufferChanged = fbW != framebufferWidth_ || fbH != framebufferHeight_;
+    framebufferWidth_ = fbW;
+    framebufferHeight_ = fbH;
+    if (targetMode_) {
+      return;
+    }
+    bool const needsLargerSwapchain =
+        !swapchain_ || swapExtent_.width == 0 || swapExtent_.height == 0 ||
+        fbW > static_cast<int>(swapExtent_.width) || fbH > static_cast<int>(swapExtent_.height);
+    if (needsLargerSwapchain) {
+      bool const addHeadroom = swapchain_ != VK_NULL_HANDLE;
+      swapchainTargetWidth_ = fbW + (addHeadroom ? std::max(128, fbW / 4) : 0);
+      swapchainTargetHeight_ = fbH + (addHeadroom ? std::max(128, fbH / 4) : 0);
       swapchainDirty_ = true;
+      if (waylandResizeTrace()) {
+        waylandResizeTraceLog(
+          "wayland-resize-trace: vulkan-resize window=%u logical=%dx%d framebuffer=%dx%d target=%dx%d dirty=1\n",
+                     handle_, width_, height_, framebufferWidth_, framebufferHeight_,
+                     swapchainTargetWidth_, swapchainTargetHeight_);
+      }
+    } else if (framebufferChanged && waylandResizeTrace()) {
+      waylandResizeTraceLog(
+        "wayland-resize-trace: vulkan-resize window=%u logical=%dx%d framebuffer=%dx%d extent=%ux%u dirty=0\n",
+                   handle_, width_, height_, framebufferWidth_, framebufferHeight_,
+                   swapExtent_.width, swapExtent_.height);
     }
   }
 
@@ -1092,12 +1138,22 @@ public:
       return;
     }
     try {
+      auto const presentStart = std::chrono::steady_clock::now();
       if (swapchainDirty_ || !swapchain_) {
         recreateSwapchain();
       }
       if (!swapchain_)
         return;
       presentImpl();
+      if (waylandResizeTrace()) {
+        auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - presentStart).count();
+        waylandResizeTraceLog(
+          "wayland-resize-trace: vulkan-present window=%u logical=%dx%d framebuffer=%dx%d extent=%ux%u elapsed=%.3fms\n",
+                     handle_, width_, height_, framebufferWidth_, framebufferHeight_,
+                     swapExtent_.width, swapExtent_.height,
+                     static_cast<double>(elapsed) / 1000.0);
+      }
     } catch (std::exception const &e) {
       recoverResetFrameFence();
       std::fprintf(stderr, "Flux Vulkan: present failed: %s\n", e.what());
@@ -2410,6 +2466,7 @@ private:
   void recreateSwapchain() {
     if (!device_)
       return;
+    auto const recreateStart = std::chrono::steady_clock::now();
     for (VkFence fence : frameFences_) {
       if (fence)
         vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
@@ -2434,12 +2491,18 @@ private:
         break;
       }
     }
-    swapExtent_ = caps.currentExtent.width != UINT32_MAX
-                      ? caps.currentExtent
-                      : VkExtent2D{static_cast<std::uint32_t>(std::max(1, framebufferWidth_)),
-                                   static_cast<std::uint32_t>(std::max(1, framebufferHeight_))};
-    framebufferWidth_ = static_cast<int>(std::max(1u, swapExtent_.width));
-    framebufferHeight_ = static_cast<int>(std::max(1u, swapExtent_.height));
+    if (caps.currentExtent.width != UINT32_MAX) {
+      swapExtent_ = caps.currentExtent;
+    } else {
+      std::uint32_t const requestedW =
+          static_cast<std::uint32_t>(std::max({1, framebufferWidth_, swapchainTargetWidth_}));
+      std::uint32_t const requestedH =
+          static_cast<std::uint32_t>(std::max({1, framebufferHeight_, swapchainTargetHeight_}));
+      swapExtent_ = VkExtent2D{
+          std::clamp(requestedW, caps.minImageExtent.width, caps.maxImageExtent.width),
+          std::clamp(requestedH, caps.minImageExtent.height, caps.maxImageExtent.height),
+      };
+    }
     std::uint32_t imageCount = std::clamp(caps.minImageCount + 1, caps.minImageCount,
                                           caps.maxImageCount ? caps.maxImageCount : caps.minImageCount + 1);
     VkSwapchainCreateInfoKHR info{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
@@ -2485,6 +2548,14 @@ private:
     if (oldSwapchain)
       vkDestroySwapchainKHR(device_, oldSwapchain, nullptr);
     swapchainDirty_ = false;
+    if (waylandResizeTrace()) {
+      auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - recreateStart).count();
+      waylandResizeTraceLog(
+          "wayland-resize-trace: vulkan-recreate-swapchain window=%u framebuffer=%dx%d extent=%ux%u images=%zu elapsed=%.3fms\n",
+                   handle_, framebufferWidth_, framebufferHeight_, swapExtent_.width, swapExtent_.height, swapchainImages_.size(),
+                   static_cast<double>(elapsed) / 1000.0);
+    }
   }
 
   void destroySwapchain() {
@@ -2917,13 +2988,15 @@ private:
   }
 
   void setViewportScissor(VkCommandBuffer commandBuffer, Rect clip) {
-    VkViewport vp{0.f, 0.f, static_cast<float>(swapExtent_.width), static_cast<float>(swapExtent_.height), 0.f, 1.f};
+    float const renderWidth = static_cast<float>(std::max(1, framebufferWidth_));
+    float const renderHeight = static_cast<float>(std::max(1, framebufferHeight_));
+    VkViewport vp{0.f, 0.f, renderWidth, renderHeight, 0.f, 1.f};
     vkCmdSetViewport(commandBuffer, 0, 1, &vp);
 
-    float const scaleX = static_cast<float>(swapExtent_.width) / std::max(1.f, static_cast<float>(width_));
-    float const scaleY = static_cast<float>(swapExtent_.height) / std::max(1.f, static_cast<float>(height_));
-    float const maxX = static_cast<float>(swapExtent_.width);
-    float const maxY = static_cast<float>(swapExtent_.height);
+    float const scaleX = renderWidth / std::max(1.f, static_cast<float>(width_));
+    float const scaleY = renderHeight / std::max(1.f, static_cast<float>(height_));
+    float const maxX = renderWidth;
+    float const maxY = renderHeight;
     float const x0f = std::clamp(std::floor(clip.x * scaleX), 0.f, maxX);
     float const y0f = std::clamp(std::floor(clip.y * scaleY), 0.f, maxY);
     float const x1f = std::clamp(std::ceil((clip.x + clip.width) * scaleX), 0.f, maxX);
@@ -3369,6 +3442,8 @@ private:
   int height_ = 1;
   int framebufferWidth_ = 1;
   int framebufferHeight_ = 1;
+  int swapchainTargetWidth_ = 1;
+  int swapchainTargetHeight_ = 1;
   float dpiScaleX_ = 1.f;
   float dpiScaleY_ = 1.f;
   Color clearColor_ = Colors::transparent;

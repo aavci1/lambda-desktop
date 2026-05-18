@@ -97,6 +97,7 @@ struct WaylandServer::Surface {
   wl_resource* resource = nullptr;
   std::uint64_t id = 0;
   wl_resource* pendingBuffer = nullptr;
+  bool pendingBufferAttached = false;
   wl_resource* currentBuffer = nullptr;
   std::int32_t x = 0;
   std::int32_t y = 0;
@@ -524,6 +525,7 @@ void surfaceDestroy(wl_client*, wl_resource* resource) {
 void surfaceAttach(wl_client*, wl_resource* resource, wl_resource* buffer, std::int32_t x, std::int32_t y) {
   auto* surface = dataFrom<WaylandServer::Surface>(resource);
   surface->pendingBuffer = buffer;
+  surface->pendingBufferAttached = true;
   surface->x = x;
   surface->y = y;
 }
@@ -706,9 +708,20 @@ bool applyViewportState(WaylandServer::Surface* surface) {
   return true;
 }
 
+bool pendingViewportSourceFitsCurrentBuffer(WaylandServer::Surface const* surface) {
+  if (!surface || !surface->pendingSourceSet) return true;
+  return surface->pendingSourceX >= 0.f &&
+         surface->pendingSourceY >= 0.f &&
+         surface->pendingSourceWidth > 0.f &&
+         surface->pendingSourceHeight > 0.f &&
+         surface->pendingSourceX + surface->pendingSourceWidth <= static_cast<float>(surface->width) &&
+         surface->pendingSourceY + surface->pendingSourceHeight <= static_cast<float>(surface->height);
+}
+
 void surfaceCommit(wl_client*, wl_resource* resource) {
   auto* surface = dataFrom<WaylandServer::Surface>(resource);
-  if (surface->layerSurface && !surface->layerSurface->configured && !surface->pendingBuffer) {
+  bool const hasBufferAttach = surface->pendingBufferAttached;
+  if (surface->layerSurface && !surface->layerSurface->configured && !hasBufferAttach) {
     surface->layerSurface->configured = true;
     sendLayerConfigure(surface->layerSurface);
     surface->server->flushClients();
@@ -724,7 +737,20 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   surface->presentationFeedbacks = std::move(surface->pendingPresentationFeedbacks);
   surface->pendingPresentationFeedbacks.clear();
 
+  if (!hasBufferAttach) {
+    if (pendingViewportSourceFitsCurrentBuffer(surface)) {
+      if (!applyViewportState(surface)) return;
+      applyLayerGeometry(surface->layerSurface);
+      traceResizeSurface("commit-state", surface);
+    } else {
+      traceResizeSurface("commit-state-defer-viewport", surface);
+    }
+    return;
+  }
+
   surface->currentBuffer = surface->pendingBuffer;
+  surface->pendingBuffer = nullptr;
+  surface->pendingBufferAttached = false;
   if (surface->currentBuffer) {
     if (auto* shmBuffer = shmBufferFor(surface->server, surface->currentBuffer)) {
       std::vector<std::uint8_t> pixels;

@@ -12,6 +12,7 @@
 
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
+#include "viewporter-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -24,6 +25,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdarg>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -68,6 +70,30 @@ bool debugDecorations() {
   return value && *value && std::strcmp(value, "0") != 0;
 }
 
+bool resizeTrace() {
+  char const* value = std::getenv("FLUX_WAYLAND_RESIZE_TRACE");
+  return value && *value && std::strcmp(value, "0") != 0;
+}
+
+void resizeTraceLog(char const* format, ...) {
+  va_list args;
+  va_start(args, format);
+  va_list stderrArgs;
+  va_copy(stderrArgs, args);
+  std::vfprintf(stderr, format, stderrArgs);
+  va_end(stderrArgs);
+
+  char const* path = std::getenv("FLUX_WAYLAND_RESIZE_TRACE_LOG");
+  if (!path || !*path) {
+    path = "/tmp/flux-wayland-resize.log";
+  }
+  if (FILE* file = std::fopen(path, "a")) {
+    std::vfprintf(file, format, args);
+    std::fclose(file);
+  }
+  va_end(args);
+}
+
 char const* const* cursorNames(Cursor cursor) {
   static char const* const arrow[] = {"default", "left_ptr", nullptr};
   static char const* const ibeam[] = {"text", "xterm", nullptr};
@@ -101,6 +127,7 @@ struct SharedWaylandConnection {
   wl_registry* registry = nullptr;
   wl_compositor* compositor = nullptr;
   wl_shm* shm = nullptr;
+  wp_viewporter* viewporter = nullptr;
   xdg_wm_base* wmBase = nullptr;
   zxdg_decoration_manager_v1* decorationManager = nullptr;
   wl_seat* seat = nullptr;
@@ -231,6 +258,10 @@ void releaseWaylandConnection() {
     zxdg_decoration_manager_v1_destroy(gWaylandConnection.decorationManager);
     gWaylandConnection.decorationManager = nullptr;
   }
+  if (gWaylandConnection.viewporter) {
+    wp_viewporter_destroy(gWaylandConnection.viewporter);
+    gWaylandConnection.viewporter = nullptr;
+  }
   if (gWaylandConnection.wmBase) {
     xdg_wm_base_destroy(gWaylandConnection.wmBase);
     gWaylandConnection.wmBase = nullptr;
@@ -273,6 +304,10 @@ public:
     shared_->windows.push_back(this);
     wl_surface_add_listener(surface_, &surfaceListener_, this);
     wl_surface_set_buffer_scale(surface_, static_cast<std::int32_t>(std::lround(dpiScaleX_)));
+    if (shared->viewporter) {
+      viewport_ = wp_viewporter_get_viewport(shared->viewporter, surface_);
+      updateViewportDestination();
+    }
     xdgSurface_ = xdg_wm_base_get_xdg_surface(shared->wmBase, surface_);
     xdg_surface_add_listener(xdgSurface_, &xdgSurfaceListener_, this);
     toplevel_ = xdg_surface_get_toplevel(xdgSurface_);
@@ -303,6 +338,7 @@ public:
     if (decoration_) zxdg_toplevel_decoration_v1_destroy(decoration_);
     if (toplevel_) xdg_toplevel_destroy(toplevel_);
     if (xdgSurface_) xdg_surface_destroy(xdgSurface_);
+    if (viewport_) wp_viewport_destroy(viewport_);
     if (surface_) wl_surface_destroy(surface_);
     if (shared_) releaseWaylandConnection();
     if (wakePipe_[0] >= 0) close(wakePipe_[0]);
@@ -335,6 +371,7 @@ public:
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     if (canvas_) canvas_->resize(static_cast<int>(std::lround(size_.width)),
                                  static_cast<int>(std::lround(size_.height)));
+    updateViewportDestination();
     queueResizeEvent();
     applyCursor(currentCursor_);
     requestResizeRedraw();
@@ -397,6 +434,11 @@ public:
   void requestAnimationFrame() override {
     if (framePending_ || !surface_) return;
     framePending_ = true;
+    if (resizeTrace()) {
+      resizeTraceLog("wayland-resize-trace: request-frame window=%u size=%dx%d\n",
+                   handle_, static_cast<int>(std::lround(size_.width)),
+                   static_cast<int>(std::lround(size_.height)));
+    }
     frameCallback_ = wl_surface_frame(surface_);
     wl_callback_add_listener(frameCallback_, &frameCallbackListener_, this);
     wl_surface_commit(surface_);
@@ -408,6 +450,10 @@ public:
   }
 
   void completeAnimationFrame(bool needsAnotherFrame) override {
+    if (resizeTrace()) {
+      resizeTraceLog("wayland-resize-trace: complete-frame window=%u needsAnother=%d\n",
+                   handle_, needsAnotherFrame ? 1 : 0);
+    }
     wl_display_flush(display_);
     if (needsAnotherFrame) requestAnimationFrame();
   }
@@ -505,6 +551,11 @@ private:
     }
     if (!self->framePending_) return;
     self->framePending_ = false;
+    if (resizeTrace()) {
+      resizeTraceLog("wayland-resize-trace: frame-done window=%u size=%dx%d\n",
+                   self->handle_, static_cast<int>(std::lround(self->size_.width)),
+                   static_cast<int>(std::lround(self->size_.height)));
+    }
     auto& queue = Application::instance().eventQueue();
     queue.post(FrameEvent{nowNanos(), self->handle_});
     queue.dispatch();
@@ -515,6 +566,10 @@ private:
     auto* self = static_cast<WaylandWindow*>(data);
     xdg_surface_ack_configure(surface, serial);
     self->configured_ = true;
+    if (resizeTrace()) {
+      resizeTraceLog("wayland-resize-trace: xdg-configure window=%u serial=%u pending=%dx%d\n",
+                   self->handle_, serial, self->pendingWidth_, self->pendingHeight_);
+    }
     if (self->pendingWidth_ > 0 && self->pendingHeight_ > 0) {
       self->applyConfiguredSize(self->pendingWidth_, self->pendingHeight_);
       self->pendingWidth_ = self->pendingHeight_ = 0;
@@ -527,6 +582,10 @@ private:
     if (width > 0 && height > 0) {
       self->pendingWidth_ = width;
       self->pendingHeight_ = height;
+      if (resizeTrace()) {
+        resizeTraceLog("wayland-resize-trace: toplevel-configure window=%u size=%dx%d\n",
+                     self->handle_, width, height);
+      }
     }
   }
 
@@ -583,17 +642,41 @@ private:
   static void surfacePreferredBufferTransform(void*, wl_surface*, std::uint32_t) {}
 
   void applyConfiguredSize(int width, int height) {
+    auto const start = std::chrono::steady_clock::now();
     size_ = {static_cast<float>(std::max(1, width)), static_cast<float>(std::max(1, height))};
     if (canvas_) canvas_->resize(static_cast<int>(std::lround(size_.width)),
                                  static_cast<int>(std::lround(size_.height)));
+    updateViewportDestination();
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     queueResizeEvent();
     applyCursor(currentCursor_);
     requestResizeRedraw();
+    if (resizeTrace()) {
+      auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - start).count();
+      resizeTraceLog(
+          "wayland-resize-trace: apply-configure window=%u size=%dx%d framePending=%d elapsed=%.3fms\n",
+          handle_, width, height, framePending_ ? 1 : 0,
+          static_cast<double>(elapsed) / 1000.0);
+    }
   }
 
   void updateCanvasDpi() {
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
+  }
+
+  void updateViewportDestination() {
+    if (!viewport_) return;
+    int const logicalWidth = std::max(1, static_cast<int>(std::lround(size_.width)));
+    int const logicalHeight = std::max(1, static_cast<int>(std::lround(size_.height)));
+    int const sourceWidth = std::max(1, static_cast<int>(std::lround(size_.width * dpiScaleX_)));
+    int const sourceHeight = std::max(1, static_cast<int>(std::lround(size_.height * dpiScaleY_)));
+    wp_viewport_set_source(viewport_,
+                           wl_fixed_from_int(0),
+                           wl_fixed_from_int(0),
+                           wl_fixed_from_int(sourceWidth),
+                           wl_fixed_from_int(sourceHeight));
+    wp_viewport_set_destination(viewport_, logicalWidth, logicalHeight);
   }
 
   bool ensureCursorTheme(int scale) {
@@ -709,6 +792,10 @@ private:
     resizeRedrawPending_ = true;
     Application::instance().requestWindowRedraw(handle_);
     wakeEventLoop();
+    if (resizeTrace()) {
+      resizeTraceLog("wayland-resize-trace: request-resize-redraw window=%u framePending=%d\n",
+                   handle_, framePending_ ? 1 : 0);
+    }
   }
 
   void drainWakePipe() {
@@ -737,12 +824,21 @@ private:
 
   void flushDeferredRedraw() {
     if (!resizeRedrawPending_ && !pendingResizeEvent_) return;
+    auto const start = std::chrono::steady_clock::now();
     resizeRedrawPending_ = false;
     if (pendingResizeEvent_) {
       pendingResizeEvent_ = false;
       Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, pendingResizeSize_});
     }
     Application::instance().eventQueue().dispatch();
+    if (resizeTrace()) {
+      auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - start).count();
+      resizeTraceLog(
+          "wayland-resize-trace: flush-deferred window=%u size=%.0fx%.0f framePending=%d elapsed=%.3fms\n",
+          handle_, pendingResizeSize_.width, pendingResizeSize_.height, framePending_ ? 1 : 0,
+          static_cast<double>(elapsed) / 1000.0);
+    }
   }
 
   static inline wl_callback_listener frameCallbackListener_{frameDone};
@@ -761,6 +857,7 @@ private:
   xdg_surface* xdgSurface_ = nullptr;
   xdg_toplevel* toplevel_ = nullptr;
   zxdg_toplevel_decoration_v1* decoration_ = nullptr;
+  wp_viewport* viewport_ = nullptr;
   Canvas* canvas_ = nullptr;
   SharedWaylandConnection* shared_ = nullptr;
 
@@ -826,6 +923,9 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
   } else if (std::strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0) {
     shared->decorationManager = static_cast<zxdg_decoration_manager_v1*>(
         wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1));
+  } else if (std::strcmp(interface, wp_viewporter_interface.name) == 0) {
+    shared->viewporter = static_cast<wp_viewporter*>(
+        wl_registry_bind(registry, name, &wp_viewporter_interface, 1));
   } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
     auto output = std::make_unique<SharedWaylandConnection::Output>();
     output->name = name;

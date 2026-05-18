@@ -969,8 +969,12 @@ int main(int, char**) {
         float const sourceHeight = clientSurface.sourceHeight > 0.f
                                        ? clientSurface.sourceHeight
                                        : static_cast<float>(cached.image->size().height);
-        float const contentWidth = clientSurface.activeSizing ? sourceWidth : windowWidth;
-        float const contentHeight = clientSurface.activeSizing ? sourceHeight : windowHeight;
+        bool const staleGrowthBuffer =
+            clientSurface.activeSizing &&
+            clientSurface.bufferWidth <= static_cast<int>(std::ceil(windowWidth)) &&
+            clientSurface.bufferHeight <= static_cast<int>(std::ceil(windowHeight));
+        float const contentWidth = staleGrowthBuffer ? sourceWidth : windowWidth;
+        float const contentHeight = staleGrowthBuffer ? sourceHeight : windowHeight;
         canvas->save();
         canvas->clipRect(flux::Rect::sharp(windowX, windowY, windowWidth, windowHeight));
         canvas->drawImage(*cached.image,

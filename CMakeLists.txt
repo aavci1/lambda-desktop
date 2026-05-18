@@ -277,9 +277,11 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   file(MAKE_DIRECTORY ${FLUX_VULKAN_GENERATED_DIR})
   set(FLUX_XDG_SHELL_XML "${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml")
   set(FLUX_XDG_DECORATION_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml")
+  set(FLUX_VIEWPORTER_XML "${WAYLAND_PROTOCOLS_DIR}/stable/viewporter/viewporter.xml")
   foreach(_flux_wayland_protocol_xml IN ITEMS
       "${FLUX_XDG_SHELL_XML}"
-      "${FLUX_XDG_DECORATION_XML}")
+      "${FLUX_XDG_DECORATION_XML}"
+      "${FLUX_VIEWPORTER_XML}")
     if(NOT EXISTS "${_flux_wayland_protocol_xml}")
       message(FATAL_ERROR
         "Flux: required Wayland protocol XML not found: ${_flux_wayland_protocol_xml}. "
@@ -306,6 +308,17 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_XDG_DECORATION_XML}
             ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
     DEPENDS ${FLUX_XDG_DECORATION_XML}
+    VERBATIM
+  )
+  add_custom_command(
+    OUTPUT
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-client-protocol.h
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_VIEWPORTER_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_VIEWPORTER_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-protocol.c
+    DEPENDS ${FLUX_VIEWPORTER_XML}
     VERBATIM
   )
   set(_flux_vulkan_shader_headers)
@@ -347,6 +360,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     src/Platform/Linux/WaylandWindow.cpp
     ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-protocol.c
     ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
+    ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-protocol.c
   )
 elseif(FLUX_PLATFORM_LINUX_KMS)
   find_package(PkgConfig REQUIRED)
