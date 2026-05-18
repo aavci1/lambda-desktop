@@ -8,6 +8,7 @@
 #include "Compositor/Chrome/CursorRenderer.hpp"
 #include "Compositor/Chrome/WindowChromeRenderer.hpp"
 #include "Compositor/Config/CompositorConfig.hpp"
+#include "Compositor/Surface/SurfaceRenderer.hpp"
 #include "Compositor/WaylandServer.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
@@ -40,25 +41,6 @@ void onSignal(int) {
   gRunning.store(false, std::memory_order_relaxed);
 }
 
-struct CachedClientImage {
-  std::uint64_t id = 0;
-  std::uint64_t serial = 0;
-  std::shared_ptr<flux::Image> image;
-  bool logged = false;
-};
-
-struct SurfaceVisualState {
-  std::chrono::steady_clock::time_point firstSeen{};
-  flux::compositor::CommittedSurfaceSnapshot lastSnapshot{};
-  bool hasLastSnapshot = false;
-};
-
-struct ClosingSurfaceVisual {
-  flux::compositor::CommittedSurfaceSnapshot snapshot{};
-  std::shared_ptr<flux::Image> image;
-  std::chrono::steady_clock::time_point closedAt{};
-};
-
 float clamp01(float value) {
   return std::clamp(value, 0.f, 1.f);
 }
@@ -67,119 +49,6 @@ float easeOutCubic(float value) {
   float const t = clamp01(value);
   float const inverse = 1.f - t;
   return 1.f - inverse * inverse * inverse;
-}
-
-bool shouldTraceRenderSnapshot(flux::compositor::CommittedSurfaceSnapshot const& current,
-                               SurfaceVisualState const& visual) {
-  if (!flux::detail::resizeTraceEnabled()) return false;
-  if (!visual.hasLastSnapshot) return true;
-  auto const& previous = visual.lastSnapshot;
-  return current.x != previous.x || current.y != previous.y ||
-         current.width != previous.width || current.height != previous.height ||
-         current.bufferWidth != previous.bufferWidth || current.bufferHeight != previous.bufferHeight ||
-         current.activeSizing != previous.activeSizing ||
-         current.serial != previous.serial ||
-         current.sourceX != previous.sourceX || current.sourceY != previous.sourceY ||
-         current.sourceWidth != previous.sourceWidth || current.sourceHeight != previous.sourceHeight ||
-         current.destinationWidth != previous.destinationWidth ||
-         current.destinationHeight != previous.destinationHeight;
-}
-
-void drawSurfaceImage(flux::Canvas& canvas,
-                      flux::compositor::CommittedSurfaceSnapshot const& surface,
-                      flux::Image& image,
-                      float opacity,
-                      float scale) {
-  float const windowX = static_cast<float>(surface.x);
-  float const windowY = static_cast<float>(surface.y);
-  float const windowWidth = static_cast<float>(surface.width);
-  float const windowHeight = static_cast<float>(surface.height);
-  float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
-  float const outerHeight = windowHeight + titleBarHeight;
-  flux::Point const pivot{windowX + windowWidth * 0.5f, windowY - titleBarHeight + outerHeight * 0.5f};
-  canvas.save();
-  canvas.setOpacity(canvas.opacity() * opacity);
-  if (scale != 1.f) {
-    canvas.translate(pivot.x, pivot.y);
-    canvas.scale(scale);
-    canvas.translate(-pivot.x, -pivot.y);
-  }
-  float const sourceWidth = surface.sourceWidth > 0.f
-                                ? surface.sourceWidth
-                                : static_cast<float>(image.size().width);
-  float const sourceHeight = surface.sourceHeight > 0.f
-                                 ? surface.sourceHeight
-                                 : static_cast<float>(image.size().height);
-  canvas.drawImage(image,
-                   flux::Rect::sharp(surface.sourceX,
-                                     surface.sourceY,
-                                     sourceWidth,
-                                     sourceHeight),
-                   flux::Rect::sharp(windowX,
-                                     windowY,
-                                     windowWidth,
-                                     windowHeight));
-  canvas.restore();
-}
-
-void updateCachedImage(flux::compositor::WaylandServer& wayland,
-                       flux::Canvas& canvas,
-                       flux::compositor::CommittedSurfaceSnapshot const& surface,
-                       CachedClientImage& cached) {
-  if (cached.image && cached.id == surface.id && cached.serial == surface.serial) return;
-
-  cached.id = surface.id;
-  cached.serial = surface.serial;
-  cached.image.reset();
-  cached.logged = false;
-  std::int32_t const bufferWidth = surface.bufferWidth > 0 ? surface.bufferWidth : surface.width;
-  std::int32_t const bufferHeight = surface.bufferHeight > 0 ? surface.bufferHeight : surface.height;
-  if (!surface.rgbaPixels.empty()) {
-    cached.image = flux::Image::fromRgbaPixels(static_cast<std::uint32_t>(bufferWidth),
-                                               static_cast<std::uint32_t>(bufferHeight),
-                                               surface.rgbaPixels,
-                                               canvas.gpuDevice());
-  } else if (!surface.dmabufPlanes.empty()) {
-    std::vector<std::uint8_t> fallbackPixels;
-    std::vector<int> fds = wayland.duplicateDmabufFds(surface.id);
-    if (fds.size() == surface.dmabufPlanes.size()) {
-      std::vector<flux::Image::DmabufPlane> planes;
-      planes.reserve(surface.dmabufPlanes.size());
-      for (std::size_t i = 0; i < surface.dmabufPlanes.size(); ++i) {
-        planes.push_back({
-            .fd = fds[i],
-            .offset = surface.dmabufPlanes[i].offset,
-            .stride = surface.dmabufPlanes[i].stride,
-            .modifier = surface.dmabufPlanes[i].modifier,
-        });
-      }
-      try {
-        cached.image = flux::Image::fromDmabuf({
-            .width = static_cast<std::uint32_t>(bufferWidth),
-            .height = static_cast<std::uint32_t>(bufferHeight),
-            .drmFormat = surface.dmabufFormat,
-            .planes = planes,
-        });
-        if (cached.image && !cached.logged) {
-          std::fprintf(stderr, "flux-compositor: imported DMABUF as Vulkan image\n");
-        }
-      } catch (std::exception const& e) {
-        std::fprintf(stderr, "flux-compositor: dmabuf import failed: %s\n", e.what());
-      }
-    } else {
-      for (int fd : fds) close(fd);
-    }
-    if (wayland.copyDmabufToRgba(surface.id, fallbackPixels)) {
-      cached.image = flux::Image::fromRgbaPixels(static_cast<std::uint32_t>(bufferWidth),
-                                                 static_cast<std::uint32_t>(bufferHeight),
-                                                 fallbackPixels,
-                                                 canvas.gpuDevice());
-      if (cached.image && !cached.logged) {
-        std::fprintf(stderr, "flux-compositor: displaying readable DMABUF contents\n");
-        cached.logged = true;
-      }
-    }
-  }
 }
 
 std::uint32_t monotonicMilliseconds() {
@@ -292,10 +161,10 @@ int main(int, char**) {
       }
     };
     applyConfig();
-    std::unordered_map<std::uint64_t, CachedClientImage> clientImages;
-    std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
-    std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
-    CachedClientImage cursorImage;
+    std::unordered_map<std::uint64_t, flux::compositor::CachedClientImage> clientImages;
+    std::unordered_map<std::uint64_t, flux::compositor::SurfaceVisualState> surfaceVisuals;
+    std::unordered_map<std::uint64_t, flux::compositor::ClosingSurfaceVisual> closingSurfaces;
+    flux::compositor::CachedClientImage cursorImage;
     bool hardwareArrowCursor = false;
     std::uint32_t const hardwareCursorWidth = output.cursorWidth();
     std::uint32_t const hardwareCursorHeight = output.cursorHeight();
@@ -352,9 +221,9 @@ int main(int, char**) {
         auto& visual = surfaceVisuals[clientSurface.id];
         if (visual.firstSeen.time_since_epoch().count() == 0) visual.firstSeen = frameTime;
         auto& cached = clientImages[clientSurface.id];
-        updateCachedImage(wayland, *canvas, clientSurface, cached);
+        flux::compositor::updateCachedImage(wayland, *canvas, clientSurface, cached);
         if (!cached.image) continue;
-        bool const traceSnapshot = shouldTraceRenderSnapshot(clientSurface, visual);
+        bool const traceSnapshot = flux::compositor::shouldTraceRenderSnapshot(clientSurface, visual);
         if (traceSnapshot) {
           auto const imageSize = cached.image->size();
           flux::detail::resizeTrace(
@@ -438,7 +307,7 @@ int main(int, char**) {
             !cached->second.image) {
           continue;
         }
-        closingSurfaces[surfaceId] = ClosingSurfaceVisual{
+        closingSurfaces[surfaceId] = flux::compositor::ClosingSurfaceVisual{
             .snapshot = visual.lastSnapshot,
             .image = cached->second.image,
             .closedAt = frameTime,
@@ -453,7 +322,7 @@ int main(int, char**) {
           continue;
         }
         float const eased = easeOutCubic(progress);
-        drawSurfaceImage(*canvas, it->second.snapshot, *it->second.image, 1.f - eased, 1.f - 0.025f * eased);
+        flux::compositor::drawSurfaceImage(*canvas, it->second.snapshot, *it->second.image, 1.f - eased, 1.f - 0.025f * eased);
         ++it;
       }
       if (auto snapPreview = wayland.snapPreview()) {
@@ -469,7 +338,7 @@ int main(int, char**) {
       }
       if (auto cursorSurface = wayland.cursorSurface()) {
         if (hardwareArrowCursor) output.hideCursor();
-        updateCachedImage(wayland, *canvas, *cursorSurface, cursorImage);
+        flux::compositor::updateCachedImage(wayland, *canvas, *cursorSurface, cursorImage);
         if (cursorImage.image) {
           float const cursorSourceWidth = cursorSurface->sourceWidth > 0.f
                                               ? cursorSurface->sourceWidth
