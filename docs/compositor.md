@@ -1,6 +1,6 @@
 # Flux Compositor
 
-**Status:** phases 1 and 2 have passed hardware smoke checks; phases 3 through 5 are implemented enough for Flux demos and initial real-app testing. The compositor cleanup spec is implemented, with Wayland globals, window/input management, runtime orchestration, lifecycle, snapshots, frame scheduling, and destroy cleanup split into concern files.
+**Status:** phases 1 and 2 have passed hardware smoke checks; phases 3 through 5 are implemented enough for Flux demos and initial real-app testing. The compositor cleanup spec is implemented, with Wayland globals, window/input management, runtime orchestration, lifecycle, snapshots, frame scheduling, and destroy cleanup split into concern files. Cursor rendering now uses the system Xcursor theme or client-provided cursor surfaces; the compositor no longer has built-in cursor artwork.
 **Repository:** `flux-compositor` is currently built from this repository as `flux-compositor` while the Flux-side KMS API settles.
 **Scope:** a Linux Wayland compositor built on Flux. Launched from a TTY, owns the display, hosts Wayland clients, manages windows, exits on signal.
 
@@ -466,7 +466,7 @@ Total new code this phase: ~1850 LOC.
 
 ## 6. Phase 3: Input and window management
 
-**Status:** input, chrome, and stacking window management are in progress and hardware-smoked. The compositor exposes real pointer and keyboard seat capabilities, forwards pointer/key events to the focused Wayland surface, draws client-provided cursor surfaces, raises windows on click, supports titlebar drag, corner resize, half-screen snapping with drag-unsnap, double-click-titlebar maximize/restore, compositor shortcuts, title text, and a click-on-release close button. Safe first-stage xdg-popup support is implemented without popup input grabs after the first experimental grab path froze the test laptop.
+**Status:** input, chrome, and stacking window management are in progress and hardware-smoked. The compositor exposes real pointer and keyboard seat capabilities, forwards pointer/key events to the focused Wayland surface, draws client-provided cursor surfaces, raises windows on click, supports titlebar drag, corner resize, half-screen snapping with drag-unsnap, double-click-titlebar maximize/restore, compositor shortcuts, title text, and a click-on-release close button. Compositor-owned cursors use the system Xcursor theme. Safe first-stage xdg-popup support is implemented without popup input grabs after the first experimental grab path froze the test laptop.
 
 ### 6.1 Goal
 
@@ -567,7 +567,7 @@ Total new code this phase: ~3300 LOC.
 
 ## 7. Phase 4: Protocols for ecosystem compatibility
 
-**Status:** first compatibility protocols in progress. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, an initial `wp_presentation_time` path, `zwp_relative_pointer_v1`, initial `zwp_pointer_constraints_v1` support, `zwp_primary_selection_v1`, initial `wl_data_device_manager` clipboard selection and drag-and-drop, and `wp_fractional_scale_v1` are implemented.
+**Status:** first compatibility protocols in progress. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, an initial `wp_presentation_time` path, `zwp_relative_pointer_v1`, initial `zwp_pointer_constraints_v1` support, `zwp_primary_selection_v1`, initial `wl_data_device_manager` clipboard selection and drag-and-drop, `wp_fractional_scale_v1`, and `xdg_activation_v1` are implemented.
 
 ### 7.1 Goal
 
@@ -586,7 +586,7 @@ Protocols to implement, in rough priority order:
 - **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard, drag-and-drop, and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `flux-compositor-primary-selection-demo`; regular clipboard selection is implemented for focused clients and smoke-tested with `flux-compositor-clipboard-demo`; drag-and-drop is implemented for UTF-8 text payloads with source/target action negotiation and smoke-tested with `flux-compositor-dnd-demo`.
 - **`zwp_idle_inhibit_manager_v1`**: lets video players prevent the screen from blanking. Implemented as protocol/state tracking; actual idle blanking is not implemented yet.
 - **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.). Implemented with simple token generation and a repeated-activation guard to avoid focus loops, with `flux-compositor-activation-demo` as the smoke client.
-- **`wp_fractional_scale_v1`**: HiDPI scaling for displays that aren't integer-multiple scales. Implemented as protocol negotiation with a fixed preferred scale of 120, meaning 1.0x, for the current single-scale output. Actual non-1.0 output scaling remains future work.
+- **`wp_fractional_scale_v1`**: HiDPI scaling for displays that aren't integer-multiple scales. Implemented as protocol negotiation from the compositor config scale, including fractional values, with `wl_output` integer scale fallback for clients that do not bind the fractional-scale protocol.
 
 ### 7.3 Out of scope for phase 4
 
@@ -603,7 +603,7 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 
 ### 7.5 Acceptance criteria
 
-- ✗ `foot` (terminal emulator) works, including resize and clipboard.
+- ◐ `foot` (terminal emulator) launches and basic interaction works; clipboard/menu behavior still needs broader real-app validation.
 - ✗ `mpv` (video player) plays a video smoothly with smooth frame pacing.
 - ✗ A GTK4 app (e.g., `gnome-text-editor`) works correctly with the implemented protocols (decoration, cursor, clipboard, focus).
 - ✗ A Qt6 app works correctly.
@@ -650,7 +650,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 - **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in, close fade-out, server-driven snap/maximize geometry animation, and snap preview overlay are implemented. Titlebar drag to the top edge maximizes; Super+Up maximizes and Super+Down restores maximized/snapped windows.
 - **Configuration file:** `~/.config/flux-compositor/config.toml`. The compositor creates this file with defaults on first launch when it does not exist; `FLUX_COMPOSITOR_CONFIG=/path/to/config.toml` can override the path for testing. Keybindings, window-management preferences, animation toggles, and output scaling live here. Current parsing and hot reload support `background = "#RRGGBB"`, `background_gradient = "#RRGGBB,#RRGGBB"`, `wallpaper = "/path/to/file.webp"`, `wallpaper_mode = "cover"` (`cover`, `contain`, `stretch`, `center`, or `tile`), `scale = 2.0`, `animations = false`, `hardware_cursor = false`, and a `[keybindings]` section for compositor shortcuts.
   Supported keybinding actions are `close`, `cycle_focus`, `snap_left`, `snap_right`, `maximize`, `restore`, and `terminate`; bindings use strings such as `"Super+Q"` or `"Ctrl+Alt+Backspace"`.
-- **Hardware cursor:** use KMS cursor planes when supported. Falls back to compositor-drawn software cursor. The compositor now loads the system Xcursor theme for its default/cursor-shape cursors and uploads themed or client-provided cursor pixels to the KMS cursor plane when they fit without compositor-side scaling.
+- **Hardware cursor:** use KMS cursor planes when supported. The compositor loads the system Xcursor theme for its default/cursor-shape cursors and uploads themed or client-provided cursor pixels to the KMS cursor plane when they fit without compositor-side scaling. If the cursor plane cannot be used, the same themed cursor image is drawn in software; there is no built-in fallback cursor artwork.
 - **Frame timing improvements:** adaptive sync if the hardware supports it (FreeSync). Triple-buffering when beneficial. Initial KMS vblank pacing uses `drmWaitVBlank` when available and falls back to timer pacing if the driver rejects it.
 - **Background / wallpaper:** the compositor draws a default backdrop. Configurable to a solid color, a gradient, or an image file. (The wallpaper is part of the compositor in v1; a separate `xdg-desktop-portal`-style daemon for wallpaper could come later.)
 - **Multi-output:** TBD whether this lands in phase 5 or post-v1. If it lands, it's "support a second monitor side-by-side." If not, it's a v1.1 feature.
@@ -670,7 +670,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 - ✗ The compositor runs reliably for a full day of dogfooding without crashes.
 - ◐ Window animations feel smooth (60+ FPS during animations, no jank). Initial open animation, close fade-out, server-driven snap/maximize geometry animation, snap preview overlay, and live resize stabilization are implemented; broader animation polish remains pending.
 - ◐ Configuration via the config file works for keybindings and basic preferences. Background color/gradient/wallpaper, animation-toggle parsing, compositor keybinding overrides, and hot reload are implemented.
-- ◐ Hardware cursor works on the test hardware (AMD Vega supports cursor planes). Themed compositor cursors and compatible client-provided cursor surfaces use the KMS cursor plane; cursor surfaces that require compositor scaling still use the software path.
+- ◐ Hardware cursor works on the test hardware (AMD Vega supports cursor planes). Themed compositor cursors and compatible client-provided cursor surfaces use the KMS cursor plane; cursor surfaces that require compositor scaling still use the software path. Built-in compositor cursor artwork has been removed.
 - ✗ User documentation explains how to build, install, configure, and use the compositor.
 - ✗ The compositor can be used as the primary desktop on the CachyOS development box.
 
@@ -766,7 +766,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_subcompositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, basic subsurface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, double-click maximize/restore, shortcuts, title text, close-on-click-release, and non-grabbing xdg-popup rendering/dismissal are implemented with a popup smoke demo. Popup input grabs remain deferred. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed with smoke demos where useful. Current Wayland globals, including core surfaces and xdg-shell/decoration, live in `src/Compositor/Wayland/Globals/`; window/input-management lives in `src/Compositor/Window/WindowManager.cpp`; server lifecycle, snapshots, frame scheduling, and destroy cleanup live in dedicated `src/Compositor/Wayland/` files. |
-| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme, compatible cursor images use a KMS cursor plane, and frame pacing waits for DRM vblank when available; adaptive sync/triple buffering and docs remain pending. |
+| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme with no built-in cursor artwork, compatible cursor images use a KMS cursor plane, and frame pacing waits for DRM vblank when available; adaptive sync/triple buffering and docs remain pending. |
 
 ### 12.1 Framework changes log
 
@@ -788,7 +788,7 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-17 | local working tree | Added compositor window resizing, half-screen snap/drag-unsnap behavior, keyboard shortcuts, keyboard modifier forwarding, titlebar titles, and close-on-click-release handling. | Linux compositor-only window-management behavior; no Metal API involved. |
 | 2026-05-17 | local working tree | Added `xdg-output-unstable-v1` protocol bindings and exposed `zxdg_output_manager_v1` for single-output logical geometry. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-17 | local working tree | Added stable `wp_viewporter` protocol bindings, compositor-side viewport state, and a viewport smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
-| 2026-05-17 | local working tree | Added `wp_cursor_shape_v1` protocol bindings, pointer cursor-shape handling, compositor-drawn fallback shapes, and a cursor-shape smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
+| 2026-05-17 | local working tree | Added `wp_cursor_shape_v1` protocol bindings, pointer cursor-shape handling, compositor-side cursor rendering, and a cursor-shape smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-17 | local working tree | Added `zwp_idle_inhibit_manager_v1` protocol bindings, compositor-side inhibitor tracking, and an idle-inhibit smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-17 | local working tree | Added a shared compositor demo-client support header so smoke clients connect to the compositor-published display socket and time out instead of silently guessing `wayland-0` or blocking indefinitely. | Linux-only compositor test utility support; no Metal API involved. |
 | 2026-05-18 | c2c3e59..f84b263 | Stabilized live resize: compositor resize geometry state, stale-content clipping, Vulkan swapchain reuse with size headroom, `wp_viewporter` client integration in `WaylandWindow`, and compositor-side viewport commit handling. | Mac unaffected: `CAMetalLayer` manages drawable size natively and has no Vulkan-style swapchain recreation per resize. No Metal API required. |
@@ -798,14 +798,24 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-18 | compositor-cleanup-spec implementation | Moved compositor window/input-management behavior (focus, raise, titlebar drag, resize, snap/maximize, keyboard shortcuts, pointer/key forwarding, and popup dismissal) into `src/Compositor/Window/WindowManager.cpp`. | Linux compositor-only shell behavior; no Metal API involved. |
 | 2026-05-18 | compositor-cleanup-spec implementation | Split the remaining Wayland server monolith into a pimpl forwarding layer plus lifecycle, snapshot/dmabuf fallback, frame scheduling, and destroy-cleanup translation units; public Wayland snapshot/shortcut types moved to `Wayland/WaylandTypes.hpp`. | Linux compositor-only structure; no Metal API involved. |
 | 2026-05-18 | compositor-cleanup-spec implementation | Moved KMS compositor runtime orchestration out of `main.cpp` into `CompositorRuntime.cpp`; `main.cpp` now only handles process signals and calls the runtime. | Linux compositor-only executable structure; no Metal API involved. |
-| 2026-05-18 | cursor polish | Added compositor-side Xcursor theme loading for default/cursor-shape cursors and generalized KMS cursor-plane upload to themed cursors plus compatible client cursor surfaces. | Linux compositor-only cursor integration; no Metal API involved. |
+| 2026-05-18 | e5cc4ec | Added compositor-side Xcursor theme loading for default/cursor-shape cursors, removed built-in compositor cursor artwork, and generalized KMS cursor-plane upload to themed cursors plus compatible client cursor surfaces. | Linux compositor-only cursor integration; no Metal API involved. |
 
 ### 12.2 Open questions
 
 Tracked as work proceeds. Removed when answered.
 
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
-- Phase 3: Is the current "copy SHM into Flux-managed image" path sufficient for cursor buffers, or should Flux gain a lower-copy shared-memory image factory? Decide based on cursor-buffer characteristics.
 - Phase 3: What is the safest way to reintroduce xdg_popup support after the first experimental popup demo froze the test laptop?
 - Phase 4: `wp_presentation_time` currently uses a compositor-sampled `CLOCK_MONOTONIC` timestamp after `canvas->present()`. Hardware-derived presentation timestamps and refresh counters should be surfaced from the render/output path when video/game smoothness work needs that precision.
 - Phase 5: Does multi-output land in v1 or post-v1?
+
+### 12.3 Remaining implementation work
+
+- Real-app validation: continue testing `foot` and add GTK/Qt/browser coverage when those apps are available.
+- Popup hardening: full popup input-grab semantics and real-app menu behavior remain pending.
+- Presentation timing: replace the initial `wp_presentation_time` feedback with hardware-derived timestamps, refresh counters, and sync-output association.
+- Frame pacing: adaptive sync and triple-buffering remain pending.
+- Idle behavior: `zwp_idle_inhibit_manager_v1` tracks inhibitors, but actual idle blanking is not implemented.
+- Input/session polish: development still uses manual `/dev/input/event*` ACLs; proper seat/session brokering is still pending.
+- Multi-output: still undecided for v1 versus post-v1.
+- User documentation: build, install, configuration, and daily-use docs still need to be written.
