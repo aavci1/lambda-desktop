@@ -544,6 +544,7 @@ if(FLUX_BUILD_COMPOSITOR)
     message(FATAL_ERROR "FLUX_BUILD_COMPOSITOR requires FLUX_PLATFORM=LINUX_KMS.")
   endif()
   add_executable(flux-compositor
+    src/Compositor/Chrome/CursorRenderer.cpp
     src/Compositor/Config/CompositorConfig.cpp
     src/Compositor/main.cpp
     src/Compositor/WaylandServer.cpp
