@@ -96,6 +96,16 @@ std::optional<float> parseScale(std::string_view value) {
   return scale;
 }
 
+std::optional<int> parseInteger(std::string_view value) {
+  std::string text = unquote(value);
+  int result = 0;
+  auto const* begin = text.data();
+  auto const* end = text.data() + text.size();
+  auto [ptr, error] = std::from_chars(begin, end, result);
+  if (error != std::errc{} || ptr != end) return std::nullopt;
+  return result;
+}
+
 std::string lowerAscii(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
     return static_cast<char>(std::tolower(c));
@@ -128,6 +138,12 @@ std::optional<float> configFloat(toml::table const& table, char const* key) {
   if (auto value = table[key].value<double>()) return static_cast<float>(*value);
   if (auto value = table[key].value<int64_t>()) return static_cast<float>(*value);
   if (auto value = table[key].value<std::string>()) return parseScale(*value);
+  return std::nullopt;
+}
+
+std::optional<int> configInt(toml::table const& table, char const* key) {
+  if (auto value = table[key].value<int64_t>()) return static_cast<int>(*value);
+  if (auto value = table[key].value<std::string>()) return parseInteger(*value);
   return std::nullopt;
 }
 
@@ -273,6 +289,8 @@ background = "#3380f2"
 # background_gradient = "#203040 #405060"
 # wallpaper = "/path/to/wallpaper.png"
 # wallpaper_mode = "cover" # cover, contain, stretch, center, tile
+# cursor_theme = "Adwaita" # unset uses XCURSOR_THEME or system default
+# cursor_size = 24 # unset uses XCURSOR_SIZE or 24
 
 scale = 2.0
 animations = true
@@ -410,6 +428,17 @@ CompositorConfig loadConfig() {
     return false;
   };
   if (!parseWallpaperMode("wallpaper_mode")) parseWallpaperMode("wallpaper_fit");
+
+  if (auto cursorTheme = configString(table, "cursor_theme"); cursorTheme && !cursorTheme->empty()) {
+    config.cursorTheme = *cursorTheme;
+  }
+  if (table.contains("cursor_size")) {
+    if (auto cursorSize = configInt(table, "cursor_size"); cursorSize && *cursorSize >= 8 && *cursorSize <= 256) {
+      config.cursorSize = *cursorSize;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid cursor_size value in %s\n", path->c_str());
+    }
+  }
 
   auto parseScaleKey = [&](char const* key) -> bool {
     if (!table.contains(key)) return false;

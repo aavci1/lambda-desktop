@@ -127,6 +127,8 @@ TEST_CASE("compositor config parses gradient aliases and scale aliases") {
   std::ofstream file(path);
   file << "background_gradient = \"#010203,#a0b0c0\"\n";
   file << "wallpaper_mode = \"tile\"\n";
+  file << "cursor_theme = \"Adwaita\"\n";
+  file << "cursor_size = \"32\"\n";
   file << "output_scale = 1.25\n";
   file << "animations = \"off\"\n";
   file << "hardware_cursor = \"on\"\n";
@@ -143,6 +145,9 @@ TEST_CASE("compositor config parses gradient aliases and scale aliases") {
   CHECK(config.backgroundGradientEnd->g == doctest::Approx(176.f / 255.f));
   CHECK(config.backgroundGradientEnd->b == doctest::Approx(192.f / 255.f));
   CHECK(config.wallpaperMode == flux::ImageFillMode::Tile);
+  REQUIRE(config.cursorTheme);
+  CHECK(*config.cursorTheme == "Adwaita");
+  CHECK(config.cursorSize == 32);
   CHECK(config.scale == doctest::Approx(1.25f));
   CHECK_FALSE(config.animationsEnabled);
   CHECK(config.hardwareCursorEnabled);
@@ -157,6 +162,8 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   file << "background = \"nope\"\n";
   file << "background_gradient = \"#112233 nope\"\n";
   file << "wallpaper_mode = \"invalid\"\n";
+  file << "cursor_theme = \"\"\n";
+  file << "cursor_size = 512\n";
   file << "scale = 9.0\n";
   file << "animations = \"maybe\"\n";
   file << "hardware_cursor = \"sometimes\"\n";
@@ -173,6 +180,8 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   CHECK(config.backgroundColor.b == doctest::Approx(0.95f));
   CHECK_FALSE(config.backgroundGradientEnd);
   CHECK(config.wallpaperMode == flux::ImageFillMode::Cover);
+  CHECK_FALSE(config.cursorTheme);
+  CHECK(config.cursorSize == 0);
   CHECK(config.scale == doctest::Approx(2.0f));
   CHECK(config.animationsEnabled);
   CHECK(config.hardwareCursorEnabled);

@@ -184,6 +184,8 @@ int runKmsCompositor(std::atomic<bool>& running) {
                            *canvas,
                            output,
                            cursorState,
+                           appliedConfig.config.cursorTheme,
+                           appliedConfig.config.cursorSize,
                            appliedConfig.config.hardwareCursorEnabled && hardwareCursorAvailable);
       pruneSurfaceRenderState(surfaceRenderState, liveSurfaceIds);
       canvas->present();

@@ -84,6 +84,8 @@ background = "#3380f2"
 # background_gradient = "#203040 #405060"
 # wallpaper = "/path/to/wallpaper.png"
 # wallpaper_mode = "cover" # cover, contain, stretch, center, tile
+# cursor_theme = "Adwaita" # unset uses XCURSOR_THEME or system default
+# cursor_size = 24 # unset uses XCURSOR_SIZE or 24
 
 scale = 2.0
 animations = true
@@ -128,7 +130,16 @@ Mouse behavior:
 
 ## Cursor Theme
 
-The compositor has no built-in cursor artwork. It uses the system Xcursor theme for compositor-owned cursor shapes and accepts client cursor surfaces when clients provide them.
+The compositor has no built-in cursor artwork. It uses Xcursor theme images for compositor-owned cursor shapes and accepts client cursor surfaces when clients provide them.
+
+Config keys:
+
+```toml
+cursor_theme = "Adwaita"
+cursor_size = 24
+```
+
+If those keys are unset, the compositor falls back to environment variables and then to the system default.
 
 Useful environment variables:
 

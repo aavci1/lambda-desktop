@@ -17,6 +17,8 @@ struct CompositorConfig {
   std::optional<Color> backgroundGradientEnd;
   std::optional<std::string> wallpaperPath;
   ImageFillMode wallpaperMode = ImageFillMode::Cover;
+  std::optional<std::string> cursorTheme;
+  int cursorSize = 0;
   float scale = 2.0f;
   bool animationsEnabled = true;
   bool hardwareCursorEnabled = true;

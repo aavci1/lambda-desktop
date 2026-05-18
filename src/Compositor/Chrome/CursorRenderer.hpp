@@ -7,6 +7,8 @@
 #include <Flux/Platform/Linux/KmsOutput.hpp>
 
 #include <cstdint>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace flux::compositor {
@@ -15,7 +17,9 @@ struct CursorRenderState {
   CachedClientImage clientImage;
   CachedClientImage themeImage;
   CursorShape themeShape = CursorShape::Arrow;
+  std::string themeName;
   float themeScale = 0.f;
+  std::int32_t themeBaseSize = 0;
   std::int32_t themeHotspotX = 0;
   std::int32_t themeHotspotY = 0;
   std::uint64_t themeSerial = 0;
@@ -30,6 +34,8 @@ void drawCompositorCursor(WaylandServer& wayland,
                           Canvas& canvas,
                           platform::KmsOutput const& output,
                           CursorRenderState& cursorState,
+                          std::optional<std::string> const& cursorTheme,
+                          std::int32_t cursorSize,
                           bool hardwareCursorEnabled);
 
 } // namespace flux::compositor

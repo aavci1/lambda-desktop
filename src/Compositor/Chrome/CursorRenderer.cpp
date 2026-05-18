@@ -8,10 +8,13 @@
 #endif
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <cstdlib>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 
 namespace flux::compositor {
 namespace {
@@ -68,10 +71,36 @@ std::uint32_t premulArgb(std::uint8_t a, std::uint8_t r, std::uint8_t g, std::ui
          static_cast<std::uint32_t>(premul(b));
 }
 
-std::optional<ThemeCursor> loadThemeCursor(CursorShape shape, float scale) {
-  int const size = std::max(16, static_cast<int>(std::lround(24.f * std::max(0.5f, scale))));
-  char const* theme = std::getenv("XCURSOR_THEME");
-  if (theme && *theme == '\0') theme = nullptr;
+std::optional<int> parseCursorSize(std::string_view value) {
+  int result = 0;
+  auto const* begin = value.data();
+  auto const* end = value.data() + value.size();
+  auto [ptr, error] = std::from_chars(begin, end, result);
+  if (error != std::errc{} || ptr != end || result < 8 || result > 256) return std::nullopt;
+  return result;
+}
+
+std::string resolvedCursorTheme(std::optional<std::string> const& configuredTheme) {
+  if (configuredTheme && !configuredTheme->empty()) return *configuredTheme;
+  char const* envTheme = std::getenv("XCURSOR_THEME");
+  return envTheme && *envTheme ? std::string(envTheme) : std::string{};
+}
+
+int resolvedCursorBaseSize(std::int32_t configuredSize) {
+  if (configuredSize >= 8 && configuredSize <= 256) return configuredSize;
+  if (char const* envSize = std::getenv("XCURSOR_SIZE"); envSize && *envSize) {
+    if (auto size = parseCursorSize(envSize)) return *size;
+  }
+  return 24;
+}
+
+std::optional<ThemeCursor> loadThemeCursor(CursorShape shape,
+                                           float scale,
+                                           std::string const& themeName,
+                                           int baseSize) {
+  int const size = std::max(16, static_cast<int>(std::lround(static_cast<float>(baseSize) *
+                                                            std::max(0.5f, scale))));
+  char const* theme = themeName.empty() ? nullptr : themeName.c_str();
 
   for (char const* const* name = cursorNames(shape); *name; ++name) {
     std::unique_ptr<XcursorImages, XcursorImagesDeleter> images{
@@ -82,6 +111,8 @@ std::optional<ThemeCursor> loadThemeCursor(CursorShape shape, float scale) {
     if (image->width == 0 || image->height == 0 || !image->pixels) continue;
 
     ThemeCursor cursor{
+        .rgbaPixels = {},
+        .premultipliedArgbPixels = {},
         .width = static_cast<std::uint32_t>(image->width),
         .height = static_cast<std::uint32_t>(image->height),
         .hotspotX = static_cast<std::int32_t>(image->xhot),
@@ -105,7 +136,7 @@ std::optional<ThemeCursor> loadThemeCursor(CursorShape shape, float scale) {
     return cursor;
   }
 
-  if (shape != CursorShape::Arrow) return loadThemeCursor(CursorShape::Arrow, scale);
+  if (shape != CursorShape::Arrow) return loadThemeCursor(CursorShape::Arrow, scale, themeName, baseSize);
   return std::nullopt;
 }
 
@@ -166,6 +197,8 @@ void drawCompositorCursor(WaylandServer& wayland,
                           Canvas& canvas,
                           platform::KmsOutput const& output,
                           CursorRenderState& cursorState,
+                          std::optional<std::string> const& cursorTheme,
+                          std::int32_t cursorSize,
                           bool hardwareCursorEnabled) {
   if (auto cursorSurface = wayland.cursorSurface()) {
     float const outputScale = wayland.preferredScale();
@@ -229,18 +262,24 @@ void drawCompositorCursor(WaylandServer& wayland,
   float const cursorY = wayland.pointerY();
   CursorShape const shape = wayland.cursorShape();
   float const outputScale = wayland.preferredScale();
+  std::string const themeName = resolvedCursorTheme(cursorTheme);
+  int const themeBaseSize = resolvedCursorBaseSize(cursorSize);
   std::uint64_t const serial = themeSerial(shape, outputScale);
 
   if (!cursorState.themeImage.image ||
       cursorState.themeShape != shape ||
+      cursorState.themeName != themeName ||
+      cursorState.themeBaseSize != themeBaseSize ||
       std::abs(cursorState.themeScale - outputScale) > 0.01f) {
     cursorState.themeImage = {};
     cursorState.themeShape = shape;
+    cursorState.themeName = themeName;
     cursorState.themeScale = outputScale;
+    cursorState.themeBaseSize = themeBaseSize;
     cursorState.themeSerial = serial;
     cursorState.themeHotspotX = 0;
     cursorState.themeHotspotY = 0;
-    if (auto themeCursor = loadThemeCursor(shape, outputScale)) {
+    if (auto themeCursor = loadThemeCursor(shape, outputScale, themeName, themeBaseSize)) {
       cursorState.themeImage.id = static_cast<std::uint64_t>(static_cast<std::uint8_t>(shape)) + 1u;
       cursorState.themeImage.serial = serial;
       cursorState.themeImage.image = Image::fromRgbaPixels(themeCursor->width,
