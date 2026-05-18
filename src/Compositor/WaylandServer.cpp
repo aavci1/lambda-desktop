@@ -3711,24 +3711,18 @@ void WaylandServer::destroySurface(Surface* surface) {
     wl_resource_destroy(callback);
   }
   surface->frameCallbacks.clear();
-  surfaces_.erase(std::remove_if(surfaces_.begin(), surfaces_.end(),
-                                 [&](auto const& candidate) { return candidate.get() == surface; }),
-                  surfaces_.end());
+  eraseResource(surfaces_, surface);
 }
 
 void WaylandServer::destroyXdgSurface(XdgSurface* surface) {
-  xdgSurfaces_.erase(std::remove_if(xdgSurfaces_.begin(), xdgSurfaces_.end(),
-                                    [&](auto const& candidate) { return candidate.get() == surface; }),
-                     xdgSurfaces_.end());
+  eraseResource(xdgSurfaces_, surface);
 }
 
 void WaylandServer::destroyXdgToplevel(XdgToplevel* toplevel) {
   while (auto* decoration = decorationFor(this, toplevel)) {
     wl_resource_destroy(decoration->resource);
   }
-  toplevels_.erase(std::remove_if(toplevels_.begin(), toplevels_.end(),
-                                  [&](auto const& candidate) { return candidate.get() == toplevel; }),
-                   toplevels_.end());
+  eraseResource(toplevels_, toplevel);
 }
 
 void WaylandServer::destroyShmPool(ShmPool* pool) {
@@ -3737,17 +3731,13 @@ void WaylandServer::destroyShmPool(ShmPool* pool) {
   }
   if (pool->data) munmap(pool->data, static_cast<std::size_t>(pool->size));
   if (pool->fd >= 0) close(pool->fd);
-  shmPools_.erase(std::remove_if(shmPools_.begin(), shmPools_.end(),
-                                 [&](auto const& candidate) { return candidate.get() == pool; }),
-                  shmPools_.end());
+  eraseResource(shmPools_, pool);
 }
 
 void WaylandServer::destroyShmBuffer(ShmBuffer* buffer) {
   if (buffer->data) munmap(buffer->data, static_cast<std::size_t>(buffer->size));
   if (buffer->fd >= 0) close(buffer->fd);
-  shmBuffers_.erase(std::remove_if(shmBuffers_.begin(), shmBuffers_.end(),
-                                   [&](auto const& candidate) { return candidate.get() == buffer; }),
-                    shmBuffers_.end());
+  eraseResource(shmBuffers_, buffer);
 }
 
 void WaylandServer::destroyDmabufParams(DmabufParams* params) {
@@ -3755,9 +3745,7 @@ void WaylandServer::destroyDmabufParams(DmabufParams* params) {
     if (plane.fd >= 0) close(plane.fd);
     plane.fd = -1;
   }
-  dmabufParams_.erase(std::remove_if(dmabufParams_.begin(), dmabufParams_.end(),
-                                     [&](auto const& candidate) { return candidate.get() == params; }),
-                      dmabufParams_.end());
+  eraseResource(dmabufParams_, params);
 }
 
 void WaylandServer::destroyDmabufBuffer(DmabufBuffer* buffer) {
@@ -3774,16 +3762,11 @@ void WaylandServer::destroyDmabufBuffer(DmabufBuffer* buffer) {
     if (plane.fd >= 0) close(plane.fd);
     plane.fd = -1;
   }
-  dmabufBuffers_.erase(std::remove_if(dmabufBuffers_.begin(), dmabufBuffers_.end(),
-                                      [&](auto const& candidate) { return candidate.get() == buffer; }),
-                       dmabufBuffers_.end());
+  eraseResource(dmabufBuffers_, buffer);
 }
 
 void WaylandServer::destroyToplevelDecoration(ToplevelDecoration* decoration) {
-  toplevelDecorations_.erase(
-      std::remove_if(toplevelDecorations_.begin(), toplevelDecorations_.end(),
-                     [&](auto const& candidate) { return candidate.get() == decoration; }),
-      toplevelDecorations_.end());
+  eraseResource(toplevelDecorations_, decoration);
 }
 
 void WaylandServer::destroyViewport(Viewport* viewport) {
@@ -3798,34 +3781,22 @@ void WaylandServer::destroyViewport(Viewport* viewport) {
     viewport->surface->pendingDestinationWidth = 0;
     viewport->surface->pendingDestinationHeight = 0;
   }
-  viewports_.erase(std::remove_if(viewports_.begin(), viewports_.end(),
-                                  [&](auto const& candidate) { return candidate.get() == viewport; }),
-                   viewports_.end());
+  eraseResource(viewports_, viewport);
 }
 
 void WaylandServer::destroyFractionalScale(FractionalScale* fractionalScale) {
   if (fractionalScale->surface && fractionalScale->surface->fractionalScale == fractionalScale) {
     fractionalScale->surface->fractionalScale = nullptr;
   }
-  fractionalScales_.erase(
-      std::remove_if(fractionalScales_.begin(),
-                     fractionalScales_.end(),
-                     [&](auto const& candidate) { return candidate.get() == fractionalScale; }),
-      fractionalScales_.end());
+  eraseResource(fractionalScales_, fractionalScale);
 }
 
 void WaylandServer::destroyCursorShapeDevice(CursorShapeDevice* device) {
-  cursorShapeDevices_.erase(
-      std::remove_if(cursorShapeDevices_.begin(), cursorShapeDevices_.end(),
-                     [&](auto const& candidate) { return candidate.get() == device; }),
-      cursorShapeDevices_.end());
+  eraseResource(cursorShapeDevices_, device);
 }
 
 void WaylandServer::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
-  idleInhibitors_.erase(
-      std::remove_if(idleInhibitors_.begin(), idleInhibitors_.end(),
-                     [&](auto const& candidate) { return candidate.get() == inhibitor; }),
-      idleInhibitors_.end());
+  eraseResource(idleInhibitors_, inhibitor);
   std::fprintf(stderr, "flux-compositor: idle inhibitors active=%zu\n", idleInhibitors_.size());
 }
 
@@ -3833,10 +3804,7 @@ void WaylandServer::destroyLayerSurface(LayerSurface* layerSurface) {
   if (layerSurface && layerSurface->surface && layerSurface->surface->layerSurface == layerSurface) {
     layerSurface->surface->layerSurface = nullptr;
   }
-  layerSurfaces_.erase(
-      std::remove_if(layerSurfaces_.begin(), layerSurfaces_.end(),
-                     [&](auto const& candidate) { return candidate.get() == layerSurface; }),
-      layerSurfaces_.end());
+  eraseResource(layerSurfaces_, layerSurface);
 }
 
 void WaylandServer::destroyPresentationFeedback(PresentationFeedback* feedback) {
@@ -3847,19 +3815,11 @@ void WaylandServer::destroyPresentationFeedback(PresentationFeedback* feedback) 
     eraseFeedback(feedback->surface->pendingPresentationFeedbacks);
     eraseFeedback(feedback->surface->presentationFeedbacks);
   }
-  presentationFeedbacks_.erase(
-      std::remove_if(presentationFeedbacks_.begin(),
-                     presentationFeedbacks_.end(),
-                     [&](auto const& candidate) { return candidate.get() == feedback; }),
-      presentationFeedbacks_.end());
+  eraseResource(presentationFeedbacks_, feedback);
 }
 
 void WaylandServer::destroyRelativePointer(RelativePointer* relativePointer) {
-  relativePointers_.erase(
-      std::remove_if(relativePointers_.begin(),
-                     relativePointers_.end(),
-                     [&](auto const& candidate) { return candidate.get() == relativePointer; }),
-      relativePointers_.end());
+  eraseResource(relativePointers_, relativePointer);
 }
 
 void WaylandServer::destroyPointerConstraint(PointerConstraint* constraint) {
@@ -3870,19 +3830,11 @@ void WaylandServer::destroyPointerConstraint(PointerConstraint* constraint) {
       zwp_confined_pointer_v1_send_unconfined(constraint->resource);
     }
   }
-  pointerConstraints_.erase(
-      std::remove_if(pointerConstraints_.begin(),
-                     pointerConstraints_.end(),
-                     [&](auto const& candidate) { return candidate.get() == constraint; }),
-      pointerConstraints_.end());
+  eraseResource(pointerConstraints_, constraint);
 }
 
 void WaylandServer::destroyPrimarySelectionDevice(PrimarySelectionDevice* device) {
-  primarySelectionDevices_.erase(
-      std::remove_if(primarySelectionDevices_.begin(),
-                     primarySelectionDevices_.end(),
-                     [&](auto const& candidate) { return candidate.get() == device; }),
-      primarySelectionDevices_.end());
+  eraseResource(primarySelectionDevices_, device);
 }
 
 void WaylandServer::destroyPrimarySelectionSource(PrimarySelectionSource* source) {
@@ -3893,19 +3845,11 @@ void WaylandServer::destroyPrimarySelectionSource(PrimarySelectionSource* source
   for (auto& offer : primarySelectionOffers_) {
     if (offer->source == source) offer->source = nullptr;
   }
-  primarySelectionSources_.erase(
-      std::remove_if(primarySelectionSources_.begin(),
-                     primarySelectionSources_.end(),
-                     [&](auto const& candidate) { return candidate.get() == source; }),
-      primarySelectionSources_.end());
+  eraseResource(primarySelectionSources_, source);
 }
 
 void WaylandServer::destroyPrimarySelectionOffer(PrimarySelectionOffer* offer) {
-  primarySelectionOffers_.erase(
-      std::remove_if(primarySelectionOffers_.begin(),
-                     primarySelectionOffers_.end(),
-                     [&](auto const& candidate) { return candidate.get() == offer; }),
-      primarySelectionOffers_.end());
+  eraseResource(primarySelectionOffers_, offer);
 }
 
 void WaylandServer::destroyDataDevice(DataDevice* device) {
@@ -3913,10 +3857,7 @@ void WaylandServer::destroyDataDevice(DataDevice* device) {
       wl_resource_get_client(device->resource) == wl_resource_get_client(dndTarget_->resource)) {
     clearDnd(this);
   }
-  dataDevices_.erase(std::remove_if(dataDevices_.begin(),
-                                    dataDevices_.end(),
-                                    [&](auto const& candidate) { return candidate.get() == device; }),
-                     dataDevices_.end());
+  eraseResource(dataDevices_, device);
 }
 
 void WaylandServer::destroyDataSource(DataSource* source) {
@@ -3928,18 +3869,12 @@ void WaylandServer::destroyDataSource(DataSource* source) {
   for (auto& offer : dataOffers_) {
     if (offer->source == source) offer->source = nullptr;
   }
-  dataSources_.erase(std::remove_if(dataSources_.begin(),
-                                    dataSources_.end(),
-                                    [&](auto const& candidate) { return candidate.get() == source; }),
-                     dataSources_.end());
+  eraseResource(dataSources_, source);
 }
 
 void WaylandServer::destroyDataOffer(DataOffer* offer) {
   if (dndOffer_ == offer) dndOffer_ = nullptr;
-  dataOffers_.erase(std::remove_if(dataOffers_.begin(),
-                                   dataOffers_.end(),
-                                   [&](auto const& candidate) { return candidate.get() == offer; }),
-                    dataOffers_.end());
+  eraseResource(dataOffers_, offer);
 }
 
 } // namespace flux::compositor
