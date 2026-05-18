@@ -11,6 +11,8 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <optional>
+#include <vector>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
@@ -76,14 +78,76 @@ std::uint32_t monotonicMilliseconds() {
                                     static_cast<std::uint64_t>(now.tv_nsec) / 1'000'000ull);
 }
 
+WaylandServer::Impl::XdgPopup* popupForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
+  if (!surface) return nullptr;
+  for (auto const& popup : server->popups_) {
+    if (popup && popup->xdgSurface && popup->xdgSurface->surface == surface) return popup.get();
+  }
+  return nullptr;
+}
+
+std::optional<WindowGeometry> popupScreenBounds(WaylandServer::Impl* server, WaylandServer::Impl::XdgPopup* popup) {
+  if (!server || !popup || popup->dismissed || !popup->xdgSurface || !popup->xdgSurface->surface) {
+    return std::nullopt;
+  }
+
+  std::vector<WindowGeometry> childToParent;
+  childToParent.push_back({
+      .x = popup->configuredX,
+      .y = popup->configuredY,
+      .width = popup->configuredWidth,
+      .height = popup->configuredHeight,
+  });
+
+  WaylandServer::Impl::Surface* parent = popup->parentSurface;
+  while (parent && parent->popup) {
+    WaylandServer::Impl::XdgPopup* parentPopup = popupForSurface(server, parent);
+    if (!parentPopup || parentPopup->dismissed) return std::nullopt;
+    childToParent.push_back({
+        .x = parentPopup->configuredX,
+        .y = parentPopup->configuredY,
+        .width = parentPopup->configuredWidth,
+        .height = parentPopup->configuredHeight,
+    });
+    parent = parentPopup->parentSurface;
+  }
+  if (!parent) return std::nullopt;
+
+  std::vector<WindowGeometry> parentToChild;
+  parentToChild.reserve(childToParent.size() + 1u);
+  parentToChild.push_back({
+      .x = parent->windowX,
+      .y = parent->windowY,
+      .width = displayWidth(parent),
+      .height = displayHeight(parent),
+  });
+  for (auto it = childToParent.rbegin(); it != childToParent.rend(); ++it) {
+    parentToChild.push_back(*it);
+  }
+  return popupScreenGeometry(parentToChild);
+}
+
 } // namespace
 
 WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, float y) {
+  for (auto it = server->popups_.rbegin(); it != server->popups_.rend(); ++it) {
+    WaylandServer::Impl::XdgPopup* popup = it->get();
+    auto const bounds = popupScreenBounds(server, popup);
+    if (!bounds) continue;
+    float const left = static_cast<float>(bounds->x);
+    float const top = static_cast<float>(bounds->y);
+    float const right = left + static_cast<float>(bounds->width);
+    float const bottom = top + static_cast<float>(bounds->height);
+    if (x >= left && x < right && y >= top && y < bottom) {
+      return popup->xdgSurface->surface;
+    }
+  }
+
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
-    if (!surface || !surface->toplevel || width <= 0 || height <= 0) continue;
+    if (!surface || !surface->toplevel || surface->popup || width <= 0 || height <= 0) continue;
     float const left = static_cast<float>(surface->windowX);
     float const top = static_cast<float>(surface->windowY);
     float const right = left + static_cast<float>(width);

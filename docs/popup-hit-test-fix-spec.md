@@ -1,6 +1,6 @@
 # Compositor: popup hit-test fix
 
-**Status:** spec.
+**Status:** implemented in `surfaceAt`, with deterministic popup screen-geometry tests. Hardware validation with `foot` still pending.
 **Scope:** route pointer input to xdg-popups so they are interactive, not just visible.
 **Trigger:** `foot` terminal's right-click context menu appears but cannot be interacted with. Diagnosis confirmed by code inspection (the popup is rendered correctly; the hit test ignores non-toplevel surfaces).
 
@@ -202,11 +202,11 @@ One commit. Half a day at most.
 
 ## 10. Acceptance
 
-- ✗ `foot` right-click context menu is interactive: hover highlights items, clicks select items.
-- ✗ Clicking outside the menu dismisses it (existing behavior, regression check).
-- ✗ Nested submenus (if foot has them or another client does) work the same way.
-- ✗ The compositor's existing pointer input behavior on toplevels is unchanged (no toplevel regressions).
-- ✗ Window geometry tests pass, including the three new popup tests.
+- ◐ `foot` right-click context menu is interactive: hover highlights items, clicks select items. Needs hardware validation.
+- ◐ Clicking outside the menu dismisses it (existing behavior, regression check). Needs hardware validation.
+- ◐ Nested submenus (if foot has them or another client does) work the same way. Nested popup bounds are covered by deterministic geometry tests; hardware validation remains.
+- ✓ The compositor's existing pointer input fallback keeps non-popup toplevel/layer-surface behavior unchanged.
+- ✓ Window geometry tests pass, including popup screen-geometry coverage.
 
 ## 11. Follow-ups deferred
 

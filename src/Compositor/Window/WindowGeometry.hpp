@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 
 namespace flux::compositor {
 
@@ -111,5 +112,6 @@ struct PopupGeometry {
 [[nodiscard]] WindowGeometry restoredDragGeometry(RestoreDragGeometry const& geometry);
 [[nodiscard]] WindowGeometry resizedWindowGeometry(ResizeDragGeometry const& geometry);
 [[nodiscard]] PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry);
+[[nodiscard]] std::optional<WindowGeometry> popupScreenGeometry(std::span<WindowGeometry const> parentToChildChain);
 
 } // namespace flux::compositor

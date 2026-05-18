@@ -808,6 +808,7 @@ Updated each time a Flux change lands in service of compositor work:
 Tracked as work proceeds. Removed when answered.
 
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
+- Phase 3: Subsurface hit testing remains separate from the popup hit-test fix. Subsurfaces render relative to parents, but pointer routing still needs explicit subsurface ordering and coordinate translation.
 - Phase 4: `wp_presentation_time` currently uses a compositor-sampled `CLOCK_MONOTONIC` timestamp after `canvas->present()`. Hardware-derived presentation timestamps and refresh counters should be surfaced from the render/output path when video/game smoothness work needs that precision.
 - Phase 5: Does multi-output land in v1 or post-v1?
 
@@ -822,7 +823,7 @@ Autonomous-safe work that can continue without live compositor testing:
 Hardware or real-app validation work:
 
 - Real-app validation: continue testing `foot` and add GTK/Qt/browser coverage when those apps are available.
-- Popup hardening: broader real-app menu behavior remains pending. Full xdg-popup input-grab semantics are still intentionally deferred because the earlier grab path froze the test laptop.
+- Popup hardening: popup hit testing is now popup-first and nested popup bounds are unit-tested. Broader real-app menu behavior remains pending, and full xdg-popup input-grab semantics are still intentionally deferred because the earlier grab path froze the test laptop.
 - Presentation timing: replace the initial `wp_presentation_time` feedback with hardware-derived timestamps, refresh counters, and sync-output association.
 - Frame pacing: adaptive sync and triple-buffering remain pending.
 - Idle behavior: `zwp_idle_inhibit_manager_v1` tracks inhibitors, but actual idle blanking is not implemented.

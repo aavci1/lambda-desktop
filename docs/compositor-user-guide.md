@@ -162,14 +162,14 @@ Set them before launching the compositor if you need to force a theme or size.
 - Single output only.
 - No display-manager, login, lock screen, workspaces, or XWayland.
 - Input device permissions are still manual unless your session grants ACLs.
-- Popup support works for the test demos and initial `foot` use, but broader GTK/Qt/browser menu behavior still needs real-app validation.
+- Popup support works for the test demos and uses popup-first pointer hit testing, but broader `foot`/GTK/Qt/browser menu behavior still needs real-app validation.
 - Presentation-time support exists, but timestamp precision still needs hardware-derived presentation data.
 - Idle-inhibit protocol state is tracked; actual idle blanking and inhibition policy are not implemented yet.
 
 ## Remaining Work
 
 - Real-app validation beyond `foot`, especially GTK, Qt, and browser clients.
-- Popup menu hardening with real applications; full xdg-popup input-grab semantics remain deferred.
+- Popup menu validation with real applications; full xdg-popup input-grab semantics remain deferred.
 - Hardware-derived presentation-time feedback and refresh counters.
 - Adaptive sync and triple-buffering.
 - Proper input/session brokering instead of manual `/dev/input/event*` ACLs.

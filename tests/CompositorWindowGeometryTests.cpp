@@ -2,6 +2,8 @@
 
 #include <doctest/doctest.h>
 
+#include <array>
+
 TEST_CASE("compositor snap geometry uses full output height minus title bar") {
   flux::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
 
@@ -192,4 +194,43 @@ TEST_CASE("compositor popup geometry clamps empty size to one pixel") {
   CHECK(popup.window.height == 1);
   CHECK(popup.configureWidth == 1);
   CHECK(popup.configureHeight == 1);
+}
+
+TEST_CASE("compositor popup screen geometry accumulates parent offsets") {
+  std::array<flux::compositor::WindowGeometry, 2> const chain{{
+      {.x = 100, .y = 100, .width = 400, .height = 300},
+      {.x = 50, .y = 200, .width = 150, .height = 180},
+  }};
+
+  auto popup = flux::compositor::popupScreenGeometry(chain);
+  REQUIRE(popup);
+  CHECK(popup->x == 150);
+  CHECK(popup->y == 300);
+  CHECK(popup->width == 150);
+  CHECK(popup->height == 180);
+}
+
+TEST_CASE("compositor nested popup screen geometry accumulates every popup offset") {
+  std::array<flux::compositor::WindowGeometry, 3> const chain{{
+      {.x = 100, .y = 100, .width = 400, .height = 300},
+      {.x = 50, .y = 50, .width = 150, .height = 180},
+      {.x = 40, .y = 30, .width = 120, .height = 90},
+  }};
+
+  auto popup = flux::compositor::popupScreenGeometry(chain);
+  REQUIRE(popup);
+  CHECK(popup->x == 190);
+  CHECK(popup->y == 180);
+  CHECK(popup->width == 120);
+  CHECK(popup->height == 90);
+}
+
+TEST_CASE("compositor popup screen geometry rejects invalid chain entries") {
+  CHECK_FALSE(flux::compositor::popupScreenGeometry({}));
+
+  std::array<flux::compositor::WindowGeometry, 2> const invalidPopup{{
+      {.x = 100, .y = 100, .width = 400, .height = 300},
+      {.x = 50, .y = 50, .width = 0, .height = 180},
+  }};
+  CHECK_FALSE(flux::compositor::popupScreenGeometry(invalidPopup));
 }

@@ -160,4 +160,20 @@ PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry) {
   };
 }
 
+std::optional<WindowGeometry> popupScreenGeometry(std::span<WindowGeometry const> parentToChildChain) {
+  if (parentToChildChain.empty()) return std::nullopt;
+
+  WindowGeometry result = parentToChildChain.front();
+  if (result.width <= 0 || result.height <= 0) return std::nullopt;
+  for (std::size_t i = 1; i < parentToChildChain.size(); ++i) {
+    WindowGeometry const& popup = parentToChildChain[i];
+    if (popup.width <= 0 || popup.height <= 0) return std::nullopt;
+    result.x += popup.x;
+    result.y += popup.y;
+    result.width = popup.width;
+    result.height = popup.height;
+  }
+  return result;
+}
+
 } // namespace flux::compositor
