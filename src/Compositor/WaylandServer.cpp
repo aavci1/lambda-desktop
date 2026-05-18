@@ -52,8 +52,8 @@ constexpr std::uint32_t kInvalidModifierIndex = ~0u;
 constexpr std::int32_t kCloseButtonSize = 18;
 constexpr std::int32_t kCloseButtonInset = 5;
 
-WaylandServer* serverFrom(wl_resource* resource) {
-  return static_cast<WaylandServer*>(wl_resource_get_user_data(resource));
+WaylandServer::Impl* serverFrom(wl_resource* resource) {
+  return static_cast<WaylandServer::Impl*>(wl_resource_get_user_data(resource));
 }
 
 template <typename T>
@@ -95,8 +95,171 @@ extern struct zwp_relative_pointer_v1_interface const relativePointerImpl;
 
 } // namespace
 
-struct WaylandServer::Surface {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl {
+  struct Surface;
+  struct XdgSurface;
+  struct XdgToplevel;
+  struct ShmPool;
+  struct ShmBuffer;
+  struct DmabufParams;
+  struct DmabufBuffer;
+  struct ToplevelDecoration;
+  struct Viewport;
+  struct FractionalScale;
+  struct CursorShapeDevice;
+  struct IdleInhibitor;
+  struct LayerSurface;
+  struct PresentationFeedback;
+  struct RelativePointer;
+  struct PointerConstraint;
+  struct PrimarySelectionDevice;
+  struct PrimarySelectionSource;
+  struct PrimarySelectionOffer;
+  struct DataDevice;
+  struct DataSource;
+  struct DataOffer;
+
+  explicit Impl(WaylandOutputInfo output);
+  ~Impl();
+
+  [[nodiscard]] char const* socketName() const noexcept;
+  [[nodiscard]] int eventFd() const noexcept;
+  [[nodiscard]] std::size_t toplevelCount() const noexcept;
+  [[nodiscard]] std::vector<CommittedSurfaceSnapshot> committedSurfaces() const;
+  [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
+  [[nodiscard]] std::optional<SnapPreviewSnapshot> snapPreview() const;
+  [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
+  [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
+
+  void dispatch();
+  void flushClients();
+  void setShortcutBindings(std::vector<ShortcutBinding> bindings);
+  void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
+  void sendFrameCallbacks(std::uint32_t timeMs);
+  void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
+  void handlePointerPosition(double x, double y, std::uint32_t timeMs);
+  void handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs);
+  void handlePointerAxis(double dx, double dy, std::uint32_t timeMs);
+  void handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs);
+
+  wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
+  void destroySurface(Surface* surface);
+  void destroyXdgSurface(XdgSurface* surface);
+  void destroyXdgToplevel(XdgToplevel* toplevel);
+  void destroyShmPool(ShmPool* pool);
+  void destroyShmBuffer(ShmBuffer* buffer);
+  void destroyDmabufParams(DmabufParams* params);
+  void destroyDmabufBuffer(DmabufBuffer* buffer);
+  void destroyToplevelDecoration(ToplevelDecoration* decoration);
+  void destroyViewport(Viewport* viewport);
+  void destroyFractionalScale(FractionalScale* fractionalScale);
+  void destroyCursorShapeDevice(CursorShapeDevice* device);
+  void destroyIdleInhibitor(IdleInhibitor* inhibitor);
+  void destroyLayerSurface(LayerSurface* layerSurface);
+  void destroyPresentationFeedback(PresentationFeedback* feedback);
+  void destroyRelativePointer(RelativePointer* relativePointer);
+  void destroyPointerConstraint(PointerConstraint* constraint);
+  void destroyPrimarySelectionDevice(PrimarySelectionDevice* device);
+  void destroyPrimarySelectionSource(PrimarySelectionSource* source);
+  void destroyPrimarySelectionOffer(PrimarySelectionOffer* offer);
+  void destroyDataDevice(DataDevice* device);
+  void destroyDataSource(DataSource* source);
+  void destroyDataOffer(DataOffer* offer);
+
+  wl_display* display_ = nullptr;
+  wl_global* compositorGlobal_ = nullptr;
+  wl_global* shmGlobal_ = nullptr;
+  wl_global* outputGlobal_ = nullptr;
+  wl_global* seatGlobal_ = nullptr;
+  wl_global* xdgWmBaseGlobal_ = nullptr;
+  wl_global* linuxDmabufGlobal_ = nullptr;
+  wl_global* xdgDecorationManagerGlobal_ = nullptr;
+  wl_global* xdgOutputManagerGlobal_ = nullptr;
+  wl_global* viewporterGlobal_ = nullptr;
+  wl_global* fractionalScaleManagerGlobal_ = nullptr;
+  wl_global* cursorShapeManagerGlobal_ = nullptr;
+  wl_global* idleInhibitManagerGlobal_ = nullptr;
+  wl_global* layerShellGlobal_ = nullptr;
+  wl_global* presentationGlobal_ = nullptr;
+  wl_global* relativePointerManagerGlobal_ = nullptr;
+  wl_global* pointerConstraintsGlobal_ = nullptr;
+  wl_global* primarySelectionManagerGlobal_ = nullptr;
+  wl_global* dataDeviceManagerGlobal_ = nullptr;
+  std::string socketName_;
+  std::string displayNameFile_;
+  WaylandOutputInfo output_;
+  std::vector<std::unique_ptr<Surface>> surfaces_;
+  std::vector<std::unique_ptr<XdgSurface>> xdgSurfaces_;
+  std::vector<std::unique_ptr<XdgToplevel>> toplevels_;
+  std::vector<std::unique_ptr<ShmPool>> shmPools_;
+  std::vector<std::unique_ptr<ShmBuffer>> shmBuffers_;
+  std::vector<std::unique_ptr<DmabufParams>> dmabufParams_;
+  std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
+  std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
+  std::vector<std::unique_ptr<Viewport>> viewports_;
+  std::vector<std::unique_ptr<FractionalScale>> fractionalScales_;
+  std::vector<std::unique_ptr<CursorShapeDevice>> cursorShapeDevices_;
+  std::vector<std::unique_ptr<IdleInhibitor>> idleInhibitors_;
+  std::vector<std::unique_ptr<LayerSurface>> layerSurfaces_;
+  std::vector<std::unique_ptr<PresentationFeedback>> presentationFeedbacks_;
+  std::vector<std::unique_ptr<RelativePointer>> relativePointers_;
+  std::vector<std::unique_ptr<PointerConstraint>> pointerConstraints_;
+  std::vector<std::unique_ptr<PrimarySelectionDevice>> primarySelectionDevices_;
+  std::vector<std::unique_ptr<PrimarySelectionSource>> primarySelectionSources_;
+  std::vector<std::unique_ptr<PrimarySelectionOffer>> primarySelectionOffers_;
+  PrimarySelectionSource* primarySelectionSource_ = nullptr;
+  std::vector<std::unique_ptr<DataDevice>> dataDevices_;
+  std::vector<std::unique_ptr<DataSource>> dataSources_;
+  std::vector<std::unique_ptr<DataOffer>> dataOffers_;
+  DataSource* selectionSource_ = nullptr;
+  DataSource* dndSource_ = nullptr;
+  Surface* dndOrigin_ = nullptr;
+  Surface* dndTarget_ = nullptr;
+  DataOffer* dndOffer_ = nullptr;
+  std::vector<wl_resource*> seatResources_;
+  std::vector<wl_resource*> pointerResources_;
+  std::vector<wl_resource*> keyboardResources_;
+  Surface* pointerFocus_ = nullptr;
+  Surface* keyboardFocus_ = nullptr;
+  Surface* dragSurface_ = nullptr;
+  Surface* resizeSurface_ = nullptr;
+  Surface* closePressSurface_ = nullptr;
+  Surface* lastTitleClickSurface_ = nullptr;
+  Surface* cursorSurface_ = nullptr;
+  CursorShape cursorShape_ = CursorShape::Arrow;
+  std::int32_t cursorHotspotX_ = 0;
+  std::int32_t cursorHotspotY_ = 0;
+  std::uint32_t pointerEnterSerial_ = 0;
+  float dragOffsetX_ = 0.f;
+  float dragOffsetY_ = 0.f;
+  std::uint32_t lastTitleClickTimeMs_ = 0;
+  float resizeStartX_ = 0.f;
+  float resizeStartY_ = 0.f;
+  std::int32_t resizeStartWindowX_ = 0;
+  std::int32_t resizeStartWindowY_ = 0;
+  std::int32_t resizeStartWidth_ = 0;
+  std::int32_t resizeStartHeight_ = 0;
+  std::int32_t resizeLastWidth_ = 0;
+  std::int32_t resizeLastHeight_ = 0;
+  std::uint32_t resizeEdges_ = 0;
+  bool metaDown_ = false;
+  bool ctrlDown_ = false;
+  bool altDown_ = false;
+  bool shiftDown_ = false;
+  std::vector<ShortcutBinding> shortcutBindings_;
+  std::uint32_t shiftModifierIndex_ = ~0u;
+  std::uint32_t ctrlModifierIndex_ = ~0u;
+  std::uint32_t altModifierIndex_ = ~0u;
+  std::uint32_t logoModifierIndex_ = ~0u;
+  float pointerX_ = 32.f;
+  float pointerY_ = 32.f;
+  std::uint64_t nextSurfaceId_ = 1;
+  std::uint32_t nextConfigureSerial_ = 1;
+  std::uint32_t nextInputSerial_ = 1;
+};
+
+struct WaylandServer::Impl::Surface {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   std::uint64_t id = 0;
   wl_resource* pendingBuffer = nullptr;
@@ -158,32 +321,32 @@ struct WaylandServer::Surface {
   std::vector<wl_resource*> frameCallbacks;
 };
 
-struct WaylandServer::Viewport {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::Viewport {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
 };
 
-struct WaylandServer::FractionalScale {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::FractionalScale {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
 };
 
-struct WaylandServer::CursorShapeDevice {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::CursorShapeDevice {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   wl_resource* pointer = nullptr;
 };
 
-struct WaylandServer::IdleInhibitor {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::IdleInhibitor {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
 };
 
-struct WaylandServer::LayerSurface {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::LayerSurface {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
   std::uint32_t layer = ZWLR_LAYER_SHELL_V1_LAYER_TOP;
@@ -198,22 +361,22 @@ struct WaylandServer::LayerSurface {
   bool configured = false;
 };
 
-struct WaylandServer::PresentationFeedback {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::PresentationFeedback {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
 };
 
-struct WaylandServer::RelativePointer {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::RelativePointer {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   wl_resource* pointer = nullptr;
 };
 
-struct WaylandServer::PointerConstraint {
+struct WaylandServer::Impl::PointerConstraint {
   enum class Kind { Lock, Confine };
 
-  WaylandServer* server = nullptr;
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
   wl_resource* pointer = nullptr;
@@ -225,70 +388,70 @@ struct WaylandServer::PointerConstraint {
   float cursorHintY = 0.f;
 };
 
-struct WaylandServer::PrimarySelectionSource {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::PrimarySelectionSource {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   std::vector<std::string> mimeTypes;
 };
 
-struct WaylandServer::PrimarySelectionDevice {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::PrimarySelectionDevice {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   wl_resource* seat = nullptr;
 };
 
-struct WaylandServer::PrimarySelectionOffer {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::PrimarySelectionOffer {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   PrimarySelectionSource* source = nullptr;
 };
 
-struct WaylandServer::DataSource {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::DataSource {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   std::vector<std::string> mimeTypes;
 };
 
-struct WaylandServer::DataDevice {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::DataDevice {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   wl_resource* seat = nullptr;
 };
 
-struct WaylandServer::DataOffer {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::DataOffer {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   DataSource* source = nullptr;
 };
 
-WaylandServer::Surface* surfaceAt(WaylandServer* server, float x, float y);
-std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer const* server);
+WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, float y);
+std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const* server);
 
-struct WaylandServer::XdgSurface {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::XdgSurface {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
   bool configured = false;
 };
 
-struct WaylandServer::XdgToplevel {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::XdgToplevel {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   XdgSurface* xdgSurface = nullptr;
   std::string title;
   std::string appId;
 };
 
-struct WaylandServer::ShmPool {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::ShmPool {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   int fd = -1;
   std::int32_t size = 0;
   void* data = nullptr;
 };
 
-struct WaylandServer::ShmBuffer {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::ShmBuffer {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   ShmPool* pool = nullptr;
   int fd = -1;
@@ -309,15 +472,15 @@ struct DmabufPlane {
   std::uint64_t modifier = DRM_FORMAT_MOD_INVALID;
 };
 
-struct WaylandServer::DmabufParams {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::DmabufParams {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   std::vector<DmabufPlane> planes;
   bool used = false;
 };
 
-struct WaylandServer::DmabufBuffer {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::DmabufBuffer {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   std::int32_t width = 0;
   std::int32_t height = 0;
@@ -326,8 +489,8 @@ struct WaylandServer::DmabufBuffer {
   std::vector<DmabufPlane> planes;
 };
 
-struct WaylandServer::ToplevelDecoration {
-  WaylandServer* server = nullptr;
+struct WaylandServer::Impl::ToplevelDecoration {
+  WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   XdgToplevel* toplevel = nullptr;
   std::uint32_t mode = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
@@ -339,8 +502,8 @@ void removeResource(std::vector<wl_resource*>& resources, wl_resource* resource)
   resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
 }
 
-void applyLayerGeometry(WaylandServer::LayerSurface* layerSurface);
-void sendLayerConfigure(WaylandServer::LayerSurface* layerSurface);
+void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface);
+void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface);
 
 void seatDestroyResource(wl_resource* resource) {
   if (auto* server = serverFrom(resource)) removeResource(server->seatResources_, resource);
@@ -369,7 +532,7 @@ void bufferDestroy(wl_client*, wl_resource* resource) {
 struct wl_buffer_interface const bufferImpl{bufferDestroy};
 
 void compositorCreateSurface(wl_client* client, wl_resource* resource, std::uint32_t id) {
-  WaylandServer* server = serverFrom(resource);
+  WaylandServer::Impl* server = serverFrom(resource);
   server->createSurface(client, wl_resource_get_version(resource), id);
 }
 
@@ -394,7 +557,7 @@ void surfaceDestroy(wl_client*, wl_resource* resource) {
 }
 
 void surfaceAttach(wl_client*, wl_resource* resource, wl_resource* buffer, std::int32_t x, std::int32_t y) {
-  auto* surface = dataFrom<WaylandServer::Surface>(resource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(resource);
   surface->pendingBuffer = buffer;
   surface->pendingBufferAttached = true;
   surface->x = x;
@@ -402,7 +565,7 @@ void surfaceAttach(wl_client*, wl_resource* resource, wl_resource* buffer, std::
 }
 
 void surfaceFrame(wl_client* client, wl_resource* resource, std::uint32_t id) {
-  auto* surface = dataFrom<WaylandServer::Surface>(resource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(resource);
   wl_resource* callback = wl_resource_create(client, &wl_callback_interface, 1, id);
   if (!callback) {
     wl_client_post_no_memory(client);
@@ -411,19 +574,19 @@ void surfaceFrame(wl_client* client, wl_resource* resource, std::uint32_t id) {
   surface->frameCallbacks.push_back(callback);
 }
 
-WaylandServer::ShmBuffer* shmBufferFor(WaylandServer* server, wl_resource* resource) {
+WaylandServer::Impl::ShmBuffer* shmBufferFor(WaylandServer::Impl* server, wl_resource* resource) {
   auto found = std::find_if(server->shmBuffers_.begin(), server->shmBuffers_.end(),
                             [resource](auto const& buffer) { return buffer->resource == resource; });
   return found == server->shmBuffers_.end() ? nullptr : found->get();
 }
 
-WaylandServer::DmabufBuffer* dmabufBufferFor(WaylandServer* server, wl_resource* resource) {
+WaylandServer::Impl::DmabufBuffer* dmabufBufferFor(WaylandServer::Impl* server, wl_resource* resource) {
   auto found = std::find_if(server->dmabufBuffers_.begin(), server->dmabufBuffers_.end(),
                             [resource](auto const& buffer) { return buffer->resource == resource; });
   return found == server->dmabufBuffers_.end() ? nullptr : found->get();
 }
 
-bool copyShmBufferToRgba(WaylandServer::ShmBuffer const& buffer, std::vector<std::uint8_t>& out) {
+bool copyShmBufferToRgba(WaylandServer::Impl::ShmBuffer const& buffer, std::vector<std::uint8_t>& out) {
   if (!buffer.data || buffer.width <= 0 || buffer.height <= 0 || buffer.stride <= 0) {
     return false;
   }
@@ -462,13 +625,13 @@ bool isIntegerSize(float value) {
   return std::floor(value) == value;
 }
 
-void setConfiguredFrameSize(WaylandServer::Surface* surface, std::int32_t width, std::int32_t height) {
+void setConfiguredFrameSize(WaylandServer::Impl::Surface* surface, std::int32_t width, std::int32_t height) {
   if (!surface) return;
   surface->frameWidth = width;
   surface->frameHeight = height;
 }
 
-void traceResizeSurface(char const* event, WaylandServer::Surface const* surface) {
+void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* surface) {
   if (!surface) return;
   flux::detail::resizeTrace(
       "compositor",
@@ -497,7 +660,7 @@ void traceResizeSurface(char const* event, WaylandServer::Surface const* surface
       surface->geometryAnimationActive ? 1 : 0);
 }
 
-bool applyViewportState(WaylandServer::Surface* surface) {
+bool applyViewportState(WaylandServer::Impl::Surface* surface) {
   surface->sourceSet = surface->pendingSourceSet;
   surface->sourceX = surface->pendingSourceX;
   surface->sourceY = surface->pendingSourceY;
@@ -572,7 +735,7 @@ bool applyViewportState(WaylandServer::Surface* surface) {
   return true;
 }
 
-bool pendingViewportSourceFitsCurrentBuffer(WaylandServer::Surface const* surface) {
+bool pendingViewportSourceFitsCurrentBuffer(WaylandServer::Impl::Surface const* surface) {
   if (!surface || !surface->pendingSourceSet) return true;
   return surface->pendingSourceX >= 0.f &&
          surface->pendingSourceY >= 0.f &&
@@ -583,7 +746,7 @@ bool pendingViewportSourceFitsCurrentBuffer(WaylandServer::Surface const* surfac
 }
 
 void surfaceCommit(wl_client*, wl_resource* resource) {
-  auto* surface = dataFrom<WaylandServer::Surface>(resource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(resource);
   bool const hasBufferAttach = surface->pendingBufferAttached;
   if (surface->layerSurface && !surface->layerSurface->configured && !hasBufferAttach) {
     surface->layerSurface->configured = true;
@@ -591,7 +754,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     surface->server->flushClients();
     return;
   }
-  std::vector<WaylandServer::PresentationFeedback*> supersededFeedbacks =
+  std::vector<WaylandServer::Impl::PresentationFeedback*> supersededFeedbacks =
       std::move(surface->presentationFeedbacks);
   surface->presentationFeedbacks.clear();
   for (auto* feedback : supersededFeedbacks) {
@@ -660,7 +823,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
 }
 
 void surfaceSetBufferScale(wl_client*, wl_resource* resource, std::int32_t scale) {
-  auto* surface = dataFrom<WaylandServer::Surface>(resource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(resource);
   surface->scale = std::max(1, scale);
 }
 
@@ -715,7 +878,7 @@ int createKeymapFd(std::uint32_t& size) {
   return -1;
 }
 
-void initializeKeyboardModifierIndices(WaylandServer* server) {
+void initializeKeyboardModifierIndices(WaylandServer::Impl* server) {
   xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
   if (!context) return;
   xkb_rule_names names{};
@@ -736,7 +899,7 @@ void initializeKeyboardModifierIndices(WaylandServer* server) {
 
 void shmCreatePool(wl_client* client, wl_resource* resource, std::uint32_t id, int fd, std::int32_t size) {
   auto* server = serverFrom(resource);
-  auto pool = std::make_unique<WaylandServer::ShmPool>();
+  auto pool = std::make_unique<WaylandServer::Impl::ShmPool>();
   pool->server = server;
   pool->fd = fd;
   pool->size = size;
@@ -748,7 +911,7 @@ void shmCreatePool(wl_client* client, wl_resource* resource, std::uint32_t id, i
   pool->resource = poolResource;
   auto* raw = pool.get();
   server->shmPools_.push_back(std::move(pool));
-  wl_resource_set_implementation(poolResource, &shmPoolImpl, raw, destroyResourceCallback<WaylandServer::ShmPool, WaylandServer, &WaylandServer::destroyShmPool>);
+  wl_resource_set_implementation(poolResource, &shmPoolImpl, raw, destroyResourceCallback<WaylandServer::Impl::ShmPool, WaylandServer::Impl, &WaylandServer::Impl::destroyShmPool>);
 }
 
 struct wl_shm_interface const shmImpl{
@@ -758,8 +921,8 @@ struct wl_shm_interface const shmImpl{
 
 void shmPoolCreateBuffer(wl_client* client, wl_resource* resource, std::uint32_t id, std::int32_t offset,
                          std::int32_t width, std::int32_t height, std::int32_t stride, std::uint32_t format) {
-  auto* pool = dataFrom<WaylandServer::ShmPool>(resource);
-  auto buffer = std::make_unique<WaylandServer::ShmBuffer>();
+  auto* pool = dataFrom<WaylandServer::Impl::ShmPool>(resource);
+  auto buffer = std::make_unique<WaylandServer::Impl::ShmBuffer>();
   buffer->server = pool->server;
   buffer->pool = pool;
   buffer->fd = pool->fd >= 0 ? dup(pool->fd) : -1;
@@ -777,11 +940,11 @@ void shmPoolCreateBuffer(wl_client* client, wl_resource* resource, std::uint32_t
   buffer->resource = bufferResource;
   auto* raw = buffer.get();
   pool->server->shmBuffers_.push_back(std::move(buffer));
-  wl_resource_set_implementation(bufferResource, &bufferImpl, raw, destroyResourceCallback<WaylandServer::ShmBuffer, WaylandServer, &WaylandServer::destroyShmBuffer>);
+  wl_resource_set_implementation(bufferResource, &bufferImpl, raw, destroyResourceCallback<WaylandServer::Impl::ShmBuffer, WaylandServer::Impl, &WaylandServer::Impl::destroyShmBuffer>);
 }
 
 void shmPoolResize(wl_client*, wl_resource* resource, std::int32_t size) {
-  auto* pool = dataFrom<WaylandServer::ShmPool>(resource);
+  auto* pool = dataFrom<WaylandServer::Impl::ShmPool>(resource);
   if (pool->data) {
     munmap(pool->data, static_cast<std::size_t>(pool->size));
     pool->data = nullptr;
@@ -804,14 +967,14 @@ bool isSupportedDmabufFormat(std::uint32_t format) {
          format == DRM_FORMAT_ABGR8888 || format == DRM_FORMAT_XBGR8888;
 }
 
-std::optional<DmabufPlane> findPlane(WaylandServer::DmabufParams const* params, std::uint32_t index) {
+std::optional<DmabufPlane> findPlane(WaylandServer::Impl::DmabufParams const* params, std::uint32_t index) {
   auto found = std::find_if(params->planes.begin(), params->planes.end(),
                             [index](DmabufPlane const& plane) { return plane.index == index; });
   if (found == params->planes.end()) return std::nullopt;
   return *found;
 }
 
-bool validateDmabufParams(WaylandServer::DmabufParams* params, std::int32_t width, std::int32_t height,
+bool validateDmabufParams(WaylandServer::Impl::DmabufParams* params, std::int32_t width, std::int32_t height,
                           std::uint32_t format) {
   if (params->used) {
     wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_ALREADY_USED,
@@ -836,10 +999,10 @@ bool validateDmabufParams(WaylandServer::DmabufParams* params, std::int32_t widt
   return true;
 }
 
-wl_resource* createDmabufBuffer(wl_client* client, WaylandServer::DmabufParams* params, std::uint32_t id,
+wl_resource* createDmabufBuffer(wl_client* client, WaylandServer::Impl::DmabufParams* params, std::uint32_t id,
                                 std::int32_t width, std::int32_t height, std::uint32_t format,
                                 std::uint32_t flags) {
-  auto buffer = std::make_unique<WaylandServer::DmabufBuffer>();
+  auto buffer = std::make_unique<WaylandServer::Impl::DmabufBuffer>();
   buffer->server = params->server;
   buffer->width = width;
   buffer->height = height;
@@ -858,7 +1021,7 @@ wl_resource* createDmabufBuffer(wl_client* client, WaylandServer::DmabufParams* 
   buffer->resource = bufferResource;
   auto* raw = buffer.get();
   params->server->dmabufBuffers_.push_back(std::move(buffer));
-  wl_resource_set_implementation(bufferResource, &bufferImpl, raw, destroyResourceCallback<WaylandServer::DmabufBuffer, WaylandServer, &WaylandServer::destroyDmabufBuffer>);
+  wl_resource_set_implementation(bufferResource, &bufferImpl, raw, destroyResourceCallback<WaylandServer::Impl::DmabufBuffer, WaylandServer::Impl, &WaylandServer::Impl::destroyDmabufBuffer>);
   return bufferResource;
 }
 
@@ -869,7 +1032,7 @@ void linuxBufferParamsDestroy(wl_client*, wl_resource* resource) {
 void linuxBufferParamsAdd(wl_client*, wl_resource* resource, int fd, std::uint32_t planeIndex,
                           std::uint32_t offset, std::uint32_t stride, std::uint32_t modifierHi,
                           std::uint32_t modifierLo) {
-  auto* params = dataFrom<WaylandServer::DmabufParams>(resource);
+  auto* params = dataFrom<WaylandServer::Impl::DmabufParams>(resource);
   if (params->used) {
     close(fd);
     wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_ALREADY_USED,
@@ -900,7 +1063,7 @@ void linuxBufferParamsAdd(wl_client*, wl_resource* resource, int fd, std::uint32
 
 void linuxBufferParamsCreate(wl_client* client, wl_resource* resource, std::int32_t width,
                              std::int32_t height, std::uint32_t format, std::uint32_t flags) {
-  auto* params = dataFrom<WaylandServer::DmabufParams>(resource);
+  auto* params = dataFrom<WaylandServer::Impl::DmabufParams>(resource);
   if (!validateDmabufParams(params, width, height, format)) return;
   params->used = true;
   wl_resource* buffer = createDmabufBuffer(client, params, 0, width, height, format, flags);
@@ -910,7 +1073,7 @@ void linuxBufferParamsCreate(wl_client* client, wl_resource* resource, std::int3
 void linuxBufferParamsCreateImmed(wl_client* client, wl_resource* resource, std::uint32_t bufferId,
                                   std::int32_t width, std::int32_t height, std::uint32_t format,
                                   std::uint32_t flags) {
-  auto* params = dataFrom<WaylandServer::DmabufParams>(resource);
+  auto* params = dataFrom<WaylandServer::Impl::DmabufParams>(resource);
   if (!validateDmabufParams(params, width, height, format)) return;
   params->used = true;
   createDmabufBuffer(client, params, bufferId, width, height, format, flags);
@@ -929,7 +1092,7 @@ void linuxDmabufDestroy(wl_client*, wl_resource* resource) {
 
 void linuxDmabufCreateParams(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* server = serverFrom(resource);
-  auto params = std::make_unique<WaylandServer::DmabufParams>();
+  auto params = std::make_unique<WaylandServer::Impl::DmabufParams>();
   params->server = server;
   wl_resource* paramsResource = wl_resource_create(client, &zwp_linux_buffer_params_v1_interface,
                                                    wl_resource_get_version(resource), id);
@@ -940,7 +1103,7 @@ void linuxDmabufCreateParams(wl_client* client, wl_resource* resource, std::uint
   params->resource = paramsResource;
   auto* raw = params.get();
   server->dmabufParams_.push_back(std::move(params));
-  wl_resource_set_implementation(paramsResource, &linuxBufferParamsImpl, raw, destroyResourceCallback<WaylandServer::DmabufParams, WaylandServer, &WaylandServer::destroyDmabufParams>);
+  wl_resource_set_implementation(paramsResource, &linuxBufferParamsImpl, raw, destroyResourceCallback<WaylandServer::Impl::DmabufParams, WaylandServer::Impl, &WaylandServer::Impl::destroyDmabufParams>);
 }
 
 struct zwp_linux_dmabuf_v1_interface const linuxDmabufImpl{
@@ -948,13 +1111,13 @@ struct zwp_linux_dmabuf_v1_interface const linuxDmabufImpl{
     .create_params = linuxDmabufCreateParams,
 };
 
-WaylandServer::ToplevelDecoration* decorationFor(WaylandServer* server, WaylandServer::XdgToplevel* toplevel) {
+WaylandServer::Impl::ToplevelDecoration* decorationFor(WaylandServer::Impl* server, WaylandServer::Impl::XdgToplevel* toplevel) {
   auto found = std::find_if(server->toplevelDecorations_.begin(), server->toplevelDecorations_.end(),
                             [toplevel](auto const& decoration) { return decoration->toplevel == toplevel; });
   return found == server->toplevelDecorations_.end() ? nullptr : found->get();
 }
 
-WaylandServer::XdgToplevel* toplevelForSurface(WaylandServer* server, WaylandServer::Surface* surface) {
+WaylandServer::Impl::XdgToplevel* toplevelForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   auto found = std::find_if(server->toplevels_.begin(), server->toplevels_.end(),
                             [surface](auto const& toplevel) {
                               return toplevel->xdgSurface && toplevel->xdgSurface->surface == surface;
@@ -962,7 +1125,7 @@ WaylandServer::XdgToplevel* toplevelForSurface(WaylandServer* server, WaylandSer
   return found == server->toplevels_.end() ? nullptr : found->get();
 }
 
-std::string titleForSurface(WaylandServer const* server, WaylandServer::Surface const* surface) {
+std::string titleForSurface(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface) {
   auto found = std::find_if(server->toplevels_.begin(), server->toplevels_.end(),
                             [surface](auto const& toplevel) {
                               return toplevel->xdgSurface && toplevel->xdgSurface->surface == surface;
@@ -973,8 +1136,8 @@ std::string titleForSurface(WaylandServer const* server, WaylandServer::Surface 
   return "Window";
 }
 
-void sendToplevelConfigure(WaylandServer* server,
-                           WaylandServer::XdgToplevel* toplevel,
+void sendToplevelConfigure(WaylandServer::Impl* server,
+                           WaylandServer::Impl::XdgToplevel* toplevel,
                            std::int32_t width,
                            std::int32_t height) {
   if (!toplevel || !toplevel->resource || !toplevel->xdgSurface || !toplevel->xdgSurface->resource) return;
@@ -993,15 +1156,15 @@ void sendToplevelConfigure(WaylandServer* server,
   xdg_surface_send_configure(toplevel->xdgSurface->resource, server->nextConfigureSerial_++);
 }
 
-std::int32_t displayWidth(WaylandServer::Surface const* surface) {
+std::int32_t displayWidth(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->frameWidth > 0 ? surface->frameWidth : surface ? surface->width : 0;
 }
 
-std::int32_t displayHeight(WaylandServer::Surface const* surface) {
+std::int32_t displayHeight(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->frameHeight > 0 ? surface->frameHeight : surface ? surface->height : 0;
 }
 
-WindowGeometry windowGeometryFor(WaylandServer::Surface const* surface) {
+WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surface) {
   return {
       .x = surface ? surface->windowX : 0,
       .y = surface ? surface->windowY : 0,
@@ -1010,7 +1173,7 @@ WindowGeometry windowGeometryFor(WaylandServer::Surface const* surface) {
   };
 }
 
-OutputGeometry outputGeometryFor(WaylandServer const* server) {
+OutputGeometry outputGeometryFor(WaylandServer::Impl const* server) {
   return {
       .width = server ? server->output_.width : 0,
       .height = server ? server->output_.height : 0,
@@ -1067,7 +1230,7 @@ std::int32_t lerpInt(std::int32_t from, std::int32_t to, float t) {
                                                static_cast<float>(to - from) * t));
 }
 
-void applyLayerGeometry(WaylandServer::LayerSurface* layerSurface) {
+void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface) {
   if (!layerSurface || !layerSurface->surface) return;
   auto* surface = layerSurface->surface;
   std::int32_t const width = displayWidth(surface);
@@ -1091,7 +1254,7 @@ void applyLayerGeometry(WaylandServer::LayerSurface* layerSurface) {
   }
 }
 
-void sendLayerConfigure(WaylandServer::LayerSurface* layerSurface) {
+void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface) {
   if (!layerSurface || !layerSurface->resource) return;
   std::uint32_t width = layerSurface->width;
   std::uint32_t height = layerSurface->height;
@@ -1113,7 +1276,7 @@ void sendLayerConfigure(WaylandServer::LayerSurface* layerSurface) {
                                        height);
 }
 
-void sendDecorationConfigure(WaylandServer::ToplevelDecoration* decoration) {
+void sendDecorationConfigure(WaylandServer::Impl::ToplevelDecoration* decoration) {
   zxdg_toplevel_decoration_v1_send_configure(decoration->resource, decoration->mode);
   if (decoration->toplevel && decoration->toplevel->xdgSurface && decoration->toplevel->xdgSurface->resource) {
     xdg_surface_send_configure(decoration->toplevel->xdgSurface->resource,
@@ -1128,14 +1291,14 @@ void xdgDecorationManagerDestroy(wl_client*, wl_resource* resource) {
 void xdgDecorationManagerGetToplevelDecoration(wl_client* client, wl_resource* resource, std::uint32_t id,
                                                wl_resource* toplevelResource) {
   auto* server = serverFrom(resource);
-  auto* toplevel = dataFrom<WaylandServer::XdgToplevel>(toplevelResource);
+  auto* toplevel = dataFrom<WaylandServer::Impl::XdgToplevel>(toplevelResource);
   if (decorationFor(server, toplevel)) {
     wl_resource_post_error(resource, ZXDG_TOPLEVEL_DECORATION_V1_ERROR_ALREADY_CONSTRUCTED,
                            "xdg_toplevel already has a decoration object");
     return;
   }
 
-  auto decoration = std::make_unique<WaylandServer::ToplevelDecoration>();
+  auto decoration = std::make_unique<WaylandServer::Impl::ToplevelDecoration>();
   decoration->server = server;
   decoration->toplevel = toplevel;
   wl_resource* decorationResource = wl_resource_create(client, &zxdg_toplevel_decoration_v1_interface,
@@ -1148,7 +1311,7 @@ void xdgDecorationManagerGetToplevelDecoration(wl_client* client, wl_resource* r
   auto* raw = decoration.get();
   server->toplevelDecorations_.push_back(std::move(decoration));
   wl_resource_set_implementation(decorationResource, &xdgToplevelDecorationImpl, raw,
-                                 destroyResourceCallback<WaylandServer::ToplevelDecoration, WaylandServer, &WaylandServer::destroyToplevelDecoration>);
+                                 destroyResourceCallback<WaylandServer::Impl::ToplevelDecoration, WaylandServer::Impl, &WaylandServer::Impl::destroyToplevelDecoration>);
   sendDecorationConfigure(raw);
 }
 
@@ -1162,7 +1325,7 @@ void xdgToplevelDecorationDestroy(wl_client*, wl_resource* resource) {
 }
 
 void xdgToplevelDecorationSetMode(wl_client*, wl_resource* resource, std::uint32_t mode) {
-  auto* decoration = dataFrom<WaylandServer::ToplevelDecoration>(resource);
+  auto* decoration = dataFrom<WaylandServer::Impl::ToplevelDecoration>(resource);
   if (mode != ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE && mode != ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE) {
     wl_resource_post_error(resource, ZXDG_TOPLEVEL_DECORATION_V1_ERROR_INVALID_MODE,
                            "invalid xdg-decoration mode %u", mode);
@@ -1173,7 +1336,7 @@ void xdgToplevelDecorationSetMode(wl_client*, wl_resource* resource, std::uint32
 }
 
 void xdgToplevelDecorationUnsetMode(wl_client*, wl_resource* resource) {
-  auto* decoration = dataFrom<WaylandServer::ToplevelDecoration>(resource);
+  auto* decoration = dataFrom<WaylandServer::Impl::ToplevelDecoration>(resource);
   decoration->mode = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
   sendDecorationConfigure(decoration);
 }
@@ -1209,8 +1372,8 @@ void xdgWmBaseCreatePositioner(wl_client* client, wl_resource* resource, std::ui
 void xdgWmBaseGetXdgSurface(wl_client* client, wl_resource* resource, std::uint32_t id,
                             wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
-  auto xdgSurface = std::make_unique<WaylandServer::XdgSurface>();
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
+  auto xdgSurface = std::make_unique<WaylandServer::Impl::XdgSurface>();
   xdgSurface->server = server;
   xdgSurface->surface = surface;
   wl_resource* xdgResource = wl_resource_create(client, &xdg_surface_interface,
@@ -1218,7 +1381,7 @@ void xdgWmBaseGetXdgSurface(wl_client* client, wl_resource* resource, std::uint3
   xdgSurface->resource = xdgResource;
   auto* raw = xdgSurface.get();
   server->xdgSurfaces_.push_back(std::move(xdgSurface));
-  wl_resource_set_implementation(xdgResource, &xdgSurfaceImpl, raw, destroyResourceCallback<WaylandServer::XdgSurface, WaylandServer, &WaylandServer::destroyXdgSurface>);
+  wl_resource_set_implementation(xdgResource, &xdgSurfaceImpl, raw, destroyResourceCallback<WaylandServer::Impl::XdgSurface, WaylandServer::Impl, &WaylandServer::Impl::destroyXdgSurface>);
 }
 
 void xdgWmBasePong(wl_client*, wl_resource*, std::uint32_t) {}
@@ -1235,12 +1398,12 @@ void xdgSurfaceDestroy(wl_client*, wl_resource* resource) {
 }
 
 void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32_t id) {
-  auto* xdgSurface = dataFrom<WaylandServer::XdgSurface>(resource);
+  auto* xdgSurface = dataFrom<WaylandServer::Impl::XdgSurface>(resource);
   if (xdgSurface->surface->layerSurface) {
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has a layer-shell role");
     return;
   }
-  auto toplevel = std::make_unique<WaylandServer::XdgToplevel>();
+  auto toplevel = std::make_unique<WaylandServer::Impl::XdgToplevel>();
   toplevel->server = xdgSurface->server;
   toplevel->xdgSurface = xdgSurface;
   xdgSurface->surface->toplevel = true;
@@ -1253,7 +1416,7 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
   toplevel->resource = toplevelResource;
   auto* raw = toplevel.get();
   xdgSurface->server->toplevels_.push_back(std::move(toplevel));
-  wl_resource_set_implementation(toplevelResource, &xdgToplevelImpl, raw, destroyResourceCallback<WaylandServer::XdgToplevel, WaylandServer, &WaylandServer::destroyXdgToplevel>);
+  wl_resource_set_implementation(toplevelResource, &xdgToplevelImpl, raw, destroyResourceCallback<WaylandServer::Impl::XdgToplevel, WaylandServer::Impl, &WaylandServer::Impl::destroyXdgToplevel>);
   wl_array states;
   wl_array_init(&states);
   xdg_toplevel_send_configure(toplevelResource, 0, 0, &states);
@@ -1269,7 +1432,7 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
 }
 
 void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t) {
-  dataFrom<WaylandServer::XdgSurface>(resource)->configured = true;
+  dataFrom<WaylandServer::Impl::XdgSurface>(resource)->configured = true;
 }
 
 struct xdg_surface_interface const xdgSurfaceImpl{
@@ -1285,15 +1448,15 @@ void xdgToplevelDestroy(wl_client*, wl_resource* resource) {
 }
 
 void xdgToplevelSetTitle(wl_client*, wl_resource* resource, char const* title) {
-  dataFrom<WaylandServer::XdgToplevel>(resource)->title = title ? title : "";
+  dataFrom<WaylandServer::Impl::XdgToplevel>(resource)->title = title ? title : "";
 }
 
 void xdgToplevelSetAppId(wl_client*, wl_resource* resource, char const* appId) {
-  dataFrom<WaylandServer::XdgToplevel>(resource)->appId = appId ? appId : "";
+  dataFrom<WaylandServer::Impl::XdgToplevel>(resource)->appId = appId ? appId : "";
 }
 
 void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t, std::uint32_t edges) {
-  auto* toplevel = dataFrom<WaylandServer::XdgToplevel>(resource);
+  auto* toplevel = dataFrom<WaylandServer::Impl::XdgToplevel>(resource);
   if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
   auto* server = toplevel->server;
   auto* surface = toplevel->xdgSurface->surface;
@@ -1343,7 +1506,7 @@ void bindShm(wl_client* client, void* data, std::uint32_t version, std::uint32_t
 }
 
 void bindOutput(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  auto* server = static_cast<WaylandServer*>(data);
+  auto* server = static_cast<WaylandServer::Impl*>(data);
   WaylandOutputInfo const& output = server->output_;
   wl_resource* resource = wl_resource_create(client, &wl_output_interface, std::min(version, 4u), id);
   static struct wl_output_interface const outputImpl{outputRelease};
@@ -1370,7 +1533,7 @@ void pointerSetCursor(wl_client*, wl_resource* resource, std::uint32_t, wl_resou
     return;
   }
 
-  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface || surface->toplevel) return;
   surface->cursor = true;
   server->cursorSurface_ = surface;
@@ -1442,7 +1605,7 @@ struct wl_seat_interface const seatImpl{
 
 void bindSeat(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource = wl_resource_create(client, &wl_seat_interface, std::min(version, 7u), id);
-  auto* server = static_cast<WaylandServer*>(data);
+  auto* server = static_cast<WaylandServer::Impl*>(data);
   server->seatResources_.push_back(resource);
   wl_resource_set_implementation(resource, &seatImpl, server, seatDestroyResource);
   wl_seat_send_capabilities(resource, WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_KEYBOARD);
@@ -1543,7 +1706,7 @@ void viewportDestroy(wl_client*, wl_resource* resource) {
 
 void viewportSetSource(wl_client*, wl_resource* resource, wl_fixed_t x, wl_fixed_t y,
                        wl_fixed_t width, wl_fixed_t height) {
-  auto* viewport = dataFrom<WaylandServer::Viewport>(resource);
+  auto* viewport = dataFrom<WaylandServer::Impl::Viewport>(resource);
   if (!viewport || !viewport->surface) {
     wl_resource_post_error(resource, WP_VIEWPORT_ERROR_NO_SURFACE, "viewport surface was destroyed");
     return;
@@ -1577,7 +1740,7 @@ void viewportSetSource(wl_client*, wl_resource* resource, wl_fixed_t x, wl_fixed
 }
 
 void viewportSetDestination(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
-  auto* viewport = dataFrom<WaylandServer::Viewport>(resource);
+  auto* viewport = dataFrom<WaylandServer::Impl::Viewport>(resource);
   if (!viewport || !viewport->surface) {
     wl_resource_post_error(resource, WP_VIEWPORT_ERROR_NO_SURFACE, "viewport surface was destroyed");
     return;
@@ -1608,7 +1771,7 @@ struct wp_viewport_interface const viewportImpl{
 void viewporterGetViewport(wl_client* client, wl_resource* resource, std::uint32_t id,
                            wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface) {
     wl_resource_post_error(resource, WP_VIEWPORT_ERROR_NO_SURFACE, "viewport surface was destroyed");
     return;
@@ -1618,7 +1781,7 @@ void viewporterGetViewport(wl_client* client, wl_resource* resource, std::uint32
     return;
   }
 
-  auto viewport = std::make_unique<WaylandServer::Viewport>();
+  auto viewport = std::make_unique<WaylandServer::Impl::Viewport>();
   viewport->server = server;
   viewport->surface = surface;
   wl_resource* viewportResource = wl_resource_create(client, &wp_viewport_interface, 1, id);
@@ -1630,7 +1793,7 @@ void viewporterGetViewport(wl_client* client, wl_resource* resource, std::uint32
   auto* raw = viewport.get();
   surface->viewport = raw;
   server->viewports_.push_back(std::move(viewport));
-  wl_resource_set_implementation(viewportResource, &viewportImpl, raw, destroyResourceCallback<WaylandServer::Viewport, WaylandServer, &WaylandServer::destroyViewport>);
+  wl_resource_set_implementation(viewportResource, &viewportImpl, raw, destroyResourceCallback<WaylandServer::Impl::Viewport, WaylandServer::Impl, &WaylandServer::Impl::destroyViewport>);
 }
 
 struct wp_viewporter_interface const viewporterImpl{
@@ -1658,7 +1821,7 @@ struct wp_fractional_scale_v1_interface const fractionalScaleImpl{
 void fractionalScaleManagerGetFractionalScale(wl_client* client, wl_resource* resource, std::uint32_t id,
                                               wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface) {
     wl_resource_post_error(resource,
                            WP_FRACTIONAL_SCALE_MANAGER_V1_ERROR_FRACTIONAL_SCALE_EXISTS,
@@ -1672,7 +1835,7 @@ void fractionalScaleManagerGetFractionalScale(wl_client* client, wl_resource* re
     return;
   }
 
-  auto fractionalScale = std::make_unique<WaylandServer::FractionalScale>();
+  auto fractionalScale = std::make_unique<WaylandServer::Impl::FractionalScale>();
   fractionalScale->server = server;
   fractionalScale->surface = surface;
   wl_resource* fractionalScaleResource = wl_resource_create(client, &wp_fractional_scale_v1_interface, 1, id);
@@ -1684,7 +1847,7 @@ void fractionalScaleManagerGetFractionalScale(wl_client* client, wl_resource* re
   auto* raw = fractionalScale.get();
   surface->fractionalScale = raw;
   server->fractionalScales_.push_back(std::move(fractionalScale));
-  wl_resource_set_implementation(fractionalScaleResource, &fractionalScaleImpl, raw, destroyResourceCallback<WaylandServer::FractionalScale, WaylandServer, &WaylandServer::destroyFractionalScale>);
+  wl_resource_set_implementation(fractionalScaleResource, &fractionalScaleImpl, raw, destroyResourceCallback<WaylandServer::Impl::FractionalScale, WaylandServer::Impl, &WaylandServer::Impl::destroyFractionalScale>);
   wp_fractional_scale_v1_send_preferred_scale(fractionalScaleResource, 120);
 }
 
@@ -1749,7 +1912,7 @@ void cursorShapeDeviceDestroy(wl_client*, wl_resource* resource) {
 }
 
 void cursorShapeDeviceSetShape(wl_client*, wl_resource* resource, std::uint32_t serial, std::uint32_t shape) {
-  auto* device = dataFrom<WaylandServer::CursorShapeDevice>(resource);
+  auto* device = dataFrom<WaylandServer::Impl::CursorShapeDevice>(resource);
   if (!device || !device->server) return;
   std::uint32_t const version = static_cast<std::uint32_t>(wl_resource_get_version(resource));
   if (!wp_cursor_shape_device_v1_shape_is_valid(shape, version)) {
@@ -1774,7 +1937,7 @@ struct wp_cursor_shape_device_v1_interface const cursorShapeDeviceImpl{
 void cursorShapeManagerGetPointer(wl_client* client, wl_resource* resource, std::uint32_t id,
                                   wl_resource* pointer) {
   auto* server = serverFrom(resource);
-  auto device = std::make_unique<WaylandServer::CursorShapeDevice>();
+  auto device = std::make_unique<WaylandServer::Impl::CursorShapeDevice>();
   device->server = server;
   device->pointer = pointer;
   wl_resource* deviceResource =
@@ -1786,7 +1949,7 @@ void cursorShapeManagerGetPointer(wl_client* client, wl_resource* resource, std:
   device->resource = deviceResource;
   auto* raw = device.get();
   server->cursorShapeDevices_.push_back(std::move(device));
-  wl_resource_set_implementation(deviceResource, &cursorShapeDeviceImpl, raw, destroyResourceCallback<WaylandServer::CursorShapeDevice, WaylandServer, &WaylandServer::destroyCursorShapeDevice>);
+  wl_resource_set_implementation(deviceResource, &cursorShapeDeviceImpl, raw, destroyResourceCallback<WaylandServer::Impl::CursorShapeDevice, WaylandServer::Impl, &WaylandServer::Impl::destroyCursorShapeDevice>);
 }
 
 struct wp_cursor_shape_manager_v1_interface const cursorShapeManagerImpl{
@@ -1818,13 +1981,13 @@ void idleInhibitManagerCreateInhibitor(wl_client* client,
                                        std::uint32_t id,
                                        wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface) {
     wl_resource_post_error(resource, 0, "invalid idle inhibitor surface");
     return;
   }
 
-  auto inhibitor = std::make_unique<WaylandServer::IdleInhibitor>();
+  auto inhibitor = std::make_unique<WaylandServer::Impl::IdleInhibitor>();
   inhibitor->server = server;
   inhibitor->surface = surface;
   wl_resource* inhibitorResource = wl_resource_create(client, &zwp_idle_inhibitor_v1_interface, 1, id);
@@ -1835,7 +1998,7 @@ void idleInhibitManagerCreateInhibitor(wl_client* client,
   inhibitor->resource = inhibitorResource;
   auto* raw = inhibitor.get();
   server->idleInhibitors_.push_back(std::move(inhibitor));
-  wl_resource_set_implementation(inhibitorResource, &idleInhibitorImpl, raw, destroyResourceCallback<WaylandServer::IdleInhibitor, WaylandServer, &WaylandServer::destroyIdleInhibitor>);
+  wl_resource_set_implementation(inhibitorResource, &idleInhibitorImpl, raw, destroyResourceCallback<WaylandServer::Impl::IdleInhibitor, WaylandServer::Impl, &WaylandServer::Impl::destroyIdleInhibitor>);
   std::fprintf(stderr,
                "flux-compositor: idle inhibitors active=%zu\n",
                server->idleInhibitors_.size());
@@ -1857,14 +2020,14 @@ void layerShellDestroy(wl_client*, wl_resource* resource) {
 }
 
 void layerSurfaceSetSize(wl_client*, wl_resource* resource, std::uint32_t width, std::uint32_t height) {
-  auto* layerSurface = dataFrom<WaylandServer::LayerSurface>(resource);
+  auto* layerSurface = dataFrom<WaylandServer::Impl::LayerSurface>(resource);
   if (!layerSurface) return;
   layerSurface->width = width;
   layerSurface->height = height;
 }
 
 void layerSurfaceSetAnchor(wl_client*, wl_resource* resource, std::uint32_t anchor) {
-  auto* layerSurface = dataFrom<WaylandServer::LayerSurface>(resource);
+  auto* layerSurface = dataFrom<WaylandServer::Impl::LayerSurface>(resource);
   if (!layerSurface) return;
   std::uint32_t const valid = ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
                              ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
@@ -1879,7 +2042,7 @@ void layerSurfaceSetExclusiveZone(wl_client*, wl_resource*, std::int32_t) {}
 
 void layerSurfaceSetMargin(wl_client*, wl_resource* resource, std::int32_t top, std::int32_t right,
                            std::int32_t bottom, std::int32_t left) {
-  auto* layerSurface = dataFrom<WaylandServer::LayerSurface>(resource);
+  auto* layerSurface = dataFrom<WaylandServer::Impl::LayerSurface>(resource);
   if (!layerSurface) return;
   layerSurface->marginTop = top;
   layerSurface->marginRight = right;
@@ -1915,7 +2078,7 @@ void layerShellGetLayerSurface(wl_client* client, wl_resource* resource, std::ui
                                wl_resource* surfaceResource, wl_resource*, std::uint32_t layer,
                                char const* nameSpace) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface || surface->toplevel || surface->layerSurface || surface->cursor) {
     wl_resource_post_error(resource, ZWLR_LAYER_SHELL_V1_ERROR_ROLE, "wl_surface already has a role");
     return;
@@ -1925,7 +2088,7 @@ void layerShellGetLayerSurface(wl_client* client, wl_resource* resource, std::ui
     return;
   }
 
-  auto layerSurface = std::make_unique<WaylandServer::LayerSurface>();
+  auto layerSurface = std::make_unique<WaylandServer::Impl::LayerSurface>();
   layerSurface->server = server;
   layerSurface->surface = surface;
   layerSurface->layer = layer;
@@ -1942,7 +2105,7 @@ void layerShellGetLayerSurface(wl_client* client, wl_resource* resource, std::ui
   surface->cursor = false;
   if (server->cursorSurface_ == surface) server->cursorSurface_ = nullptr;
   server->layerSurfaces_.push_back(std::move(layerSurface));
-  wl_resource_set_implementation(layerResource, &layerSurfaceImpl, raw, destroyResourceCallback<WaylandServer::LayerSurface, WaylandServer, &WaylandServer::destroyLayerSurface>);
+  wl_resource_set_implementation(layerResource, &layerSurfaceImpl, raw, destroyResourceCallback<WaylandServer::Impl::LayerSurface, WaylandServer::Impl, &WaylandServer::Impl::destroyLayerSurface>);
 }
 
 struct zwlr_layer_shell_v1_interface const layerShellImpl{
@@ -1961,13 +2124,13 @@ void presentationDestroy(wl_client*, wl_resource* resource) {
 
 void presentationFeedback(wl_client* client, wl_resource* resource, wl_resource* surfaceResource, std::uint32_t id) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surface) {
     wl_resource_post_error(resource, 0, "invalid surface for presentation feedback");
     return;
   }
 
-  auto feedback = std::make_unique<WaylandServer::PresentationFeedback>();
+  auto feedback = std::make_unique<WaylandServer::Impl::PresentationFeedback>();
   feedback->server = server;
   feedback->surface = surface;
   wl_resource* feedbackResource = wl_resource_create(client, &wp_presentation_feedback_interface, 2, id);
@@ -1979,7 +2142,7 @@ void presentationFeedback(wl_client* client, wl_resource* resource, wl_resource*
   auto* raw = feedback.get();
   server->presentationFeedbacks_.push_back(std::move(feedback));
   surface->pendingPresentationFeedbacks.push_back(raw);
-  wl_resource_set_implementation(feedbackResource, nullptr, raw, destroyResourceCallback<WaylandServer::PresentationFeedback, WaylandServer, &WaylandServer::destroyPresentationFeedback>);
+  wl_resource_set_implementation(feedbackResource, nullptr, raw, destroyResourceCallback<WaylandServer::Impl::PresentationFeedback, WaylandServer::Impl, &WaylandServer::Impl::destroyPresentationFeedback>);
 }
 
 struct wp_presentation_interface const presentationImpl{
@@ -2014,7 +2177,7 @@ void relativePointerManagerGetRelativePointer(wl_client* client,
                                               std::uint32_t id,
                                               wl_resource* pointerResource) {
   auto* server = serverFrom(resource);
-  auto relativePointer = std::make_unique<WaylandServer::RelativePointer>();
+  auto relativePointer = std::make_unique<WaylandServer::Impl::RelativePointer>();
   relativePointer->server = server;
   relativePointer->pointer = pointerResource;
   wl_resource* relativePointerResource = wl_resource_create(client, &zwp_relative_pointer_v1_interface, 1, id);
@@ -2025,7 +2188,7 @@ void relativePointerManagerGetRelativePointer(wl_client* client,
   relativePointer->resource = relativePointerResource;
   auto* raw = relativePointer.get();
   server->relativePointers_.push_back(std::move(relativePointer));
-  wl_resource_set_implementation(relativePointerResource, &relativePointerImpl, raw, destroyResourceCallback<WaylandServer::RelativePointer, WaylandServer, &WaylandServer::destroyRelativePointer>);
+  wl_resource_set_implementation(relativePointerResource, &relativePointerImpl, raw, destroyResourceCallback<WaylandServer::Impl::RelativePointer, WaylandServer::Impl, &WaylandServer::Impl::destroyRelativePointer>);
 }
 
 struct zwp_relative_pointer_manager_v1_interface const relativePointerManagerImpl{
@@ -2043,13 +2206,13 @@ void bindRelativePointerManager(wl_client* client, void* data, std::uint32_t ver
   wl_resource_set_implementation(resource, &relativePointerManagerImpl, data, nullptr);
 }
 
-void updatePointerConstraintActivation(WaylandServer* server, WaylandServer::PointerConstraint* constraint) {
+void updatePointerConstraintActivation(WaylandServer::Impl* server, WaylandServer::Impl::PointerConstraint* constraint) {
   if (!constraint || constraint->defunct || !constraint->resource || !constraint->surface || !constraint->pointer) return;
   bool const shouldActivate = server->pointerFocus_ == constraint->surface;
   if (shouldActivate == constraint->active) return;
 
   constraint->active = shouldActivate;
-  if (constraint->kind == WaylandServer::PointerConstraint::Kind::Lock) {
+  if (constraint->kind == WaylandServer::Impl::PointerConstraint::Kind::Lock) {
     if (constraint->active) {
       zwp_locked_pointer_v1_send_locked(constraint->resource);
     } else {
@@ -2067,13 +2230,13 @@ void updatePointerConstraintActivation(WaylandServer* server, WaylandServer::Poi
   }
 }
 
-void updatePointerConstraintsForFocus(WaylandServer* server) {
+void updatePointerConstraintsForFocus(WaylandServer::Impl* server) {
   for (auto const& constraint : server->pointerConstraints_) {
     updatePointerConstraintActivation(server, constraint.get());
   }
 }
 
-WaylandServer::PointerConstraint* activePointerConstraint(WaylandServer* server) {
+WaylandServer::Impl::PointerConstraint* activePointerConstraint(WaylandServer::Impl* server) {
   for (auto const& constraint : server->pointerConstraints_) {
     if (constraint->active && !constraint->defunct && constraint->surface == server->pointerFocus_) {
       return constraint.get();
@@ -2082,7 +2245,7 @@ WaylandServer::PointerConstraint* activePointerConstraint(WaylandServer* server)
   return nullptr;
 }
 
-bool surfaceAlreadyConstrained(WaylandServer* server, WaylandServer::Surface* surface, wl_resource* pointer) {
+bool surfaceAlreadyConstrained(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, wl_resource* pointer) {
   if (!surface || !pointer) return false;
   wl_client* pointerClient = wl_resource_get_client(pointer);
   for (auto const& constraint : server->pointerConstraints_) {
@@ -2103,7 +2266,7 @@ void lockedPointerDestroy(wl_client*, wl_resource* resource) {
 }
 
 void lockedPointerSetCursorPositionHint(wl_client*, wl_resource* resource, wl_fixed_t surfaceX, wl_fixed_t surfaceY) {
-  auto* constraint = dataFrom<WaylandServer::PointerConstraint>(resource);
+  auto* constraint = dataFrom<WaylandServer::Impl::PointerConstraint>(resource);
   if (!constraint) return;
   constraint->cursorHintX = static_cast<float>(wl_fixed_to_double(surfaceX));
   constraint->cursorHintY = static_cast<float>(wl_fixed_to_double(surfaceY));
@@ -2134,9 +2297,9 @@ void createPointerConstraint(wl_client* client,
                              wl_resource* surfaceResource,
                              wl_resource* pointerResource,
                              std::uint32_t lifetime,
-                             WaylandServer::PointerConstraint::Kind kind) {
+                             WaylandServer::Impl::PointerConstraint::Kind kind) {
   auto* server = serverFrom(resource);
-  auto* surface = dataFrom<WaylandServer::Surface>(surfaceResource);
+  auto* surface = dataFrom<WaylandServer::Impl::Surface>(surfaceResource);
   if (surfaceAlreadyConstrained(server, surface, pointerResource)) {
     wl_resource_post_error(resource,
                            ZWP_POINTER_CONSTRAINTS_V1_ERROR_ALREADY_CONSTRAINED,
@@ -2144,7 +2307,7 @@ void createPointerConstraint(wl_client* client,
     return;
   }
 
-  wl_interface const* interface = kind == WaylandServer::PointerConstraint::Kind::Lock
+  wl_interface const* interface = kind == WaylandServer::Impl::PointerConstraint::Kind::Lock
                                       ? &zwp_locked_pointer_v1_interface
                                       : &zwp_confined_pointer_v1_interface;
   wl_resource* constraintResource = wl_resource_create(client, interface, 1, id);
@@ -2153,7 +2316,7 @@ void createPointerConstraint(wl_client* client,
     return;
   }
 
-  auto constraint = std::make_unique<WaylandServer::PointerConstraint>();
+  auto constraint = std::make_unique<WaylandServer::Impl::PointerConstraint>();
   constraint->server = server;
   constraint->resource = constraintResource;
   constraint->surface = surface;
@@ -2163,11 +2326,11 @@ void createPointerConstraint(wl_client* client,
   auto* raw = constraint.get();
   server->pointerConstraints_.push_back(std::move(constraint));
   wl_resource_set_implementation(constraintResource,
-                                 kind == WaylandServer::PointerConstraint::Kind::Lock
+                                 kind == WaylandServer::Impl::PointerConstraint::Kind::Lock
                                      ? static_cast<void const*>(&lockedPointerImpl)
                                      : static_cast<void const*>(&confinedPointerImpl),
                                  raw,
-                                 destroyResourceCallback<WaylandServer::PointerConstraint, WaylandServer, &WaylandServer::destroyPointerConstraint>);
+                                 destroyResourceCallback<WaylandServer::Impl::PointerConstraint, WaylandServer::Impl, &WaylandServer::Impl::destroyPointerConstraint>);
   updatePointerConstraintActivation(server, raw);
 }
 
@@ -2184,7 +2347,7 @@ void pointerConstraintsLockPointer(wl_client* client,
                           surface,
                           pointer,
                           lifetime,
-                          WaylandServer::PointerConstraint::Kind::Lock);
+                          WaylandServer::Impl::PointerConstraint::Kind::Lock);
 }
 
 void pointerConstraintsConfinePointer(wl_client* client,
@@ -2200,7 +2363,7 @@ void pointerConstraintsConfinePointer(wl_client* client,
                           surface,
                           pointer,
                           lifetime,
-                          WaylandServer::PointerConstraint::Kind::Confine);
+                          WaylandServer::Impl::PointerConstraint::Kind::Confine);
 }
 
 struct zwp_pointer_constraints_v1_interface const pointerConstraintsImpl{
@@ -2224,7 +2387,7 @@ void primarySelectionManagerDestroy(wl_client*, wl_resource* resource) {
 }
 
 void primarySelectionSourceOffer(wl_client*, wl_resource* resource, char const* mimeType) {
-  auto* source = dataFrom<WaylandServer::PrimarySelectionSource>(resource);
+  auto* source = dataFrom<WaylandServer::Impl::PrimarySelectionSource>(resource);
   if (!source || !mimeType) return;
   if (std::find(source->mimeTypes.begin(), source->mimeTypes.end(), mimeType) == source->mimeTypes.end()) {
     source->mimeTypes.emplace_back(mimeType);
@@ -2244,7 +2407,7 @@ void primarySelectionDeviceDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-void sendPrimarySelectionToDevice(WaylandServer::PrimarySelectionDevice* device) {
+void sendPrimarySelectionToDevice(WaylandServer::Impl::PrimarySelectionDevice* device) {
   if (!device || !device->resource) return;
   auto* server = device->server;
   wl_client* deviceClient = wl_resource_get_client(device->resource);
@@ -2254,7 +2417,7 @@ void sendPrimarySelectionToDevice(WaylandServer::PrimarySelectionDevice* device)
     return;
   }
 
-  auto offer = std::make_unique<WaylandServer::PrimarySelectionOffer>();
+  auto offer = std::make_unique<WaylandServer::Impl::PrimarySelectionOffer>();
   offer->server = server;
   offer->source = server->primarySelectionSource_;
   wl_resource* offerResource =
@@ -2266,7 +2429,7 @@ void sendPrimarySelectionToDevice(WaylandServer::PrimarySelectionDevice* device)
   offer->resource = offerResource;
   auto* raw = offer.get();
   server->primarySelectionOffers_.push_back(std::move(offer));
-  wl_resource_set_implementation(offerResource, &primarySelectionOfferImpl, raw, destroyResourceCallback<WaylandServer::PrimarySelectionOffer, WaylandServer, &WaylandServer::destroyPrimarySelectionOffer>);
+  wl_resource_set_implementation(offerResource, &primarySelectionOfferImpl, raw, destroyResourceCallback<WaylandServer::Impl::PrimarySelectionOffer, WaylandServer::Impl, &WaylandServer::Impl::destroyPrimarySelectionOffer>);
   zwp_primary_selection_device_v1_send_data_offer(device->resource, offerResource);
   for (auto const& mimeType : raw->source->mimeTypes) {
     zwp_primary_selection_offer_v1_send_offer(offerResource, mimeType.c_str());
@@ -2274,17 +2437,17 @@ void sendPrimarySelectionToDevice(WaylandServer::PrimarySelectionDevice* device)
   zwp_primary_selection_device_v1_send_selection(device->resource, offerResource);
 }
 
-void sendPrimarySelectionForFocus(WaylandServer* server) {
+void sendPrimarySelectionForFocus(WaylandServer::Impl* server) {
   for (auto const& device : server->primarySelectionDevices_) {
     sendPrimarySelectionToDevice(device.get());
   }
 }
 
 void primarySelectionDeviceSetSelection(wl_client*, wl_resource* resource, wl_resource* sourceResource, std::uint32_t) {
-  auto* device = dataFrom<WaylandServer::PrimarySelectionDevice>(resource);
+  auto* device = dataFrom<WaylandServer::Impl::PrimarySelectionDevice>(resource);
   if (!device) return;
   auto* server = device->server;
-  auto* source = dataFrom<WaylandServer::PrimarySelectionSource>(sourceResource);
+  auto* source = dataFrom<WaylandServer::Impl::PrimarySelectionSource>(sourceResource);
   if (server->primarySelectionSource_ && server->primarySelectionSource_ != source &&
       server->primarySelectionSource_->resource) {
     zwp_primary_selection_source_v1_send_cancelled(server->primarySelectionSource_->resource);
@@ -2299,7 +2462,7 @@ struct zwp_primary_selection_device_v1_interface const primarySelectionDeviceImp
 };
 
 void primarySelectionOfferReceive(wl_client*, wl_resource* resource, char const* mimeType, int fd) {
-  auto* offer = dataFrom<WaylandServer::PrimarySelectionOffer>(resource);
+  auto* offer = dataFrom<WaylandServer::Impl::PrimarySelectionOffer>(resource);
   if (!offer || !offer->source || !offer->source->resource || !mimeType) {
     close(fd);
     return;
@@ -2319,7 +2482,7 @@ struct zwp_primary_selection_offer_v1_interface const primarySelectionOfferImpl{
 
 void primarySelectionManagerCreateSource(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* server = serverFrom(resource);
-  auto source = std::make_unique<WaylandServer::PrimarySelectionSource>();
+  auto source = std::make_unique<WaylandServer::Impl::PrimarySelectionSource>();
   source->server = server;
   wl_resource* sourceResource = wl_resource_create(client, &zwp_primary_selection_source_v1_interface, 1, id);
   if (!sourceResource) {
@@ -2329,7 +2492,7 @@ void primarySelectionManagerCreateSource(wl_client* client, wl_resource* resourc
   source->resource = sourceResource;
   auto* raw = source.get();
   server->primarySelectionSources_.push_back(std::move(source));
-  wl_resource_set_implementation(sourceResource, &primarySelectionSourceImpl, raw, destroyResourceCallback<WaylandServer::PrimarySelectionSource, WaylandServer, &WaylandServer::destroyPrimarySelectionSource>);
+  wl_resource_set_implementation(sourceResource, &primarySelectionSourceImpl, raw, destroyResourceCallback<WaylandServer::Impl::PrimarySelectionSource, WaylandServer::Impl, &WaylandServer::Impl::destroyPrimarySelectionSource>);
 }
 
 void primarySelectionManagerGetDevice(wl_client* client,
@@ -2337,7 +2500,7 @@ void primarySelectionManagerGetDevice(wl_client* client,
                                       std::uint32_t id,
                                       wl_resource* seatResource) {
   auto* server = serverFrom(resource);
-  auto device = std::make_unique<WaylandServer::PrimarySelectionDevice>();
+  auto device = std::make_unique<WaylandServer::Impl::PrimarySelectionDevice>();
   device->server = server;
   device->seat = seatResource;
   wl_resource* deviceResource = wl_resource_create(client, &zwp_primary_selection_device_v1_interface, 1, id);
@@ -2348,7 +2511,7 @@ void primarySelectionManagerGetDevice(wl_client* client,
   device->resource = deviceResource;
   auto* raw = device.get();
   server->primarySelectionDevices_.push_back(std::move(device));
-  wl_resource_set_implementation(deviceResource, &primarySelectionDeviceImpl, raw, destroyResourceCallback<WaylandServer::PrimarySelectionDevice, WaylandServer, &WaylandServer::destroyPrimarySelectionDevice>);
+  wl_resource_set_implementation(deviceResource, &primarySelectionDeviceImpl, raw, destroyResourceCallback<WaylandServer::Impl::PrimarySelectionDevice, WaylandServer::Impl, &WaylandServer::Impl::destroyPrimarySelectionDevice>);
   sendPrimarySelectionToDevice(raw);
 }
 
@@ -2373,7 +2536,7 @@ void dataDeviceManagerDestroy(wl_client*, wl_resource* resource) {
 }
 
 void dataSourceOffer(wl_client*, wl_resource* resource, char const* mimeType) {
-  auto* source = dataFrom<WaylandServer::DataSource>(resource);
+  auto* source = dataFrom<WaylandServer::Impl::DataSource>(resource);
   if (!source || !mimeType) return;
   if (std::find(source->mimeTypes.begin(), source->mimeTypes.end(), mimeType) == source->mimeTypes.end()) {
     source->mimeTypes.emplace_back(mimeType);
@@ -2393,13 +2556,13 @@ struct wl_data_source_interface const dataSourceImpl{
 };
 
 void dataOfferAccept(wl_client*, wl_resource* resource, std::uint32_t, char const* mimeType) {
-  auto* offer = dataFrom<WaylandServer::DataOffer>(resource);
+  auto* offer = dataFrom<WaylandServer::Impl::DataOffer>(resource);
   if (!offer || !offer->source || !offer->source->resource) return;
   wl_data_source_send_target(offer->source->resource, mimeType);
 }
 
 void dataOfferReceive(wl_client*, wl_resource* resource, char const* mimeType, int fd) {
-  auto* offer = dataFrom<WaylandServer::DataOffer>(resource);
+  auto* offer = dataFrom<WaylandServer::Impl::DataOffer>(resource);
   if (!offer || !offer->source || !offer->source->resource || !mimeType) {
     close(fd);
     return;
@@ -2413,7 +2576,7 @@ void dataOfferDestroy(wl_client*, wl_resource* resource) {
 }
 
 void dataOfferFinish(wl_client*, wl_resource* resource) {
-  auto* offer = dataFrom<WaylandServer::DataOffer>(resource);
+  auto* offer = dataFrom<WaylandServer::Impl::DataOffer>(resource);
   if (!offer || !offer->source || !offer->source->resource) return;
   if (wl_resource_get_version(offer->source->resource) >= WL_DATA_SOURCE_DND_FINISHED_SINCE_VERSION) {
     wl_data_source_send_dnd_finished(offer->source->resource);
@@ -2429,7 +2592,7 @@ struct wl_data_offer_interface const dataOfferImpl{
     .set_actions = dataOfferSetActions,
 };
 
-void sendSelectionToDataDevice(WaylandServer::DataDevice* device) {
+void sendSelectionToDataDevice(WaylandServer::Impl::DataDevice* device) {
   if (!device || !device->resource) return;
   auto* server = device->server;
   wl_client* deviceClient = wl_resource_get_client(device->resource);
@@ -2439,7 +2602,7 @@ void sendSelectionToDataDevice(WaylandServer::DataDevice* device) {
     return;
   }
 
-  auto offer = std::make_unique<WaylandServer::DataOffer>();
+  auto offer = std::make_unique<WaylandServer::Impl::DataOffer>();
   offer->server = server;
   offer->source = server->selectionSource_;
   wl_resource* offerResource = wl_resource_create(deviceClient, &wl_data_offer_interface, 3, 0);
@@ -2450,7 +2613,7 @@ void sendSelectionToDataDevice(WaylandServer::DataDevice* device) {
   offer->resource = offerResource;
   auto* raw = offer.get();
   server->dataOffers_.push_back(std::move(offer));
-  wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, destroyResourceCallback<WaylandServer::DataOffer, WaylandServer, &WaylandServer::destroyDataOffer>);
+  wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, destroyResourceCallback<WaylandServer::Impl::DataOffer, WaylandServer::Impl, &WaylandServer::Impl::destroyDataOffer>);
   wl_data_device_send_data_offer(device->resource, offerResource);
   for (auto const& mimeType : raw->source->mimeTypes) {
     wl_data_offer_send_offer(offerResource, mimeType.c_str());
@@ -2458,20 +2621,20 @@ void sendSelectionToDataDevice(WaylandServer::DataDevice* device) {
   wl_data_device_send_selection(device->resource, offerResource);
 }
 
-void sendSelectionForFocus(WaylandServer* server) {
+void sendSelectionForFocus(WaylandServer::Impl* server) {
   for (auto const& device : server->dataDevices_) {
     sendSelectionToDataDevice(device.get());
   }
 }
 
-WaylandServer::DataDevice* dataDeviceForClient(WaylandServer* server, wl_client* client) {
+WaylandServer::Impl::DataDevice* dataDeviceForClient(WaylandServer::Impl* server, wl_client* client) {
   for (auto const& device : server->dataDevices_) {
     if (device->resource && wl_resource_get_client(device->resource) == client) return device.get();
   }
   return nullptr;
 }
 
-void clearDnd(WaylandServer* server) {
+void clearDnd(WaylandServer::Impl* server) {
   if (server->dndTarget_) {
     if (auto* device = dataDeviceForClient(server, wl_resource_get_client(server->dndTarget_->resource))) {
       wl_data_device_send_leave(device->resource);
@@ -2486,9 +2649,9 @@ void clearDnd(WaylandServer* server) {
   server->dndOffer_ = nullptr;
 }
 
-WaylandServer::DataOffer* createDndOffer(WaylandServer* server, wl_client* client) {
+WaylandServer::Impl::DataOffer* createDndOffer(WaylandServer::Impl* server, wl_client* client) {
   if (!server->dndSource_ || server->dndSource_->mimeTypes.empty()) return nullptr;
-  auto offer = std::make_unique<WaylandServer::DataOffer>();
+  auto offer = std::make_unique<WaylandServer::Impl::DataOffer>();
   offer->server = server;
   offer->source = server->dndSource_;
   wl_resource* offerResource = wl_resource_create(client, &wl_data_offer_interface, 3, 0);
@@ -2499,11 +2662,11 @@ WaylandServer::DataOffer* createDndOffer(WaylandServer* server, wl_client* clien
   offer->resource = offerResource;
   auto* raw = offer.get();
   server->dataOffers_.push_back(std::move(offer));
-  wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, destroyResourceCallback<WaylandServer::DataOffer, WaylandServer, &WaylandServer::destroyDataOffer>);
+  wl_resource_set_implementation(offerResource, &dataOfferImpl, raw, destroyResourceCallback<WaylandServer::Impl::DataOffer, WaylandServer::Impl, &WaylandServer::Impl::destroyDataOffer>);
   return raw;
 }
 
-void updateDndTarget(WaylandServer* server, WaylandServer::Surface* target, std::uint32_t timeMs) {
+void updateDndTarget(WaylandServer::Impl* server, WaylandServer::Impl::Surface* target, std::uint32_t timeMs) {
   if (!server->dndSource_) return;
   if (target == server->dndOrigin_) target = nullptr;
   if (target != server->dndTarget_) {
@@ -2519,7 +2682,7 @@ void updateDndTarget(WaylandServer* server, WaylandServer::Surface* target, std:
     server->dndOffer_ = nullptr;
     if (target) {
       wl_client* targetClient = wl_resource_get_client(target->resource);
-      WaylandServer::DataDevice* targetDevice = dataDeviceForClient(server, targetClient);
+      WaylandServer::Impl::DataDevice* targetDevice = dataDeviceForClient(server, targetClient);
       if (targetDevice) {
         server->dndOffer_ = createDndOffer(server, targetClient);
         wl_resource* offerResource = server->dndOffer_ ? server->dndOffer_->resource : nullptr;
@@ -2551,11 +2714,11 @@ void dataDeviceStartDrag(wl_client* client,
                          wl_resource* originResource,
                          wl_resource*,
                          std::uint32_t) {
-  auto* device = dataFrom<WaylandServer::DataDevice>(resource);
+  auto* device = dataFrom<WaylandServer::Impl::DataDevice>(resource);
   if (!device) return;
   auto* server = device->server;
-  auto* source = dataFrom<WaylandServer::DataSource>(sourceResource);
-  auto* origin = dataFrom<WaylandServer::Surface>(originResource);
+  auto* source = dataFrom<WaylandServer::Impl::DataSource>(sourceResource);
+  auto* origin = dataFrom<WaylandServer::Impl::Surface>(originResource);
   if (!origin || wl_resource_get_client(origin->resource) != client) return;
   if (server->dndSource_) clearDnd(server);
   server->dndSource_ = source;
@@ -2564,10 +2727,10 @@ void dataDeviceStartDrag(wl_client* client,
 }
 
 void dataDeviceSetSelection(wl_client*, wl_resource* resource, wl_resource* sourceResource, std::uint32_t) {
-  auto* device = dataFrom<WaylandServer::DataDevice>(resource);
+  auto* device = dataFrom<WaylandServer::Impl::DataDevice>(resource);
   if (!device) return;
   auto* server = device->server;
-  auto* source = dataFrom<WaylandServer::DataSource>(sourceResource);
+  auto* source = dataFrom<WaylandServer::Impl::DataSource>(sourceResource);
   if (server->selectionSource_ && server->selectionSource_ != source && server->selectionSource_->resource) {
     wl_data_source_send_cancelled(server->selectionSource_->resource);
   }
@@ -2587,7 +2750,7 @@ struct wl_data_device_interface const dataDeviceImpl{
 
 void dataDeviceManagerCreateDataSource(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* server = serverFrom(resource);
-  auto source = std::make_unique<WaylandServer::DataSource>();
+  auto source = std::make_unique<WaylandServer::Impl::DataSource>();
   source->server = server;
   wl_resource* sourceResource = wl_resource_create(client, &wl_data_source_interface, 3, id);
   if (!sourceResource) {
@@ -2597,12 +2760,12 @@ void dataDeviceManagerCreateDataSource(wl_client* client, wl_resource* resource,
   source->resource = sourceResource;
   auto* raw = source.get();
   server->dataSources_.push_back(std::move(source));
-  wl_resource_set_implementation(sourceResource, &dataSourceImpl, raw, destroyResourceCallback<WaylandServer::DataSource, WaylandServer, &WaylandServer::destroyDataSource>);
+  wl_resource_set_implementation(sourceResource, &dataSourceImpl, raw, destroyResourceCallback<WaylandServer::Impl::DataSource, WaylandServer::Impl, &WaylandServer::Impl::destroyDataSource>);
 }
 
 void dataDeviceManagerGetDataDevice(wl_client* client, wl_resource* resource, std::uint32_t id, wl_resource* seat) {
   auto* server = serverFrom(resource);
-  auto device = std::make_unique<WaylandServer::DataDevice>();
+  auto device = std::make_unique<WaylandServer::Impl::DataDevice>();
   device->server = server;
   device->seat = seat;
   wl_resource* deviceResource = wl_resource_create(client, &wl_data_device_interface, 3, id);
@@ -2613,7 +2776,7 @@ void dataDeviceManagerGetDataDevice(wl_client* client, wl_resource* resource, st
   device->resource = deviceResource;
   auto* raw = device.get();
   server->dataDevices_.push_back(std::move(device));
-  wl_resource_set_implementation(deviceResource, &dataDeviceImpl, raw, destroyResourceCallback<WaylandServer::DataDevice, WaylandServer, &WaylandServer::destroyDataDevice>);
+  wl_resource_set_implementation(deviceResource, &dataDeviceImpl, raw, destroyResourceCallback<WaylandServer::Impl::DataDevice, WaylandServer::Impl, &WaylandServer::Impl::destroyDataDevice>);
   sendSelectionToDataDevice(raw);
 }
 
@@ -2634,7 +2797,7 @@ void bindDataDeviceManager(wl_client* client, void* data, std::uint32_t version,
 
 } // namespace
 
-WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(output)) {
+WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output)) {
   initializeKeyboardModifierIndices(this);
   shortcutBindings_ = {
       {.action = ShortcutAction::CloseFocused, .key = KEY_Q, .meta = true},
@@ -2693,26 +2856,26 @@ WaylandServer::WaylandServer(WaylandOutputInfo output) : output_(std::move(outpu
   std::fprintf(stderr, "flux-compositor: Wayland display %s\n", socketName_.c_str());
 }
 
-WaylandServer::~WaylandServer() {
+WaylandServer::Impl::~Impl() {
   if (!displayNameFile_.empty()) unlink(displayNameFile_.c_str());
   if (!display_) return;
   wl_display_destroy_clients(display_);
   wl_display_destroy(display_);
 }
 
-char const* WaylandServer::socketName() const noexcept {
+char const* WaylandServer::Impl::socketName() const noexcept {
   return socketName_.c_str();
 }
 
-int WaylandServer::eventFd() const noexcept {
+int WaylandServer::Impl::eventFd() const noexcept {
   return display_ ? wl_event_loop_get_fd(wl_display_get_event_loop(display_)) : -1;
 }
 
-std::size_t WaylandServer::toplevelCount() const noexcept {
+std::size_t WaylandServer::Impl::toplevelCount() const noexcept {
   return toplevels_.size();
 }
 
-std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
+std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() const {
   std::vector<CommittedSurfaceSnapshot> snapshots;
   snapshots.reserve(surfaces_.size());
   for (auto const& surface : surfaces_) {
@@ -2758,7 +2921,7 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
   return snapshots;
 }
 
-std::optional<CommittedSurfaceSnapshot> WaylandServer::cursorSurface() const {
+std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() const {
   Surface* surface = cursorSurface_;
   if (!surface || surface->width <= 0 || surface->height <= 0) return std::nullopt;
   if (surface->rgbaPixels.empty() && !surface->dmabufBuffer) return std::nullopt;
@@ -2800,7 +2963,7 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::cursorSurface() const {
   return snapshot;
 }
 
-std::vector<int> WaylandServer::duplicateDmabufFds(std::uint64_t surfaceId) const {
+std::vector<int> WaylandServer::Impl::duplicateDmabufFds(std::uint64_t surfaceId) const {
   auto surface = std::find_if(surfaces_.begin(), surfaces_.end(),
                               [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });
   if (surface == surfaces_.end() || !(*surface)->dmabufBuffer) return {};
@@ -2818,13 +2981,13 @@ std::vector<int> WaylandServer::duplicateDmabufFds(std::uint64_t surfaceId) cons
   return fds;
 }
 
-std::optional<SnapPreviewSnapshot> WaylandServer::snapPreview() const {
+std::optional<SnapPreviewSnapshot> WaylandServer::Impl::snapPreview() const {
   return snapPreviewForDrag(this);
 }
 
-WaylandServer::Surface* surfaceAt(WaylandServer* server, float x, float y) {
+WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, float y) {
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
-    WaylandServer::Surface* surface = it->get();
+    WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
     if (!surface || !surface->toplevel || width <= 0 || height <= 0) continue;
@@ -2837,9 +3000,9 @@ WaylandServer::Surface* surfaceAt(WaylandServer* server, float x, float y) {
   return nullptr;
 }
 
-WaylandServer::Surface* titlebarAt(WaylandServer* server, float x, float y) {
+WaylandServer::Impl::Surface* titlebarAt(WaylandServer::Impl* server, float x, float y) {
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
-    WaylandServer::Surface* surface = it->get();
+    WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
     if (!surface || !surface->toplevel || width <= 0 || height <= 0) continue;
@@ -2852,9 +3015,9 @@ WaylandServer::Surface* titlebarAt(WaylandServer* server, float x, float y) {
   return nullptr;
 }
 
-WaylandServer::Surface* closeButtonAt(WaylandServer* server, float x, float y) {
+WaylandServer::Impl::Surface* closeButtonAt(WaylandServer::Impl* server, float x, float y) {
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
-    WaylandServer::Surface* surface = it->get();
+    WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
     if (!surface || !surface->toplevel || width <= 0 || height <= 0) continue;
@@ -2867,10 +3030,10 @@ WaylandServer::Surface* closeButtonAt(WaylandServer* server, float x, float y) {
   return nullptr;
 }
 
-WaylandServer::Surface* resizeGripAt(WaylandServer* server, float x, float y, std::uint32_t& edges) {
+WaylandServer::Impl::Surface* resizeGripAt(WaylandServer::Impl* server, float x, float y, std::uint32_t& edges) {
   edges = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
-    WaylandServer::Surface* surface = it->get();
+    WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
     if (!surface || !surface->toplevel || width <= 0 || height <= 0) continue;
@@ -2892,7 +3055,7 @@ WaylandServer::Surface* resizeGripAt(WaylandServer* server, float x, float y, st
   return nullptr;
 }
 
-void raiseSurface(WaylandServer* server, WaylandServer::Surface* surface) {
+void raiseSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   auto found = std::find_if(server->surfaces_.begin(), server->surfaces_.end(),
                             [surface](auto const& candidate) { return candidate.get() == surface; });
   if (found == server->surfaces_.end() || std::next(found) == server->surfaces_.end()) return;
@@ -2901,7 +3064,7 @@ void raiseSurface(WaylandServer* server, WaylandServer::Surface* surface) {
   server->surfaces_.push_back(std::move(item));
 }
 
-void sendPointerFocus(WaylandServer* server, WaylandServer::Surface* next, std::uint32_t timeMs) {
+void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next, std::uint32_t timeMs) {
   if (server->pointerFocus_ == next) {
     if (!next) return;
     wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(next->windowX));
@@ -2935,7 +3098,7 @@ void sendPointerFocus(WaylandServer* server, WaylandServer::Surface* next, std::
   updatePointerConstraintsForFocus(server);
 }
 
-void sendRelativePointerMotion(WaylandServer* server, double dx, double dy, std::uint32_t timeMs) {
+void sendRelativePointerMotion(WaylandServer::Impl* server, double dx, double dy, std::uint32_t timeMs) {
   if (!server->pointerFocus_ || (dx == 0.0 && dy == 0.0)) return;
   wl_client* focusedClient = wl_resource_get_client(server->pointerFocus_->resource);
   std::uint64_t const timeUsec = static_cast<std::uint64_t>(timeMs) * 1000ull;
@@ -2956,9 +3119,9 @@ void sendRelativePointerMotion(WaylandServer* server, double dx, double dy, std:
   }
 }
 
-std::uint32_t keyboardModifierMask(WaylandServer* server);
+std::uint32_t keyboardModifierMask(WaylandServer::Impl* server);
 
-void setKeyboardFocus(WaylandServer* server, WaylandServer::Surface* next) {
+void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next) {
   if (server->keyboardFocus_ == next) return;
   std::uint32_t serial = server->nextInputSerial_++;
   if (server->keyboardFocus_) {
@@ -2986,29 +3149,29 @@ std::uint32_t modifierBit(std::uint32_t index, bool active) {
   return 1u << index;
 }
 
-std::uint32_t keyboardModifierMask(WaylandServer* server) {
+std::uint32_t keyboardModifierMask(WaylandServer::Impl* server) {
   return modifierBit(server->shiftModifierIndex_, server->shiftDown_) |
          modifierBit(server->ctrlModifierIndex_, server->ctrlDown_) |
          modifierBit(server->altModifierIndex_, server->altDown_) |
          modifierBit(server->logoModifierIndex_, server->metaDown_);
 }
 
-void sendKeyboardModifiers(WaylandServer* server) {
+void sendKeyboardModifiers(WaylandServer::Impl* server) {
   std::uint32_t const depressed = keyboardModifierMask(server);
   for (wl_resource* keyboard : server->keyboardResources_) {
     wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, depressed, 0, 0, 0);
   }
 }
 
-void focusSurface(WaylandServer* server, WaylandServer::Surface* surface, std::uint32_t timeMs) {
+void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs) {
   if (!surface) return;
   raiseSurface(server, surface);
   setKeyboardFocus(server, surface);
   sendPointerFocus(server, surfaceAt(server, server->pointerX_, server->pointerY_), timeMs);
 }
 
-WaylandServer::Surface* previousToplevel(WaylandServer* server, WaylandServer::Surface* current) {
-  WaylandServer::Surface* previous = nullptr;
+WaylandServer::Impl::Surface* previousToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* current) {
+  WaylandServer::Impl::Surface* previous = nullptr;
   for (auto const& surface : server->surfaces_) {
     if (!surface || !surface->toplevel) continue;
     if (surface.get() == current) return previous;
@@ -3017,19 +3180,19 @@ WaylandServer::Surface* previousToplevel(WaylandServer* server, WaylandServer::S
   return previous;
 }
 
-WaylandServer::XdgToplevel* focusedToplevel(WaylandServer* server) {
+WaylandServer::Impl::XdgToplevel* focusedToplevel(WaylandServer::Impl* server) {
   return toplevelForSurface(server, server->keyboardFocus_);
 }
 
-bool closeFocusedToplevel(WaylandServer* server) {
-  WaylandServer::XdgToplevel* toplevel = focusedToplevel(server);
+bool closeFocusedToplevel(WaylandServer::Impl* server) {
+  WaylandServer::Impl::XdgToplevel* toplevel = focusedToplevel(server);
   if (!toplevel || !toplevel->resource) return false;
   xdg_toplevel_send_close(toplevel->resource);
   return true;
 }
 
-bool cycleFocus(WaylandServer* server, std::uint32_t timeMs) {
-  WaylandServer::Surface* target = previousToplevel(server, server->keyboardFocus_);
+bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs) {
+  WaylandServer::Impl::Surface* target = previousToplevel(server, server->keyboardFocus_);
   if (!target) {
     for (auto const& surface : server->surfaces_) {
       if (surface && surface->toplevel) {
@@ -3042,8 +3205,8 @@ bool cycleFocus(WaylandServer* server, std::uint32_t timeMs) {
   return true;
 }
 
-std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer const* server) {
-  WaylandServer::Surface const* surface = server->dragSurface_;
+std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const* server) {
+  WaylandServer::Impl::Surface const* surface = server->dragSurface_;
   if (!surface) return std::nullopt;
   auto preview = snapPreviewGeometry(windowGeometryFor(surface), outputGeometryFor(server));
   if (!preview) return std::nullopt;
@@ -3055,8 +3218,8 @@ std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer const* serve
   };
 }
 
-void startGeometryAnimation(WaylandServer* server,
-                            WaylandServer::Surface* surface,
+void startGeometryAnimation(WaylandServer::Impl* server,
+                            WaylandServer::Impl::Surface* surface,
                             std::int32_t targetX,
                             std::int32_t targetY,
                             std::int32_t targetWidth,
@@ -3083,7 +3246,7 @@ void startGeometryAnimation(WaylandServer* server,
   server->flushClients();
 }
 
-void snapToplevel(WaylandServer* server, WaylandServer::Surface* surface, bool leftHalf) {
+void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, bool leftHalf) {
   if (!surface || !surface->toplevel) return;
   if (!surface->snapped && !surface->maximized) {
     surface->restoreX = surface->windowX;
@@ -3102,11 +3265,11 @@ void snapToplevel(WaylandServer* server, WaylandServer::Surface* surface, bool l
                          target.height);
 }
 
-void snapFocusedToplevel(WaylandServer* server, bool leftHalf) {
+void snapFocusedToplevel(WaylandServer::Impl* server, bool leftHalf) {
   snapToplevel(server, server->keyboardFocus_, leftHalf);
 }
 
-void restoreSnappedForDrag(WaylandServer* server, WaylandServer::Surface* surface) {
+void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!surface || (!surface->snapped && !surface->maximized)) return;
   WindowGeometry const restored = restoredDragGeometry({
       .pointerX = server->pointerX_,
@@ -3132,7 +3295,7 @@ void restoreSnappedForDrag(WaylandServer* server, WaylandServer::Surface* surfac
   sendToplevelConfigure(server, toplevelForSurface(server, surface), restored.width, restored.height);
 }
 
-void toggleMaximizedToplevel(WaylandServer* server, WaylandServer::Surface* surface) {
+void toggleMaximizedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!surface || !surface->toplevel) return;
   if (surface->maximized) {
     std::int32_t const restoreWidth =
@@ -3161,7 +3324,7 @@ void toggleMaximizedToplevel(WaylandServer* server, WaylandServer::Surface* surf
   startGeometryAnimation(server, surface, 0, kTitleBarHeight, width, height);
 }
 
-bool updateShortcutModifier(WaylandServer* server, std::uint32_t key, bool pressed) {
+bool updateShortcutModifier(WaylandServer::Impl* server, std::uint32_t key, bool pressed) {
   bool changed = false;
   if (key == KEY_LEFTMETA || key == KEY_RIGHTMETA) {
     changed = server->metaDown_ != pressed;
@@ -3190,7 +3353,7 @@ bool updateShortcutModifier(WaylandServer* server, std::uint32_t key, bool press
   return false;
 }
 
-bool handleCompositorShortcut(WaylandServer* server, std::uint32_t key, bool pressed, std::uint32_t timeMs) {
+bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bool pressed, std::uint32_t timeMs) {
   if (!pressed) return false;
   for (auto const& binding : server->shortcutBindings_) {
     if (binding.key != key) continue;
@@ -3218,9 +3381,9 @@ bool handleCompositorShortcut(WaylandServer* server, std::uint32_t key, bool pre
   return false;
 }
 
-void updateDrag(WaylandServer* server) {
+void updateDrag(WaylandServer::Impl* server) {
   if (!server->dragSurface_) return;
-  WaylandServer::Surface* surface = server->dragSurface_;
+  WaylandServer::Impl::Surface* surface = server->dragSurface_;
   restoreSnappedForDrag(server, surface);
   int const maxX = std::max(0, server->output_.width - displayWidth(surface));
   int const maxY = std::max(kTitleBarHeight, server->output_.height - displayHeight(surface));
@@ -3228,8 +3391,8 @@ void updateDrag(WaylandServer* server) {
   surface->windowY = std::clamp(static_cast<int>(server->pointerY_ - server->dragOffsetY_), kTitleBarHeight, maxY);
 }
 
-void updateResize(WaylandServer* server) {
-  WaylandServer::Surface* surface = server->resizeSurface_;
+void updateResize(WaylandServer::Impl* server) {
+  WaylandServer::Impl::Surface* surface = server->resizeSurface_;
   if (!surface) return;
   surface->geometryAnimationActive = false;
 
@@ -3275,7 +3438,7 @@ void updateResize(WaylandServer* server) {
   sendToplevelConfigure(server, toplevelForSurface(server, surface), next.width, next.height);
 }
 
-void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t timeMs) {
+void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_t timeMs) {
   if (auto* constraint = activePointerConstraint(this);
       constraint && constraint->kind == PointerConstraint::Kind::Lock) {
     sendRelativePointerMotion(this, dx, dy, timeMs);
@@ -3308,7 +3471,7 @@ void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t time
   sendRelativePointerMotion(this, dx, dy, timeMs);
 }
 
-void WaylandServer::handlePointerPosition(double x, double y, std::uint32_t timeMs) {
+void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_t timeMs) {
   if (auto* constraint = activePointerConstraint(this);
       constraint && constraint->kind == PointerConstraint::Kind::Lock) {
     return;
@@ -3339,7 +3502,7 @@ void WaylandServer::handlePointerPosition(double x, double y, std::uint32_t time
   sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
 }
 
-void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
+void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
   if (button == BTN_LEFT && !pressed && dndSource_) {
     updateDndTarget(this, target, timeMs);
@@ -3456,7 +3619,7 @@ void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std:
   }
 }
 
-void WaylandServer::handlePointerAxis(double dx, double dy, std::uint32_t timeMs) {
+void WaylandServer::Impl::handlePointerAxis(double dx, double dy, std::uint32_t timeMs) {
   if (!pointerFocus_) return;
   for (wl_resource* pointer : pointerResources_) {
     if (dx != 0.0) {
@@ -3469,7 +3632,7 @@ void WaylandServer::handlePointerAxis(double dx, double dy, std::uint32_t timeMs
   }
 }
 
-void WaylandServer::handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs) {
+void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs) {
   bool const consumeModifier = updateShortcutModifier(this, key, pressed);
   if (consumeModifier) return;
   if (handleCompositorShortcut(this, key, pressed, timeMs)) return;
@@ -3484,7 +3647,7 @@ void WaylandServer::handleKeyboardKey(std::uint32_t key, bool pressed, std::uint
   }
 }
 
-bool WaylandServer::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const {
+bool WaylandServer::Impl::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const {
   auto surface = std::find_if(surfaces_.begin(), surfaces_.end(),
                               [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });
   if (surface == surfaces_.end() || !(*surface)->dmabufBuffer) return false;
@@ -3537,21 +3700,21 @@ bool WaylandServer::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::u
   return true;
 }
 
-void WaylandServer::dispatch() {
+void WaylandServer::Impl::dispatch() {
   if (!display_) return;
   wl_event_loop_dispatch(wl_display_get_event_loop(display_), 0);
   wl_display_flush_clients(display_);
 }
 
-void WaylandServer::flushClients() {
+void WaylandServer::Impl::flushClients() {
   if (display_) wl_display_flush_clients(display_);
 }
 
-void WaylandServer::setShortcutBindings(std::vector<ShortcutBinding> bindings) {
+void WaylandServer::Impl::setShortcutBindings(std::vector<ShortcutBinding> bindings) {
   shortcutBindings_ = std::move(bindings);
 }
 
-void WaylandServer::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
+void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
   bool sentConfigure = false;
   for (auto const& surface : surfaces_) {
     if (!surface->geometryAnimationActive) continue;
@@ -3602,7 +3765,7 @@ void WaylandServer::updateAnimations(std::uint32_t timeMs, bool animationsEnable
   if (sentConfigure) flushClients();
 }
 
-void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs) {
+void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs) {
   timespec now{};
   clock_gettime(CLOCK_MONOTONIC, &now);
   std::uint64_t const seconds = static_cast<std::uint64_t>(now.tv_sec);
@@ -3639,7 +3802,7 @@ void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs) {
   flushClients();
 }
 
-wl_resource* WaylandServer::createSurface(wl_client* client, std::uint32_t version, std::uint32_t id) {
+wl_resource* WaylandServer::Impl::createSurface(wl_client* client, std::uint32_t version, std::uint32_t id) {
   auto surface = std::make_unique<Surface>();
   surface->server = this;
   surface->id = nextSurfaceId_++;
@@ -3647,11 +3810,11 @@ wl_resource* WaylandServer::createSurface(wl_client* client, std::uint32_t versi
   surface->resource = resource;
   auto* raw = surface.get();
   surfaces_.push_back(std::move(surface));
-  wl_resource_set_implementation(resource, &surfaceImpl, raw, destroyResourceCallback<WaylandServer::Surface, WaylandServer, &WaylandServer::destroySurface>);
+  wl_resource_set_implementation(resource, &surfaceImpl, raw, destroyResourceCallback<WaylandServer::Impl::Surface, WaylandServer::Impl, &WaylandServer::Impl::destroySurface>);
   return resource;
 }
 
-void WaylandServer::destroySurface(Surface* surface) {
+void WaylandServer::Impl::destroySurface(Surface* surface) {
   if (pointerFocus_ == surface) pointerFocus_ = nullptr;
   if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
   if (primarySelectionSource_ &&
@@ -3714,18 +3877,18 @@ void WaylandServer::destroySurface(Surface* surface) {
   eraseResource(surfaces_, surface);
 }
 
-void WaylandServer::destroyXdgSurface(XdgSurface* surface) {
+void WaylandServer::Impl::destroyXdgSurface(XdgSurface* surface) {
   eraseResource(xdgSurfaces_, surface);
 }
 
-void WaylandServer::destroyXdgToplevel(XdgToplevel* toplevel) {
+void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
   while (auto* decoration = decorationFor(this, toplevel)) {
     wl_resource_destroy(decoration->resource);
   }
   eraseResource(toplevels_, toplevel);
 }
 
-void WaylandServer::destroyShmPool(ShmPool* pool) {
+void WaylandServer::Impl::destroyShmPool(ShmPool* pool) {
   for (auto& buffer : shmBuffers_) {
     if (buffer->pool == pool) buffer->pool = nullptr;
   }
@@ -3734,13 +3897,13 @@ void WaylandServer::destroyShmPool(ShmPool* pool) {
   eraseResource(shmPools_, pool);
 }
 
-void WaylandServer::destroyShmBuffer(ShmBuffer* buffer) {
+void WaylandServer::Impl::destroyShmBuffer(ShmBuffer* buffer) {
   if (buffer->data) munmap(buffer->data, static_cast<std::size_t>(buffer->size));
   if (buffer->fd >= 0) close(buffer->fd);
   eraseResource(shmBuffers_, buffer);
 }
 
-void WaylandServer::destroyDmabufParams(DmabufParams* params) {
+void WaylandServer::Impl::destroyDmabufParams(DmabufParams* params) {
   for (auto& plane : params->planes) {
     if (plane.fd >= 0) close(plane.fd);
     plane.fd = -1;
@@ -3748,7 +3911,7 @@ void WaylandServer::destroyDmabufParams(DmabufParams* params) {
   eraseResource(dmabufParams_, params);
 }
 
-void WaylandServer::destroyDmabufBuffer(DmabufBuffer* buffer) {
+void WaylandServer::Impl::destroyDmabufBuffer(DmabufBuffer* buffer) {
   for (auto const& surface : surfaces_) {
     if (surface->dmabufBuffer == buffer) {
       surface->dmabufBuffer = nullptr;
@@ -3765,11 +3928,11 @@ void WaylandServer::destroyDmabufBuffer(DmabufBuffer* buffer) {
   eraseResource(dmabufBuffers_, buffer);
 }
 
-void WaylandServer::destroyToplevelDecoration(ToplevelDecoration* decoration) {
+void WaylandServer::Impl::destroyToplevelDecoration(ToplevelDecoration* decoration) {
   eraseResource(toplevelDecorations_, decoration);
 }
 
-void WaylandServer::destroyViewport(Viewport* viewport) {
+void WaylandServer::Impl::destroyViewport(Viewport* viewport) {
   if (viewport->surface && viewport->surface->viewport == viewport) {
     viewport->surface->viewport = nullptr;
     viewport->surface->pendingSourceSet = false;
@@ -3784,30 +3947,30 @@ void WaylandServer::destroyViewport(Viewport* viewport) {
   eraseResource(viewports_, viewport);
 }
 
-void WaylandServer::destroyFractionalScale(FractionalScale* fractionalScale) {
+void WaylandServer::Impl::destroyFractionalScale(FractionalScale* fractionalScale) {
   if (fractionalScale->surface && fractionalScale->surface->fractionalScale == fractionalScale) {
     fractionalScale->surface->fractionalScale = nullptr;
   }
   eraseResource(fractionalScales_, fractionalScale);
 }
 
-void WaylandServer::destroyCursorShapeDevice(CursorShapeDevice* device) {
+void WaylandServer::Impl::destroyCursorShapeDevice(CursorShapeDevice* device) {
   eraseResource(cursorShapeDevices_, device);
 }
 
-void WaylandServer::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
+void WaylandServer::Impl::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
   eraseResource(idleInhibitors_, inhibitor);
   std::fprintf(stderr, "flux-compositor: idle inhibitors active=%zu\n", idleInhibitors_.size());
 }
 
-void WaylandServer::destroyLayerSurface(LayerSurface* layerSurface) {
+void WaylandServer::Impl::destroyLayerSurface(LayerSurface* layerSurface) {
   if (layerSurface && layerSurface->surface && layerSurface->surface->layerSurface == layerSurface) {
     layerSurface->surface->layerSurface = nullptr;
   }
   eraseResource(layerSurfaces_, layerSurface);
 }
 
-void WaylandServer::destroyPresentationFeedback(PresentationFeedback* feedback) {
+void WaylandServer::Impl::destroyPresentationFeedback(PresentationFeedback* feedback) {
   if (feedback && feedback->surface) {
     auto eraseFeedback = [feedback](std::vector<PresentationFeedback*>& feedbacks) {
       feedbacks.erase(std::remove(feedbacks.begin(), feedbacks.end(), feedback), feedbacks.end());
@@ -3818,11 +3981,11 @@ void WaylandServer::destroyPresentationFeedback(PresentationFeedback* feedback) 
   eraseResource(presentationFeedbacks_, feedback);
 }
 
-void WaylandServer::destroyRelativePointer(RelativePointer* relativePointer) {
+void WaylandServer::Impl::destroyRelativePointer(RelativePointer* relativePointer) {
   eraseResource(relativePointers_, relativePointer);
 }
 
-void WaylandServer::destroyPointerConstraint(PointerConstraint* constraint) {
+void WaylandServer::Impl::destroyPointerConstraint(PointerConstraint* constraint) {
   if (constraint && constraint->active && constraint->resource) {
     if (constraint->kind == PointerConstraint::Kind::Lock) {
       zwp_locked_pointer_v1_send_unlocked(constraint->resource);
@@ -3833,11 +3996,11 @@ void WaylandServer::destroyPointerConstraint(PointerConstraint* constraint) {
   eraseResource(pointerConstraints_, constraint);
 }
 
-void WaylandServer::destroyPrimarySelectionDevice(PrimarySelectionDevice* device) {
+void WaylandServer::Impl::destroyPrimarySelectionDevice(PrimarySelectionDevice* device) {
   eraseResource(primarySelectionDevices_, device);
 }
 
-void WaylandServer::destroyPrimarySelectionSource(PrimarySelectionSource* source) {
+void WaylandServer::Impl::destroyPrimarySelectionSource(PrimarySelectionSource* source) {
   if (primarySelectionSource_ == source) {
     primarySelectionSource_ = nullptr;
     sendPrimarySelectionForFocus(this);
@@ -3848,11 +4011,11 @@ void WaylandServer::destroyPrimarySelectionSource(PrimarySelectionSource* source
   eraseResource(primarySelectionSources_, source);
 }
 
-void WaylandServer::destroyPrimarySelectionOffer(PrimarySelectionOffer* offer) {
+void WaylandServer::Impl::destroyPrimarySelectionOffer(PrimarySelectionOffer* offer) {
   eraseResource(primarySelectionOffers_, offer);
 }
 
-void WaylandServer::destroyDataDevice(DataDevice* device) {
+void WaylandServer::Impl::destroyDataDevice(DataDevice* device) {
   if (dndTarget_ && device->resource &&
       wl_resource_get_client(device->resource) == wl_resource_get_client(dndTarget_->resource)) {
     clearDnd(this);
@@ -3860,7 +4023,7 @@ void WaylandServer::destroyDataDevice(DataDevice* device) {
   eraseResource(dataDevices_, device);
 }
 
-void WaylandServer::destroyDataSource(DataSource* source) {
+void WaylandServer::Impl::destroyDataSource(DataSource* source) {
   if (selectionSource_ == source) {
     selectionSource_ = nullptr;
     sendSelectionForFocus(this);
@@ -3872,9 +4035,97 @@ void WaylandServer::destroyDataSource(DataSource* source) {
   eraseResource(dataSources_, source);
 }
 
-void WaylandServer::destroyDataOffer(DataOffer* offer) {
+void WaylandServer::Impl::destroyDataOffer(DataOffer* offer) {
   if (dndOffer_ == offer) dndOffer_ = nullptr;
   eraseResource(dataOffers_, offer);
+}
+
+WaylandServer::WaylandServer(WaylandOutputInfo output) : impl_(std::make_unique<Impl>(std::move(output))) {}
+
+WaylandServer::~WaylandServer() = default;
+
+char const* WaylandServer::socketName() const noexcept {
+  return impl_->socketName();
+}
+
+int WaylandServer::eventFd() const noexcept {
+  return impl_->eventFd();
+}
+
+std::size_t WaylandServer::toplevelCount() const noexcept {
+  return impl_->toplevelCount();
+}
+
+std::vector<CommittedSurfaceSnapshot> WaylandServer::committedSurfaces() const {
+  return impl_->committedSurfaces();
+}
+
+std::optional<CommittedSurfaceSnapshot> WaylandServer::cursorSurface() const {
+  return impl_->cursorSurface();
+}
+
+std::optional<SnapPreviewSnapshot> WaylandServer::snapPreview() const {
+  return impl_->snapPreview();
+}
+
+std::vector<int> WaylandServer::duplicateDmabufFds(std::uint64_t surfaceId) const {
+  return impl_->duplicateDmabufFds(surfaceId);
+}
+
+bool WaylandServer::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const {
+  return impl_->copyDmabufToRgba(surfaceId, out);
+}
+
+void WaylandServer::dispatch() {
+  impl_->dispatch();
+}
+
+void WaylandServer::flushClients() {
+  impl_->flushClients();
+}
+
+void WaylandServer::setShortcutBindings(std::vector<ShortcutBinding> bindings) {
+  impl_->setShortcutBindings(std::move(bindings));
+}
+
+void WaylandServer::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
+  impl_->updateAnimations(timeMs, animationsEnabled);
+}
+
+void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs) {
+  impl_->sendFrameCallbacks(timeMs);
+}
+
+void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t timeMs) {
+  impl_->handlePointerMotion(dx, dy, timeMs);
+}
+
+void WaylandServer::handlePointerPosition(double x, double y, std::uint32_t timeMs) {
+  impl_->handlePointerPosition(x, y, timeMs);
+}
+
+void WaylandServer::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
+  impl_->handlePointerButton(button, pressed, timeMs);
+}
+
+void WaylandServer::handlePointerAxis(double dx, double dy, std::uint32_t timeMs) {
+  impl_->handlePointerAxis(dx, dy, timeMs);
+}
+
+void WaylandServer::handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs) {
+  impl_->handleKeyboardKey(key, pressed, timeMs);
+}
+
+float WaylandServer::pointerX() const noexcept {
+  return impl_->pointerX_;
+}
+
+float WaylandServer::pointerY() const noexcept {
+  return impl_->pointerY_;
+}
+
+CursorShape WaylandServer::cursorShape() const noexcept {
+  return impl_->cursorShape_;
 }
 
 } // namespace flux::compositor

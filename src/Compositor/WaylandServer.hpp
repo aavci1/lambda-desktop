@@ -6,11 +6,6 @@
 #include <string>
 #include <vector>
 
-struct wl_client;
-struct wl_display;
-struct wl_global;
-struct wl_resource;
-
 namespace flux::compositor {
 
 enum class CursorShape : std::uint8_t {
@@ -116,150 +111,14 @@ public:
   void handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs);
   void handlePointerAxis(double dx, double dy, std::uint32_t timeMs);
   void handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs);
-  [[nodiscard]] float pointerX() const noexcept { return pointerX_; }
-  [[nodiscard]] float pointerY() const noexcept { return pointerY_; }
-  [[nodiscard]] CursorShape cursorShape() const noexcept { return cursorShape_; }
+  [[nodiscard]] float pointerX() const noexcept;
+  [[nodiscard]] float pointerY() const noexcept;
+  [[nodiscard]] CursorShape cursorShape() const noexcept;
 
-  // Protocol callbacks are plain C function pointers, so this implementation
-  // state is public to the translation unit callbacks. It remains unexposed to
-  // consumers because this header is private to the compositor executable.
-  struct Surface;
-  struct XdgSurface;
-  struct XdgToplevel;
-  struct ShmPool;
-  struct ShmBuffer;
-  struct DmabufParams;
-  struct DmabufBuffer;
-  struct ToplevelDecoration;
-  struct Viewport;
-  struct FractionalScale;
-  struct CursorShapeDevice;
-  struct IdleInhibitor;
-  struct LayerSurface;
-  struct PresentationFeedback;
-  struct RelativePointer;
-  struct PointerConstraint;
-  struct PrimarySelectionDevice;
-  struct PrimarySelectionSource;
-  struct PrimarySelectionOffer;
-  struct DataDevice;
-  struct DataSource;
-  struct DataOffer;
+  struct Impl;
 
-  wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
-  void destroySurface(Surface* surface);
-  void destroyXdgSurface(XdgSurface* surface);
-  void destroyXdgToplevel(XdgToplevel* toplevel);
-  void destroyShmPool(ShmPool* pool);
-  void destroyShmBuffer(ShmBuffer* buffer);
-  void destroyDmabufParams(DmabufParams* params);
-  void destroyDmabufBuffer(DmabufBuffer* buffer);
-  void destroyToplevelDecoration(ToplevelDecoration* decoration);
-  void destroyViewport(Viewport* viewport);
-  void destroyFractionalScale(FractionalScale* fractionalScale);
-  void destroyCursorShapeDevice(CursorShapeDevice* device);
-  void destroyIdleInhibitor(IdleInhibitor* inhibitor);
-  void destroyLayerSurface(LayerSurface* layerSurface);
-  void destroyPresentationFeedback(PresentationFeedback* feedback);
-  void destroyRelativePointer(RelativePointer* relativePointer);
-  void destroyPointerConstraint(PointerConstraint* constraint);
-  void destroyPrimarySelectionDevice(PrimarySelectionDevice* device);
-  void destroyPrimarySelectionSource(PrimarySelectionSource* source);
-  void destroyPrimarySelectionOffer(PrimarySelectionOffer* offer);
-  void destroyDataDevice(DataDevice* device);
-  void destroyDataSource(DataSource* source);
-  void destroyDataOffer(DataOffer* offer);
-
-  wl_display* display_ = nullptr;
-  wl_global* compositorGlobal_ = nullptr;
-  wl_global* shmGlobal_ = nullptr;
-  wl_global* outputGlobal_ = nullptr;
-  wl_global* seatGlobal_ = nullptr;
-  wl_global* xdgWmBaseGlobal_ = nullptr;
-  wl_global* linuxDmabufGlobal_ = nullptr;
-  wl_global* xdgDecorationManagerGlobal_ = nullptr;
-  wl_global* xdgOutputManagerGlobal_ = nullptr;
-  wl_global* viewporterGlobal_ = nullptr;
-  wl_global* fractionalScaleManagerGlobal_ = nullptr;
-  wl_global* cursorShapeManagerGlobal_ = nullptr;
-  wl_global* idleInhibitManagerGlobal_ = nullptr;
-  wl_global* layerShellGlobal_ = nullptr;
-  wl_global* presentationGlobal_ = nullptr;
-  wl_global* relativePointerManagerGlobal_ = nullptr;
-  wl_global* pointerConstraintsGlobal_ = nullptr;
-  wl_global* primarySelectionManagerGlobal_ = nullptr;
-  wl_global* dataDeviceManagerGlobal_ = nullptr;
-  std::string socketName_;
-  std::string displayNameFile_;
-  WaylandOutputInfo output_;
-  std::vector<std::unique_ptr<Surface>> surfaces_;
-  std::vector<std::unique_ptr<XdgSurface>> xdgSurfaces_;
-  std::vector<std::unique_ptr<XdgToplevel>> toplevels_;
-  std::vector<std::unique_ptr<ShmPool>> shmPools_;
-  std::vector<std::unique_ptr<ShmBuffer>> shmBuffers_;
-  std::vector<std::unique_ptr<DmabufParams>> dmabufParams_;
-  std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
-  std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
-  std::vector<std::unique_ptr<Viewport>> viewports_;
-  std::vector<std::unique_ptr<FractionalScale>> fractionalScales_;
-  std::vector<std::unique_ptr<CursorShapeDevice>> cursorShapeDevices_;
-  std::vector<std::unique_ptr<IdleInhibitor>> idleInhibitors_;
-  std::vector<std::unique_ptr<LayerSurface>> layerSurfaces_;
-  std::vector<std::unique_ptr<PresentationFeedback>> presentationFeedbacks_;
-  std::vector<std::unique_ptr<RelativePointer>> relativePointers_;
-  std::vector<std::unique_ptr<PointerConstraint>> pointerConstraints_;
-  std::vector<std::unique_ptr<PrimarySelectionDevice>> primarySelectionDevices_;
-  std::vector<std::unique_ptr<PrimarySelectionSource>> primarySelectionSources_;
-  std::vector<std::unique_ptr<PrimarySelectionOffer>> primarySelectionOffers_;
-  PrimarySelectionSource* primarySelectionSource_ = nullptr;
-  std::vector<std::unique_ptr<DataDevice>> dataDevices_;
-  std::vector<std::unique_ptr<DataSource>> dataSources_;
-  std::vector<std::unique_ptr<DataOffer>> dataOffers_;
-  DataSource* selectionSource_ = nullptr;
-  DataSource* dndSource_ = nullptr;
-  Surface* dndOrigin_ = nullptr;
-  Surface* dndTarget_ = nullptr;
-  DataOffer* dndOffer_ = nullptr;
-  std::vector<wl_resource*> seatResources_;
-  std::vector<wl_resource*> pointerResources_;
-  std::vector<wl_resource*> keyboardResources_;
-  Surface* pointerFocus_ = nullptr;
-  Surface* keyboardFocus_ = nullptr;
-  Surface* dragSurface_ = nullptr;
-  Surface* resizeSurface_ = nullptr;
-  Surface* closePressSurface_ = nullptr;
-  Surface* lastTitleClickSurface_ = nullptr;
-  Surface* cursorSurface_ = nullptr;
-  CursorShape cursorShape_ = CursorShape::Arrow;
-  std::int32_t cursorHotspotX_ = 0;
-  std::int32_t cursorHotspotY_ = 0;
-  std::uint32_t pointerEnterSerial_ = 0;
-  float dragOffsetX_ = 0.f;
-  float dragOffsetY_ = 0.f;
-  std::uint32_t lastTitleClickTimeMs_ = 0;
-  float resizeStartX_ = 0.f;
-  float resizeStartY_ = 0.f;
-  std::int32_t resizeStartWindowX_ = 0;
-  std::int32_t resizeStartWindowY_ = 0;
-  std::int32_t resizeStartWidth_ = 0;
-  std::int32_t resizeStartHeight_ = 0;
-  std::int32_t resizeLastWidth_ = 0;
-  std::int32_t resizeLastHeight_ = 0;
-  std::uint32_t resizeEdges_ = 0;
-  bool metaDown_ = false;
-  bool ctrlDown_ = false;
-  bool altDown_ = false;
-  bool shiftDown_ = false;
-  std::vector<ShortcutBinding> shortcutBindings_;
-  std::uint32_t shiftModifierIndex_ = ~0u;
-  std::uint32_t ctrlModifierIndex_ = ~0u;
-  std::uint32_t altModifierIndex_ = ~0u;
-  std::uint32_t logoModifierIndex_ = ~0u;
-  float pointerX_ = 32.f;
-  float pointerY_ = 32.f;
-  std::uint64_t nextSurfaceId_ = 1;
-  std::uint32_t nextConfigureSerial_ = 1;
-  std::uint32_t nextInputSerial_ = 1;
+private:
+  std::unique_ptr<Impl> impl_;
 };
 
 } // namespace flux::compositor
