@@ -550,6 +550,7 @@ if(FLUX_BUILD_COMPOSITOR)
     src/Compositor/Config/CompositorConfig.cpp
     src/Compositor/Input/KmsInputBridge.cpp
     src/Compositor/Surface/SurfaceRenderer.cpp
+    src/Compositor/Wayland/Globals/LinuxDmabuf.cpp
     src/Compositor/Wayland/Globals/Output.cpp
     src/Compositor/Wayland/Globals/Seat.cpp
     src/Compositor/Wayland/Globals/Shm.cpp
