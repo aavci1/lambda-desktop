@@ -333,7 +333,7 @@ std::string defaultConfigToml() {
 
 background = "#3380f2"
 # background_gradient = "#203040 #405060"
-# wallpaper = "/path/to/wallpaper.png"
+# wallpaper = "/path/to/wallpaper.jpg"
 # wallpaper_mode = "cover" # cover, contain, stretch, center, tile
 # cursor_theme = "Adwaita" # unset uses XCURSOR_THEME or system default
 # cursor_size = 24 # unset uses XCURSOR_SIZE or 24

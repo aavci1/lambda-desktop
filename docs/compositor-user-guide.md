@@ -102,7 +102,7 @@ Current keys:
 ```toml
 background = "#3380f2"
 # background_gradient = "#203040 #405060"
-# wallpaper = "/path/to/wallpaper.png"
+# wallpaper = "/path/to/wallpaper.jpg"
 # wallpaper_mode = "cover" # cover, contain, stretch, center, tile
 # cursor_theme = "Adwaita" # unset uses XCURSOR_THEME or system default
 # cursor_size = 24 # unset uses XCURSOR_SIZE or 24
@@ -128,7 +128,9 @@ terminate = "ctrl+alt+backspace"
 `output` selects which connected KMS connector the single-output compositor owns. Use `--list-outputs` to see connector names and indexes. Changing this key while the compositor is running is logged, but moving to another output requires restarting the compositor.
 
 `wallpaper_mode` accepts `cover`, `contain`, `stretch`, `center`, and `tile`.
-Wallpaper paths may be absolute, `~/...`, or relative to the config file directory.
+Wallpaper paths may be absolute, `~/...`, or relative to the config file directory. On Linux,
+the Vulkan renderer loads common image formats through gdk-pixbuf when available, including
+JPEG, PNG, and WebP; WebP also has a direct fallback decoder.
 
 ## Window Management
 

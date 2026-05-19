@@ -3700,17 +3700,98 @@ std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width, std::uint32_t 
   return std::make_shared<VulkanImage>(static_cast<int>(width), static_cast<int>(height), std::move(pixels));
 }
 
-std::shared_ptr<Image> loadImageFromFile(std::string_view path, void *) {
+std::shared_ptr<Image> loadImageWithGdkPixbuf(std::string_view path) {
+  using GdkPixbufNewFromFileFn = void *(*)(char const *, void **);
+  using GdkPixbufGetWidthFn = int (*)(void *);
+  using GdkPixbufGetHeightFn = int (*)(void *);
+  using GdkPixbufGetNChannelsFn = int (*)(void *);
+  using GdkPixbufGetHasAlphaFn = int (*)(void *);
+  using GdkPixbufGetRowstrideFn = int (*)(void *);
+  using GdkPixbufGetPixelsFn = std::uint8_t *(*)(void *);
+  using GObjectUnrefFn = void (*)(void *);
+  using GErrorFreeFn = void (*)(void *);
+
+  void *pixbufLib = dlopen("libgdk_pixbuf-2.0.so.0", RTLD_LAZY | RTLD_LOCAL);
+  if (!pixbufLib) {
+    pixbufLib = dlopen("libgdk_pixbuf-2.0.so", RTLD_LAZY | RTLD_LOCAL);
+  }
+  if (!pixbufLib) {
+    return nullptr;
+  }
+
+  void *gobjectLib = dlopen("libgobject-2.0.so.0", RTLD_LAZY | RTLD_LOCAL);
+  if (!gobjectLib) {
+    gobjectLib = dlopen("libgobject-2.0.so", RTLD_LAZY | RTLD_LOCAL);
+  }
+  void *glibLib = dlopen("libglib-2.0.so.0", RTLD_LAZY | RTLD_LOCAL);
+  if (!glibLib) {
+    glibLib = dlopen("libglib-2.0.so", RTLD_LAZY | RTLD_LOCAL);
+  }
+
+  auto newFromFile = reinterpret_cast<GdkPixbufNewFromFileFn>(dlsym(pixbufLib, "gdk_pixbuf_new_from_file"));
+  auto getWidth = reinterpret_cast<GdkPixbufGetWidthFn>(dlsym(pixbufLib, "gdk_pixbuf_get_width"));
+  auto getHeight = reinterpret_cast<GdkPixbufGetHeightFn>(dlsym(pixbufLib, "gdk_pixbuf_get_height"));
+  auto getNChannels =
+      reinterpret_cast<GdkPixbufGetNChannelsFn>(dlsym(pixbufLib, "gdk_pixbuf_get_n_channels"));
+  auto getHasAlpha = reinterpret_cast<GdkPixbufGetHasAlphaFn>(dlsym(pixbufLib, "gdk_pixbuf_get_has_alpha"));
+  auto getRowstride = reinterpret_cast<GdkPixbufGetRowstrideFn>(dlsym(pixbufLib, "gdk_pixbuf_get_rowstride"));
+  auto getPixels = reinterpret_cast<GdkPixbufGetPixelsFn>(dlsym(pixbufLib, "gdk_pixbuf_get_pixels"));
+  auto unref = reinterpret_cast<GObjectUnrefFn>(gobjectLib ? dlsym(gobjectLib, "g_object_unref") : nullptr);
+  auto errorFree = reinterpret_cast<GErrorFreeFn>(glibLib ? dlsym(glibLib, "g_error_free") : nullptr);
+
+  if (!newFromFile || !getWidth || !getHeight || !getNChannels || !getHasAlpha || !getRowstride ||
+      !getPixels || !unref) {
+    if (glibLib) dlclose(glibLib);
+    if (gobjectLib) dlclose(gobjectLib);
+    dlclose(pixbufLib);
+    return nullptr;
+  }
+
+  std::string ownedPath(path);
+  void *error = nullptr;
+  void *pixbuf = newFromFile(ownedPath.c_str(), &error);
+  if (!pixbuf) {
+    if (error && errorFree) errorFree(error);
+    if (glibLib) dlclose(glibLib);
+    if (gobjectLib) dlclose(gobjectLib);
+    dlclose(pixbufLib);
+    return nullptr;
+  }
+
+  int const width = getWidth(pixbuf);
+  int const height = getHeight(pixbuf);
+  int const channels = getNChannels(pixbuf);
+  int const rowstride = getRowstride(pixbuf);
+  bool const hasAlpha = getHasAlpha(pixbuf) != 0;
+  std::uint8_t *pixels = getPixels(pixbuf);
+
+  std::shared_ptr<Image> result;
+  if (width > 0 && height > 0 && (channels == 3 || channels == 4) && rowstride >= width * channels && pixels) {
+    std::vector<Rgba> rgba(static_cast<std::size_t>(width) * static_cast<std::size_t>(height));
+    for (int y = 0; y < height; ++y) {
+      std::uint8_t const *row = pixels + static_cast<std::size_t>(y) * static_cast<std::size_t>(rowstride);
+      for (int x = 0; x < width; ++x) {
+        std::uint8_t const *src = row + static_cast<std::size_t>(x) * static_cast<std::size_t>(channels);
+        std::uint8_t const alpha = hasAlpha && channels == 4 ? src[3] : static_cast<std::uint8_t>(255);
+        rgba[static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x)] =
+            Rgba{src[0], src[1], src[2], alpha};
+      }
+    }
+    result = std::make_shared<VulkanImage>(width, height, std::move(rgba));
+  }
+
+  unref(pixbuf);
+  if (glibLib) dlclose(glibLib);
+  if (gobjectLib) dlclose(gobjectLib);
+  dlclose(pixbufLib);
+  return result;
+}
+
+std::shared_ptr<Image> loadImageWithWebP(std::span<std::uint8_t const> data) {
   using WebPGetInfoFn = int (*)(std::uint8_t const *, std::size_t, int *, int *);
   using WebPDecodeRGBAFn = std::uint8_t *(*)(std::uint8_t const *, std::size_t, int *, int *);
   using WebPFreeFn = void (*)(void *);
 
-  std::ifstream in(std::filesystem::path(std::string(path)), std::ios::binary);
-  if (!in)
-    return nullptr;
-  std::vector<std::uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-  if (data.empty())
-    return nullptr;
   void *lib = dlopen("libwebp.so.7", RTLD_LAZY | RTLD_LOCAL);
   if (!lib)
     lib = dlopen("libwebp.so", RTLD_LAZY | RTLD_LOCAL);
@@ -3741,6 +3822,20 @@ std::shared_ptr<Image> loadImageFromFile(std::string_view path, void *) {
   freeWebP(decoded);
   dlclose(lib);
   return std::make_shared<VulkanImage>(width, height, std::move(rgba));
+}
+
+std::shared_ptr<Image> loadImageFromFile(std::string_view path, void *) {
+  std::ifstream in(std::filesystem::path(std::string(path)), std::ios::binary);
+  if (!in)
+    return nullptr;
+  std::vector<std::uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  if (data.empty())
+    return nullptr;
+
+  if (auto image = loadImageWithGdkPixbuf(path)) {
+    return image;
+  }
+  return loadImageWithWebP(data);
 }
 
 std::shared_ptr<Image> rasterizeToImage(Canvas &canvas, Size logicalSize, RasterizeDrawCallback draw, float dpiScale) {
