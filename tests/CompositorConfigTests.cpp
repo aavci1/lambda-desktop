@@ -111,6 +111,42 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   std::filesystem::remove(path);
 }
 
+TEST_CASE("compositor config resolves wallpaper paths from home and config directory") {
+  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  ScopedEnv homeEnv("HOME");
+  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+
+  auto const root = std::filesystem::temp_directory_path() /
+                    ("flux-compositor-wallpaper-test-" +
+                     std::to_string(static_cast<unsigned long long>(getpid())));
+  auto const configDir = root / "config";
+  auto const homeDir = root / "home";
+  std::filesystem::create_directories(configDir);
+  std::filesystem::create_directories(homeDir);
+  setenv("HOME", homeDir.c_str(), 1);
+
+  auto const path = configDir / "config.toml";
+  {
+    std::ofstream file(path);
+    file << "wallpaper = \"~/Pictures/wallpaper.png\"\n";
+  }
+  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+  auto homeLoaded = flux::compositor::loadConfigWithMetadata();
+  REQUIRE(homeLoaded.config.wallpaperPath);
+  CHECK(*homeLoaded.config.wallpaperPath == (homeDir / "Pictures/wallpaper.png").lexically_normal().string());
+
+  {
+    std::ofstream file(path);
+    file << "wallpaper = \"images/wallpaper.png\"\n";
+  }
+  auto relativeLoaded = flux::compositor::loadConfigWithMetadata();
+  REQUIRE(relativeLoaded.config.wallpaperPath);
+  CHECK(*relativeLoaded.config.wallpaperPath == (configDir / "images/wallpaper.png").lexically_normal().string());
+
+  std::filesystem::remove_all(root);
+}
+
 TEST_CASE("compositor config parses shorthand and alpha colors") {
   ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
   ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");

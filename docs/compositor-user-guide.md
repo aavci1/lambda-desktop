@@ -128,6 +128,7 @@ terminate = "ctrl+alt+backspace"
 `output` selects which connected KMS connector the single-output compositor owns. Use `--list-outputs` to see connector names and indexes. Changing this key while the compositor is running is logged, but moving to another output requires restarting the compositor.
 
 `wallpaper_mode` accepts `cover`, `contain`, `stretch`, `center`, and `tile`.
+Wallpaper paths may be absolute, `~/...`, or relative to the config file directory.
 
 ## Window Management
 

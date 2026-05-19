@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <linux/input-event-codes.h>
 #include <optional>
@@ -300,6 +301,30 @@ void applyEnvironmentOverrides(CompositorConfig& config) {
   }
 }
 
+std::string resolveConfigPathValue(std::string_view value, std::string const& configFilePath) {
+  std::string text = trim(value);
+  if (text.empty()) return text;
+  if (text == "~") {
+    if (char const* home = std::getenv("HOME"); home && *home) return std::string(home);
+    return text;
+  }
+  if (text.rfind("~/", 0) == 0) {
+    if (char const* home = std::getenv("HOME"); home && *home) {
+      return (std::filesystem::path(home) / text.substr(2)).lexically_normal().string();
+    }
+    return text;
+  }
+
+  std::filesystem::path resolved(text);
+  if (resolved.is_absolute()) return resolved.lexically_normal().string();
+
+  std::filesystem::path const configPath(configFilePath);
+  std::filesystem::path const base = configPath.has_parent_path()
+                                         ? configPath.parent_path()
+                                         : std::filesystem::current_path();
+  return (base / resolved).lexically_normal().string();
+}
+
 std::string defaultConfigToml() {
   return R"(# Flux compositor configuration.
 #
@@ -436,7 +461,7 @@ CompositorConfig loadConfig() {
 
   auto parseWallpaper = [&](char const* key) -> bool {
     if (auto wallpaper = configString(table, key); wallpaper && !wallpaper->empty()) {
-      config.wallpaperPath = *wallpaper;
+      config.wallpaperPath = resolveConfigPathValue(*wallpaper, *path);
       return true;
     }
     return false;
