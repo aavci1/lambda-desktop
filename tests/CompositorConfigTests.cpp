@@ -228,6 +228,34 @@ TEST_CASE("compositor config parses gradient aliases and scale aliases") {
   std::filesystem::remove(path);
 }
 
+TEST_CASE("compositor config supports per-output scale overrides") {
+  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  auto const path = tempConfigPath();
+  std::ofstream file(path);
+  file << "scale = 1.0\n";
+  file << "[outputs.\"eDP-1\"]\n";
+  file << "scale = 1.25\n";
+  file << "[outputs.\"DP-1\"]\n";
+  file << "scale = 2.0\n";
+  file.close();
+  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+
+  auto loaded = flux::compositor::loadConfigWithMetadata();
+  auto const& config = loaded.config;
+  CHECK(config.scale == doctest::Approx(1.0f));
+  REQUIRE(config.outputScales.contains("eDP-1"));
+  REQUIRE(config.outputScales.contains("DP-1"));
+  CHECK(config.outputScales.at("eDP-1") == doctest::Approx(1.25f));
+  CHECK(config.outputScales.at("DP-1") == doctest::Approx(2.0f));
+  CHECK(flux::compositor::scaleForOutput(config, "eDP-1") == doctest::Approx(1.25f));
+  CHECK(flux::compositor::scaleForOutput(config, "DP-1") == doctest::Approx(2.0f));
+  CHECK(flux::compositor::scaleForOutput(config, "HDMI-A-1") == doctest::Approx(1.0f));
+
+  std::filesystem::remove(path);
+}
+
 TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
   ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");

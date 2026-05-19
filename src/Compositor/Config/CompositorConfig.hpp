@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace flux::compositor {
@@ -21,6 +22,7 @@ struct CompositorConfig {
   int cursorSize = 0;
   std::optional<std::string> outputSelector;
   float scale = 2.0f;
+  std::unordered_map<std::string, float> outputScales;
   bool animationsEnabled = true;
   bool hardwareCursorEnabled = true;
   std::vector<WaylandServer::ShortcutBinding> shortcutBindings;
@@ -35,5 +37,6 @@ struct LoadedCompositorConfig {
 
 [[nodiscard]] LoadedCompositorConfig loadConfigWithMetadata();
 [[nodiscard]] bool configChanged(LoadedCompositorConfig const& loaded);
+[[nodiscard]] float scaleForOutput(CompositorConfig const& config, std::string const& outputName);
 
 } // namespace flux::compositor

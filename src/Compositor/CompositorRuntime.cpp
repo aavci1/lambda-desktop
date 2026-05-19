@@ -227,25 +227,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                  output.height(),
                  output.name().c_str());
 
-    AppliedCompositorConfig appliedConfig = applyCompositorConfig(loadedConfig.config, *canvas);
-    wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
-    wayland.setPreferredScale(appliedConfig.config.scale);
-    canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
-    canvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
-    std::fprintf(stderr,
-                 "flux-compositor: output physical=%ux%u logical=%dx%d scale=%.2f\n",
-                 output.width(),
-                 output.height(),
-                 wayland.logicalOutputWidth(),
-                 wayland.logicalOutputHeight(),
-                 wayland.preferredScale());
+    auto effectiveConfig = [&] {
+      CompositorConfig config = loadedConfig.config;
+      config.scale = scaleForOutput(config, output.name());
+      return config;
+    };
 
-    auto applyConfig = [&] {
+    AppliedCompositorConfig appliedConfig{};
+    auto applyOutputScale = [&](bool force) {
       float const previousScale = wayland.preferredScale();
-      appliedConfig = applyCompositorConfig(loadedConfig.config, *canvas);
-      wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
       wayland.setPreferredScale(appliedConfig.config.scale);
-      if (std::abs(previousScale - wayland.preferredScale()) > 0.001f) {
+      if (force || std::abs(previousScale - wayland.preferredScale()) > 0.001f) {
         canvas->updateDpiScale(wayland.preferredScale(), wayland.preferredScale());
         canvas->resize(wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
         std::fprintf(stderr,
@@ -258,6 +250,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
     };
 
+    auto applyConfig = [&](bool forceOutputScale = false) {
+      appliedConfig = applyCompositorConfig(effectiveConfig(), *canvas);
+      wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
+      applyOutputScale(forceOutputScale);
+    };
+    applyConfig(true);
+
     SurfaceRenderState surfaceRenderState;
     CursorRenderState cursorState;
     LoopInstrumentation loopStats;
@@ -269,6 +268,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     }
 
     bool forceRender = true;
+    bool wasVtForeground = device->isVtForeground();
     constexpr int kIdlePollMs = 250;
 
     while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
@@ -296,7 +296,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         applyConfig();
         configReloaded = true;
       }
-      if (!device->isVtForeground()) {
+      bool const vtForeground = device->isVtForeground();
+      if (vtForeground && !wasVtForeground) {
+        applyConfig(true);
+        forceRender = true;
+      }
+      wasVtForeground = vtForeground;
+      if (!vtForeground) {
         ++loopStats.vtSleeps;
         timingStart = LoopInstrumentation::Clock::now();
         bool const vtPollWoke = device->pollEvents(kIdlePollMs, waylandEventFds);

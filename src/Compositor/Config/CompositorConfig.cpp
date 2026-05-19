@@ -339,7 +339,15 @@ background = "#3380f2"
 # cursor_size = 24 # unset uses XCURSOR_SIZE or 24
 # output = "HDMI-A-1" # connector name, 0-based index, "primary", or "secondary"
 
-scale = 2.0
+scale = 2.0 # fallback scale for outputs without an override
+#
+# Per-output scale overrides use connector names:
+# [outputs."eDP-1"]
+# scale = 1.25
+#
+# [outputs."DP-1"]
+# scale = 2.0
+
 animations = true
 hardware_cursor = true
 
@@ -517,6 +525,52 @@ CompositorConfig loadConfig() {
   };
   if (!parseScaleKey("scale") && !parseScaleKey("output_scale")) parseScaleKey("fractional_scale");
 
+  auto parseOutputScaleEntry = [&](std::string outputName, toml::table const& outputTable) {
+    outputName = trim(outputName);
+    if (outputName.empty()) {
+      std::fprintf(stderr, "flux-compositor: ignoring output scale with empty output name in %s\n", path->c_str());
+      return;
+    }
+    auto parseNamedScaleKey = [&](char const* key) -> bool {
+      if (!outputTable.contains(key)) return false;
+      if (auto scale = configFloat(outputTable, key); scale && *scale >= 0.5f && *scale <= 4.f) {
+        config.outputScales[outputName] = *scale;
+      } else {
+        std::fprintf(stderr,
+                     "flux-compositor: ignoring invalid scale for output %s in %s\n",
+                     outputName.c_str(),
+                     path->c_str());
+      }
+      return true;
+    };
+    if (!parseNamedScaleKey("scale") && !parseNamedScaleKey("output_scale")) parseNamedScaleKey("fractional_scale");
+  };
+
+  if (auto* outputsTable = table["outputs"].as_table()) {
+    for (auto&& [key, node] : *outputsTable) {
+      if (auto* outputTable = node.as_table()) {
+        parseOutputScaleEntry(std::string(key.str()), *outputTable);
+      } else {
+        std::fprintf(stderr,
+                     "flux-compositor: ignoring non-table output entry %s in %s\n",
+                     std::string(key.str()).c_str(),
+                     path->c_str());
+      }
+    }
+  } else if (auto* outputsArray = table["outputs"].as_array()) {
+    for (auto&& node : *outputsArray) {
+      if (auto* outputTable = node.as_table()) {
+        auto outputName = configString(*outputTable, "name");
+        if (!outputName) outputName = configString(*outputTable, "output");
+        if (outputName) {
+          parseOutputScaleEntry(*outputName, *outputTable);
+        } else {
+          std::fprintf(stderr, "flux-compositor: ignoring output scale without name in %s\n", path->c_str());
+        }
+      }
+    }
+  }
+
   if (table.contains("animations")) {
     if (auto enabled = configBool(table, "animations")) {
       config.animationsEnabled = *enabled;
@@ -567,6 +621,11 @@ bool configChanged(LoadedCompositorConfig const& loaded) {
   auto modifiedAt = std::filesystem::last_write_time(*loaded.path, error);
   if (error) return loaded.hasModifiedAt;
   return !loaded.hasModifiedAt || modifiedAt != loaded.modifiedAt;
+}
+
+float scaleForOutput(CompositorConfig const& config, std::string const& outputName) {
+  auto found = config.outputScales.find(outputName);
+  return found == config.outputScales.end() ? config.scale : found->second;
 }
 
 } // namespace flux::compositor

@@ -108,7 +108,15 @@ background = "#3380f2"
 # cursor_size = 24 # unset uses XCURSOR_SIZE or 24
 # output = "HDMI-A-1" # connector name, 0-based index, primary, or secondary
 
-scale = 2.0
+scale = 2.0 # fallback scale for outputs without an override
+
+# Per-output scale overrides use connector names:
+# [outputs."eDP-1"]
+# scale = 1.25
+#
+# [outputs."DP-1"]
+# scale = 2.0
+
 animations = true
 hardware_cursor = true
 
@@ -123,7 +131,7 @@ launch_command = "super+space"
 terminate = "ctrl+alt+backspace"
 ```
 
-`scale` is compositor-level output scale. The compositor advertises a logical output size to clients and sends fractional-scale protocol updates when clients support them. Integer scales such as `1.0` and `2.0` are the safest baselines; `1.25` and `1.5` exercise fractional scaling.
+`scale` is compositor-level output scale. The compositor advertises a logical output size to clients and sends fractional-scale protocol updates when clients support them. Integer scales such as `1.0` and `2.0` are the safest baselines; `1.25` and `1.5` exercise fractional scaling. Use `[outputs."CONNECTOR"]` entries to override scale per KMS connector while keeping a fallback `scale` for every other output.
 
 `output` selects which connected KMS connector the single-output compositor owns. Use `--list-outputs` to see connector names and indexes. Changing this key while the compositor is running is logged, but moving to another output requires restarting the compositor.
 
