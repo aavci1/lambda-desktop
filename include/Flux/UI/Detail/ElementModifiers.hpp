@@ -6,6 +6,7 @@
 
 #include <Flux/UI/Cursor.hpp>
 #include <Flux/UI/Input.hpp>
+#include <Flux/UI/WindowChrome.hpp>
 #include <Flux/Core/Identity.hpp>
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Detail/SmallVector.hpp>
@@ -76,6 +77,8 @@ struct ElementModifiers {
   std::function<void(std::string const&)> onTextInput;
   Reactive::Bindable<bool> focusable{false};
   Reactive::Bindable<Cursor> cursor{Cursor::Inherit};
+  bool windowDragRegion = false;
+  WindowResizeEdge windowResizeEdge = WindowResizeEdge::None;
 
   bool hasInteraction() const noexcept {
     return static_cast<bool>(onTap) || static_cast<bool>(onPointerEnter) ||
@@ -85,7 +88,8 @@ struct ElementModifiers {
            static_cast<bool>(onScroll) || static_cast<bool>(onKeyDown) ||
            static_cast<bool>(onKeyUp) || static_cast<bool>(onTextInput) ||
            focusable.isReactive() || focusable.evaluate() ||
-           cursor.isReactive() || cursor.evaluate() != Cursor::Inherit;
+           cursor.isReactive() || cursor.evaluate() != Cursor::Inherit ||
+           windowDragRegion || windowResizeEdge != WindowResizeEdge::None;
   }
 
   bool needsModifierPass() const {

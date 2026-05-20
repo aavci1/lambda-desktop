@@ -13,6 +13,7 @@
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/UI/Cursor.hpp>
 #include <Flux/UI/Input.hpp>
+#include <Flux/UI/WindowChrome.hpp>
 
 #include <string>
 
@@ -22,6 +23,8 @@ struct InteractionData : public scenegraph::Interaction {
   ComponentKey stableTargetKey_{};
   Reactive::Bindable<Cursor> cursor{Cursor::Inherit};
   Reactive::Bindable<bool> focusable_{false};
+  bool windowDragRegion = false;
+  WindowResizeEdge windowResizeEdge = WindowResizeEdge::None;
   Reactive::SmallFn<void()> onPointerEnter;
   Reactive::SmallFn<void()> onPointerExit;
   Reactive::SmallFn<void()> onFocus;
@@ -54,7 +57,8 @@ struct InteractionData : public scenegraph::Interaction {
            hoverSignal.disposed() && pressSignal.disposed() &&
            focusSignal.disposed() && keyboardFocusSignal.disposed() &&
            !focusable_.isReactive() && !focusable_.evaluate() &&
-           !cursor.isReactive() && cursor.evaluate() == Cursor::Inherit;
+           !cursor.isReactive() && cursor.evaluate() == Cursor::Inherit &&
+           !windowDragRegion && windowResizeEdge == WindowResizeEdge::None;
   }
 };
 

@@ -2,10 +2,12 @@
 
 #include <memory>
 #include <optional>
+#include <cstdint>
 #include <string>
 
 #include <Flux/UI/Cursor.hpp>
 #include <Flux/Core/Geometry.hpp>
+#include <Flux/UI/WindowChrome.hpp>
 
 namespace flux {
 
@@ -33,6 +35,11 @@ public:
   virtual void setMaxSize(Size /*size*/) {}
   virtual void setFullscreen(bool fullscreen) = 0;
   virtual void setTitle(const std::string& title) = 0;
+  virtual void setDecorationMode(WindowDecorationMode /*mode*/) {}
+  virtual WindowDecorationMode decorationMode() const { return WindowDecorationMode::System; }
+  virtual WindowChromeMetrics chromeMetrics() const { return {}; }
+  virtual void beginWindowDrag(std::uint32_t /*platformSerial*/ = 0) {}
+  virtual void beginWindowResize(WindowResizeEdge /*edge*/, std::uint32_t /*platformSerial*/ = 0) {}
 
   virtual Size currentSize() const = 0;
   virtual std::optional<Rect> currentFrame() const { return std::nullopt; }

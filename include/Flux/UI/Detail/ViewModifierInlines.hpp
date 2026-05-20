@@ -247,6 +247,16 @@ Element ViewModifiers<Derived>::cursor(Reactive::Bindable<Cursor> c) && {
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::windowDragRegion(bool enabled) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.windowDragRegion(enabled);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::windowResizeRegion(WindowResizeEdge edge) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.windowResizeRegion(edge);
+}
+
+template<typename Derived>
 Element ViewModifiers<Derived>::flex(float grow) && {
   return Element{std::move(static_cast<Derived&>(*this))}.flex(grow);
 }

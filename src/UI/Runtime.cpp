@@ -46,6 +46,8 @@ struct RuntimeTargetSnapshot {
   Reactive::Signal<bool> pressSignal;
   Reactive::Signal<bool> focusSignal;
   Reactive::Signal<bool> keyboardFocusSignal;
+  bool windowDragRegion = false;
+  WindowResizeEdge windowResizeEdge = WindowResizeEdge::None;
 };
 
 struct RuntimeInputState {
@@ -359,6 +361,8 @@ RuntimeTargetSnapshot snapshot(scenegraph::SceneNode const* node,
     target.pressSignal = interaction->pressSignal;
     target.focusSignal = interaction->focusSignal;
     target.keyboardFocusSignal = interaction->keyboardFocusSignal;
+    target.windowDragRegion = interaction->windowDragRegion;
+    target.windowResizeEdge = interaction->windowResizeEdge;
   }
   return target;
 }
@@ -739,6 +743,20 @@ void Runtime::handleInput(InputEvent const& event) {
       }
       d->input.pressTarget = target;
       setPressActive(target, true);
+      if (event.button == MouseButton::Left && target.windowResizeEdge != WindowResizeEdge::None) {
+        setPressActive(target, false);
+        d->input.pressTarget.reset();
+        d->input.pressCancelled = false;
+        d->window.beginWindowResize(target.windowResizeEdge, event);
+        return;
+      }
+      if (event.button == MouseButton::Left && target.windowDragRegion) {
+        setPressActive(target, false);
+        d->input.pressTarget.reset();
+        d->input.pressCancelled = false;
+        d->window.beginWindowDrag(event);
+        return;
+      }
       if (target.onPointerDown) {
         target.onPointerDown(hit->localPoint, event.button);
       }
@@ -823,6 +841,7 @@ void Runtime::handleInput(InputEvent const& event) {
 }
 
 void Runtime::handleWindowEvent(WindowEvent const& event) {
+  d->window.refreshChromeMetrics();
   switch (event.kind) {
   case WindowEvent::Kind::Resize:
     if (d->root && d->window.hasSceneGraph()) {

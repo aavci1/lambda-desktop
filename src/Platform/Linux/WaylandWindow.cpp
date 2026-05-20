@@ -109,6 +109,7 @@ struct SharedWaylandConnection {
   wp_fractional_scale_manager_v1* fractionalScaleManager = nullptr;
   xdg_wm_base* wmBase = nullptr;
   zxdg_decoration_manager_v1* decorationManager = nullptr;
+  std::uint32_t decorationManagerVersion = 0;
   xx_cutouts_manager_v1* cutoutsManager = nullptr;
   wl_seat* seat = nullptr;
   wl_pointer* pointer = nullptr;
@@ -237,6 +238,7 @@ void releaseWaylandConnection() {
   if (gWaylandConnection.decorationManager) {
     zxdg_decoration_manager_v1_destroy(gWaylandConnection.decorationManager);
     gWaylandConnection.decorationManager = nullptr;
+    gWaylandConnection.decorationManagerVersion = 0;
   }
   if (gWaylandConnection.cutoutsManager) {
     xx_cutouts_manager_v1_destroy(gWaylandConnection.cutoutsManager);
@@ -279,7 +281,7 @@ class WaylandWindow final : public platform::Window {
 public:
   explicit WaylandWindow(WindowConfig const& config)
       : handle_(gNextHandle.fetch_add(1)), size_(config.size), title_(config.title),
-        fullscreen_(config.fullscreen) {
+        fullscreen_(config.fullscreen), decorationMode_(config.decorationMode) {
     if (pipe(wakePipe_) != 0) {
       throw std::runtime_error("Failed to create Wayland wake pipe");
     }
@@ -310,10 +312,10 @@ public:
     xdg_toplevel_set_app_id(toplevel_, appId_.c_str());
     if (config.minSize.width > 0.f || config.minSize.height > 0.f) setMinSize(config.minSize);
     if (config.maxSize.width > 0.f || config.maxSize.height > 0.f) setMaxSize(config.maxSize);
-    requestServerSideDecorations();
-    requestCutouts();
+    configureDecorationProtocol();
     if (fullscreen_) xdg_toplevel_set_fullscreen(toplevel_, nullptr);
     wl_surface_commit(surface_);
+    surfaceCommitted_ = true;
     while (!configured_) {
       if (wl_display_dispatch(display_) < 0) {
         throw std::runtime_error("Wayland initial configure failed");
@@ -404,6 +406,64 @@ public:
     if (toplevel_) xdg_toplevel_set_title(toplevel_, title_.c_str());
   }
 
+  void setDecorationMode(WindowDecorationMode mode) override {
+    if (decorationMode_ == mode) {
+      return;
+    }
+    decorationMode_ = mode;
+    configureDecorationProtocol();
+    if (surface_) wl_surface_commit(surface_);
+    if (display_) wl_display_flush(display_);
+  }
+
+  WindowDecorationMode decorationMode() const override { return decorationMode_; }
+
+  WindowChromeMetrics chromeMetrics() const override {
+    WindowChromeMetrics metrics{};
+    metrics.decorationMode = decorationMode_;
+    metrics.active = true;
+    if (decorationMode_ == WindowDecorationMode::System) {
+      return metrics;
+    }
+
+    metrics.titlebarHeight = kClientTitlebarHeight;
+    if (decorationMode_ == WindowDecorationMode::IntegratedTitlebar && serverSideDecorationsActive_) {
+      metrics.nativeControlsVisible = true;
+      if (receivedCutout_ && lastCutoutWidth_ > 0 && lastCutoutHeight_ > 0) {
+        metrics.reservedRegions.push_back(Rect::sharp(static_cast<float>(lastCutoutX_),
+                                                       static_cast<float>(lastCutoutY_),
+                                                       static_cast<float>(lastCutoutWidth_),
+                                                       static_cast<float>(lastCutoutHeight_)));
+      } else {
+        metrics.reservedRegions.push_back(Rect::sharp(std::max(0.f, size_.width - kCompositorControlReserveWidth),
+                                                       0.f,
+                                                       std::min(kCompositorControlReserveWidth, size_.width),
+                                                       kClientTitlebarHeight));
+      }
+    }
+    return metrics;
+  }
+
+  void beginWindowDrag(std::uint32_t platformSerial = 0) override {
+    std::uint32_t const serial = platformSerial != 0 ? platformSerial : lastPointerButtonSerial_;
+    if (!shared_ || !shared_->seat || !toplevel_ || serial == 0) {
+      return;
+    }
+    xdg_toplevel_move(toplevel_, shared_->seat, serial);
+    wl_display_flush(display_);
+  }
+
+  void beginWindowResize(WindowResizeEdge edge, std::uint32_t platformSerial = 0) override {
+    std::uint32_t const xdgEdge = xdgResizeEdge(edge);
+    std::uint32_t const serial = platformSerial != 0 ? platformSerial : lastPointerButtonSerial_;
+    if (!shared_ || !shared_->seat || !toplevel_ || serial == 0 ||
+        xdgEdge == XDG_TOPLEVEL_RESIZE_EDGE_NONE) {
+      return;
+    }
+    xdg_toplevel_resize(toplevel_, shared_->seat, serial, xdgEdge);
+    wl_display_flush(display_);
+  }
+
   Size currentSize() const override { return size_; }
   bool isFullscreen() const override { return fullscreen_; }
   unsigned int handle() const override { return handle_; }
@@ -464,6 +524,7 @@ public:
 
   void handlePointerLeave() {
     pressedButtons_ = 0;
+    lastPointerButtonSerial_ = 0;
   }
 
   void handlePointerMotion(wl_fixed_t x, wl_fixed_t y) {
@@ -474,17 +535,21 @@ public:
                                                          .pressedButtons = pressedButtons_});
   }
 
-  void handlePointerButton(std::uint32_t button, std::uint32_t state) {
+  void handlePointerButton(std::uint32_t serial, std::uint32_t button, std::uint32_t state) {
     std::uint8_t const bit = button == BTN_LEFT ? 1u : button == BTN_RIGHT ? 2u : button == BTN_MIDDLE ? 4u : 0u;
     if (state == WL_POINTER_BUTTON_STATE_PRESSED) pressedButtons_ |= bit;
     else pressedButtons_ &= static_cast<std::uint8_t>(~bit);
+    if (button == BTN_LEFT) {
+      lastPointerButtonSerial_ = state == WL_POINTER_BUTTON_STATE_PRESSED ? serial : 0u;
+    }
     Application::instance().eventQueue().post(InputEvent{.kind = state == WL_POINTER_BUTTON_STATE_PRESSED
                                                                      ? InputEvent::Kind::PointerDown
                                                                      : InputEvent::Kind::PointerUp,
                                                          .handle = handle_,
                                                          .position = pointerPos_,
                                                          .button = mouseButtonFromLinux(button),
-                                                         .pressedButtons = pressedButtons_});
+                                                         .pressedButtons = pressedButtons_,
+                                                         .platformSerial = serial});
   }
 
   void handlePointerAxis(std::uint32_t axis, wl_fixed_t value) {
@@ -604,6 +669,7 @@ private:
       self->warnedDecorationFallback_ = true;
       std::fprintf(stderr, "Flux Wayland: compositor refused server-side decorations; resize chrome may be absent.\n");
     }
+    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, self->handle_, self->size_});
   }
 
   static void cutoutBox(void* data,
@@ -615,16 +681,31 @@ private:
                         std::uint32_t,
                         std::uint32_t id) {
     auto* self = static_cast<WaylandWindow*>(data);
-    self->receivedCutout_ = true;
-    self->lastCutoutX_ = x;
-    self->lastCutoutY_ = y;
-    self->lastCutoutWidth_ = width;
-    self->lastCutoutHeight_ = height;
-    self->lastCutoutId_ = id;
+    self->pendingCutoutReceived_ = true;
+    self->pendingCutoutX_ = x;
+    self->pendingCutoutY_ = y;
+    self->pendingCutoutWidth_ = width;
+    self->pendingCutoutHeight_ = height;
+    self->pendingCutoutId_ = id;
   }
 
   static void cutoutCorner(void*, xx_cutouts_v1*, std::uint32_t, std::uint32_t, std::uint32_t) {}
-  static void cutoutsConfigure(void*, xx_cutouts_v1*) {}
+  static void cutoutsConfigure(void* data, xx_cutouts_v1*) {
+    auto* self = static_cast<WaylandWindow*>(data);
+    self->receivedCutout_ = self->pendingCutoutReceived_;
+    self->lastCutoutX_ = self->pendingCutoutX_;
+    self->lastCutoutY_ = self->pendingCutoutY_;
+    self->lastCutoutWidth_ = self->pendingCutoutWidth_;
+    self->lastCutoutHeight_ = self->pendingCutoutHeight_;
+    self->lastCutoutId_ = self->pendingCutoutId_;
+    self->pendingCutoutReceived_ = false;
+    self->pendingCutoutX_ = 0;
+    self->pendingCutoutY_ = 0;
+    self->pendingCutoutWidth_ = 0;
+    self->pendingCutoutHeight_ = 0;
+    self->pendingCutoutId_ = 0;
+    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, self->handle_, self->size_});
+  }
 
   static void surfaceEnter(void* data, wl_surface*, wl_output* output) {
     auto* self = static_cast<WaylandWindow*>(data);
@@ -785,10 +866,21 @@ private:
   }
 
   void requestServerSideDecorations() {
+    if (decoration_) {
+      zxdg_toplevel_decoration_v1_set_mode(decoration_, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+      return;
+    }
     if (!shared_ || !shared_->decorationManager) {
       if (!warnedDecorationFallback_) {
         warnedDecorationFallback_ = true;
         std::fprintf(stderr, "Flux Wayland: compositor does not expose xdg-decoration; server-side decorations are unavailable.\n");
+      }
+      return;
+    }
+    if (shared_->decorationManagerVersion < 2 && surfaceCommitted_) {
+      if (!warnedDecorationFallback_) {
+        warnedDecorationFallback_ = true;
+        std::fprintf(stderr, "Flux Wayland: xdg-decoration v1 cannot create decorations after the first commit.\n");
       }
       return;
     }
@@ -797,7 +889,32 @@ private:
     zxdg_toplevel_decoration_v1_set_mode(decoration_, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
   }
 
+  void configureDecorationProtocol() {
+    serverSideDecorationsActive_ = false;
+    receivedCutout_ = false;
+    if (cutouts_ && decorationMode_ != WindowDecorationMode::IntegratedTitlebar) {
+      xx_cutouts_v1_destroy(cutouts_);
+      cutouts_ = nullptr;
+    }
+
+    if (decorationMode_ == WindowDecorationMode::ClientSide) {
+      if (decoration_) {
+        zxdg_toplevel_decoration_v1_set_mode(decoration_, ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+      }
+      return;
+    }
+
+    requestServerSideDecorations();
+    if (decorationMode_ == WindowDecorationMode::IntegratedTitlebar) {
+      requestCutouts();
+    }
+  }
+
   void requestCutouts() {
+    if (cutouts_) {
+      xx_cutouts_v1_destroy(cutouts_);
+      cutouts_ = nullptr;
+    }
     if (!shared_ || !shared_->cutoutsManager || !surface_) return;
     cutouts_ = xx_cutouts_manager_v1_get_cutouts(shared_->cutoutsManager, surface_);
     if (cutouts_) xx_cutouts_v1_add_listener(cutouts_, &cutoutsListener_, this);
@@ -887,6 +1004,23 @@ private:
                                                        topCapabilities};
   static inline zxdg_toplevel_decoration_v1_listener decorationListener_{decorationConfigure};
   static inline xx_cutouts_v1_listener cutoutsListener_{cutoutBox, cutoutCorner, cutoutsConfigure};
+  static constexpr float kClientTitlebarHeight = 48.f;
+  static constexpr float kCompositorControlReserveWidth = 96.f;
+
+  static std::uint32_t xdgResizeEdge(WindowResizeEdge edge) {
+    switch (edge) {
+    case WindowResizeEdge::Top: return XDG_TOPLEVEL_RESIZE_EDGE_TOP;
+    case WindowResizeEdge::Bottom: return XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
+    case WindowResizeEdge::Left: return XDG_TOPLEVEL_RESIZE_EDGE_LEFT;
+    case WindowResizeEdge::Right: return XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
+    case WindowResizeEdge::TopLeft: return XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT;
+    case WindowResizeEdge::TopRight: return XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT;
+    case WindowResizeEdge::BottomLeft: return XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT;
+    case WindowResizeEdge::BottomRight: return XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
+    case WindowResizeEdge::None: break;
+    }
+    return XDG_TOPLEVEL_RESIZE_EDGE_NONE;
+  }
 
   wl_display* display_ = nullptr;
   std::vector<wl_output*> enteredOutputs_;
@@ -910,6 +1044,8 @@ private:
   float dpiScaleX_ = 1.f;
   float dpiScaleY_ = 1.f;
   bool fullscreen_ = false;
+  WindowDecorationMode decorationMode_ = WindowDecorationMode::System;
+  bool surfaceCommitted_ = false;
   bool configured_ = false;
   bool serverSideDecorationsActive_ = false;
   bool receivedCutout_ = false;
@@ -920,10 +1056,17 @@ private:
   std::int32_t lastCutoutWidth_ = 0;
   std::int32_t lastCutoutHeight_ = 0;
   std::uint32_t lastCutoutId_ = 0;
+  bool pendingCutoutReceived_ = false;
+  std::int32_t pendingCutoutX_ = 0;
+  std::int32_t pendingCutoutY_ = 0;
+  std::int32_t pendingCutoutWidth_ = 0;
+  std::int32_t pendingCutoutHeight_ = 0;
+  std::uint32_t pendingCutoutId_ = 0;
   int pendingWidth_ = 0;
   int pendingHeight_ = 0;
   Point pointerPos_{};
   std::uint32_t pointerEnterSerial_ = 0;
+  std::uint32_t lastPointerButtonSerial_ = 0;
   Cursor currentCursor_ = Cursor::Arrow;
   std::uint8_t pressedButtons_ = 0;
   Modifiers currentModifiers_ = Modifiers::None;
@@ -968,8 +1111,9 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
         wl_registry_bind(registry, name, &wl_seat_interface, std::min(version, 7u)));
     wl_seat_add_listener(shared->seat, &sharedSeatListener, shared);
   } else if (std::strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0) {
+    shared->decorationManagerVersion = std::min(version, 2u);
     shared->decorationManager = static_cast<zxdg_decoration_manager_v1*>(
-        wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1));
+        wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, shared->decorationManagerVersion));
   } else if (std::strcmp(interface, xx_cutouts_manager_v1_interface.name) == 0) {
     shared->cutoutsManager = static_cast<xx_cutouts_manager_v1*>(
         wl_registry_bind(registry, name, &xx_cutouts_manager_v1_interface, 1));
@@ -1049,10 +1193,10 @@ void sharedPointerMotion(void* data, wl_pointer*, std::uint32_t, wl_fixed_t x, w
   auto* shared = static_cast<SharedWaylandConnection*>(data);
   if (shared->pointerFocus) shared->pointerFocus->handlePointerMotion(x, y);
 }
-void sharedPointerButton(void* data, wl_pointer*, std::uint32_t, std::uint32_t, std::uint32_t button,
+void sharedPointerButton(void* data, wl_pointer*, std::uint32_t serial, std::uint32_t, std::uint32_t button,
                          std::uint32_t state) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
-  if (shared->pointerFocus) shared->pointerFocus->handlePointerButton(button, state);
+  if (shared->pointerFocus) shared->pointerFocus->handlePointerButton(serial, button, state);
 }
 void sharedPointerAxis(void* data, wl_pointer*, std::uint32_t, std::uint32_t axis, wl_fixed_t value) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);

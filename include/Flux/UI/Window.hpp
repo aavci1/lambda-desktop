@@ -16,6 +16,7 @@
 #include <Flux/UI/Cursor.hpp>
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Core/Color.hpp>
+#include <Flux/UI/WindowChrome.hpp>
 
 namespace flux {
 
@@ -23,6 +24,7 @@ struct RootHolder;
 class Element;
 struct OverlayConfig;
 struct OverlayId;
+struct InputEvent;
 
 class Application;
 class Canvas;
@@ -45,6 +47,7 @@ struct DisplayMode {
 struct WindowConfig {
   Size size = {1280, 720};
   std::string title = "Flux Application";
+  WindowDecorationMode decorationMode = WindowDecorationMode::System;
   bool fullscreen = false;
   bool resizable = true;
   Size minSize{};
@@ -75,6 +78,12 @@ public:
 
   Size getSize() const;
   void setTitle(std::string title);
+  void setDecorationMode(WindowDecorationMode mode);
+  WindowDecorationMode decorationMode() const;
+  WindowChromeMetrics chromeMetrics() const;
+  void beginWindowDrag();
+  void beginWindowResize(WindowResizeEdge edge);
+  void requestClose();
   void setFullscreen(bool fullscreen);
   unsigned int handle() const;
 
@@ -175,6 +184,9 @@ private:
   std::string const& restoreId() const;
   WindowState currentWindowState() const;
   void applyRestoredWindowState(WindowState const& state);
+  void refreshChromeMetrics();
+  void beginWindowDrag(InputEvent const& event);
+  void beginWindowResize(WindowResizeEdge edge, InputEvent const& event);
 
   /// Used by `Application` (friend); implementation on `Impl`.
   platform::Window* platformWindow() const;

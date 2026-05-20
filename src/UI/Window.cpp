@@ -42,20 +42,28 @@ struct Window::Impl {
   std::unique_ptr<Runtime> runtime_;
   std::unordered_map<std::string, ActionDescriptor> actions_;
   Reactive::Signal<Theme> themeSignal_{Theme::light()};
+  Reactive::Signal<WindowChromeMetrics> chromeMetricsSignal_{WindowChromeMetrics{}};
   EnvironmentBinding windowEnvironmentBinding_{};
   std::string restoreId_;
   bool shutdown_ = false;
 
   explicit Impl(Window&, WindowConfig const& config)
       : restoreId_(config.restoreId) {
-    windowEnvironmentBinding_ = EnvironmentBinding{}.withSignal<ThemeKey>(themeSignal_);
+    windowEnvironmentBinding_ = EnvironmentBinding{}
+                                    .withSignal<ThemeKey>(themeSignal_)
+                                    .withSignal<WindowChromeMetricsKey>(chromeMetricsSignal_);
   }
   ~Impl();
 
   platform::Window* platformWindow() const { return platform_.get(); }
+  void refreshChromeMetrics();
   void setViewRoot(Window& window, std::unique_ptr<RootHolder> holder);
   void shutdown();
 };
+
+void Window::Impl::refreshChromeMetrics() {
+  chromeMetricsSignal_.set(platform_ ? platform_->chromeMetrics() : WindowChromeMetrics{});
+}
 
 void Window::Impl::setViewRoot(Window& window, std::unique_ptr<RootHolder> holder) {
   if (!runtime_) {
@@ -86,6 +94,7 @@ Window::Window(const WindowConfig& config) {
   d = std::make_unique<Impl>(*this, config);
   d->platform_ = platform::createWindow(config);
   d->platform_->setFluxWindow(this);
+  d->refreshChromeMetrics();
   Application::instance().eventQueue().post(WindowLifecycleEvent{
       .kind = WindowLifecycleEvent::Kind::Registered,
       .handle = handle(),
@@ -116,6 +125,42 @@ Size Window::getSize() const {
 
 void Window::setTitle(std::string title) {
   d->platform_->setTitle(std::move(title));
+}
+
+void Window::setDecorationMode(WindowDecorationMode mode) {
+  d->platform_->setDecorationMode(mode);
+  refreshChromeMetrics();
+  requestRedraw();
+}
+
+WindowDecorationMode Window::decorationMode() const {
+  return d->platform_->decorationMode();
+}
+
+WindowChromeMetrics Window::chromeMetrics() const {
+  return d->platform_->chromeMetrics();
+}
+
+void Window::beginWindowDrag() {
+  d->platform_->beginWindowDrag();
+}
+
+void Window::beginWindowResize(WindowResizeEdge edge) {
+  d->platform_->beginWindowResize(edge);
+}
+
+void Window::beginWindowDrag(InputEvent const& event) {
+  d->platform_->beginWindowDrag(event.platformSerial);
+}
+
+void Window::beginWindowResize(WindowResizeEdge edge, InputEvent const& event) {
+  d->platform_->beginWindowResize(edge, event.platformSerial);
+}
+
+void Window::requestClose() {
+  if (Application::hasInstance()) {
+    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::CloseRequest, handle()});
+  }
 }
 
 void Window::setFullscreen(bool fullscreen) {
@@ -160,6 +205,10 @@ void Window::setCursor(Cursor kind) {
 
 platform::Window* Window::platformWindow() const {
   return d->platformWindow();
+}
+
+void Window::refreshChromeMetrics() {
+  d->refreshChromeMetrics();
 }
 
 void Window::postRedraw(unsigned int handle) {

@@ -9,6 +9,7 @@
 
 #include <Flux/UI/Cursor.hpp>
 #include <Flux/UI/Input.hpp>
+#include <Flux/UI/WindowChrome.hpp>
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Styles.hpp>
@@ -80,6 +81,8 @@ struct ViewModifiers {
   Element focusable(Reactive::Bindable<bool> enabled) &&;
   Element cursor(Cursor c) &&;
   Element cursor(Reactive::Bindable<Cursor> c) &&;
+  Element windowDragRegion(bool enabled = true) &&;
+  Element windowResizeRegion(WindowResizeEdge edge) &&;
 
   Element flex(float grow) &&;
   Element flex(float grow, float shrink) &&;

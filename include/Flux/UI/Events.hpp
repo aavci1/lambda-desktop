@@ -67,6 +67,9 @@ struct InputEvent {
   /// Bit 0 = primary (left), bit 1 = secondary (right), bit 2 = middle.
   /// Populated on pointer and scroll events from platforms that support it; 0 otherwise.
   std::uint8_t pressedButtons = 0;
+  /// Backend input serial for operations that must be tied to the triggering user event.
+  /// Wayland uses this for xdg_toplevel.move/resize. Other backends leave it at 0.
+  std::uint32_t platformSerial = 0;
   std::string text;
 };
 

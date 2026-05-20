@@ -210,6 +210,8 @@ public:
   Element focusable(Reactive::Bindable<bool> enabled) &&;
   Element cursor(Cursor c) &&;
   Element cursor(Reactive::Bindable<Cursor> c) &&;
+  Element windowDragRegion(bool enabled = true) &&;
+  Element windowResizeRegion(WindowResizeEdge edge) &&;
 
 private:
   friend Popover* detail::popoverOverlayStateIf(Element& el);

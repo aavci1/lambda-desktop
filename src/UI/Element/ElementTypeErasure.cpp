@@ -453,6 +453,8 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     interaction->onTextInput = modifiers.onTextInput;
     interaction->focusable_ = modifiers.focusable;
     interaction->cursor = modifiers.cursor;
+    interaction->windowDragRegion = modifiers.windowDragRegion;
+    interaction->windowResizeEdge = modifiers.windowResizeEdge;
     if (detail::InteractionSignalBundle const* signals = detail::currentInteractionSignals()) {
       interaction->hoverSignal = signals->hover;
       interaction->pressSignal = signals->press;

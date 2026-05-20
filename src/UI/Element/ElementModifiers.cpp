@@ -93,7 +93,9 @@ detail::ElementModifiers::ElementModifiers(detail::ElementModifiers const& o)
     , onKeyUp(o.onKeyUp)
     , onTextInput(o.onTextInput)
     , focusable(o.focusable)
-    , cursor(o.cursor) {}
+    , cursor(o.cursor)
+    , windowDragRegion(o.windowDragRegion)
+    , windowResizeEdge(o.windowResizeEdge) {}
 
 detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementModifiers const& o) {
   if (this != &o) {
@@ -128,6 +130,8 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
     onTextInput = o.onTextInput;
     focusable = o.focusable;
     cursor = o.cursor;
+    windowDragRegion = o.windowDragRegion;
+    windowResizeEdge = o.windowResizeEdge;
   }
   return *this;
 }
@@ -436,6 +440,16 @@ Element Element::cursor(Cursor c) && {
 
 Element Element::cursor(Reactive::Bindable<Cursor> c) && {
   writableModifiers().cursor = std::move(c);
+  return std::move(*this);
+}
+
+Element Element::windowDragRegion(bool enabled) && {
+  writableModifiers().windowDragRegion = enabled;
+  return std::move(*this);
+}
+
+Element Element::windowResizeRegion(WindowResizeEdge edge) && {
+  writableModifiers().windowResizeEdge = edge;
   return std::move(*this);
 }
 

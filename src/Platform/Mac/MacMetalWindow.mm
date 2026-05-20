@@ -299,6 +299,11 @@ public:
   void setMaxSize(Size size) override;
   void setFullscreen(bool fullscreen) override;
   void setTitle(const std::string& title) override;
+  void setDecorationMode(WindowDecorationMode mode) override;
+  WindowDecorationMode decorationMode() const override;
+  WindowChromeMetrics chromeMetrics() const override;
+  void beginWindowDrag(std::uint32_t platformSerial = 0) override;
+  void beginWindowResize(WindowResizeEdge edge, std::uint32_t platformSerial = 0) override;
   Size currentSize() const override;
   std::optional<Rect> currentFrame() const override;
   void setFrame(Rect frame) override;
@@ -316,6 +321,7 @@ public:
   void completeAnimationFrame(bool needsAnotherFrame) override;
 
   void setCursor(Cursor kind) override;
+  void rememberPointerDownEvent(NSEvent* event);
 
   ::flux::Window* fluxWindow() const;
   CVReturn onDisplayLinkTick();
@@ -325,6 +331,7 @@ public:
 
 private:
   void setModernDisplayLinkPaused(bool paused);
+  void applyDecorationMode();
 
   struct Impl;
   std::unique_ptr<Impl> d;
@@ -352,6 +359,8 @@ struct MacMetalWindow::Impl {
   std::atomic<bool> frameEventQueued_{false};
   std::atomic<bool> legacyDisplayLinkRunning_{false};
   Cursor currentCursor_{Cursor::Inherit};
+  WindowDecorationMode decorationMode_{WindowDecorationMode::System};
+  NSEvent* lastPointerDownEvent_{nil};
 };
 
 namespace detail {
@@ -399,6 +408,9 @@ void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, s
       std::fprintf(stderr, "[flux:input:mac] postInputFromView: no platform/window (dropped)\n");
     }
     return;
+  }
+  if (kind == InputEvent::Kind::PointerDown) {
+    p->rememberPointerDownEvent(e);
   }
   InputEvent ie;
   ie.kind = kind;
@@ -631,16 +643,63 @@ CVReturn fluxHandleDisplayLinkTick(MacMetalWindow* platform) {
   return d ? d->fluxWindow_ : nullptr;
 }
 
+namespace {
+
+constexpr CGFloat kFluxTitlebarHeight = 48.0;
+constexpr CGFloat kNativeControlReservePadding = 8.0;
+
+void setStandardWindowButtonsHidden(NSWindow* window, BOOL hidden) {
+  if (!window) {
+    return;
+  }
+  NSWindowButton const buttons[] = {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
+  for (NSWindowButton buttonType : buttons) {
+    NSButton* button = [window standardWindowButton:buttonType];
+    if (button) {
+      [button setHidden:hidden];
+    }
+  }
+}
+
+} // namespace
+
+void MacMetalWindow::applyDecorationMode() {
+  if (!d || !d->window_) {
+    return;
+  }
+
+  if (d->decorationMode_ == WindowDecorationMode::System) {
+    [d->window_ setTitleVisibility:NSWindowTitleVisible];
+    [d->window_ setTitlebarAppearsTransparent:NO];
+    [d->window_ setMovableByWindowBackground:NO];
+    setStandardWindowButtonsHidden(d->window_, NO);
+    return;
+  }
+
+  [d->window_ setStyleMask:([d->window_ styleMask] | NSWindowStyleMaskFullSizeContentView)];
+  [d->window_ setTitleVisibility:NSWindowTitleHidden];
+  [d->window_ setTitlebarAppearsTransparent:YES];
+  [d->window_ setMovableByWindowBackground:NO];
+  if (@available(macOS 11.0, *)) {
+    [d->window_ setTitlebarSeparatorStyle:NSTitlebarSeparatorStyleNone];
+  }
+  setStandardWindowButtonsHidden(d->window_, d->decorationMode_ == WindowDecorationMode::ClientSide);
+}
+
 MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<Impl>()) {
   d->handle_ = gNextHandle.fetch_add(1, std::memory_order_relaxed);
   d->fluxWindow_ = nullptr;
   d->window_ = nil;
   d->metalView_ = nil;
   d->delegate_ = nil;
+  d->decorationMode_ = config.decorationMode;
 
   NSWindowStyleMask styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
   if (config.resizable) {
     styleMask |= NSWindowStyleMaskResizable;
+  }
+  if (config.decorationMode != WindowDecorationMode::System) {
+    styleMask |= NSWindowStyleMaskFullSizeContentView;
   }
 
   NSScreen* screen = [NSScreen mainScreen];
@@ -654,6 +713,7 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
                                           styleMask:styleMask
                                             backing:NSBackingStoreBuffered
                                               defer:NO];
+  applyDecorationMode();
   [d->window_ setReleasedWhenClosed:NO];
   // Flux owns cursor state. Stops _NSTrackingAreaAKManager from running its
   // cursor logic on this window and clobbering our setCursor decisions.
@@ -798,6 +858,79 @@ void MacMetalWindow::setTitle(const std::string& title) {
     nsTitle = @"";
   }
   [d->window_ setTitle:nsTitle];
+}
+
+void MacMetalWindow::setDecorationMode(WindowDecorationMode mode) {
+  if (d->decorationMode_ == mode) {
+    return;
+  }
+  d->decorationMode_ = mode;
+  applyDecorationMode();
+}
+
+WindowDecorationMode MacMetalWindow::decorationMode() const {
+  return d ? d->decorationMode_ : WindowDecorationMode::System;
+}
+
+WindowChromeMetrics MacMetalWindow::chromeMetrics() const {
+  WindowChromeMetrics metrics{};
+  if (!d || !d->window_) {
+    return metrics;
+  }
+  metrics.decorationMode = d->decorationMode_;
+  metrics.active = [d->window_ isKeyWindow];
+  if (d->decorationMode_ == WindowDecorationMode::System) {
+    return metrics;
+  }
+
+  metrics.titlebarHeight = static_cast<float>(kFluxTitlebarHeight);
+  metrics.nativeControlsVisible = d->decorationMode_ == WindowDecorationMode::IntegratedTitlebar;
+  if (!metrics.nativeControlsVisible || !d->metalView_) {
+    return metrics;
+  }
+
+  NSView* contentView = d->metalView_;
+  bool hasRect = false;
+  NSRect reserved = NSZeroRect;
+  NSWindowButton const buttons[] = {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
+  for (NSWindowButton buttonType : buttons) {
+    NSButton* button = [d->window_ standardWindowButton:buttonType];
+    if (!button || [button isHidden] || ![button superview]) {
+      continue;
+    }
+    NSRect rect = [contentView convertRect:[button frame] fromView:[button superview]];
+    reserved = hasRect ? NSUnionRect(reserved, rect) : rect;
+    hasRect = true;
+  }
+  if (hasRect) {
+    reserved = NSInsetRect(reserved, -kNativeControlReservePadding, -kNativeControlReservePadding);
+    metrics.reservedRegions.push_back(Rect::sharp(
+        static_cast<float>(std::max<CGFloat>(0.0, reserved.origin.x)),
+        static_cast<float>(std::max<CGFloat>(0.0, reserved.origin.y)),
+        static_cast<float>(std::max<CGFloat>(0.0, reserved.size.width)),
+        static_cast<float>(std::max<CGFloat>(0.0, reserved.size.height))));
+  }
+  return metrics;
+}
+
+void MacMetalWindow::rememberPointerDownEvent(NSEvent* event) {
+  if (!d) {
+    return;
+  }
+  d->lastPointerDownEvent_ = event;
+}
+
+void MacMetalWindow::beginWindowDrag(std::uint32_t platformSerial) {
+  (void)platformSerial;
+  if (!d || !d->window_ || !d->lastPointerDownEvent_) {
+    return;
+  }
+  [d->window_ performWindowDragWithEvent:d->lastPointerDownEvent_];
+}
+
+void MacMetalWindow::beginWindowResize(WindowResizeEdge edge, std::uint32_t platformSerial) {
+  (void)edge;
+  (void)platformSerial;
 }
 
 Size MacMetalWindow::currentSize() const {

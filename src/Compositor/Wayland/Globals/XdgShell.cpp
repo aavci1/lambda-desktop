@@ -656,13 +656,18 @@ void xdgToplevelSetAppId(wl_client*, wl_resource* resource, char const* appId) {
   resourceData<WaylandServer::Impl::XdgToplevel>(resource)->appId = appId ? appId : "";
 }
 
-void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t, std::uint32_t edges) {
+void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t serial, std::uint32_t edges) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
   if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
   auto* server = toplevel->server;
   auto* surface = toplevel->xdgSurface->surface;
   std::int32_t const width = displayWidth(surface);
   std::int32_t const height = displayHeight(surface);
+  if (serial == 0 ||
+      serial != server->lastPointerButtonSerial_ ||
+      server->lastPointerButtonSurface_ != surface) {
+    return;
+  }
   if (edges == XDG_TOPLEVEL_RESIZE_EDGE_NONE || width <= 0 || height <= 0) return;
   server->resizeSurface_ = surface;
   server->resizeStartX_ = server->pointerX_;
