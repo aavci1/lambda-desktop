@@ -74,10 +74,10 @@ void updateCachedImage(WaylandServer& wayland,
   cached.logged = false;
   std::int32_t const bufferWidth = surface.bufferWidth > 0 ? surface.bufferWidth : surface.width;
   std::int32_t const bufferHeight = surface.bufferHeight > 0 ? surface.bufferHeight : surface.height;
-  if (!surface.rgbaPixels.empty()) {
+  if (surface.rgbaPixels && !surface.rgbaPixels->empty()) {
     cached.image = Image::fromRgbaPixels(static_cast<std::uint32_t>(bufferWidth),
                                          static_cast<std::uint32_t>(bufferHeight),
-                                         surface.rgbaPixels,
+                                         *surface.rgbaPixels,
                                          canvas.gpuDevice());
   } else if (!surface.dmabufPlanes.empty()) {
     std::vector<int> fds = wayland.duplicateDmabufFds(surface.id);
@@ -182,6 +182,19 @@ void drawClosingSurfaces(Canvas& canvas,
     drawSurfaceImage(canvas, it->second.snapshot, *it->second.image, 1.f - eased, 1.f - 0.025f * eased);
     ++it;
   }
+}
+
+bool hasActiveSurfaceAnimations(SurfaceRenderState const& state,
+                                std::chrono::steady_clock::time_point frameTime,
+                                bool animationsEnabled) {
+  if (!state.closingSurfaces.empty()) return true;
+  if (!animationsEnabled) return false;
+
+  return std::any_of(state.surfaceVisuals.begin(), state.surfaceVisuals.end(), [&](auto const& entry) {
+    auto const firstSeen = entry.second.firstSeen;
+    if (firstSeen.time_since_epoch().count() == 0) return false;
+    return frameTime - firstSeen < kSurfaceOpenAnimationDuration;
+  });
 }
 
 void pruneSurfaceRenderState(SurfaceRenderState& state,

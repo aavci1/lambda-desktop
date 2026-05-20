@@ -11,6 +11,8 @@
 
 namespace flux::compositor {
 
+inline constexpr std::chrono::milliseconds kSurfaceOpenAnimationDuration{140};
+
 struct SurfaceVisualState {
   std::chrono::steady_clock::time_point firstSeen{};
   CommittedSurfaceSnapshot lastSnapshot{};

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -69,7 +70,7 @@ struct CommittedSurfaceSnapshot {
   bool defaultGlassEligible = false;
   std::uint64_t serial = 0;
   std::vector<RegionRect> backgroundBlurRects;
-  std::vector<std::uint8_t> rgbaPixels;
+  std::shared_ptr<std::vector<std::uint8_t> const> rgbaPixels;
   std::uint32_t dmabufFormat = 0;
   std::vector<DmabufPlane> dmabufPlanes;
 };

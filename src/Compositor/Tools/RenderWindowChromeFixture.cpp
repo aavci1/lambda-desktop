@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -283,7 +284,7 @@ flux::compositor::CommittedSurfaceSnapshot snapshot(std::uint64_t id, int x, int
 	      .sourceHeight = static_cast<float>(height),
 	      .destinationWidth = width,
 	      .destinationHeight = height,
-	      .defaultGlassEligible = true,
+	      .defaultGlassEligible = false,
 	      .serial = id,
 	  };
 }
@@ -378,6 +379,14 @@ int main(int argc, char** argv) {
   try {
     std::filesystem::path output =
         argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path("build/compositor-window-chrome-fixture.png");
+    int frameCount = 1;
+    if (char const* frameCountEnv = std::getenv("FLUX_RENDER_FIXTURE_FRAMES")) {
+      char* end = nullptr;
+      long const parsed = std::strtol(frameCountEnv, &end, 10);
+      if (end != frameCountEnv && parsed > 0) {
+        frameCount = static_cast<int>(std::min<long>(parsed, 10000));
+      }
+    }
     constexpr int logicalWidth = 960;
     constexpr int logicalHeight = 640;
     constexpr float scale = 2.f;
@@ -464,51 +473,56 @@ int main(int argc, char** argv) {
     flux::compositor::SurfaceVisualState resizingVisual{};
     auto const frameTime = std::chrono::steady_clock::now();
 
-    target.beginFrame();
-    canvas.clear(flux::Color{0.10f, 0.12f, 0.17f, 1.f});
-    canvas.drawRect(flux::Rect::sharp(0.f, 0.f, logicalWidth, logicalHeight),
-                    flux::CornerRadius{},
-                    flux::FillStyle::linearGradient(flux::Color{0.13f, 0.16f, 0.22f, 1.f},
-                                                    flux::Color{0.34f, 0.39f, 0.48f, 1.f},
-                                                    flux::Point{0.f, 0.f},
-                                                    flux::Point{1.f, 1.f}),
-                    flux::StrokeStyle::none());
-    canvas.drawRect(flux::Rect::sharp(18.f, 18.f, logicalWidth - 36.f, logicalHeight - 36.f),
-                    flux::CornerRadius{18.f},
-                    flux::FillStyle::solid(flux::Color{1.f, 1.f, 1.f, 0.04f}),
-                    flux::StrokeStyle::solid(flux::Color{1.f, 1.f, 1.f, 0.12f}, 1.f));
-    flux::compositor::drawCommittedSurfaceSnapshot(
-        canvas, textSystem, foreign, foreignVisual, *foreignImage, frameTime, chrome, false);
-    flux::compositor::drawCommittedSurfaceSnapshot(
-        canvas, textSystem, ssdFocused, ssdFocusedVisual, *ssdFocusedImage, frameTime, chrome, false);
-    flux::compositor::drawSnapPreview(canvas,
-                                      flux::compositor::SnapPreviewSnapshot{
-                                          .surfaceId = ssdUnfocused.id,
-                                          .x = 690,
-                                          .y = 42,
-                                          .width = 230,
-                                          .height = 220,
-                                      },
-                                      chrome);
-    flux::compositor::drawCommittedSurfaceSnapshot(
-        canvas, textSystem, ssdUnfocused, ssdUnfocusedVisual, *ssdUnfocusedImage, frameTime, chrome, false);
-    flux::compositor::drawCommittedSurfaceSnapshot(
-        canvas, textSystem, cutout, cutoutVisual, *cutoutImage, frameTime, chrome, false);
-    flux::compositor::drawCommittedSurfaceSnapshot(
-        canvas, textSystem, rejected, rejectedVisual, *rejectedImage, frameTime, chrome, false);
-    flux::compositor::drawCommittedSurfaceSnapshot(
-        canvas, textSystem, resizing, resizingVisual, *resizingImage, frameTime, chrome, false);
-    flux::compositor::drawCommandLauncher(canvas,
-                                          textSystem,
-                                          flux::compositor::CommandLauncherSnapshot{
-                                              .visible = true,
-                                              .command = "foot",
-                                              .message = "Enter to run, Escape to cancel",
-                                          },
-                                          chrome,
-                                          logicalWidth,
-                                          logicalHeight);
-    target.endFrame();
+    auto renderFrame = [&]() {
+      target.beginFrame();
+      canvas.clear(flux::Color{0.10f, 0.12f, 0.17f, 1.f});
+      canvas.drawRect(flux::Rect::sharp(0.f, 0.f, logicalWidth, logicalHeight),
+                      flux::CornerRadius{},
+                      flux::FillStyle::linearGradient(flux::Color{0.13f, 0.16f, 0.22f, 1.f},
+                                                      flux::Color{0.34f, 0.39f, 0.48f, 1.f},
+                                                      flux::Point{0.f, 0.f},
+                                                      flux::Point{1.f, 1.f}),
+                      flux::StrokeStyle::none());
+      canvas.drawRect(flux::Rect::sharp(18.f, 18.f, logicalWidth - 36.f, logicalHeight - 36.f),
+                      flux::CornerRadius{18.f},
+                      flux::FillStyle::solid(flux::Color{1.f, 1.f, 1.f, 0.04f}),
+                      flux::StrokeStyle::solid(flux::Color{1.f, 1.f, 1.f, 0.12f}, 1.f));
+      flux::compositor::drawCommittedSurfaceSnapshot(
+          canvas, textSystem, foreign, foreignVisual, *foreignImage, frameTime, chrome, false);
+      flux::compositor::drawCommittedSurfaceSnapshot(
+          canvas, textSystem, ssdFocused, ssdFocusedVisual, *ssdFocusedImage, frameTime, chrome, false);
+      flux::compositor::drawSnapPreview(canvas,
+                                        flux::compositor::SnapPreviewSnapshot{
+                                            .surfaceId = ssdUnfocused.id,
+                                            .x = 690,
+                                            .y = 42,
+                                            .width = 230,
+                                            .height = 220,
+                                        },
+                                        chrome);
+      flux::compositor::drawCommittedSurfaceSnapshot(
+          canvas, textSystem, ssdUnfocused, ssdUnfocusedVisual, *ssdUnfocusedImage, frameTime, chrome, false);
+      flux::compositor::drawCommittedSurfaceSnapshot(
+          canvas, textSystem, cutout, cutoutVisual, *cutoutImage, frameTime, chrome, false);
+      flux::compositor::drawCommittedSurfaceSnapshot(
+          canvas, textSystem, rejected, rejectedVisual, *rejectedImage, frameTime, chrome, false);
+      flux::compositor::drawCommittedSurfaceSnapshot(
+          canvas, textSystem, resizing, resizingVisual, *resizingImage, frameTime, chrome, false);
+      flux::compositor::drawCommandLauncher(canvas,
+                                            textSystem,
+                                            flux::compositor::CommandLauncherSnapshot{
+                                                .visible = true,
+                                                .command = "foot",
+                                                .message = "Enter to run, Escape to cancel",
+                                            },
+                                            chrome,
+                                            logicalWidth,
+                                            logicalHeight);
+      target.endFrame();
+    };
+    for (int frame = 0; frame < frameCount; ++frame) {
+      renderFrame();
+    }
 
     writePng(output, readBgraImage(vk, imageTarget, pixelWidth, pixelHeight), pixelWidth, pixelHeight);
     std::cout << output << '\n';

@@ -292,12 +292,14 @@ void hideHardwareCursor(platform::KmsOutput const& output, CursorRenderState& st
 
 std::vector<std::uint32_t> clientCursorPixelsForHardware(CommittedSurfaceSnapshot const& cursorSurface,
                                                          float outputScale) {
-  if (cursorSurface.rgbaPixels.empty() || cursorSurface.bufferWidth <= 0 || cursorSurface.bufferHeight <= 0) {
+  if (!cursorSurface.rgbaPixels || cursorSurface.rgbaPixels->empty() ||
+      cursorSurface.bufferWidth <= 0 || cursorSurface.bufferHeight <= 0) {
     return {};
   }
+  auto const& rgbaPixels = *cursorSurface.rgbaPixels;
   std::size_t const count = static_cast<std::size_t>(cursorSurface.bufferWidth) *
                             static_cast<std::size_t>(cursorSurface.bufferHeight);
-  if (cursorSurface.rgbaPixels.size() != count * 4u) return {};
+  if (rgbaPixels.size() != count * 4u) return {};
 
   float const cursorScaleX = cursorSurface.width > 0
                                  ? static_cast<float>(cursorSurface.bufferWidth) /
@@ -313,10 +315,10 @@ std::vector<std::uint32_t> clientCursorPixelsForHardware(CommittedSurfaceSnapsho
 
   std::vector<std::uint32_t> pixels(count);
   for (std::size_t i = 0; i < count; ++i) {
-    auto const r = cursorSurface.rgbaPixels[i * 4u + 0u];
-    auto const g = cursorSurface.rgbaPixels[i * 4u + 1u];
-    auto const b = cursorSurface.rgbaPixels[i * 4u + 2u];
-    auto const a = cursorSurface.rgbaPixels[i * 4u + 3u];
+    auto const r = rgbaPixels[i * 4u + 0u];
+    auto const g = rgbaPixels[i * 4u + 1u];
+    auto const b = rgbaPixels[i * 4u + 2u];
+    auto const a = rgbaPixels[i * 4u + 3u];
     pixels[i] = premulArgb(a, r, g, b);
   }
   return pixels;

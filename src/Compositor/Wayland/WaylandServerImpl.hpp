@@ -259,7 +259,8 @@ struct WaylandServer::Impl::Surface {
   std::int32_t windowY = 96;
   SurfaceRole role = SurfaceRole::None;
   std::uint64_t serial = 0;
-  std::vector<std::uint8_t> rgbaPixels;
+  std::shared_ptr<std::vector<std::uint8_t> const> rgbaPixels;
+  bool rgbaFullyOpaque = false;
   std::int32_t width = 0;
   std::int32_t height = 0;
   std::int32_t frameWidth = 0;

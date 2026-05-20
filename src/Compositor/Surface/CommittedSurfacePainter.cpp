@@ -173,7 +173,9 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                                  : windowCorners);
   float const animationMs = static_cast<float>(
       std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
-  float const openProgress = animationsEnabled ? easeOutCubic(animationMs / 140.f) : 1.f;
+  float const openProgress = animationsEnabled
+                                 ? easeOutCubic(animationMs / static_cast<float>(kSurfaceOpenAnimationDuration.count()))
+                                 : 1.f;
   float const openScale = 0.965f + 0.035f * openProgress;
   float const openOpacity = openProgress;
   float const outerHeight = windowHeight + titleBarHeight;

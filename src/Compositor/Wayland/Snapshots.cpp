@@ -20,7 +20,18 @@ namespace {
 
 bool surfaceIsRenderable(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->width > 0 && surface->height > 0 &&
-         (!surface->rgbaPixels.empty() || surface->dmabufBuffer);
+         ((surface->rgbaPixels && !surface->rgbaPixels->empty()) || surface->dmabufBuffer);
+}
+
+bool dmabufFormatFullyOpaque(std::uint32_t format) {
+  return format == DRM_FORMAT_XRGB8888 || format == DRM_FORMAT_XBGR8888;
+}
+
+bool surfaceContentFullyOpaque(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return false;
+  if (surface->rgbaPixels && !surface->rgbaPixels->empty()) return surface->rgbaFullyOpaque;
+  if (surface->dmabufBuffer) return dmabufFormatFullyOpaque(surface->dmabufBuffer->format);
+  return false;
 }
 
 WaylandServer::Impl::XdgToplevel const* toplevelForSurface(WaylandServer::Impl const* server,
@@ -115,7 +126,7 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
 	      .activeSizing = server->resizeSurface_ == surface ||
 	                      surface->geometryAnimationActive ||
 	                      surface->awaitingConfigureCommit,
-	      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface),
+	      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface) && !surfaceContentFullyOpaque(surface),
 	      .serial = surface->serial,
 	      .backgroundBlurRects = surface->backgroundBlurRects,
 	      .rgbaPixels = surface->rgbaPixels,
@@ -173,7 +184,7 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
   if (compositorCursorOverride_) return std::nullopt;
   Surface* surface = cursorSurface_;
   if (!surface || surface->width <= 0 || surface->height <= 0) return std::nullopt;
-  if (surface->rgbaPixels.empty() && !surface->dmabufBuffer) return std::nullopt;
+  if ((!surface->rgbaPixels || surface->rgbaPixels->empty()) && !surface->dmabufBuffer) return std::nullopt;
 
   CommittedSurfaceSnapshot snapshot{
       .id = surface->id,

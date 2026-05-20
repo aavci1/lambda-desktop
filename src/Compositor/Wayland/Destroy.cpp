@@ -180,7 +180,8 @@ void WaylandServer::Impl::destroyDmabufBuffer(DmabufBuffer* buffer) {
       surface->dmabufBuffer = nullptr;
       surface->width = 0;
       surface->height = 0;
-      surface->rgbaPixels.clear();
+      surface->rgbaPixels.reset();
+      surface->rgbaFullyOpaque = false;
       ++surface->serial;
     }
   }

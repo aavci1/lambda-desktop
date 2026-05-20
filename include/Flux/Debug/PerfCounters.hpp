@@ -51,6 +51,10 @@ struct RenderCounters {
   std::uint64_t opOrderEntries = 0;
   std::uint64_t pathVertices = 0;
   std::uint64_t glyphVertices = 0;
+  std::uint64_t backdropBlurRuns = 0;
+  std::uint64_t backdropBlurPasses = 0;
+  std::uint64_t backdropBlurPixels = 0;
+  std::uint64_t backdropCopyPixels = 0;
   std::uint64_t recorderCapacityGrowths = 0;
   std::uint64_t recorderCapacityGrowthBytes = 0;
 };
@@ -192,7 +196,9 @@ inline void printSummaryLine(IntervalCounters const& interval, double seconds) {
   printCompactCount(stderr, perFrame(interval.scene.preparedReplaySuccesses, interval.frames));
   std::fprintf(stderr, "/");
   printCompactCount(stderr, perFrame(interval.scene.preparedReplayFailures, interval.frames));
-  std::fprintf(stderr, "  upload %.1fKB  text %llu/%llu\n",
+  std::fprintf(stderr, "  blur %.1f/f %.1fMP/f  upload %.1fKB  text %llu/%llu\n",
+               perFrame(interval.render.backdropBlurRuns, interval.frames),
+               perFrame(interval.render.backdropBlurPixels, interval.frames) / 1'000'000.0,
                uploadKilobytesPerFrame(interval.render, interval.frames),
                static_cast<unsigned long long>(interval.text.layoutCacheHits),
                static_cast<unsigned long long>(interval.text.layoutCacheMisses));
@@ -248,7 +254,13 @@ inline void printVerboseLine(IntervalCounters const& interval, double seconds) {
   }
 
   std::fprintf(stderr,
+               " blur runs=%llu(%.2f/f) passes=%llu px=%.1fMP/f copy=%.1fMP/f"
                " uploadKB %.1f text layout=%llu hit=%llu miss=%llu",
+               static_cast<unsigned long long>(interval.render.backdropBlurRuns),
+               perFrame(interval.render.backdropBlurRuns, interval.frames),
+               static_cast<unsigned long long>(interval.render.backdropBlurPasses),
+               perFrame(interval.render.backdropBlurPixels, interval.frames) / 1'000'000.0,
+               perFrame(interval.render.backdropCopyPixels, interval.frames) / 1'000'000.0,
                uploadKilobytesPerFrame(interval.render, 1),
                static_cast<unsigned long long>(interval.text.layoutCalls),
                static_cast<unsigned long long>(interval.text.layoutCacheHits),
@@ -416,6 +428,17 @@ inline void recordRecorderCapacityGrowth(std::uint64_t bytes) {
   auto& render = detail::counters().render;
   ++render.recorderCapacityGrowths;
   render.recorderCapacityGrowthBytes += bytes;
+}
+
+inline void recordBackdropBlurRun(std::uint64_t copyPixels, std::uint64_t blurPixels, std::uint64_t passes) {
+  if (!enabled()) {
+    return;
+  }
+  auto& render = detail::counters().render;
+  ++render.backdropBlurRuns;
+  render.backdropCopyPixels += copyPixels;
+  render.backdropBlurPixels += blurPixels;
+  render.backdropBlurPasses += passes;
 }
 
 inline void recordTextLayoutCall() {

@@ -144,6 +144,64 @@ struct LoopInstrumentation {
   }
 };
 
+struct CompositorFrameProfile {
+  using Clock = std::chrono::steady_clock;
+
+  bool enabled = std::getenv("FLUX_COMPOSITOR_PROFILE") != nullptr;
+  Clock::time_point windowStart = Clock::now();
+  std::uint64_t frames = 0;
+  std::uint64_t surfaces = 0;
+  double backgroundMs = 0.0;
+  double snapshotMs = 0.0;
+  double surfaceMs = 0.0;
+  double closingMs = 0.0;
+  double launcherMs = 0.0;
+  double cursorMs = 0.0;
+  double presentMs = 0.0;
+  double totalMs = 0.0;
+
+  static double milliseconds(Clock::time_point begin, Clock::time_point end = Clock::now()) {
+    return std::chrono::duration<double, std::milli>(end - begin).count();
+  }
+
+  void maybeLog() {
+    if (!enabled) return;
+    auto const now = Clock::now();
+    double const elapsedMs = milliseconds(windowStart, now);
+    if (elapsedMs < 2000.0 || frames == 0) return;
+
+    double const invFrames = 1.0 / static_cast<double>(frames);
+    std::fprintf(stderr,
+                 "flux-compositor: frame-profile %.1fs frames=%llu fps=%.1f surfaces=%.2f/f "
+                 "total=%.3fms bg=%.3fms snapshots=%.3fms surfaces=%.3fms closing=%.3fms "
+                 "launcher=%.3fms cursor=%.3fms present=%.3fms\n",
+                 elapsedMs / 1000.0,
+                 static_cast<unsigned long long>(frames),
+                 frames / (elapsedMs / 1000.0),
+                 static_cast<double>(surfaces) * invFrames,
+                 totalMs * invFrames,
+                 backgroundMs * invFrames,
+                 snapshotMs * invFrames,
+                 surfaceMs * invFrames,
+                 closingMs * invFrames,
+                 launcherMs * invFrames,
+                 cursorMs * invFrames,
+                 presentMs * invFrames);
+
+    windowStart = now;
+    frames = 0;
+    surfaces = 0;
+    backgroundMs = 0.0;
+    snapshotMs = 0.0;
+    surfaceMs = 0.0;
+    closingMs = 0.0;
+    launcherMs = 0.0;
+    cursorMs = 0.0;
+    presentMs = 0.0;
+    totalMs = 0.0;
+  }
+};
+
 std::string lowerAscii(std::string_view value) {
   std::string result(value);
   for (char& c : result) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -295,6 +353,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     SurfaceRenderState surfaceRenderState;
     CursorRenderState cursorState;
     LoopInstrumentation loopStats;
+    CompositorFrameProfile frameProfile;
     std::uint32_t const hardwareCursorWidth = output.cursorWidth();
     std::uint32_t const hardwareCursorHeight = output.cursorHeight();
     bool const hardwareCursorAvailable = hardwareCursorWidth > 0 && hardwareCursorHeight > 0;
@@ -317,17 +376,24 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     };
     auto renderCompositorFrame = [&](std::chrono::steady_clock::time_point frameTime,
                                      LoopInstrumentation::Clock::time_point renderStart) {
+      auto const frameProfileStart = CompositorFrameProfile::Clock::now();
+      auto phaseStart = frameProfileStart;
       canvas->beginFrame();
       drawCompositorBackground(*canvas,
                                appliedConfig,
                                static_cast<std::uint32_t>(wayland.logicalOutputWidth()),
                                static_cast<std::uint32_t>(wayland.logicalOutputHeight()));
+      frameProfile.backgroundMs += CompositorFrameProfile::milliseconds(phaseStart);
+      phaseStart = CompositorFrameProfile::Clock::now();
       auto snapPreview = wayland.snapPreview();
       bool snapPreviewDrawn = false;
       auto committedSurfaces = wayland.committedSurfaces();
       loopStats.lastSurfaceCount = committedSurfaces.size();
+      frameProfile.snapshotMs += CompositorFrameProfile::milliseconds(phaseStart);
+      frameProfile.surfaces += committedSurfaces.size();
       std::unordered_set<std::uint64_t> liveSurfaceIds;
       liveSurfaceIds.reserve(committedSurfaces.size());
+      phaseStart = CompositorFrameProfile::Clock::now();
       for (auto const& clientSurface : committedSurfaces) {
         if (snapPreview && !snapPreviewDrawn && snapPreview->surfaceId == clientSurface.id) {
           drawSnapPreview(*canvas, *snapPreview, appliedConfig.config.chrome);
@@ -349,17 +415,23 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (snapPreview && !snapPreviewDrawn) {
         drawSnapPreview(*canvas, *snapPreview, appliedConfig.config.chrome);
       }
+      frameProfile.surfaceMs += CompositorFrameProfile::milliseconds(phaseStart);
+      phaseStart = CompositorFrameProfile::Clock::now();
       captureClosingSurfaces(surfaceRenderState,
                              liveSurfaceIds,
                              frameTime,
                              appliedConfig.config.animationsEnabled);
       drawClosingSurfaces(*canvas, surfaceRenderState, frameTime);
+      frameProfile.closingMs += CompositorFrameProfile::milliseconds(phaseStart);
+      phaseStart = CompositorFrameProfile::Clock::now();
       drawCommandLauncher(*canvas,
                           textSystem,
                           wayland.commandLauncher(),
                           appliedConfig.config.chrome,
                           wayland.logicalOutputWidth(),
                           wayland.logicalOutputHeight());
+      frameProfile.launcherMs += CompositorFrameProfile::milliseconds(phaseStart);
+      phaseStart = CompositorFrameProfile::Clock::now();
       drawCompositorCursor(wayland,
                            *canvas,
                            output,
@@ -367,16 +439,26 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                            appliedConfig.config.cursorTheme,
                            appliedConfig.config.cursorSize,
                            appliedConfig.config.hardwareCursorEnabled && hardwareCursorAvailable);
+      frameProfile.cursorMs += CompositorFrameProfile::milliseconds(phaseStart);
       pruneSurfaceRenderState(surfaceRenderState, liveSurfaceIds);
+      phaseStart = CompositorFrameProfile::Clock::now();
       canvas->present();
+      frameProfile.presentMs += CompositorFrameProfile::milliseconds(phaseStart);
+      ++frameProfile.frames;
+      frameProfile.totalMs += CompositorFrameProfile::milliseconds(frameProfileStart);
+      frameProfile.maybeLog();
       loopStats.recordRender(renderStart);
       wayland.sendFrameCallbacks(monotonicMilliseconds());
     };
 
     while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
       ++loopStats.loops;
+      auto const animationCheckTime = std::chrono::steady_clock::now();
       bool const animationFrameNeeded =
-          wayland.hasActiveAnimations() || !surfaceRenderState.closingSurfaces.empty();
+          wayland.hasActiveAnimations() ||
+          hasActiveSurfaceAnimations(surfaceRenderState,
+                                     animationCheckTime,
+                                     appliedConfig.config.animationsEnabled);
       int const waylandEventFd = wayland.eventFd();
       std::span<int const> const waylandEventFds(&waylandEventFd, waylandEventFd >= 0 ? 1u : 0u);
       int const pollTimeoutMs = forceRender || animationFrameNeeded ? 0 : kIdlePollMs;

@@ -65,6 +65,10 @@ void drawClosingSurfaces(Canvas& canvas,
                          SurfaceRenderState& state,
                          std::chrono::steady_clock::time_point frameTime);
 
+[[nodiscard]] bool hasActiveSurfaceAnimations(SurfaceRenderState const& state,
+                                              std::chrono::steady_clock::time_point frameTime,
+                                              bool animationsEnabled);
+
 void pruneSurfaceRenderState(SurfaceRenderState& state,
                              std::unordered_set<std::uint64_t> const& liveSurfaceIds);
 

@@ -240,7 +240,9 @@ WaylandServer::Impl::DmabufBuffer* dmabufBufferFor(WaylandServer::Impl* server, 
   return found == server->dmabufBuffers_.end() ? nullptr : found->get();
 }
 
-bool copyShmBufferToRgba(WaylandServer::Impl::ShmBuffer const& buffer, std::vector<std::uint8_t>& out) {
+bool copyShmBufferToRgba(WaylandServer::Impl::ShmBuffer const& buffer,
+                         std::vector<std::uint8_t>& out,
+                         bool& fullyOpaque) {
   if (!buffer.data || buffer.width <= 0 || buffer.height <= 0 || buffer.stride <= 0) {
     return false;
   }
@@ -259,6 +261,7 @@ bool copyShmBufferToRgba(WaylandServer::Impl::ShmBuffer const& buffer, std::vect
   }
 
   out.resize(static_cast<std::size_t>(buffer.width) * static_cast<std::size_t>(buffer.height) * 4u);
+  fullyOpaque = true;
   auto const* base = static_cast<std::uint8_t const*>(buffer.data) + buffer.offset;
   for (std::int32_t y = 0; y < buffer.height; ++y) {
     auto const* src = base + static_cast<std::size_t>(y) * static_cast<std::size_t>(buffer.stride);
@@ -268,8 +271,10 @@ bool copyShmBufferToRgba(WaylandServer::Impl::ShmBuffer const& buffer, std::vect
       dst[static_cast<std::size_t>(x) * 4u + 0u] = src[static_cast<std::size_t>(x) * 4u + 2u];
       dst[static_cast<std::size_t>(x) * 4u + 1u] = src[static_cast<std::size_t>(x) * 4u + 1u];
       dst[static_cast<std::size_t>(x) * 4u + 2u] = src[static_cast<std::size_t>(x) * 4u + 0u];
-      dst[static_cast<std::size_t>(x) * 4u + 3u] =
+      std::uint8_t const alpha =
           buffer.format == WL_SHM_FORMAT_XRGB8888 ? 255u : src[static_cast<std::size_t>(x) * 4u + 3u];
+      dst[static_cast<std::size_t>(x) * 4u + 3u] = alpha;
+      fullyOpaque = fullyOpaque && alpha == 255u;
     }
   }
   return true;
@@ -450,8 +455,10 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   if (surface->currentBuffer) {
     if (auto* shmBuffer = shmBufferFor(surface->server, surface->currentBuffer)) {
       std::vector<std::uint8_t> pixels;
-      if (copyShmBufferToRgba(*shmBuffer, pixels)) {
-        surface->rgbaPixels = std::move(pixels);
+      bool fullyOpaque = false;
+      if (copyShmBufferToRgba(*shmBuffer, pixels, fullyOpaque)) {
+        surface->rgbaPixels = std::make_shared<std::vector<std::uint8_t> const>(std::move(pixels));
+        surface->rgbaFullyOpaque = fullyOpaque;
         surface->width = shmBuffer->width;
         surface->height = shmBuffer->height;
         if (!applyViewportState(surface)) return;
@@ -464,7 +471,8 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       }
     } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->currentBuffer)) {
       if (dmabufBuffer->width > 0 && dmabufBuffer->height > 0 && !dmabufBuffer->planes.empty()) {
-        surface->rgbaPixels.clear();
+        surface->rgbaPixels.reset();
+        surface->rgbaFullyOpaque = false;
         surface->width = dmabufBuffer->width;
         surface->height = dmabufBuffer->height;
         if (!applyViewportState(surface)) return;
@@ -485,7 +493,8 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     }
     wl_buffer_send_release(surface->currentBuffer);
   } else {
-    surface->rgbaPixels.clear();
+    surface->rgbaPixels.reset();
+    surface->rgbaFullyOpaque = false;
     surface->width = 0;
     surface->height = 0;
     setConfiguredFrameSize(surface, 0, 0);

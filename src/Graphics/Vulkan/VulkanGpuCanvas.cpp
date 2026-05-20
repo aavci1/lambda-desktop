@@ -2984,6 +2984,10 @@ private:
     if (!renderArea.valid()) {
       return;
     }
+    std::uint64_t const areaPixels = static_cast<std::uint64_t>(renderArea.width) * renderArea.height;
+    debug::perf::recordBackdropBlurRun(areaPixels,
+                                       areaPixels * 2u * static_cast<std::uint64_t>(kBackdropBlurIterations),
+                                       2u * static_cast<std::uint64_t>(kBackdropBlurIterations));
     for (int i = 0; i < kBackdropBlurIterations; ++i) {
       transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
       beginColorRendering(commandBuffer,
