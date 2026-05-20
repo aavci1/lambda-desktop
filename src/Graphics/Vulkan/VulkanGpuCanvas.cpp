@@ -151,6 +151,7 @@ struct Buffer {
   VkBuffer buffer = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
   VkDeviceSize capacity = 0;
+  void *mapped = nullptr;
 };
 
 struct ImageBatch {
@@ -2649,14 +2650,21 @@ private:
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VmaAllocationCreateInfo allocation{};
     allocation.usage = VMA_MEMORY_USAGE_AUTO;
-    allocation.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
-    vkCheck(vmaCreateBuffer(allocator_, &info, &allocation, &buffer.buffer, &buffer.allocation, nullptr),
+    allocation.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    VmaAllocationInfo allocationInfo{};
+    vkCheck(vmaCreateBuffer(allocator_, &info, &allocation, &buffer.buffer, &buffer.allocation, &allocationInfo),
             "vmaCreateBuffer");
+    buffer.mapped = allocationInfo.pMappedData;
   }
 
   void upload(Buffer &buffer, void const *data, std::size_t size) {
     if (!size)
       return;
+    if (buffer.mapped) {
+      std::memcpy(buffer.mapped, data, size);
+      vkCheck(vmaFlushAllocation(allocator_, buffer.allocation, 0, size), "vmaFlushAllocation");
+      return;
+    }
     void *mapped = nullptr;
     vkCheck(vmaMapMemory(allocator_, buffer.allocation, &mapped), "vmaMapMemory");
     std::memcpy(mapped, data, size);
@@ -2866,76 +2874,138 @@ private:
     return push;
   }
 
-  void drawRectRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count,
+  struct VulkanCommandState {
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    VkDescriptorSet descriptor0 = VK_NULL_HANDLE;
+    VkDescriptorSet descriptor1 = VK_NULL_HANDLE;
+    VkBuffer vertexBuffer = VK_NULL_HANDLE;
+    bool pushConstantsValid = false;
+    float translationX = 0.f;
+    float translationY = 0.f;
+  };
+
+  void bindPipeline(VkCommandBuffer commandBuffer,
+                    VulkanCommandState &state,
+                    VkPipeline pipeline,
+                    VkPipelineLayout layout) {
+    if (state.pipeline != pipeline) {
+      vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+      state.pipeline = pipeline;
+    }
+    if (state.layout != layout) {
+      state.layout = layout;
+      state.descriptor0 = VK_NULL_HANDLE;
+      state.descriptor1 = VK_NULL_HANDLE;
+      state.pushConstantsValid = false;
+    }
+  }
+
+  void bindDescriptorSet(VkCommandBuffer commandBuffer,
+                         VulkanCommandState &state,
+                         VkPipelineLayout layout,
+                         std::uint32_t index,
+                         VkDescriptorSet descriptor) {
+    VkDescriptorSet *cached = index == 0 ? &state.descriptor0 : &state.descriptor1;
+    if (*cached == descriptor) {
+      return;
+    }
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            layout,
+                            index,
+                            1,
+                            &descriptor,
+                            0,
+                            nullptr);
+    *cached = descriptor;
+  }
+
+  void pushDrawConstants(VkCommandBuffer commandBuffer,
+                         VulkanCommandState &state,
+                         VkPipelineLayout layout,
+                         float translationX = 0.f,
+                         float translationY = 0.f) {
+    if (state.pushConstantsValid &&
+        std::abs(state.translationX - translationX) <= 1e-4f &&
+        std::abs(state.translationY - translationY) <= 1e-4f) {
+      return;
+    }
+    VulkanDrawPushConstants const push = drawPushConstants(translationX, translationY);
+    vkCmdPushConstants(commandBuffer, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
+    state.pushConstantsValid = true;
+    state.translationX = translationX;
+    state.translationY = translationY;
+  }
+
+  void bindVertexBuffer(VkCommandBuffer commandBuffer, VulkanCommandState &state, VkBuffer buffer) {
+    if (state.vertexBuffer == buffer) {
+      return;
+    }
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &buffer, &offset);
+    state.vertexBuffer = buffer;
+  }
+
+  void drawRectRange(VkCommandBuffer commandBuffer, VulkanCommandState &state, std::uint32_t first, std::uint32_t count,
                      VkDescriptorSet descriptor = VK_NULL_HANDLE,
                      float translationX = 0.f, float translationY = 0.f) {
     if (count == 0)
       return;
-    VulkanDrawPushConstants const push = drawPushConstants(translationX, translationY);
     auto const &res = resources();
     VkDescriptorSet const storageDescriptor = descriptor ? descriptor : rectDescriptorSet_;
     if (!storageDescriptor)
       return;
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.rectPipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.rectPipelineLayout, 0, 1,
-                            &storageDescriptor, 0, nullptr);
-    vkCmdPushConstants(commandBuffer, res.rectPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
+    bindPipeline(commandBuffer, state, res.rectPipeline, res.rectPipelineLayout);
+    bindDescriptorSet(commandBuffer, state, res.rectPipelineLayout, 0, storageDescriptor);
+    pushDrawConstants(commandBuffer, state, res.rectPipelineLayout, translationX, translationY);
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
-  void drawPathRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count,
+  void drawPathRange(VkCommandBuffer commandBuffer, VulkanCommandState &state, std::uint32_t first, std::uint32_t count,
                      VkBuffer vertexBuffer = VK_NULL_HANDLE,
                      float translationX = 0.f, float translationY = 0.f) {
     if (count == 0)
       return;
-    VkDeviceSize offset = 0;
     VkBuffer const buffer = vertexBuffer ? vertexBuffer : pathBuffer_.buffer;
     if (!buffer)
       return;
-    VulkanDrawPushConstants const push = drawPushConstants(translationX, translationY);
     auto const &res = resources();
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.pathPipeline);
-    vkCmdPushConstants(commandBuffer, res.pathPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &buffer, &offset);
+    bindPipeline(commandBuffer, state, res.pathPipeline, res.pathPipelineLayout);
+    pushDrawConstants(commandBuffer, state, res.pathPipelineLayout, translationX, translationY);
+    bindVertexBuffer(commandBuffer, state, buffer);
     vkCmdDraw(commandBuffer, count, 1, first, 0);
   }
 
-  void drawImageRange(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, std::uint32_t count,
+  void drawImageRange(VkCommandBuffer commandBuffer, VulkanCommandState &state, Texture *texture, std::uint32_t first, std::uint32_t count,
                       VkDescriptorSet descriptor = VK_NULL_HANDLE,
                       float translationX = 0.f, float translationY = 0.f) {
     if (!texture || !texture->descriptor || count == 0)
       return;
-    VulkanDrawPushConstants const push = drawPushConstants(translationX, translationY);
     auto const &res = resources();
     VkDescriptorSet const storageDescriptor = descriptor ? descriptor : quadDescriptorSet_;
     if (!storageDescriptor)
       return;
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipelineLayout, 0, 1,
-                            &storageDescriptor, 0, nullptr);
-    vkCmdPushConstants(commandBuffer, res.imagePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.imagePipelineLayout, 1, 1,
-                            &texture->descriptor, 0, nullptr);
+    bindPipeline(commandBuffer, state, res.imagePipeline, res.imagePipelineLayout);
+    bindDescriptorSet(commandBuffer, state, res.imagePipelineLayout, 0, storageDescriptor);
+    pushDrawConstants(commandBuffer, state, res.imagePipelineLayout, translationX, translationY);
+    bindDescriptorSet(commandBuffer, state, res.imagePipelineLayout, 1, texture->descriptor);
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
-  void drawBackdropRange(VkCommandBuffer commandBuffer, Texture *texture, std::uint32_t first, std::uint32_t count,
+  void drawBackdropRange(VkCommandBuffer commandBuffer, VulkanCommandState &state, Texture *texture, std::uint32_t first, std::uint32_t count,
                          VkDescriptorSet descriptor = VK_NULL_HANDLE,
                          float translationX = 0.f, float translationY = 0.f) {
     if (!texture || !texture->descriptor || count == 0)
       return;
-    VulkanDrawPushConstants const push = drawPushConstants(translationX, translationY);
     auto const &res = resources();
     VkDescriptorSet const storageDescriptor = descriptor ? descriptor : quadDescriptorSet_;
     if (!storageDescriptor)
       return;
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 0, 1,
-                            &storageDescriptor, 0, nullptr);
-    vkCmdPushConstants(commandBuffer, res.backdropPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(push), &push);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 1, 1,
-                            &texture->descriptor, 0, nullptr);
+    bindPipeline(commandBuffer, state, res.backdropPipeline, res.backdropPipelineLayout);
+    bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 0, storageDescriptor);
+    pushDrawConstants(commandBuffer, state, res.backdropPipelineLayout, translationX, translationY);
+    bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 1, texture->descriptor);
     vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
@@ -3136,6 +3206,7 @@ private:
     std::size_t const opEnd = std::min(end, ops_.size());
     bool hasScissor = false;
     Rect currentScissor{};
+    VulkanCommandState commandState{};
     for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
       DrawOp const &op = ops_[index];
       if (op.clip.width <= 0.f || op.clip.height <= 0.f) {
@@ -3148,19 +3219,19 @@ private:
       }
       switch (op.kind) {
       case DrawOp::Kind::Rect:
-        drawRectRange(commandBuffer, op.first, op.count, op.externalStorageDescriptor,
+        drawRectRange(commandBuffer, commandState, op.first, op.count, op.externalStorageDescriptor,
                       op.externalTranslationX, op.externalTranslationY);
         break;
       case DrawOp::Kind::Path:
-        drawPathRange(commandBuffer, op.first, op.count, op.externalVertexBuffer,
+        drawPathRange(commandBuffer, commandState, op.first, op.count, op.externalVertexBuffer,
                       op.externalTranslationX, op.externalTranslationY);
         break;
       case DrawOp::Kind::Image:
-        drawImageRange(commandBuffer, op.texture, op.first, op.count, op.externalStorageDescriptor,
+        drawImageRange(commandBuffer, commandState, op.texture, op.first, op.count, op.externalStorageDescriptor,
                        op.externalTranslationX, op.externalTranslationY);
         break;
       case DrawOp::Kind::BackdropBlur:
-        drawBackdropRange(commandBuffer, backdropSource, op.first, op.count, op.externalStorageDescriptor,
+        drawBackdropRange(commandBuffer, commandState, backdropSource, op.first, op.count, op.externalStorageDescriptor,
                           op.externalTranslationX, op.externalTranslationY);
         break;
       }
