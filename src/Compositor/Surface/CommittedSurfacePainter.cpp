@@ -165,11 +165,12 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   float const windowHeight = static_cast<float>(surface.height);
   float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
   bool const cutoutChrome = surface.serverSideDecorated && surface.cutoutsBound && !surface.cutoutsRejected;
+  CornerRadius const windowCorners = chrome.windowCornerRadius;
   CornerRadius const contentCorners = cutoutChrome
-                                          ? CornerRadius{chrome.windowCornerRadius}
+                                          ? windowCorners
                                           : (titleBarHeight > 0.f
-                                                 ? CornerRadius{0.f, 0.f, chrome.windowCornerRadius, chrome.windowCornerRadius}
-                                                 : CornerRadius{chrome.windowCornerRadius});
+                                                 ? CornerRadius{0.f, 0.f, windowCorners.bottomRight, windowCorners.bottomLeft}
+                                                 : windowCorners);
   float const animationMs = static_cast<float>(
       std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
   float const openProgress = animationsEnabled ? easeOutCubic(animationMs / 140.f) : 1.f;

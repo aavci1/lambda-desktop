@@ -1,5 +1,7 @@
 #include "Compositor/Chrome/WindowChromeRenderer.hpp"
 
+#include "Compositor/Chrome/ChromeMetrics.hpp"
+
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 
@@ -25,27 +27,29 @@ bool usesCutoutChrome(CommittedSurfaceSnapshot const& surface) {
   return surface.serverSideDecorated && surface.cutoutsBound && !surface.cutoutsRejected;
 }
 
-void drawControls(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome, float titleTop) {
+void drawControls(Canvas& canvas,
+                  CommittedSurfaceSnapshot const& surface,
+                  ChromeConfig const& chrome,
+                  float titleTop,
+                  float titleBarHeight) {
   float const windowX = static_cast<float>(surface.x);
   float const windowWidth = static_cast<float>(surface.width);
-  float const buttonSize = static_cast<float>(chrome.buttonSize);
-  float const buttonY = titleTop + static_cast<float>(chrome.controlsInsetTop);
-  float const closeRight = windowX + windowWidth - static_cast<float>(chrome.controlsInsetRight);
-  float const closeX = closeRight - buttonSize;
-  float const minimizeX = closeX - static_cast<float>(chrome.buttonGap) - buttonSize;
+  ChromeControlsMetrics const metrics = chromeControlsMetrics(chrome, titleBarHeight);
+  ChromeControlRects const rects = chromeControlRects(chrome, windowX, titleTop, windowWidth, titleBarHeight);
+  float const buttonSize = metrics.buttonSize;
+  float const buttonY = rects.closeButton.y;
   float const groupOpacity = surface.focused ? 1.f : 0.6f;
-  float const glyphInset = std::max(4.f, buttonSize * 0.32f);
+  float const glyphInset = std::max(3.f, buttonSize * 0.32f);
   float const glyphMin = glyphInset;
   float const glyphMax = buttonSize - glyphInset;
   float const minimizeY = buttonY + buttonSize * 0.66f;
 
-  auto drawButton = [&](float x, bool hovered, bool pressed, bool close) {
-    Rect const rect = Rect::sharp(x, buttonY, buttonSize, buttonSize);
+  auto drawButton = [&](Rect const& rect, bool hovered, bool pressed, bool close) {
     bool const active = hovered || pressed;
     if (active) {
       Color const background = close ? chrome.closeHoverBackground : chrome.minimizeHoverBackground;
       canvas.drawRect(rect,
-                      CornerRadius{chrome.buttonRadius},
+                      CornerRadius{metrics.buttonRadius},
                       FillStyle::solid(withOpacity(background, groupOpacity)),
                       StrokeStyle::none(),
                       ShadowStyle::none());
@@ -58,15 +62,15 @@ void drawControls(Canvas& canvas, CommittedSurfaceSnapshot const& surface, Chrom
     StrokeStyle stroke = StrokeStyle::solid(glyph, 1.6f);
     stroke.cap = StrokeCap::Round;
     if (close) {
-      canvas.drawLine({x + glyphMin, buttonY + glyphMin}, {x + glyphMax, buttonY + glyphMax}, stroke);
-      canvas.drawLine({x + glyphMax, buttonY + glyphMin}, {x + glyphMin, buttonY + glyphMax}, stroke);
+      canvas.drawLine({rect.x + glyphMin, buttonY + glyphMin}, {rect.x + glyphMax, buttonY + glyphMax}, stroke);
+      canvas.drawLine({rect.x + glyphMax, buttonY + glyphMin}, {rect.x + glyphMin, buttonY + glyphMax}, stroke);
     } else {
-      canvas.drawLine({x + glyphMin, minimizeY}, {x + glyphMax, minimizeY}, stroke);
+      canvas.drawLine({rect.x + glyphMin, minimizeY}, {rect.x + glyphMax, minimizeY}, stroke);
     }
   };
 
-  drawButton(minimizeX, surface.minimizeButtonHovered, surface.minimizeButtonPressed, false);
-  drawButton(closeX, surface.closeButtonHovered, surface.closeButtonPressed, true);
+  drawButton(rects.minimizeButton, surface.minimizeButtonHovered, surface.minimizeButtonPressed, false);
+  drawButton(rects.closeButton, surface.closeButtonHovered, surface.closeButtonPressed, true);
 }
 
 void drawDefaultChrome(Canvas& canvas,
@@ -82,7 +86,7 @@ void drawDefaultChrome(Canvas& canvas,
 
   float const titleTop = windowY - titleBarHeight;
   Rect const frameRect = Rect::sharp(windowX, titleTop, windowWidth, windowHeight + titleBarHeight);
-  CornerRadius const frameRadius{chrome.windowCornerRadius};
+  CornerRadius const frameRadius = chrome.windowCornerRadius;
   Color const frameTint = chrome.windowGlassEnabled
                               ? chrome.glassTint
                               : Color{chrome.glassTint.r, chrome.glassTint.g, chrome.glassTint.b, 1.f};
@@ -97,16 +101,15 @@ void drawDefaultChrome(Canvas& canvas,
 
   canvas.drawLine({windowX, windowY}, {windowX + windowWidth, windowY},
                   StrokeStyle::solid(chrome.borderLineColor, 0.5f));
-  float const topInsetRadius = std::min(chrome.windowCornerRadius, windowWidth * 0.5f);
-  float const topInsetLeft = windowX + topInsetRadius;
-  float const topInsetRight = windowX + windowWidth - topInsetRadius;
+  float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
+  float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
   if (topInsetRight > topInsetLeft) {
     canvas.drawLine({topInsetLeft, titleTop + 0.5f},
                     {topInsetRight, titleTop + 0.5f},
                     StrokeStyle::solid(chrome.insetHighlightColor, 1.f));
   }
 
-  float const controlsWidth = static_cast<float>(chrome.controlsWidth);
+  float const controlsWidth = chromeControlsMetrics(chrome, titleBarHeight).controlsWidth;
   float const titleLeft = windowX + controlsWidth;
   float const titleWidth = std::max(0.f, windowWidth - controlsWidth * 2.f);
   if (titleWidth > 0.f && !surface.title.empty()) {
@@ -140,7 +143,7 @@ void drawDefaultChrome(Canvas& canvas,
     }
   }
 
-  drawControls(canvas, surface, chrome, titleTop);
+  drawControls(canvas, surface, chrome, titleTop, titleBarHeight);
 }
 
 } // namespace
@@ -151,7 +154,7 @@ void drawWindowChrome(Canvas& canvas,
                       ChromeConfig const& chrome) {
   if (!surface.serverSideDecorated) return;
   if (usesCutoutChrome(surface)) {
-    drawControls(canvas, surface, chrome, static_cast<float>(surface.y));
+    drawControls(canvas, surface, chrome, static_cast<float>(surface.y), static_cast<float>(chrome.titleBarHeight));
     return;
   }
   drawDefaultChrome(canvas, textSystem, surface, chrome);

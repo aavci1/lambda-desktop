@@ -1,4 +1,5 @@
 #include "Compositor/Config/CompositorConfig.hpp"
+#include "Compositor/Chrome/ChromeMetrics.hpp"
 
 #include <Flux/Graphics/ImageFillMode.hpp>
 
@@ -184,8 +185,14 @@ TEST_CASE("compositor config parses chrome section") {
   file << "title_bar_height = 44\n";
   file << "controls_width = 96\n";
   file << "button_radius = 8.5\n";
+  file << "resize_grip_size = 3\n";
   file << "glass_tint = \"#ffffff80\"\n";
   file << "close_hover_background = \"#ff0000\"\n";
+  file << "[chrome.window_corner_radius]\n";
+  file << "top_left = 6\n";
+  file << "top_right = 7\n";
+  file << "bottom_right = 8\n";
+  file << "bottom_left = 9\n";
   file << "[chrome.dark]\n";
   file << "title_text_color = \"#e6ecf7\"\n";
   file.close();
@@ -196,12 +203,32 @@ TEST_CASE("compositor config parses chrome section") {
   CHECK(chrome.titleBarHeight == 44);
   CHECK(chrome.controlsWidth == 96);
   CHECK(chrome.buttonRadius == doctest::Approx(8.5f));
+  CHECK(chrome.resizeGripSize == 3);
+  CHECK(chrome.windowCornerRadius.topLeft == doctest::Approx(6.f));
+  CHECK(chrome.windowCornerRadius.topRight == doctest::Approx(7.f));
+  CHECK(chrome.windowCornerRadius.bottomRight == doctest::Approx(8.f));
+  CHECK(chrome.windowCornerRadius.bottomLeft == doctest::Approx(9.f));
   CHECK(chrome.glassTint.a == doctest::Approx(128.f / 255.f));
   CHECK(chrome.closeHoverBackground.r == doctest::Approx(1.f));
   REQUIRE(loaded.config.darkChrome);
   CHECK(loaded.config.darkChrome->titleTextColor.r == doctest::Approx(230.f / 255.f));
 
   std::filesystem::remove(path);
+}
+
+TEST_CASE("chrome controls scale and center with title bar height") {
+  flux::compositor::ChromeConfig chrome;
+  chrome.titleBarHeight = 56;
+
+  auto const metrics = flux::compositor::chromeControlsMetrics(chrome);
+  CHECK(metrics.buttonSize == doctest::Approx(32.f));
+  CHECK(metrics.buttonGap == doctest::Approx(8.f));
+  CHECK(metrics.insetTop == doctest::Approx(12.f));
+
+  auto const rects = flux::compositor::chromeControlRects(chrome, 10.f, 20.f, 300.f, 56.f);
+  CHECK(rects.closeButton.y == doctest::Approx(32.f));
+  CHECK(rects.closeButton.height == doctest::Approx(32.f));
+  CHECK(rects.minimizeButton.height == doctest::Approx(32.f));
 }
 
 TEST_CASE("compositor config reports file changes") {

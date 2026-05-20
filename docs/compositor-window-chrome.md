@@ -33,3 +33,32 @@ cmake --build build --target flux-compositor-render-fixture
 The fixture renders synthetic Tier 1, Tier 2, and Tier 3 `CommittedSurfaceSnapshot`s through the same `drawCommittedSurfaceSnapshot` path used by the KMS compositor, reads back the offscreen render target, and writes a PNG for visual inspection or pixel checks.
 
 Chrome defaults live under `[chrome]` in the compositor config and match the SADE values. `[chrome.dark]` can override those values for a future dark theme path. The compositor also enables `window_glass` by default, which synthesizes a full-window blur region and applies `window_glass_opacity` to client buffers; set `window_glass = false` to disable that default while still allowing clients to request explicit `ext-background-effect-v1` blur regions.
+
+The title bar and frame metrics are configurable from `[chrome]`. The commonly tuned values are:
+
+```toml
+[chrome]
+title_bar_height = 28
+controls_width = 58
+controls_inset_right = 8
+controls_inset_top = 6
+button_size = 16
+button_gap = 4
+resize_grip_size = 4
+window_corner_radius = 14
+```
+
+`window_corner_radius` can also be configured per corner:
+
+```toml
+[chrome.window_corner_radius]
+all = 14
+top_left = 14
+top_right = 14
+bottom_right = 14
+bottom_left = 14
+```
+
+The resize grip is a thin hit-test ring around the visible rounded frame, not a full square strip. With the default 4 px grip, most of the 28 px title bar remains available for dragging while the rounded corners still expose diagonal resize handles.
+
+Window controls are laid out from the active `title_bar_height`. `button_size`, `button_gap`, `controls_width`, `controls_inset_right`, `controls_inset_top`, and `button_radius` are treated as the 28 px title-bar baseline and scale proportionally when the title bar gets taller or shorter. Buttons are vertically centered in the title bar after scaling.

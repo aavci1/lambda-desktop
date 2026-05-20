@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/XdgShell.hpp"
 
+#include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
@@ -9,6 +10,7 @@
 #include "xdg-shell-server-protocol.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <memory>
@@ -154,9 +156,10 @@ void sendCutoutsConfigureIfNeeded(WaylandServer::Impl* server,
   if (!usesCutouts) return;
   if (width <= 0 || height <= 0) return;
 
+  ChromeControlsMetrics const controls = chromeControlsMetrics(server->chromeConfig_);
   CutoutBox const box = compositorControlsCutout(width,
                                                  height,
-                                                 server->chromeConfig_.controlsWidth,
+                                                 static_cast<std::int32_t>(std::ceil(controls.controlsWidth)),
                                                  server->chromeConfig_.titleBarHeight);
   auto* cutouts = toplevel->cutouts;
   CutoutSendState const state{

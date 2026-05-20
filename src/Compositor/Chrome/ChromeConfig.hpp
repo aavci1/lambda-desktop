@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Flux/Core/Color.hpp>
+#include <Flux/Core/Geometry.hpp>
 
 #include <cstdint>
 
@@ -23,7 +24,8 @@ struct ChromeConfig {
   Color titleTextColor = Color::hex(0x16203a);
   float titleTextFontSize = 11.5f;
   float titleTextFontWeight = 600.f;
-  float windowCornerRadius = 14.f;
+  CornerRadius windowCornerRadius = CornerRadius{14.f};
+  std::int32_t resizeGripSize = 4;
   bool windowGlassEnabled = true;
   float windowGlassOpacity = 0.92f;
   Color glassTint = Color{1.f, 1.f, 1.f, 0.80f};

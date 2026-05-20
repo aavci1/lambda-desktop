@@ -1,5 +1,6 @@
 #include "Compositor/Surface/CommittedSurfacePainter.hpp"
 
+#include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Graphics/CoreTextSystem.hpp"
 
 #include <Flux/Graphics/Image.hpp>
@@ -102,11 +103,12 @@ std::vector<std::uint8_t> makeTier2Pixels(int width, int height) {
 
 std::vector<std::uint8_t> makeTier3Pixels(int width, int height, flux::compositor::ChromeConfig const& chrome) {
   auto pixels = makePixels(width, height, U8Color{237, 243, 249, 255}, U8Color{205, 218, 234, 255});
+  auto const controlsWidth = static_cast<int>(std::ceil(flux::compositor::chromeControlsMetrics(chrome).controlsWidth));
   fillRect(pixels, width, height, 0, 0, width, chrome.titleBarHeight, U8Color{247, 250, 253, 242});
   fillRect(pixels, width, height, 16, 7, 52, 16, U8Color{224, 232, 244, 255});
   fillRect(pixels, width, height, 82, 7, 150, 16, U8Color{255, 255, 255, 255});
   fillRect(pixels, width, height, 248, 7, std::max(0, width - 320), 16, U8Color{232, 239, 248, 255});
-  fillRect(pixels, width, height, width - chrome.controlsWidth, 0, chrome.controlsWidth, chrome.titleBarHeight,
+  fillRect(pixels, width, height, width - controlsWidth, 0, controlsWidth, chrome.titleBarHeight,
            U8Color{247, 250, 253, 242});
   fillRect(pixels, width, height, 22, 54, width - 44, 54, U8Color{255, 255, 255, 255});
   fillRect(pixels, width, height, 22, 128, 120, height - 154, U8Color{226, 235, 246, 255});

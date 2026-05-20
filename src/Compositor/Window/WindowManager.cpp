@@ -1,4 +1,5 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
@@ -25,7 +26,6 @@ namespace flux::compositor {
 namespace {
 
 constexpr std::int32_t kTitleBarHeight = kCompositorTitleBarHeight;
-constexpr std::int32_t kResizeGripSize = 14;
 constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
 constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
@@ -57,6 +57,53 @@ OutputGeometry outputGeometryFor(WaylandServer::Impl const* server) {
 
 std::int32_t titleBarHeightFor(WaylandServer::Impl const* server) {
   return std::max(0, server ? server->chromeConfig_.titleBarHeight : kTitleBarHeight);
+}
+
+std::int32_t resizeGripSizeFor(WaylandServer::Impl const* server) {
+  return std::clamp(server ? server->chromeConfig_.resizeGripSize : 4, 1, 24);
+}
+
+CornerRadius clampedCornerRadius(CornerRadius radius, float width, float height) {
+  float const maximum = std::max(0.f, std::min(width, height) * 0.5f);
+  radius.topLeft = std::clamp(radius.topLeft, 0.f, maximum);
+  radius.topRight = std::clamp(radius.topRight, 0.f, maximum);
+  radius.bottomRight = std::clamp(radius.bottomRight, 0.f, maximum);
+  radius.bottomLeft = std::clamp(radius.bottomLeft, 0.f, maximum);
+  return radius;
+}
+
+CornerRadius insetCornerRadius(CornerRadius radius, float inset) {
+  radius.topLeft = std::max(0.f, radius.topLeft - inset);
+  radius.topRight = std::max(0.f, radius.topRight - inset);
+  radius.bottomRight = std::max(0.f, radius.bottomRight - inset);
+  radius.bottomLeft = std::max(0.f, radius.bottomLeft - inset);
+  return radius;
+}
+
+bool pointInCorner(float x, float y, float centerX, float centerY, float radius) {
+  float const dx = x - centerX;
+  float const dy = y - centerY;
+  return dx * dx + dy * dy <= radius * radius;
+}
+
+bool roundedRectContainsPoint(float x, float y, float left, float top, float right, float bottom, CornerRadius radius) {
+  if (!containsPoint(x, y, left, top, right, bottom)) return false;
+  float const width = right - left;
+  float const height = bottom - top;
+  radius = clampedCornerRadius(radius, width, height);
+  if (radius.topLeft > 0.f && x < left + radius.topLeft && y < top + radius.topLeft) {
+    return pointInCorner(x, y, left + radius.topLeft, top + radius.topLeft, radius.topLeft);
+  }
+  if (radius.topRight > 0.f && x >= right - radius.topRight && y < top + radius.topRight) {
+    return pointInCorner(x, y, right - radius.topRight, top + radius.topRight, radius.topRight);
+  }
+  if (radius.bottomRight > 0.f && x >= right - radius.bottomRight && y >= bottom - radius.bottomRight) {
+    return pointInCorner(x, y, right - radius.bottomRight, bottom - radius.bottomRight, radius.bottomRight);
+  }
+  if (radius.bottomLeft > 0.f && x < left + radius.bottomLeft && y >= bottom - radius.bottomLeft) {
+    return pointInCorner(x, y, left + radius.bottomLeft, bottom - radius.bottomLeft, radius.bottomLeft);
+  }
+  return true;
 }
 
 WaylandServer::Impl::XdgToplevel* toplevelForSurfaceConst(WaylandServer::Impl* server,
@@ -190,6 +237,7 @@ struct ChromeHitContext {
   float right = 0.f;
   float bottom = 0.f;
   float contentTop = 0.f;
+  CornerRadius cornerRadius{};
   bool serverSideDecorated = false;
   bool cutouts = false;
 };
@@ -217,7 +265,8 @@ std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server,
     bool const decorated = surfaceServerSideDecorated(server, surface);
     bool const cutouts = surfaceUsesCutouts(server, surface);
     float const frameTop = contentTop - static_cast<float>(externalTitleBarHeight(server, surface));
-    if (!containsPoint(x, y, contentLeft, frameTop, contentRight, contentBottom)) continue;
+    CornerRadius const cornerRadius = server ? server->chromeConfig_.windowCornerRadius : CornerRadius{14.f};
+    if (!roundedRectContainsPoint(x, y, contentLeft, frameTop, contentRight, contentBottom, cornerRadius)) continue;
     return ChromeHitContext{
         .surface = surface,
         .left = contentLeft,
@@ -225,6 +274,7 @@ std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server,
         .right = contentRight,
         .bottom = contentBottom,
         .contentTop = contentTop,
+        .cornerRadius = cornerRadius,
         .serverSideDecorated = decorated,
         .cutouts = cutouts,
     };
@@ -235,8 +285,9 @@ std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server,
 bool controlsRegionContains(ChromeHitContext const& context, float x, float y) {
   if (!context.serverSideDecorated || !context.cutouts) return false;
   auto const& chrome = context.surface->server->chromeConfig_;
-  float const cutoutWidth = static_cast<float>(std::min(chrome.controlsWidth, displayWidth(context.surface)));
-  float const cutoutHeight = static_cast<float>(std::min(chrome.titleBarHeight, displayHeight(context.surface)));
+  ChromeControlsMetrics const metrics = chromeControlsMetrics(chrome);
+  float const cutoutWidth = std::min(metrics.controlsWidth, static_cast<float>(displayWidth(context.surface)));
+  float const cutoutHeight = std::min(metrics.titleBarHeight, static_cast<float>(displayHeight(context.surface)));
   return containsPoint(x, y, context.right - cutoutWidth, context.contentTop, context.right, context.contentTop + cutoutHeight);
 }
 
@@ -250,16 +301,87 @@ ChromeButton chromeButtonAt(ChromeHitContext const& context, float x, float y) {
   if (!context.serverSideDecorated) return ChromeButton::None;
   if (context.cutouts && !controlsRegionContains(context, x, y)) return ChromeButton::None;
   auto const& chrome = context.surface->server->chromeConfig_;
-  float const buttonSize = static_cast<float>(chrome.buttonSize);
-  float const top = context.top + static_cast<float>(chrome.controlsInsetTop);
-  float const closeRight = context.right - static_cast<float>(chrome.controlsInsetRight);
-  float const closeLeft = closeRight - buttonSize;
-  float const minimizeRight = closeLeft - static_cast<float>(chrome.buttonGap);
-  float const minimizeLeft = minimizeRight - buttonSize;
-  float const bottom = top + buttonSize;
-  if (containsPoint(x, y, closeLeft, top, closeRight, bottom)) return ChromeButton::Close;
-  if (containsPoint(x, y, minimizeLeft, top, minimizeRight, bottom)) return ChromeButton::Minimize;
+  float const titleBarHeight = context.cutouts
+                                   ? static_cast<float>(chrome.titleBarHeight)
+                                   : std::max(0.f, context.contentTop - context.top);
+  ChromeControlRects const rects =
+      chromeControlRects(chrome, context.left, context.top, context.right - context.left, titleBarHeight);
+  if (containsPoint(x,
+                    y,
+                    rects.closeButton.x,
+                    rects.closeButton.y,
+                    rects.closeButton.x + rects.closeButton.width,
+                    rects.closeButton.y + rects.closeButton.height)) {
+    return ChromeButton::Close;
+  }
+  if (containsPoint(x,
+                    y,
+                    rects.minimizeButton.x,
+                    rects.minimizeButton.y,
+                    rects.minimizeButton.x + rects.minimizeButton.width,
+                    rects.minimizeButton.y + rects.minimizeButton.height)) {
+    return ChromeButton::Minimize;
+  }
   return ChromeButton::None;
+}
+
+float cornerGripSpan(float radius, float gripSize) {
+  return std::max(radius, gripSize);
+}
+
+std::uint32_t resizeEdgesForContext(ChromeHitContext const& context, float x, float y) {
+  if (!context.surface || !context.surface->server) return XDG_TOPLEVEL_RESIZE_EDGE_NONE;
+  float const gripSize = static_cast<float>(resizeGripSizeFor(context.surface->server));
+  float const width = context.right - context.left;
+  float const height = context.bottom - context.top;
+  if (width <= 0.f || height <= 0.f) return XDG_TOPLEVEL_RESIZE_EDGE_NONE;
+
+  CornerRadius const outerRadius = clampedCornerRadius(context.cornerRadius, width, height);
+  if (!roundedRectContainsPoint(x, y, context.left, context.top, context.right, context.bottom, outerRadius)) {
+    return XDG_TOPLEVEL_RESIZE_EDGE_NONE;
+  }
+
+  float const innerLeft = context.left + gripSize;
+  float const innerTop = context.top + gripSize;
+  float const innerRight = context.right - gripSize;
+  float const innerBottom = context.bottom - gripSize;
+  if (innerRight > innerLeft && innerBottom > innerTop) {
+    CornerRadius const innerRadius = insetCornerRadius(outerRadius, gripSize);
+    if (roundedRectContainsPoint(x, y, innerLeft, innerTop, innerRight, innerBottom, innerRadius)) {
+      return XDG_TOPLEVEL_RESIZE_EDGE_NONE;
+    }
+  }
+
+  float const topLeftSpan = cornerGripSpan(outerRadius.topLeft, gripSize);
+  float const topRightSpan = cornerGripSpan(outerRadius.topRight, gripSize);
+  float const bottomRightSpan = cornerGripSpan(outerRadius.bottomRight, gripSize);
+  float const bottomLeftSpan = cornerGripSpan(outerRadius.bottomLeft, gripSize);
+  if (x < context.left + topLeftSpan && y < context.top + topLeftSpan) {
+    return XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT;
+  }
+  if (x >= context.right - topRightSpan && y < context.top + topRightSpan) {
+    return XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT;
+  }
+  if (x >= context.right - bottomRightSpan && y >= context.bottom - bottomRightSpan) {
+    return XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
+  }
+  if (x < context.left + bottomLeftSpan && y >= context.bottom - bottomLeftSpan) {
+    return XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT;
+  }
+
+  bool const nearLeft = x < context.left + gripSize;
+  bool const nearRight = x >= context.right - gripSize;
+  bool const nearTop = y < context.top + gripSize;
+  bool const nearBottom = y >= context.bottom - gripSize;
+  if (nearLeft && nearTop) return XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT;
+  if (nearRight && nearTop) return XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT;
+  if (nearLeft && nearBottom) return XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT;
+  if (nearRight && nearBottom) return XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
+  if (nearLeft) return XDG_TOPLEVEL_RESIZE_EDGE_LEFT;
+  if (nearRight) return XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
+  if (nearTop) return XDG_TOPLEVEL_RESIZE_EDGE_TOP;
+  if (nearBottom) return XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
+  return XDG_TOPLEVEL_RESIZE_EDGE_NONE;
 }
 
 } // namespace
@@ -288,6 +410,7 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
             .right = right,
             .bottom = bottom,
             .contentTop = top,
+            .cornerRadius = server ? server->chromeConfig_.windowCornerRadius : CornerRadius{14.f},
             .serverSideDecorated = true,
             .cutouts = true,
         };
@@ -325,19 +448,8 @@ WaylandServer::Impl::Surface* resizeGripAt(WaylandServer::Impl* server, float x,
   auto context = topChromeHitContext(server, x, y);
   if (!context) return nullptr;
 
-  bool const nearLeft = x >= context->left && x < context->left + kResizeGripSize;
-  bool const nearRight = x >= context->right - kResizeGripSize && x < context->right;
-  bool const nearTop = y >= context->top && y < context->top + kResizeGripSize;
-  bool const nearBottom = y >= context->bottom - kResizeGripSize && y < context->bottom;
-  if (nearLeft && nearTop) edges = XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT;
-  else if (nearRight && nearTop) edges = XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT;
-  else if (nearLeft && nearBottom) edges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT;
-  else if (nearRight && nearBottom) edges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
-  else if (nearLeft) edges = XDG_TOPLEVEL_RESIZE_EDGE_LEFT;
-  else if (nearRight) edges = XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
-  else if (nearTop) edges = XDG_TOPLEVEL_RESIZE_EDGE_TOP;
-  else if (nearBottom) edges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
-  else return nullptr;
+  edges = resizeEdgesForContext(*context, x, y);
+  if (edges == XDG_TOPLEVEL_RESIZE_EDGE_NONE) return nullptr;
   return context->surface;
 }
 
@@ -356,19 +468,8 @@ WaylandServer::Impl::Surface* resizeOrCloseChromeAt(WaylandServer::Impl* server,
     return context->surface;
   }
 
-  bool const nearLeft = x >= context->left && x < context->left + kResizeGripSize;
-  bool const nearRight = x >= context->right - kResizeGripSize && x < context->right;
-  bool const nearTop = y >= context->top && y < context->top + kResizeGripSize;
-  bool const nearBottom = y >= context->bottom - kResizeGripSize && y < context->bottom;
-  if (nearLeft && nearTop) resizeEdges = XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT;
-  else if (nearRight && nearTop) resizeEdges = XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT;
-  else if (nearLeft && nearBottom) resizeEdges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT;
-  else if (nearRight && nearBottom) resizeEdges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
-  else if (nearLeft) resizeEdges = XDG_TOPLEVEL_RESIZE_EDGE_LEFT;
-  else if (nearRight) resizeEdges = XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
-  else if (nearTop) resizeEdges = XDG_TOPLEVEL_RESIZE_EDGE_TOP;
-  else if (nearBottom) resizeEdges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
-  else return nullptr;
+  resizeEdges = resizeEdgesForContext(*context, x, y);
+  if (resizeEdges == XDG_TOPLEVEL_RESIZE_EDGE_NONE) return nullptr;
   return context->surface;
 }
 

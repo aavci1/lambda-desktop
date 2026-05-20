@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
+#include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Wayland/Globals/LinuxDmabuf.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 
@@ -66,18 +67,14 @@ ChromeButton chromeButtonAt(WaylandServer::Impl const* server,
   float const windowX = static_cast<float>(surface->windowX);
   float const windowY = static_cast<float>(surface->windowY);
   float const width = static_cast<float>(displayWidth(surface));
-  float const top = windowY - (cutoutMode ? 0.f : static_cast<float>(chrome.titleBarHeight)) +
-                    static_cast<float>(chrome.controlsInsetTop);
-  float const closeRight = windowX + width - static_cast<float>(chrome.controlsInsetRight);
-  float const closeLeft = closeRight - static_cast<float>(chrome.buttonSize);
-  float const minimizeRight = closeLeft - static_cast<float>(chrome.buttonGap);
-  float const minimizeLeft = minimizeRight - static_cast<float>(chrome.buttonSize);
-  float const bottom = top + static_cast<float>(chrome.buttonSize);
-  auto contains = [&](float left, float right) {
-    return x >= left && x < right && y >= top && y < bottom;
+  float const titleBarHeight = static_cast<float>(chrome.titleBarHeight);
+  float const top = windowY - (cutoutMode ? 0.f : titleBarHeight);
+  ChromeControlRects const rects = chromeControlRects(chrome, windowX, top, width, titleBarHeight);
+  auto contains = [&](Rect const& rect) {
+    return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
   };
-  if (contains(closeLeft, closeRight)) return ChromeButton::Close;
-  if (contains(minimizeLeft, minimizeRight)) return ChromeButton::Minimize;
+  if (contains(rects.closeButton)) return ChromeButton::Close;
+  if (contains(rects.minimizeButton)) return ChromeButton::Minimize;
   return ChromeButton::None;
 }
 
