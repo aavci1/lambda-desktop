@@ -15,6 +15,7 @@
 #include "Detail/ResizeTrace.hpp"
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
+#include "xx-cutouts-v1-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -108,6 +109,7 @@ struct SharedWaylandConnection {
   wp_fractional_scale_manager_v1* fractionalScaleManager = nullptr;
   xdg_wm_base* wmBase = nullptr;
   zxdg_decoration_manager_v1* decorationManager = nullptr;
+  xx_cutouts_manager_v1* cutoutsManager = nullptr;
   wl_seat* seat = nullptr;
   wl_pointer* pointer = nullptr;
   wl_cursor_theme* cursorTheme = nullptr;
@@ -236,6 +238,10 @@ void releaseWaylandConnection() {
     zxdg_decoration_manager_v1_destroy(gWaylandConnection.decorationManager);
     gWaylandConnection.decorationManager = nullptr;
   }
+  if (gWaylandConnection.cutoutsManager) {
+    xx_cutouts_manager_v1_destroy(gWaylandConnection.cutoutsManager);
+    gWaylandConnection.cutoutsManager = nullptr;
+  }
   if (gWaylandConnection.viewporter) {
     wp_viewporter_destroy(gWaylandConnection.viewporter);
     gWaylandConnection.viewporter = nullptr;
@@ -305,6 +311,7 @@ public:
     if (config.minSize.width > 0.f || config.minSize.height > 0.f) setMinSize(config.minSize);
     if (config.maxSize.width > 0.f || config.maxSize.height > 0.f) setMaxSize(config.maxSize);
     requestServerSideDecorations();
+    requestCutouts();
     if (fullscreen_) xdg_toplevel_set_fullscreen(toplevel_, nullptr);
     wl_surface_commit(surface_);
     while (!configured_) {
@@ -322,6 +329,7 @@ public:
       if (shared_->keyboardFocus == this) shared_->keyboardFocus = nullptr;
     }
     if (frameCallback_) wl_callback_destroy(frameCallback_);
+    if (cutouts_) xx_cutouts_v1_destroy(cutouts_);
     if (decoration_) zxdg_toplevel_decoration_v1_destroy(decoration_);
     if (toplevel_) xdg_toplevel_destroy(toplevel_);
     if (xdgSurface_) xdg_surface_destroy(xdgSurface_);
@@ -598,6 +606,26 @@ private:
     }
   }
 
+  static void cutoutBox(void* data,
+                        xx_cutouts_v1*,
+                        std::int32_t x,
+                        std::int32_t y,
+                        std::int32_t width,
+                        std::int32_t height,
+                        std::uint32_t,
+                        std::uint32_t id) {
+    auto* self = static_cast<WaylandWindow*>(data);
+    self->receivedCutout_ = true;
+    self->lastCutoutX_ = x;
+    self->lastCutoutY_ = y;
+    self->lastCutoutWidth_ = width;
+    self->lastCutoutHeight_ = height;
+    self->lastCutoutId_ = id;
+  }
+
+  static void cutoutCorner(void*, xx_cutouts_v1*, std::uint32_t, std::uint32_t, std::uint32_t) {}
+  static void cutoutsConfigure(void*, xx_cutouts_v1*) {}
+
   static void surfaceEnter(void* data, wl_surface*, wl_output* output) {
     auto* self = static_cast<WaylandWindow*>(data);
     if (std::find(self->enteredOutputs_.begin(), self->enteredOutputs_.end(), output) == self->enteredOutputs_.end()) {
@@ -769,6 +797,12 @@ private:
     zxdg_toplevel_decoration_v1_set_mode(decoration_, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
   }
 
+  void requestCutouts() {
+    if (!shared_ || !shared_->cutoutsManager || !surface_) return;
+    cutouts_ = xx_cutouts_manager_v1_get_cutouts(shared_->cutoutsManager, surface_);
+    if (cutouts_) xx_cutouts_v1_add_listener(cutouts_, &cutoutsListener_, this);
+  }
+
   float outputScale(wl_output* output) const {
     if (!shared_) return 1.f;
     for (auto const& candidate : shared_->outputs) {
@@ -852,6 +886,7 @@ private:
   static inline xdg_toplevel_listener toplevelListener_{topConfigure, topClose, topConfigureBounds,
                                                        topCapabilities};
   static inline zxdg_toplevel_decoration_v1_listener decorationListener_{decorationConfigure};
+  static inline xx_cutouts_v1_listener cutoutsListener_{cutoutBox, cutoutCorner, cutoutsConfigure};
 
   wl_display* display_ = nullptr;
   std::vector<wl_output*> enteredOutputs_;
@@ -861,6 +896,7 @@ private:
   xdg_surface* xdgSurface_ = nullptr;
   xdg_toplevel* toplevel_ = nullptr;
   zxdg_toplevel_decoration_v1* decoration_ = nullptr;
+  xx_cutouts_v1* cutouts_ = nullptr;
   wp_viewport* viewport_ = nullptr;
   wp_fractional_scale_v1* fractionalScale_ = nullptr;
   Canvas* canvas_ = nullptr;
@@ -876,8 +912,14 @@ private:
   bool fullscreen_ = false;
   bool configured_ = false;
   bool serverSideDecorationsActive_ = false;
+  bool receivedCutout_ = false;
   bool warnedDecorationFallback_ = false;
   bool loggedDecorationMode_ = false;
+  std::int32_t lastCutoutX_ = 0;
+  std::int32_t lastCutoutY_ = 0;
+  std::int32_t lastCutoutWidth_ = 0;
+  std::int32_t lastCutoutHeight_ = 0;
+  std::uint32_t lastCutoutId_ = 0;
   int pendingWidth_ = 0;
   int pendingHeight_ = 0;
   Point pointerPos_{};
@@ -928,6 +970,9 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
   } else if (std::strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0) {
     shared->decorationManager = static_cast<zxdg_decoration_manager_v1*>(
         wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1));
+  } else if (std::strcmp(interface, xx_cutouts_manager_v1_interface.name) == 0) {
+    shared->cutoutsManager = static_cast<xx_cutouts_manager_v1*>(
+        wl_registry_bind(registry, name, &xx_cutouts_manager_v1_interface, 1));
   } else if (std::strcmp(interface, wp_viewporter_interface.name) == 0) {
     shared->viewporter = static_cast<wp_viewporter*>(
         wl_registry_bind(registry, name, &wp_viewporter_interface, 1));

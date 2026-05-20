@@ -6,7 +6,7 @@
 
 namespace flux::compositor {
 
-constexpr std::int32_t kCompositorTitleBarHeight = 42;
+constexpr std::int32_t kCompositorTitleBarHeight = 28;
 constexpr std::int32_t kCompositorSnapEdgeThreshold = 32;
 constexpr std::int32_t kCompositorMinWindowWidth = 160;
 constexpr std::int32_t kCompositorMinWindowHeight = 120;

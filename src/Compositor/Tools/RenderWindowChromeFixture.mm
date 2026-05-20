@@ -100,16 +100,17 @@ std::vector<std::uint8_t> makeTier2Pixels(int width, int height) {
   return pixels;
 }
 
-std::vector<std::uint8_t> makeTier3Pixels(int width, int height) {
+std::vector<std::uint8_t> makeTier3Pixels(int width, int height, flux::compositor::ChromeConfig const& chrome) {
   auto pixels = makePixels(width, height, U8Color{237, 243, 249, 255}, U8Color{205, 218, 234, 255});
-  fillRect(pixels, width, height, 0, 0, width, 42, U8Color{247, 250, 253, 242});
-  fillRect(pixels, width, height, 16, 9, 52, 24, U8Color{224, 232, 244, 255});
-  fillRect(pixels, width, height, 82, 9, 150, 24, U8Color{255, 255, 255, 255});
-  fillRect(pixels, width, height, 248, 9, std::max(0, width - 360), 24, U8Color{232, 239, 248, 255});
-  fillRect(pixels, width, height, width - 90, 0, 90, 42, U8Color{247, 250, 253, 242});
-  fillRect(pixels, width, height, 22, 66, width - 44, 54, U8Color{255, 255, 255, 255});
-  fillRect(pixels, width, height, 22, 140, 120, height - 166, U8Color{226, 235, 246, 255});
-  fillRect(pixels, width, height, 164, 140, width - 186, height - 166, U8Color{241, 245, 250, 255});
+  fillRect(pixels, width, height, 0, 0, width, chrome.titleBarHeight, U8Color{247, 250, 253, 242});
+  fillRect(pixels, width, height, 16, 7, 52, 16, U8Color{224, 232, 244, 255});
+  fillRect(pixels, width, height, 82, 7, 150, 16, U8Color{255, 255, 255, 255});
+  fillRect(pixels, width, height, 248, 7, std::max(0, width - 320), 16, U8Color{232, 239, 248, 255});
+  fillRect(pixels, width, height, width - chrome.controlsWidth, 0, chrome.controlsWidth, chrome.titleBarHeight,
+           U8Color{247, 250, 253, 242});
+  fillRect(pixels, width, height, 22, 54, width - 44, 54, U8Color{255, 255, 255, 255});
+  fillRect(pixels, width, height, 22, 128, 120, height - 154, U8Color{226, 235, 246, 255});
+  fillRect(pixels, width, height, 164, 128, width - 186, height - 154, U8Color{241, 245, 250, 255});
   return pixels;
 }
 
@@ -266,12 +267,12 @@ int main(int argc, char** argv) {
       canvas.resize(logicalWidth, logicalHeight);
       canvas.updateDpiScale(scale, scale);
 
+      flux::compositor::ChromeConfig chrome{};
       auto foreignImage = flux::Image::fromRgbaPixels(300, 190, makeForeignCsdPixels(300, 190), canvas.gpuDevice());
       auto tier2Image = flux::Image::fromRgbaPixels(360, 230, makeTier2Pixels(360, 230), canvas.gpuDevice());
-      auto tier3Image = flux::Image::fromRgbaPixels(460, 280, makeTier3Pixels(460, 280), canvas.gpuDevice());
+      auto tier3Image = flux::Image::fromRgbaPixels(460, 280, makeTier3Pixels(460, 280, chrome), canvas.gpuDevice());
       if (!foreignImage || !tier2Image || !tier3Image) throw std::runtime_error("failed to create fixture images");
 
-      flux::compositor::ChromeConfig chrome{};
       auto foreign = snapshot(1, 42, 76, 300, 190);
       foreign.focused = false;
 

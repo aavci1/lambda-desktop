@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/XdgShell.hpp"
 
+#include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
@@ -129,40 +130,71 @@ bool toplevelUsesCutouts(WaylandServer::Impl* server,
          !toplevel->cutoutsRejected;
 }
 
+void markCutoutsUnsent(WaylandServer::Impl::XxCutouts* cutouts) {
+  if (!cutouts) return;
+  cutouts->lastSent = false;
+  cutouts->lastX = 0;
+  cutouts->lastY = 0;
+  cutouts->lastWidth = 0;
+  cutouts->lastHeight = 0;
+}
+
 void sendCutoutsConfigureIfNeeded(WaylandServer::Impl* server,
                                   WaylandServer::Impl::XdgToplevel* toplevel,
                                   std::int32_t width,
                                   std::int32_t height,
                                   bool force) {
-  if (!server || !toplevelUsesCutouts(server, toplevel) || !toplevel->cutouts || !toplevel->cutouts->resource) return;
+  if (!server || !toplevel || !toplevel->cutouts || !toplevel->cutouts->resource) return;
+  bool const usesCutouts = toplevelUsesCutouts(server, toplevel);
+  if (shouldSendEmptyCutoutConfigure(true, toplevel->cutouts->lastSent, usesCutouts)) {
+    xx_cutouts_v1_send_configure(toplevel->cutouts->resource);
+    markCutoutsUnsent(toplevel->cutouts);
+    return;
+  }
+  if (!usesCutouts) return;
   if (width <= 0 || height <= 0) return;
 
-  std::int32_t const cutoutWidth = std::min(server->chromeConfig_.controlsWidth, width);
-  std::int32_t const cutoutHeight = std::min(server->chromeConfig_.titleBarHeight, height);
-  std::int32_t const x = width - cutoutWidth;
-  std::int32_t const y = 0;
+  CutoutBox const box = compositorControlsCutout(width,
+                                                 height,
+                                                 server->chromeConfig_.controlsWidth,
+                                                 server->chromeConfig_.titleBarHeight);
   auto* cutouts = toplevel->cutouts;
-  if (!force &&
-      cutouts->lastSent &&
-      cutouts->lastX == x &&
-      cutouts->lastY == y &&
-      cutouts->lastWidth == cutoutWidth &&
-      cutouts->lastHeight == cutoutHeight) {
+  CutoutSendState const state{
+      .lastSent = cutouts->lastSent,
+      .lastX = cutouts->lastX,
+      .lastY = cutouts->lastY,
+      .lastWidth = cutouts->lastWidth,
+      .lastHeight = cutouts->lastHeight,
+  };
+  if (!shouldSendCutoutConfigure(state, box, force)) {
     return;
   }
   xx_cutouts_v1_send_cutout_box(cutouts->resource,
-                                x,
-                                y,
-                                cutoutWidth,
-                                cutoutHeight,
+                                box.x,
+                                box.y,
+                                box.width,
+                                box.height,
                                 XX_CUTOUTS_V1_TYPE_CUTOUT,
-                                1);
+                                box.id);
   xx_cutouts_v1_send_configure(cutouts->resource);
   cutouts->lastSent = true;
-  cutouts->lastX = x;
-  cutouts->lastY = y;
-  cutouts->lastWidth = cutoutWidth;
-  cutouts->lastHeight = cutoutHeight;
+  cutouts->lastX = box.x;
+  cutouts->lastY = box.y;
+  cutouts->lastWidth = box.width;
+  cutouts->lastHeight = box.height;
+}
+
+void maybeSendInitialCutoutsConfigure(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
+  auto* toplevel = toplevelForSurface(server, surface);
+  if (!toplevel || !toplevel->cutouts) return;
+  if (!shouldSendInitialCutoutConfigure(toplevel->cutouts != nullptr,
+                                        toplevel->cutoutsRejected,
+                                        toplevel->cutouts->lastSent,
+                                        displayWidth(surface),
+                                        displayHeight(surface))) {
+    return;
+  }
+  sendToplevelStateConfigure(server, toplevel);
 }
 
 namespace {
@@ -261,7 +293,9 @@ void xdgToplevelDecorationSetMode(wl_client*, wl_resource* resource, std::uint32
                            "invalid xdg-decoration mode %u", mode);
     return;
   }
-  decoration->mode = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+  decoration->mode = decorationModeForClientRequest(mode,
+                                                    ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE,
+                                                    ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
   sendDecorationConfigure(decoration);
   if (decoration->toplevel && decoration->toplevel->cutouts) {
     sendToplevelStateConfigure(decoration->server, decoration->toplevel);
@@ -270,7 +304,7 @@ void xdgToplevelDecorationSetMode(wl_client*, wl_resource* resource, std::uint32
 
 void xdgToplevelDecorationUnsetMode(wl_client*, wl_resource* resource) {
   auto* decoration = resourceData<WaylandServer::Impl::ToplevelDecoration>(resource);
-  decoration->mode = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+  decoration->mode = defaultDecorationMode(ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
   sendDecorationConfigure(decoration);
   if (decoration->toplevel && decoration->toplevel->cutouts) {
     sendToplevelStateConfigure(decoration->server, decoration->toplevel);
@@ -592,7 +626,6 @@ void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t) {
   if (toplevel->cutoutsRejected) return;
 
   toplevel->cutoutsRejected = true;
-  toplevel->cutouts->lastSent = false;
   if (xdgSurface->surface) {
     std::int32_t const nextWidth = displayWidth(xdgSurface->surface);
     std::int32_t const nextHeight =

@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
+#include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
 #include "presentation-time-server-protocol.h"
@@ -127,6 +128,11 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
     wl_resource_destroy(decoration->resource);
   }
   while (auto* cutouts = cutoutsFor(this, toplevel)) {
+    if (shouldReportDefunctCutoutsOnToplevelDestroy(cutouts->resource != nullptr)) {
+      wl_resource_post_error(cutouts->resource,
+                             XX_CUTOUTS_MANAGER_V1_ERROR_DEFUNCT_CUTOUTS_OBJECT,
+                             "xx_cutouts_v1 must be destroyed before its xdg_toplevel");
+    }
     wl_resource_destroy(cutouts->resource);
   }
   eraseResource(toplevels_, toplevel);

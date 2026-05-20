@@ -337,6 +337,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     } else if (pendingViewportSourceFitsCurrentBuffer(surface)) {
       if (!applyViewportState(surface)) return;
       applyLayerGeometry(surface->layerSurface);
+      maybeSendInitialCutoutsConfigure(surface->server, surface);
       traceResizeSurface("commit-state", surface);
     }
     return;
@@ -355,6 +356,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         if (!applyViewportState(surface)) return;
         clearMatchedConfigureCommit(surface);
         applyLayerGeometry(surface->layerSurface);
+        maybeSendInitialCutoutsConfigure(surface->server, surface);
         surface->dmabufBuffer = nullptr;
         ++surface->serial;
         traceResizeSurface("commit-shm", surface);
@@ -367,6 +369,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         if (!applyViewportState(surface)) return;
         clearMatchedConfigureCommit(surface);
         applyLayerGeometry(surface->layerSurface);
+        maybeSendInitialCutoutsConfigure(surface->server, surface);
         surface->dmabufBuffer = dmabufBuffer;
         ++surface->serial;
         traceResizeSurface("commit-dmabuf", surface);

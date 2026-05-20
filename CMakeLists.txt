@@ -596,6 +596,27 @@ if(FLUX_PLATFORM_MACOS)
     "-framework Metal")
 endif()
 
+if(FLUX_PLATFORM_LINUX_WAYLAND OR FLUX_PLATFORM_LINUX_KMS)
+  add_executable(flux-compositor-render-fixture
+    src/Compositor/Chrome/WindowChromeRenderer.cpp
+    src/Compositor/Surface/CommittedSurfacePainter.cpp
+    src/Compositor/Tools/RenderWindowChromeFixture.cpp
+  )
+  target_include_directories(flux-compositor-render-fixture PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_compile_options(flux-compositor-render-fixture PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-render-fixture PRIVATE
+    flux
+    PkgConfig::VULKAN
+    PkgConfig::ZLIB)
+endif()
+
 option(FLUX_BUILD_COMPOSITOR
   "Build the phase-1 flux-compositor executable. Requires FLUX_PLATFORM=LINUX_KMS."
   OFF)
@@ -931,6 +952,7 @@ if(FLUX_BUILD_TESTS)
       src/Compositor/Config/CompositorConfig.cpp
       src/Compositor/Window/WindowGeometry.cpp
       tests/CompositorConfigTests.cpp
+      tests/CompositorDecorationStateTests.cpp
       tests/CompositorWindowGeometryTests.cpp
       tests/VulkanRenderTargetTests.cpp
     )

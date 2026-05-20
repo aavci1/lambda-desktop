@@ -34,6 +34,10 @@ void drawControls(Canvas& canvas, CommittedSurfaceSnapshot const& surface, Chrom
   float const closeX = closeRight - buttonSize;
   float const minimizeX = closeX - static_cast<float>(chrome.buttonGap) - buttonSize;
   float const groupOpacity = surface.focused ? 1.f : 0.6f;
+  float const glyphInset = std::max(4.f, buttonSize * 0.32f);
+  float const glyphMin = glyphInset;
+  float const glyphMax = buttonSize - glyphInset;
+  float const minimizeY = buttonY + buttonSize * 0.66f;
 
   auto drawButton = [&](float x, bool hovered, bool pressed, bool close) {
     Rect const rect = Rect::sharp(x, buttonY, buttonSize, buttonSize);
@@ -54,10 +58,10 @@ void drawControls(Canvas& canvas, CommittedSurfaceSnapshot const& surface, Chrom
     StrokeStyle stroke = StrokeStyle::solid(glyph, 1.6f);
     stroke.cap = StrokeCap::Round;
     if (close) {
-      canvas.drawLine({x + 8.f, buttonY + 8.f}, {x + 18.f, buttonY + 18.f}, stroke);
-      canvas.drawLine({x + 18.f, buttonY + 8.f}, {x + 8.f, buttonY + 18.f}, stroke);
+      canvas.drawLine({x + glyphMin, buttonY + glyphMin}, {x + glyphMax, buttonY + glyphMax}, stroke);
+      canvas.drawLine({x + glyphMax, buttonY + glyphMin}, {x + glyphMin, buttonY + glyphMax}, stroke);
     } else {
-      canvas.drawLine({x + 8.f, buttonY + 17.f}, {x + 18.f, buttonY + 17.f}, stroke);
+      canvas.drawLine({x + glyphMin, minimizeY}, {x + glyphMax, minimizeY}, stroke);
     }
   };
 

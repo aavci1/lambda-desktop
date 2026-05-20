@@ -424,12 +424,12 @@ animations = true
 hardware_cursor = true
 
 [chrome]
-title_bar_height = 42
-controls_width = 90
-controls_inset_right = 10
-controls_inset_top = 8
-button_size = 26
-button_radius = 7
+title_bar_height = 28
+controls_width = 58
+controls_inset_right = 8
+controls_inset_top = 6
+button_size = 16
+button_radius = 5
 button_gap = 4
 close_glyph_color = "#5b6781"
 close_glyph_hover_color = "#ffffff"
@@ -438,7 +438,7 @@ minimize_glyph_color = "#5b6781"
 minimize_glyph_hover_color = "#16203a"
 minimize_hover_background = "#00000012"
 title_text_color = "#16203a"
-title_text_font_size = 12.5
+title_text_font_size = 11.5
 title_text_font_weight = 600
 window_corner_radius = 14
 glass_tint = "#ffffffcc"

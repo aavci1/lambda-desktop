@@ -498,6 +498,7 @@ void sendCutoutsConfigureIfNeeded(WaylandServer::Impl* server,
                                   std::int32_t width,
                                   std::int32_t height,
                                   bool force = false);
+void maybeSendInitialCutoutsConfigure(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 WaylandServer::Impl::PointerConstraint* activePointerConstraint(WaylandServer::Impl* server);
 void updatePointerConstraintsForFocus(WaylandServer::Impl* server);
 void sendPrimarySelectionForFocus(WaylandServer::Impl* server);

@@ -65,8 +65,8 @@ TEST_CASE("compositor config creates a default file when missing") {
   CHECK(loaded.config.backgroundColor.r == doctest::Approx(51.f / 255.f));
   CHECK(loaded.config.backgroundColor.g == doctest::Approx(128.f / 255.f));
   CHECK(loaded.config.backgroundColor.b == doctest::Approx(242.f / 255.f));
-  CHECK(loaded.config.chrome.titleBarHeight == 42);
-  CHECK(loaded.config.chrome.controlsWidth == 90);
+  CHECK(loaded.config.chrome.titleBarHeight == 28);
+  CHECK(loaded.config.chrome.controlsWidth == 58);
 
   std::filesystem::remove_all(path.parent_path());
 }

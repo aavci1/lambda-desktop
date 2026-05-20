@@ -11,13 +11,13 @@ TEST_CASE("compositor snap geometry uses full output height minus title bar") {
   CHECK(left.x == 0);
   CHECK(left.y == flux::compositor::kCompositorTitleBarHeight);
   CHECK(left.width == 960);
-  CHECK(left.height == 1038);
+  CHECK(left.height == 1052);
 
   auto right = flux::compositor::snappedWindowGeometry(output, false);
   CHECK(right.x == 960);
   CHECK(right.y == flux::compositor::kCompositorTitleBarHeight);
   CHECK(right.width == 960);
-  CHECK(right.height == 1038);
+  CHECK(right.height == 1052);
 }
 
 TEST_CASE("compositor snap geometry can use a zero chrome inset") {
@@ -55,7 +55,7 @@ TEST_CASE("compositor snap preview appears only near output edges") {
   CHECK(top->x == 0);
   CHECK(top->y == flux::compositor::kCompositorTitleBarHeight);
   CHECK(top->width == 1280);
-  CHECK(top->height == 678);
+  CHECK(top->height == 692);
 }
 
 TEST_CASE("compositor restored drag geometry keeps title bar under cursor") {
@@ -63,7 +63,7 @@ TEST_CASE("compositor restored drag geometry keeps title bar under cursor") {
       .pointerX = 480.f,
       .pointerY = 80.f,
       .dragOffsetY = 20.f,
-      .snappedWindow = {.x = 0, .y = flux::compositor::kCompositorTitleBarHeight, .width = 960, .height = 1038},
+      .snappedWindow = {.x = 0, .y = flux::compositor::kCompositorTitleBarHeight, .width = 960, .height = 1052},
       .restoreWindow = {.x = 200, .y = 120, .width = 500, .height = 400},
       .output = {.width = 1920, .height = 1080},
   });
@@ -112,7 +112,7 @@ TEST_CASE("compositor maximized geometry uses the same top inset as snap") {
   CHECK(maximized.x == 0);
   CHECK(maximized.y == flux::compositor::kCompositorTitleBarHeight);
   CHECK(maximized.width == 1366);
-  CHECK(maximized.height == 726);
+  CHECK(maximized.height == 740);
 }
 
 TEST_CASE("compositor geometry stays valid on tiny outputs") {

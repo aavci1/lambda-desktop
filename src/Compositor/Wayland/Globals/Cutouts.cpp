@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/Cutouts.hpp"
 
+#include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "xx-cutouts-v1-server-protocol.h"
@@ -11,8 +12,6 @@
 
 namespace flux::compositor {
 namespace {
-
-constexpr std::uint32_t kControlsCutoutId = 1;
 
 void cutoutsManagerDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -40,7 +39,7 @@ void cutoutsSetUnhandled(wl_client*, wl_resource* resource, wl_array* unhandled)
   auto* begin = static_cast<std::uint32_t*>(unhandled->data);
   auto* end = reinterpret_cast<std::uint32_t*>(static_cast<char*>(unhandled->data) + unhandled->size);
   for (auto* id = begin; id < end; ++id) {
-    if (*id == kControlsCutoutId) {
+    if (*id == kCompositorControlsCutoutId) {
       controlsUnhandled = true;
       continue;
     }

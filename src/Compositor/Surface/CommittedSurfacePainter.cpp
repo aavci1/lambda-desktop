@@ -131,7 +131,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                windowY,
                                contentWidth,
                                contentHeight),
-                   clientContentSmallerThanFrame ? CornerRadius{} : contentCorners);
+                   CornerRadius{});
   if (clientContentSmallerThanFrame) {
     float const rightPad = std::max(0.f, windowWidth - contentWidth);
     float const bottomPad = std::max(0.f, windowHeight - contentHeight);
