@@ -157,6 +157,7 @@ void drawCommittedSurface(WaylandServer& wayland,
                           SurfaceVisualState& visual,
                           CachedClientImage& cached,
                           std::chrono::steady_clock::time_point frameTime,
+                          ChromeConfig const& chrome,
                           bool animationsEnabled) {
   if (visual.firstSeen.time_since_epoch().count() == 0) visual.firstSeen = frameTime;
   updateCachedImage(wayland, canvas, surface, cached);
@@ -193,8 +194,12 @@ void drawCommittedSurface(WaylandServer& wayland,
   float const windowWidth = static_cast<float>(surface.width);
   float const windowHeight = static_cast<float>(surface.height);
   float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
-  CornerRadius const contentCorners = titleBarHeight > 0.f ? CornerRadius{0.f, 0.f, 10.f, 10.f}
-                                                           : CornerRadius{};
+  bool const cutoutChrome = surface.serverSideDecorated && surface.cutoutsBound && !surface.cutoutsRejected;
+  CornerRadius const contentCorners = cutoutChrome
+                                          ? CornerRadius{chrome.windowCornerRadius}
+                                          : (titleBarHeight > 0.f
+                                                 ? CornerRadius{0.f, 0.f, chrome.windowCornerRadius, chrome.windowCornerRadius}
+                                                 : CornerRadius{});
   float const animationMs = static_cast<float>(
       std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
   float const openProgress = animationsEnabled ? easeOutCubic(animationMs / 140.f) : 1.f;
@@ -209,7 +214,7 @@ void drawCommittedSurface(WaylandServer& wayland,
     canvas.scale(openScale);
     canvas.translate(-pivot.x, -pivot.y);
   }
-  drawWindowChrome(canvas, textSystem, surface);
+  if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   float const sourceWidth = surface.sourceWidth > 0.f
                                 ? surface.sourceWidth
                                 : static_cast<float>(cached.image->size().width);
@@ -282,6 +287,7 @@ void drawCommittedSurface(WaylandServer& wayland,
     }
   }
   canvas.restore();
+  if (cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   canvas.restore();
 }
 

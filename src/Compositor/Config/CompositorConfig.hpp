@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Compositor/Chrome/ChromeConfig.hpp"
 #include "Compositor/WaylandServer.hpp"
 
 #include <Flux/Core/Color.hpp>
@@ -25,6 +26,8 @@ struct CompositorConfig {
   std::unordered_map<std::string, float> outputScales;
   bool animationsEnabled = true;
   bool hardwareCursorEnabled = true;
+  ChromeConfig chrome;
+  std::optional<ChromeConfig> darkChrome;
   std::vector<WaylandServer::ShortcutBinding> shortcutBindings;
 };
 

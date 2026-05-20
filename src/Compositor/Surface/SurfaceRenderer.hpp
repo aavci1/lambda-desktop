@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Compositor/Chrome/ChromeConfig.hpp"
 #include "Compositor/WaylandServer.hpp"
 
 #include <Flux/Graphics/Canvas.hpp>
@@ -60,6 +61,7 @@ void drawCommittedSurface(WaylandServer& wayland,
                           SurfaceVisualState& visual,
                           CachedClientImage& cached,
                           std::chrono::steady_clock::time_point frameTime,
+                          ChromeConfig const& chrome,
                           bool animationsEnabled);
 
 void captureClosingSurfaces(SurfaceRenderState& state,

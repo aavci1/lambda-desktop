@@ -30,8 +30,6 @@ constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
 constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
 constexpr std::uint32_t kInvalidModifierIndex = ~0u;
-constexpr std::int32_t kCloseButtonSize = 12;
-constexpr std::int32_t kCloseButtonInset = 11;
 
 bool isManagedToplevel(WaylandServer::Impl::Surface const* surface) {
   return surfaceIsXdgToplevel(surface);
@@ -55,6 +53,33 @@ OutputGeometry outputGeometryFor(WaylandServer::Impl const* server) {
       .width = server ? server->logicalOutputWidth() : 0,
       .height = server ? server->logicalOutputHeight() : 0,
   };
+}
+
+std::int32_t titleBarHeightFor(WaylandServer::Impl const* server) {
+  return std::max(0, server ? server->chromeConfig_.titleBarHeight : kTitleBarHeight);
+}
+
+WaylandServer::Impl::XdgToplevel* toplevelForSurfaceConst(WaylandServer::Impl* server,
+                                                          WaylandServer::Impl::Surface const* surface) {
+  return toplevelForSurface(server, const_cast<WaylandServer::Impl::Surface*>(surface));
+}
+
+bool surfaceServerSideDecorated(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
+  return toplevelServerSideDecorated(server, toplevelForSurfaceConst(server, surface));
+}
+
+bool surfaceUsesCutouts(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
+  return toplevelUsesCutouts(server, toplevelForSurfaceConst(server, surface));
+}
+
+std::int32_t externalTitleBarHeight(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
+  return surfaceServerSideDecorated(server, surface) && !surfaceUsesCutouts(server, surface)
+             ? titleBarHeightFor(server)
+             : 0;
+}
+
+std::int32_t topInsetForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
+  return externalTitleBarHeight(server, surface);
 }
 
 ResizeEdge resizeEdgesFromXdg(std::uint32_t edges) {
@@ -165,6 +190,8 @@ struct ChromeHitContext {
   float right = 0.f;
   float bottom = 0.f;
   float contentTop = 0.f;
+  bool serverSideDecorated = false;
+  bool cutouts = false;
 };
 
 std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server, float x, float y) {
@@ -173,7 +200,7 @@ std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server,
     WaylandServer::Impl::Surface* surface = it->get();
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
-    if (!surface || surfaceIsXdgPopup(surface) || width <= 0 || height <= 0) continue;
+    if (!surface || surface->minimized || surfaceIsXdgPopup(surface) || width <= 0 || height <= 0) continue;
 
     float const contentLeft = static_cast<float>(surface->windowX);
     float const contentTop = static_cast<float>(surface->windowY);
@@ -187,7 +214,9 @@ std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server,
       continue;
     }
 
-    float const frameTop = contentTop - static_cast<float>(kTitleBarHeight);
+    bool const decorated = surfaceServerSideDecorated(server, surface);
+    bool const cutouts = surfaceUsesCutouts(server, surface);
+    float const frameTop = contentTop - static_cast<float>(externalTitleBarHeight(server, surface));
     if (!containsPoint(x, y, contentLeft, frameTop, contentRight, contentBottom)) continue;
     return ChromeHitContext{
         .surface = surface,
@@ -196,9 +225,41 @@ std::optional<ChromeHitContext> topChromeHitContext(WaylandServer::Impl* server,
         .right = contentRight,
         .bottom = contentBottom,
         .contentTop = contentTop,
+        .serverSideDecorated = decorated,
+        .cutouts = cutouts,
     };
   }
   return std::nullopt;
+}
+
+bool controlsRegionContains(ChromeHitContext const& context, float x, float y) {
+  if (!context.serverSideDecorated || !context.cutouts) return false;
+  auto const& chrome = context.surface->server->chromeConfig_;
+  float const cutoutWidth = static_cast<float>(std::min(chrome.controlsWidth, displayWidth(context.surface)));
+  float const cutoutHeight = static_cast<float>(std::min(chrome.titleBarHeight, displayHeight(context.surface)));
+  return containsPoint(x, y, context.right - cutoutWidth, context.contentTop, context.right, context.contentTop + cutoutHeight);
+}
+
+enum class ChromeButton {
+  None,
+  Close,
+  Minimize,
+};
+
+ChromeButton chromeButtonAt(ChromeHitContext const& context, float x, float y) {
+  if (!context.serverSideDecorated) return ChromeButton::None;
+  if (context.cutouts && !controlsRegionContains(context, x, y)) return ChromeButton::None;
+  auto const& chrome = context.surface->server->chromeConfig_;
+  float const buttonSize = static_cast<float>(chrome.buttonSize);
+  float const top = context.top + static_cast<float>(chrome.controlsInsetTop);
+  float const closeRight = context.right - static_cast<float>(chrome.controlsInsetRight);
+  float const closeLeft = closeRight - buttonSize;
+  float const minimizeRight = closeLeft - static_cast<float>(chrome.buttonGap);
+  float const minimizeLeft = minimizeRight - buttonSize;
+  float const bottom = top + buttonSize;
+  if (containsPoint(x, y, closeLeft, top, closeRight, bottom)) return ChromeButton::Close;
+  if (containsPoint(x, y, minimizeLeft, top, minimizeRight, bottom)) return ChromeButton::Minimize;
+  return ChromeButton::None;
 }
 
 } // namespace
@@ -211,14 +272,29 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
     std::int32_t const width = displayWidth(surface);
     std::int32_t const height = displayHeight(surface);
     if (!surface || !surfaceIsTopLevelRenderable(surface) || surfaceIsXdgPopup(surface) ||
-        width <= 0 || height <= 0) {
+        surface->minimized || width <= 0 || height <= 0) {
       continue;
     }
     float const left = static_cast<float>(surface->windowX);
     float const top = static_cast<float>(surface->windowY);
     float const right = left + static_cast<float>(width);
     float const bottom = top + static_cast<float>(height);
-    if (x >= left && x < right && y >= top && y < bottom) return surface;
+    if (x >= left && x < right && y >= top && y < bottom) {
+      if (surfaceUsesCutouts(server, surface)) {
+        ChromeHitContext context{
+            .surface = surface,
+            .left = left,
+            .top = top,
+            .right = right,
+            .bottom = bottom,
+            .contentTop = top,
+            .serverSideDecorated = true,
+            .cutouts = true,
+        };
+        if (controlsRegionContains(context, x, y)) return nullptr;
+      }
+      return surface;
+    }
   }
   return nullptr;
 }
@@ -226,6 +302,7 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
 WaylandServer::Impl::Surface* titlebarAt(WaylandServer::Impl* server, float x, float y) {
   auto context = topChromeHitContext(server, x, y);
   if (!context) return nullptr;
+  if (!context->serverSideDecorated || context->cutouts) return nullptr;
   return containsPoint(x, y, context->left, context->top, context->right, context->contentTop)
              ? context->surface
              : nullptr;
@@ -234,11 +311,13 @@ WaylandServer::Impl::Surface* titlebarAt(WaylandServer::Impl* server, float x, f
 WaylandServer::Impl::Surface* closeButtonAt(WaylandServer::Impl* server, float x, float y) {
   auto context = topChromeHitContext(server, x, y);
   if (!context) return nullptr;
-  float const left = context->left + static_cast<float>(kCloseButtonInset);
-  float const top = context->top + (static_cast<float>(kTitleBarHeight - kCloseButtonSize) * 0.5f);
-  float const right = left + static_cast<float>(kCloseButtonSize);
-  float const bottom = top + static_cast<float>(kCloseButtonSize);
-  return containsPoint(x, y, left, top, right, bottom) ? context->surface : nullptr;
+  return chromeButtonAt(*context, x, y) == ChromeButton::Close ? context->surface : nullptr;
+}
+
+WaylandServer::Impl::Surface* minimizeButtonAt(WaylandServer::Impl* server, float x, float y) {
+  auto context = topChromeHitContext(server, x, y);
+  if (!context) return nullptr;
+  return chromeButtonAt(*context, x, y) == ChromeButton::Minimize ? context->surface : nullptr;
 }
 
 WaylandServer::Impl::Surface* resizeGripAt(WaylandServer::Impl* server, float x, float y, std::uint32_t& edges) {
@@ -272,11 +351,7 @@ WaylandServer::Impl::Surface* resizeOrCloseChromeAt(WaylandServer::Impl* server,
   auto context = topChromeHitContext(server, x, y);
   if (!context) return nullptr;
 
-  float const closeLeft = context->left + static_cast<float>(kCloseButtonInset);
-  float const closeTop = context->top + (static_cast<float>(kTitleBarHeight - kCloseButtonSize) * 0.5f);
-  float const closeRight = closeLeft + static_cast<float>(kCloseButtonSize);
-  float const closeBottom = closeTop + static_cast<float>(kCloseButtonSize);
-  if (containsPoint(x, y, closeLeft, closeTop, closeRight, closeBottom)) {
+  if (chromeButtonAt(*context, x, y) == ChromeButton::Close) {
     closeButton = true;
     return context->surface;
   }
@@ -341,6 +416,15 @@ void raiseSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
   server->surfaces_.push_back(std::move(item));
 }
 
+void lowerSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
+  auto found = std::find_if(server->surfaces_.begin(), server->surfaces_.end(),
+                            [surface](auto const& candidate) { return candidate.get() == surface; });
+  if (found == server->surfaces_.end() || found == server->surfaces_.begin()) return;
+  auto item = std::move(*found);
+  server->surfaces_.erase(found);
+  server->surfaces_.insert(server->surfaces_.begin(), std::move(item));
+}
+
 void removeSurfaceFromFocusOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!server || !surface) return;
   server->focusOrder_.erase(std::remove(server->focusOrder_.begin(), server->focusOrder_.end(), surface),
@@ -356,10 +440,10 @@ void noteFocusedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surfa
 WaylandServer::Impl::Surface* mostRecentToplevel(WaylandServer::Impl* server) {
   if (!server) return nullptr;
   for (auto it = server->focusOrder_.rbegin(); it != server->focusOrder_.rend(); ++it) {
-    if (isManagedToplevel(*it)) return *it;
+    if (isManagedToplevel(*it) && !(*it)->minimized) return *it;
   }
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
-    if (isManagedToplevel(it->get())) return it->get();
+    if (isManagedToplevel(it->get()) && !it->get()->minimized) return it->get();
   }
   return nullptr;
 }
@@ -537,6 +621,7 @@ void sendKeyboardModifiers(WaylandServer::Impl* server) {
 
 void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs) {
   if (!surface) return;
+  surface->minimized = false;
   raiseSurface(server, surface);
   setKeyboardFocus(server, surface);
   sendPointerFocus(server, surfaceAt(server, server->pointerX_, server->pointerY_), timeMs);
@@ -548,14 +633,14 @@ WaylandServer::Impl::Surface* previousFocusedToplevel(WaylandServer::Impl* serve
   auto currentIt = std::find(server->focusOrder_.begin(), server->focusOrder_.end(), current);
   if (currentIt != server->focusOrder_.end()) {
     for (auto it = std::make_reverse_iterator(currentIt); it != server->focusOrder_.rend(); ++it) {
-      if (isManagedToplevel(*it)) return *it;
+      if (isManagedToplevel(*it) && !(*it)->minimized) return *it;
     }
   }
   for (auto it = server->focusOrder_.rbegin(); it != server->focusOrder_.rend(); ++it) {
-    if (*it != current && isManagedToplevel(*it)) return *it;
+    if (*it != current && isManagedToplevel(*it) && !(*it)->minimized) return *it;
   }
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
-    if (it->get() != current && isManagedToplevel(it->get())) return it->get();
+    if (it->get() != current && isManagedToplevel(it->get()) && !it->get()->minimized) return it->get();
   }
   return nullptr;
 }
@@ -567,6 +652,17 @@ WaylandServer::Impl::XdgToplevel* focusedToplevel(WaylandServer::Impl* server) {
     return toplevelForSurface(server, popup->parentSurface);
   }
   return nullptr;
+}
+
+void minimizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs) {
+  if (!isManagedToplevel(surface)) return;
+  lowerSurface(server, surface);
+  if (server->keyboardFocus_ == surface) {
+    setKeyboardFocus(server, previousFocusedToplevel(server, surface));
+  }
+  if (server->pointerFocus_ == surface) {
+    sendPointerFocus(server, surfaceAt(server, server->pointerX_, server->pointerY_), timeMs);
+  }
 }
 
 bool closeFocusedToplevel(WaylandServer::Impl* server) {
@@ -587,7 +683,10 @@ bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs) {
 std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const* server) {
   WaylandServer::Impl::Surface const* surface = server->dragSurface_;
   if (!surface) return std::nullopt;
-  auto preview = snapPreviewGeometry(windowGeometryFor(surface), outputGeometryFor(server));
+  auto* mutableServer = const_cast<WaylandServer::Impl*>(server);
+  auto preview = snapPreviewGeometry(windowGeometryFor(surface),
+                                     outputGeometryFor(server),
+                                     topInsetForSurface(mutableServer, surface));
   if (!preview) return std::nullopt;
   return SnapPreviewSnapshot{
       .x = preview->x,
@@ -633,7 +732,9 @@ void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
     surface->restoreWidth = displayWidth(surface);
     surface->restoreHeight = displayHeight(surface);
   }
-  WindowGeometry const target = snappedWindowGeometry(outputGeometryFor(server), leftHalf);
+  WindowGeometry const target = snappedWindowGeometry(outputGeometryFor(server),
+                                                      leftHalf,
+                                                      topInsetForSurface(server, surface));
   surface->snapped = true;
   surface->maximized = false;
   startGeometryAnimation(server,
@@ -654,8 +755,8 @@ bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
       std::clamp(surface->restoreX, 0, std::max(0, server->logicalOutputWidth() - restoreWidth));
   std::int32_t const restoreY =
       std::clamp(surface->restoreY,
-                 kTitleBarHeight,
-                 std::max(kTitleBarHeight, server->logicalOutputHeight() - restoreHeight));
+                 topInsetForSurface(server, surface),
+                 std::max(topInsetForSurface(server, surface), server->logicalOutputHeight() - restoreHeight));
   surface->maximized = false;
   surface->snapped = false;
   startGeometryAnimation(server, surface, restoreX, restoreY, restoreWidth, restoreHeight);
@@ -671,7 +772,8 @@ void maximizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     surface->restoreWidth = displayWidth(surface);
     surface->restoreHeight = displayHeight(surface);
   }
-  WindowGeometry const target = maximizedWindowGeometry(outputGeometryFor(server));
+  WindowGeometry const target = maximizedWindowGeometry(outputGeometryFor(server),
+                                                        topInsetForSurface(server, surface));
   surface->maximized = true;
   surface->snapped = false;
   startGeometryAnimation(server, surface, target.x, target.y, target.width, target.height);
@@ -703,6 +805,7 @@ void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Sur
           .height = surface->restoreHeight > 0 ? surface->restoreHeight : surface->height,
       },
       .output = outputGeometryFor(server),
+      .topInset = topInsetForSurface(server, surface),
   });
   surface->windowX = restored.x;
   surface->windowY = restored.y;
@@ -916,10 +1019,11 @@ void updateDrag(WaylandServer::Impl* server) {
   if (!server->dragSurface_) return;
   WaylandServer::Impl::Surface* surface = server->dragSurface_;
   restoreSnappedForDrag(server, surface);
+  std::int32_t const topInset = topInsetForSurface(server, surface);
   int const maxX = std::max(0, server->logicalOutputWidth() - displayWidth(surface));
-  int const maxY = std::max(kTitleBarHeight, server->logicalOutputHeight() - displayHeight(surface));
+  int const maxY = std::max(topInset, server->logicalOutputHeight() - displayHeight(surface));
   surface->windowX = std::clamp(static_cast<int>(server->pointerX_ - server->dragOffsetX_), 0, maxX);
-  surface->windowY = std::clamp(static_cast<int>(server->pointerY_ - server->dragOffsetY_), kTitleBarHeight, maxY);
+  surface->windowY = std::clamp(static_cast<int>(server->pointerY_ - server->dragOffsetY_), topInset, maxY);
 }
 
 void updateResize(WaylandServer::Impl* server) {
@@ -945,6 +1049,7 @@ void updateResize(WaylandServer::Impl* server) {
       },
       .edges = edges,
       .output = outputGeometryFor(server),
+      .topInset = topInsetForSurface(server, surface),
   });
 
   if (left) surface->windowX = next.x;
@@ -1095,6 +1200,22 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
   if (pressed && dismissTopPopupOutside(this, target)) return;
   if (button == BTN_LEFT) {
     if (pressed) {
+      if (altDown_) {
+        Surface* moveTarget = target;
+        if (!moveTarget) {
+          if (auto context = topChromeHitContext(this, pointerX_, pointerY_)) moveTarget = context->surface;
+        }
+        if (moveTarget && isManagedToplevel(moveTarget)) {
+          raiseSurface(this, moveTarget);
+          setKeyboardFocus(this, moveTarget);
+          sendPointerFocus(this, nullptr, timeMs);
+          dragSurface_ = moveTarget;
+          dragOffsetX_ = pointerX_ - static_cast<float>(moveTarget->windowX);
+          dragOffsetY_ = pointerY_ - static_cast<float>(moveTarget->windowY);
+          return;
+        }
+      }
+
       std::uint32_t resizeEdges = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
       bool closeButton = false;
       Surface* chromeControlTarget = resizeOrCloseChromeAt(this, pointerX_, pointerY_, closeButton, resizeEdges);
@@ -1102,6 +1223,12 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         raiseSurface(this, chromeControlTarget);
         setKeyboardFocus(this, chromeControlTarget);
         closePressSurface_ = chromeControlTarget;
+        return;
+      }
+      if (Surface* minimizeTarget = minimizeButtonAt(this, pointerX_, pointerY_)) {
+        raiseSurface(this, minimizeTarget);
+        setKeyboardFocus(this, minimizeTarget);
+        minimizePressSurface_ = minimizeTarget;
         return;
       }
       if (chromeControlTarget && resizeEdges != XDG_TOPLEVEL_RESIZE_EDGE_NONE) {
@@ -1165,6 +1292,16 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       updateCompositorCursorForPointer(this);
       return;
+    } else if (minimizePressSurface_) {
+      Surface* minimizeTarget = minimizeButtonAt(this, pointerX_, pointerY_);
+      if (minimizeTarget && minimizeTarget == minimizePressSurface_) {
+        minimizeToplevel(this, minimizePressSurface_, timeMs);
+        flushClients();
+      }
+      minimizePressSurface_ = nullptr;
+      sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+      updateCompositorCursorForPointer(this);
+      return;
     } else if (resizeSurface_) {
       updateResize(this);
       traceResizeSurface("end-resize", resizeSurface_);
@@ -1198,6 +1335,8 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
   }
   if (!pointerFocus_) return;
   std::uint32_t serial = nextInputSerial_++;
+  lastPointerButtonSerial_ = pressed ? serial : 0;
+  lastPointerButtonSurface_ = pressed ? pointerFocus_ : nullptr;
   for (wl_resource* pointer : pointerResources_) {
     if (!resourceBelongsToSurfaceClient(pointer, pointerFocus_)) continue;
     wl_pointer_send_button(pointer,

@@ -17,11 +17,68 @@
 namespace flux::compositor {
 namespace {
 
-constexpr std::int32_t kTitleBarHeight = kCompositorTitleBarHeight;
-
 bool surfaceIsRenderable(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->width > 0 && surface->height > 0 &&
          (!surface->rgbaPixels.empty() || surface->dmabufBuffer);
+}
+
+WaylandServer::Impl::XdgToplevel const* toplevelForSurface(WaylandServer::Impl const* server,
+                                                           WaylandServer::Impl::Surface const* surface) {
+  auto found = std::find_if(server->toplevels_.begin(), server->toplevels_.end(),
+                            [surface](auto const& toplevel) {
+                              return toplevel->xdgSurface && toplevel->xdgSurface->surface == surface;
+                            });
+  return found == server->toplevels_.end() ? nullptr : found->get();
+}
+
+bool serverSideDecorated(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface) {
+  auto* toplevel = toplevelForSurface(server, surface);
+  if (!toplevel) return false;
+  auto found = std::find_if(server->toplevelDecorations_.begin(), server->toplevelDecorations_.end(),
+                            [toplevel](auto const& decoration) { return decoration->toplevel == toplevel; });
+  return found != server->toplevelDecorations_.end() &&
+         (*found)->mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+}
+
+bool cutoutsBound(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface) {
+  auto* toplevel = toplevelForSurface(server, surface);
+  return toplevel && toplevel->cutouts;
+}
+
+bool cutoutsRejected(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface) {
+  auto* toplevel = toplevelForSurface(server, surface);
+  return toplevel && toplevel->cutoutsRejected;
+}
+
+enum class ChromeButton {
+  None,
+  Close,
+  Minimize,
+};
+
+ChromeButton chromeButtonAt(WaylandServer::Impl const* server,
+                            WaylandServer::Impl::Surface const* surface,
+                            float x,
+                            float y,
+                            bool cutoutMode) {
+  if (!surface || !serverSideDecorated(server, surface)) return ChromeButton::None;
+  auto const& chrome = server->chromeConfig_;
+  float const windowX = static_cast<float>(surface->windowX);
+  float const windowY = static_cast<float>(surface->windowY);
+  float const width = static_cast<float>(displayWidth(surface));
+  float const top = windowY - (cutoutMode ? 0.f : static_cast<float>(chrome.titleBarHeight)) +
+                    static_cast<float>(chrome.controlsInsetTop);
+  float const closeRight = windowX + width - static_cast<float>(chrome.controlsInsetRight);
+  float const closeLeft = closeRight - static_cast<float>(chrome.buttonSize);
+  float const minimizeRight = closeLeft - static_cast<float>(chrome.buttonGap);
+  float const minimizeLeft = minimizeRight - static_cast<float>(chrome.buttonSize);
+  float const bottom = top + static_cast<float>(chrome.buttonSize);
+  auto contains = [&](float left, float right) {
+    return x >= left && x < right && y >= top && y < bottom;
+  };
+  if (contains(closeLeft, closeRight)) return ChromeButton::Close;
+  if (contains(minimizeLeft, minimizeRight)) return ChromeButton::Minimize;
+  return ChromeButton::None;
 }
 
 CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
@@ -29,6 +86,11 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
                                             std::int32_t x,
                                             std::int32_t y,
                                             bool withChrome) {
+  bool const decorated = withChrome && surfaceIsXdgToplevel(surface) && serverSideDecorated(server, surface);
+  bool const bound = withChrome && surfaceIsXdgToplevel(surface) && cutoutsBound(server, surface);
+  bool const rejected = withChrome && surfaceIsXdgToplevel(surface) && cutoutsRejected(server, surface);
+  bool const cutoutMode = decorated && bound && !rejected;
+  ChromeButton const hovered = chromeButtonAt(server, surface, server->pointerX_, server->pointerY_, cutoutMode);
   CommittedSurfaceSnapshot snapshot{
       .id = surface->id,
       .x = x,
@@ -43,8 +105,15 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
       .destinationWidth = surface->destinationSet ? surface->destinationWidth : displayWidth(surface),
       .destinationHeight = surface->destinationSet ? surface->destinationHeight : displayHeight(surface),
-      .titleBarHeight = withChrome && surfaceIsXdgToplevel(surface) ? kTitleBarHeight : 0,
-      .title = withChrome && surfaceIsXdgToplevel(surface) ? titleForSurface(server, surface) : std::string{},
+      .titleBarHeight = decorated && !cutoutMode ? server->chromeConfig_.titleBarHeight : 0,
+      .title = decorated && !cutoutMode ? titleForSurface(server, surface) : std::string{},
+      .serverSideDecorated = decorated,
+      .cutoutsBound = bound,
+      .cutoutsRejected = rejected,
+      .closeButtonHovered = hovered == ChromeButton::Close,
+      .closeButtonPressed = server->closePressSurface_ == surface,
+      .minimizeButtonHovered = hovered == ChromeButton::Minimize,
+      .minimizeButtonPressed = server->minimizePressSurface_ == surface,
       .focused = server->keyboardFocus_ == surface,
       .activeSizing = server->resizeSurface_ == surface ||
                       surface->geometryAnimationActive ||
@@ -91,6 +160,7 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() c
   snapshots.reserve(surfaces_.size());
   for (auto const& surface : surfaces_) {
     if (!surfaceIsTopLevelRenderable(surface.get())) continue;
+    if (surface->minimized) continue;
     if (surface->xdgPopup && surface->xdgPopup->dismissed) continue;
     if (surfaceIsRenderable(surface.get())) {
       snapshots.push_back(snapshotForSurface(this, surface.get(), surface->windowX, surface->windowY, true));

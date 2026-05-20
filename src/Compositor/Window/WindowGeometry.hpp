@@ -6,7 +6,7 @@
 
 namespace flux::compositor {
 
-constexpr std::int32_t kCompositorTitleBarHeight = 28;
+constexpr std::int32_t kCompositorTitleBarHeight = 42;
 constexpr std::int32_t kCompositorSnapEdgeThreshold = 32;
 constexpr std::int32_t kCompositorMinWindowWidth = 160;
 constexpr std::int32_t kCompositorMinWindowHeight = 120;
@@ -71,6 +71,7 @@ struct ResizeDragGeometry {
   WindowGeometry startWindow{};
   ResizeEdge edges = ResizeEdge::None;
   OutputGeometry output{};
+  std::int32_t topInset = kCompositorTitleBarHeight;
 };
 
 struct RestoreDragGeometry {
@@ -80,6 +81,7 @@ struct RestoreDragGeometry {
   WindowGeometry snappedWindow{};
   WindowGeometry restoreWindow{};
   OutputGeometry output{};
+  std::int32_t topInset = kCompositorTitleBarHeight;
 };
 
 struct PopupPositionerGeometry {
@@ -106,9 +108,13 @@ struct PopupGeometry {
 };
 
 [[nodiscard]] std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window,
-                                                               OutputGeometry output);
-[[nodiscard]] WindowGeometry snappedWindowGeometry(OutputGeometry output, bool leftHalf);
-[[nodiscard]] WindowGeometry maximizedWindowGeometry(OutputGeometry output);
+                                                               OutputGeometry output,
+                                                               std::int32_t topInset = kCompositorTitleBarHeight);
+[[nodiscard]] WindowGeometry snappedWindowGeometry(OutputGeometry output,
+                                                  bool leftHalf,
+                                                  std::int32_t topInset = kCompositorTitleBarHeight);
+[[nodiscard]] WindowGeometry maximizedWindowGeometry(OutputGeometry output,
+                                                    std::int32_t topInset = kCompositorTitleBarHeight);
 [[nodiscard]] WindowGeometry restoredDragGeometry(RestoreDragGeometry const& geometry);
 [[nodiscard]] WindowGeometry resizedWindowGeometry(ResizeDragGeometry const& geometry);
 [[nodiscard]] PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry);

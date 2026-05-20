@@ -65,9 +65,11 @@ Pure Wayland. Apps that don't support Wayland natively don't run. This is a deli
 
 Windows stack. Click-to-focus. Drag title bar to move. Drag corner to resize. Snap to halves on edge drag. No tiling, no tags, no workspaces in v1. Tiling can be a future addition; workspaces too.
 
-### 1.8 Compositor-drawn chrome
+### 1.8 Hybrid compositor chrome
 
-The compositor draws window decorations (title bar, border, close button, etc.) via Flux's `Canvas`. Clients render their content; the compositor renders the surrounding frame. Server-side decoration. The `xdg_decoration_v1` protocol negotiates this with clients; client-side decoration is not in v1.
+The compositor supports three window-chrome tiers. Clients that do not bind `xdg_decoration_v1` keep client-side decoration and receive no compositor title bar. Clients that accept server-side decoration get compositor chrome above the client buffer. Clients that accept server-side decoration and bind `xx_cutouts_v1` render their own title-bar content inside the surface while the compositor overlays only the reserved close/minimize controls cutout.
+
+See `docs/compositor-window-chrome.md` for the cutout convention, input routing, and chrome config keys.
 
 ### 1.9 Repository layout
 

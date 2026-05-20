@@ -108,6 +108,16 @@ std::optional<float> parseScale(std::string_view value) {
   return scale;
 }
 
+std::optional<float> parseFloat(std::string_view value) {
+  std::string text = trim(value);
+  float result = 0.f;
+  auto const* begin = text.data();
+  auto const* end = text.data() + text.size();
+  auto [ptr, error] = std::from_chars(begin, end, result);
+  if (error != std::errc{} || ptr != end) return std::nullopt;
+  return result;
+}
+
 std::optional<int> parseInteger(std::string_view value) {
   std::string text = trim(value);
   int result = 0;
@@ -150,6 +160,13 @@ std::optional<float> configFloat(toml::table const& table, char const* key) {
   if (auto value = table[key].value<double>()) return static_cast<float>(*value);
   if (auto value = table[key].value<int64_t>()) return static_cast<float>(*value);
   if (auto value = table[key].value<std::string>()) return parseScale(*value);
+  return std::nullopt;
+}
+
+std::optional<float> configNumber(toml::table const& table, char const* key) {
+  if (auto value = table[key].value<double>()) return static_cast<float>(*value);
+  if (auto value = table[key].value<int64_t>()) return static_cast<float>(*value);
+  if (auto value = table[key].value<std::string>()) return parseFloat(*value);
   return std::nullopt;
 }
 
@@ -282,6 +299,61 @@ void replaceShortcutBinding(std::vector<WaylandServer::ShortcutBinding>& binding
   }
 }
 
+void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char const* path) {
+  auto parseIntField = [&](char const* key, std::int32_t& field, std::int32_t minValue, std::int32_t maxValue) {
+    if (!table.contains(key)) return;
+    if (auto value = configInt(table, key); value && *value >= minValue && *value <= maxValue) {
+      field = *value;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s value in %s\n", key, path);
+    }
+  };
+  auto parseFloatField = [&](char const* key, float& field, float minValue, float maxValue) {
+    if (!table.contains(key)) return;
+    if (auto value = configNumber(table, key); value && *value >= minValue && *value <= maxValue) {
+      field = *value;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s value in %s\n", key, path);
+    }
+  };
+  auto parseColorField = [&](char const* key, Color& field) {
+    if (!table.contains(key)) return;
+    if (auto value = configString(table, key); value) {
+      if (auto color = parseHexColor(*value)) {
+        field = *color;
+      } else {
+        std::fprintf(stderr, "flux-compositor: ignoring invalid chrome.%s color in %s\n", key, path);
+      }
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring non-string chrome.%s color in %s\n", key, path);
+    }
+  };
+
+  parseIntField("title_bar_height", chrome.titleBarHeight, 16, 120);
+  parseIntField("controls_width", chrome.controlsWidth, 32, 240);
+  parseIntField("controls_inset_right", chrome.controlsInsetRight, 0, 120);
+  parseIntField("controls_inset_top", chrome.controlsInsetTop, 0, 80);
+  parseIntField("button_size", chrome.buttonSize, 12, 80);
+  parseFloatField("button_radius", chrome.buttonRadius, 0.f, 40.f);
+  parseIntField("button_gap", chrome.buttonGap, 0, 80);
+  parseColorField("close_glyph_color", chrome.closeGlyphColor);
+  parseColorField("close_glyph_hover_color", chrome.closeGlyphHoverColor);
+  parseColorField("close_hover_background", chrome.closeHoverBackground);
+  parseColorField("minimize_glyph_color", chrome.minimizeGlyphColor);
+  parseColorField("minimize_glyph_hover_color", chrome.minimizeGlyphHoverColor);
+  parseColorField("minimize_hover_background", chrome.minimizeHoverBackground);
+  parseColorField("title_text_color", chrome.titleTextColor);
+  parseFloatField("title_text_font_size", chrome.titleTextFontSize, 6.f, 40.f);
+  parseFloatField("title_text_font_weight", chrome.titleTextFontWeight, 100.f, 1000.f);
+  parseFloatField("window_corner_radius", chrome.windowCornerRadius, 0.f, 48.f);
+  parseColorField("glass_tint", chrome.glassTint);
+  parseFloatField("glass_blur_radius", chrome.glassBlurRadius, 0.f, 120.f);
+  parseColorField("border_line_color", chrome.borderLineColor);
+  parseColorField("inset_highlight_color", chrome.insetHighlightColor);
+  parseColorField("focused_shadow_color", chrome.focusedShadowColor);
+  parseColorField("unfocused_shadow_color", chrome.unfocusedShadowColor);
+}
+
 std::optional<std::string> configPath() {
   if (char const* explicitPath = std::getenv("FLUX_COMPOSITOR_CONFIG"); explicitPath && *explicitPath) {
     return std::string(explicitPath);
@@ -350,6 +422,28 @@ scale = 2.0 # fallback scale for outputs without an override
 
 animations = true
 hardware_cursor = true
+
+[chrome]
+title_bar_height = 42
+controls_width = 90
+controls_inset_right = 10
+controls_inset_top = 8
+button_size = 26
+button_radius = 7
+button_gap = 4
+close_glyph_color = "#5b6781"
+close_glyph_hover_color = "#ffffff"
+close_hover_background = "#e25555"
+minimize_glyph_color = "#5b6781"
+minimize_glyph_hover_color = "#16203a"
+minimize_hover_background = "#00000012"
+title_text_color = "#16203a"
+title_text_font_size = 12.5
+title_text_font_weight = 600
+window_corner_radius = 14
+glass_tint = "#ffffffcc"
+glass_blur_radius = 32
+border_line_color = "#141e3c14"
 
 [keybindings]
 close = "super+q"
@@ -585,6 +679,17 @@ CompositorConfig loadConfig() {
     } else {
       std::fprintf(stderr, "flux-compositor: ignoring invalid hardware_cursor value in %s\n", path->c_str());
     }
+  }
+
+  if (auto* chromeTable = table["chrome"].as_table()) {
+    parseChromeConfig(*chromeTable, config.chrome, path->c_str());
+    if (auto* darkTable = (*chromeTable)["dark"].as_table()) {
+      ChromeConfig darkChrome = config.chrome;
+      parseChromeConfig(*darkTable, darkChrome, path->c_str());
+      config.darkChrome = darkChrome;
+    }
+  } else if (table.contains("chrome")) {
+    std::fprintf(stderr, "flux-compositor: ignoring non-table chrome section in %s\n", path->c_str());
   }
 
   applyEnvironmentOverrides(config);

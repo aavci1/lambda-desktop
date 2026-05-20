@@ -287,6 +287,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       appliedConfig = applyCompositorConfig(effectiveConfig(), *canvas);
       traceTiming("apply-config", configStart);
       wayland.setShortcutBindings(appliedConfig.config.shortcutBindings);
+      wayland.setChromeConfig(appliedConfig.config.chrome);
       applyOutputScale(forceOutputScale);
     };
     applyConfig(true);
@@ -336,6 +337,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                              visual,
                              cached,
                              frameTime,
+                             appliedConfig.config.chrome,
                              appliedConfig.config.animationsEnabled);
       }
       captureClosingSurfaces(surfaceRenderState,

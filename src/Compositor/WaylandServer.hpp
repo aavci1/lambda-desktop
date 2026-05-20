@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Compositor/Chrome/ChromeConfig.hpp"
 #include "Compositor/Wayland/WaylandTypes.hpp"
 
 #include <cstdint>
@@ -36,6 +37,7 @@ public:
   void dispatch();
   void flushClients();
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);
+  void setChromeConfig(ChromeConfig config);
   void setPreferredScale(float scale);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;

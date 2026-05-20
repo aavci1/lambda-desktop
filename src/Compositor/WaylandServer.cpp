@@ -70,6 +70,10 @@ void WaylandServer::setShortcutBindings(std::vector<ShortcutBinding> bindings) {
   impl_->setShortcutBindings(std::move(bindings));
 }
 
+void WaylandServer::setChromeConfig(ChromeConfig config) {
+  impl_->setChromeConfig(config);
+}
+
 void WaylandServer::setPreferredScale(float scale) {
   impl_->setPreferredScale(scale);
 }

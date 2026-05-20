@@ -50,6 +50,13 @@ struct CommittedSurfaceSnapshot {
   std::int32_t destinationHeight = 0;
   std::int32_t titleBarHeight = 0;
   std::string title;
+  bool serverSideDecorated = false;
+  bool cutoutsBound = false;
+  bool cutoutsRejected = false;
+  bool closeButtonHovered = false;
+  bool closeButtonPressed = false;
+  bool minimizeButtonHovered = false;
+  bool minimizeButtonPressed = false;
   bool focused = false;
   bool activeSizing = false;
   std::uint64_t serial = 0;

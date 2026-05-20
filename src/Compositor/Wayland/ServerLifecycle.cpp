@@ -3,6 +3,7 @@
 #include "Compositor/Wayland/Globals/Activation.hpp"
 #include "Compositor/Wayland/Globals/Core.hpp"
 #include "Compositor/Wayland/Globals/CursorShape.hpp"
+#include "Compositor/Wayland/Globals/Cutouts.hpp"
 #include "Compositor/Wayland/Globals/FractionalScale.hpp"
 #include "Compositor/Wayland/Globals/IdleInhibit.hpp"
 #include "Compositor/Wayland/Globals/LayerShell.hpp"
@@ -26,6 +27,7 @@
 #include "relative-pointer-unstable-v1-server-protocol.h"
 #include "viewporter-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
+#include "xx-cutouts-v1-server-protocol.h"
 #include "xdg-activation-v1-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
 #include "xdg-output-unstable-v1-server-protocol.h"
@@ -126,12 +128,13 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
       wl_global_create(display_, &zwp_primary_selection_device_manager_v1_interface, 1, this, bindPrimarySelectionManager);
   dataDeviceManagerGlobal_ = wl_global_create(display_, &wl_data_device_manager_interface, 3, this, bindDataDeviceManager);
   activationGlobal_ = wl_global_create(display_, &xdg_activation_v1_interface, 1, this, bindActivation);
+  cutoutsManagerGlobal_ = wl_global_create(display_, &xx_cutouts_manager_v1_interface, 1, this, bindCutoutsManager);
   if (!compositorGlobal_ || !subcompositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ ||
       !xdgWmBaseGlobal_ || !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ ||
       !viewporterGlobal_ || !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ ||
       !idleInhibitManagerGlobal_ || !layerShellGlobal_ || !presentationGlobal_ || !relativePointerManagerGlobal_ ||
       !pointerConstraintsGlobal_ || !primarySelectionManagerGlobal_ || !dataDeviceManagerGlobal_ ||
-      !activationGlobal_) {
+      !activationGlobal_ || !cutoutsManagerGlobal_) {
     throw std::runtime_error("failed to create Wayland globals");
   }
 
@@ -194,6 +197,16 @@ void WaylandServer::Impl::flushClients() {
 
 void WaylandServer::Impl::setShortcutBindings(std::vector<ShortcutBinding> bindings) {
   shortcutBindings_ = std::move(bindings);
+}
+
+void WaylandServer::Impl::setChromeConfig(ChromeConfig config) {
+  chromeConfig_ = config;
+  for (auto const& toplevel : toplevels_) {
+    if (!toplevel || !toplevel->cutouts) continue;
+    toplevel->cutouts->lastSent = false;
+    sendToplevelStateConfigure(this, toplevel.get());
+  }
+  flushClients();
 }
 
 void WaylandServer::Impl::setPreferredScale(float scale) {

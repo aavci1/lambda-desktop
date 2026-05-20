@@ -287,11 +287,13 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   set(FLUX_XDG_DECORATION_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml")
   set(FLUX_VIEWPORTER_XML "${WAYLAND_PROTOCOLS_DIR}/stable/viewporter/viewporter.xml")
   set(FLUX_FRACTIONAL_SCALE_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/fractional-scale-v1.xml")
+  set(FLUX_XX_CUTOUTS_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/xx-cutouts-v1.xml")
   foreach(_flux_wayland_protocol_xml IN ITEMS
       "${FLUX_XDG_SHELL_XML}"
       "${FLUX_XDG_DECORATION_XML}"
       "${FLUX_VIEWPORTER_XML}"
-      "${FLUX_FRACTIONAL_SCALE_XML}")
+      "${FLUX_FRACTIONAL_SCALE_XML}"
+      "${FLUX_XX_CUTOUTS_XML}")
     if(NOT EXISTS "${_flux_wayland_protocol_xml}")
       message(FATAL_ERROR
         "Flux: required Wayland protocol XML not found: ${_flux_wayland_protocol_xml}. "
@@ -307,6 +309,17 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_XDG_SHELL_XML}
             ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-shell-protocol.c
     DEPENDS ${FLUX_XDG_SHELL_XML}
+    VERBATIM
+  )
+  add_custom_command(
+    OUTPUT
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-client-protocol.h
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_XX_CUTOUTS_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_XX_CUTOUTS_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-protocol.c
+    DEPENDS ${FLUX_XX_CUTOUTS_XML}
     VERBATIM
   )
   add_custom_command(
@@ -383,6 +396,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     ${FLUX_WAYLAND_PROTOCOL_DIR}/xdg-decoration-unstable-v1-protocol.c
     ${FLUX_WAYLAND_PROTOCOL_DIR}/viewporter-protocol.c
     ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-protocol.c
+    ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-protocol.c
   )
 elseif(FLUX_PLATFORM_LINUX_KMS)
   find_package(PkgConfig REQUIRED)
@@ -455,6 +469,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     src/Compositor/Protocols/primary-selection-unstable-v1-protocol.c
     src/Compositor/Protocols/linux-dmabuf-unstable-v1-protocol.c
     src/Compositor/Protocols/xdg-activation-v1-protocol.c
+    src/Compositor/Protocols/xx-cutouts-v1-protocol.c
   )
 endif()
 
@@ -577,6 +592,7 @@ if(FLUX_BUILD_COMPOSITOR)
     src/Compositor/Wayland/Globals/Activation.cpp
     src/Compositor/Wayland/Globals/Core.cpp
     src/Compositor/Wayland/Globals/CursorShape.cpp
+    src/Compositor/Wayland/Globals/Cutouts.cpp
     src/Compositor/Wayland/Globals/FractionalScale.cpp
     src/Compositor/Wayland/Globals/IdleInhibit.cpp
     src/Compositor/Wayland/Globals/LayerShell.cpp

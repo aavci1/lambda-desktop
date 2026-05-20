@@ -51,6 +51,7 @@ void sendToplevelConfigureInternal(WaylandServer::Impl* server,
   fillToplevelStates(server, toplevel, &states);
   xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
   wl_array_release(&states);
+  sendCutoutsConfigureIfNeeded(server, toplevel, width, height);
   flux::detail::resizeTrace("compositor",
                             "configure surface=%llu size=%dx%d serial=%u\n",
                             static_cast<unsigned long long>(toplevel->xdgSurface->surface
@@ -69,6 +70,13 @@ WaylandServer::Impl::ToplevelDecoration* decorationFor(WaylandServer::Impl* serv
   auto found = std::find_if(server->toplevelDecorations_.begin(), server->toplevelDecorations_.end(),
                             [toplevel](auto const& decoration) { return decoration->toplevel == toplevel; });
   return found == server->toplevelDecorations_.end() ? nullptr : found->get();
+}
+
+WaylandServer::Impl::XxCutouts* cutoutsFor(WaylandServer::Impl* server,
+                                           WaylandServer::Impl::XdgToplevel* toplevel) {
+  auto found = std::find_if(server->cutouts_.begin(), server->cutouts_.end(),
+                            [toplevel](auto const& cutouts) { return cutouts->toplevel == toplevel; });
+  return found == server->cutouts_.end() ? nullptr : found->get();
 }
 
 WaylandServer::Impl::XdgToplevel* toplevelForSurface(WaylandServer::Impl* server,
@@ -105,6 +113,56 @@ void sendToplevelStateConfigure(WaylandServer::Impl* server,
   std::int32_t const width = surface->frameWidth > 0 ? surface->frameWidth : 0;
   std::int32_t const height = surface->frameHeight > 0 ? surface->frameHeight : 0;
   sendToplevelConfigureInternal(server, toplevel, width, height, false);
+}
+
+bool toplevelServerSideDecorated(WaylandServer::Impl* server,
+                                 WaylandServer::Impl::XdgToplevel* toplevel) {
+  auto* decoration = decorationFor(server, toplevel);
+  return decoration && decoration->mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+}
+
+bool toplevelUsesCutouts(WaylandServer::Impl* server,
+                         WaylandServer::Impl::XdgToplevel* toplevel) {
+  return toplevelServerSideDecorated(server, toplevel) &&
+         toplevel &&
+         toplevel->cutouts &&
+         !toplevel->cutoutsRejected;
+}
+
+void sendCutoutsConfigureIfNeeded(WaylandServer::Impl* server,
+                                  WaylandServer::Impl::XdgToplevel* toplevel,
+                                  std::int32_t width,
+                                  std::int32_t height,
+                                  bool force) {
+  if (!server || !toplevelUsesCutouts(server, toplevel) || !toplevel->cutouts || !toplevel->cutouts->resource) return;
+  if (width <= 0 || height <= 0) return;
+
+  std::int32_t const cutoutWidth = std::min(server->chromeConfig_.controlsWidth, width);
+  std::int32_t const cutoutHeight = std::min(server->chromeConfig_.titleBarHeight, height);
+  std::int32_t const x = width - cutoutWidth;
+  std::int32_t const y = 0;
+  auto* cutouts = toplevel->cutouts;
+  if (!force &&
+      cutouts->lastSent &&
+      cutouts->lastX == x &&
+      cutouts->lastY == y &&
+      cutouts->lastWidth == cutoutWidth &&
+      cutouts->lastHeight == cutoutHeight) {
+    return;
+  }
+  xx_cutouts_v1_send_cutout_box(cutouts->resource,
+                                x,
+                                y,
+                                cutoutWidth,
+                                cutoutHeight,
+                                XX_CUTOUTS_V1_TYPE_CUTOUT,
+                                1);
+  xx_cutouts_v1_send_configure(cutouts->resource);
+  cutouts->lastSent = true;
+  cutouts->lastX = x;
+  cutouts->lastY = y;
+  cutouts->lastWidth = cutoutWidth;
+  cutouts->lastHeight = cutoutHeight;
 }
 
 namespace {
@@ -184,6 +242,7 @@ void xdgDecorationManagerGetToplevelDecoration(wl_client* client,
                                                          WaylandServer::Impl,
                                                          &WaylandServer::Impl::destroyToplevelDecoration>);
   sendDecorationConfigure(raw);
+  if (toplevel && toplevel->cutouts) sendToplevelStateConfigure(server, toplevel);
 }
 
 struct zxdg_decoration_manager_v1_interface const xdgDecorationManagerImpl{
@@ -204,12 +263,18 @@ void xdgToplevelDecorationSetMode(wl_client*, wl_resource* resource, std::uint32
   }
   decoration->mode = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
   sendDecorationConfigure(decoration);
+  if (decoration->toplevel && decoration->toplevel->cutouts) {
+    sendToplevelStateConfigure(decoration->server, decoration->toplevel);
+  }
 }
 
 void xdgToplevelDecorationUnsetMode(wl_client*, wl_resource* resource) {
   auto* decoration = resourceData<WaylandServer::Impl::ToplevelDecoration>(resource);
   decoration->mode = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
   sendDecorationConfigure(decoration);
+  if (decoration->toplevel && decoration->toplevel->cutouts) {
+    sendToplevelStateConfigure(decoration->server, decoration->toplevel);
+  }
 }
 
 struct zxdg_toplevel_decoration_v1_interface const xdgToplevelDecorationImpl{
@@ -517,7 +582,25 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
 }
 
 void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t) {
-  resourceData<WaylandServer::Impl::XdgSurface>(resource)->configured = true;
+  auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
+  if (!xdgSurface) return;
+  xdgSurface->configured = true;
+
+  auto* toplevel = toplevelForSurface(xdgSurface->server, xdgSurface->surface);
+  if (!toplevel || !toplevel->cutouts || !toplevel->cutouts->pendingControlsUnhandled) return;
+  toplevel->cutouts->pendingControlsUnhandled = false;
+  if (toplevel->cutoutsRejected) return;
+
+  toplevel->cutoutsRejected = true;
+  toplevel->cutouts->lastSent = false;
+  if (xdgSurface->surface) {
+    std::int32_t const nextWidth = displayWidth(xdgSurface->surface);
+    std::int32_t const nextHeight =
+        std::max(kCompositorMinWindowHeight,
+                 displayHeight(xdgSurface->surface) - xdgSurface->server->chromeConfig_.titleBarHeight);
+    setConfiguredFrameSize(xdgSurface->surface, nextWidth, nextHeight);
+    sendToplevelConfigure(xdgSurface->server, toplevel, nextWidth, nextHeight);
+  }
 }
 
 struct xdg_surface_interface const xdgSurfaceImpl{
@@ -561,13 +644,29 @@ void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uin
   surface->snapped = false;
 }
 
+void xdgToplevelMove(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t serial) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
+  auto* server = toplevel->server;
+  auto* surface = toplevel->xdgSurface->surface;
+  if (serial == 0 ||
+      serial != server->lastPointerButtonSerial_ ||
+      server->lastPointerButtonSurface_ != surface) {
+    return;
+  }
+  focusSurface(server, surface, monotonicMilliseconds());
+  server->dragSurface_ = surface;
+  server->dragOffsetX_ = server->pointerX_ - static_cast<float>(surface->windowX);
+  server->dragOffsetY_ = server->pointerY_ - static_cast<float>(surface->windowY);
+}
+
 struct xdg_toplevel_interface const xdgToplevelImpl{
     .destroy = xdgToplevelDestroy,
     .set_parent = [](wl_client*, wl_resource*, wl_resource*) {},
     .set_title = xdgToplevelSetTitle,
     .set_app_id = xdgToplevelSetAppId,
     .show_window_menu = [](wl_client*, wl_resource*, wl_resource*, std::uint32_t, std::int32_t, std::int32_t) {},
-    .move = [](wl_client*, wl_resource*, wl_resource*, std::uint32_t) {},
+    .move = xdgToplevelMove,
     .resize = xdgToplevelResize,
     .set_max_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
     .set_min_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},

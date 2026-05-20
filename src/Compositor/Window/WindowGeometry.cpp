@@ -5,33 +5,38 @@
 
 namespace flux::compositor {
 
-std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window, OutputGeometry output) {
+std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window,
+                                                 OutputGeometry output,
+                                                 std::int32_t topInset) {
   if (window.width <= 0) return std::nullopt;
-  bool const topEdge = window.y <= kCompositorTitleBarHeight + kCompositorSnapEdgeThreshold;
-  if (topEdge) return maximizedWindowGeometry(output);
+  topInset = std::max(0, topInset);
+  bool const topEdge = window.y <= topInset + kCompositorSnapEdgeThreshold;
+  if (topEdge) return maximizedWindowGeometry(output, topInset);
   bool const leftHalf = window.x <= kCompositorSnapEdgeThreshold;
   bool const rightHalf = window.x + window.width >= output.width - kCompositorSnapEdgeThreshold;
   if (!leftHalf && !rightHalf) return std::nullopt;
-  return snappedWindowGeometry(output, leftHalf);
+  return snappedWindowGeometry(output, leftHalf, topInset);
 }
 
-WindowGeometry snappedWindowGeometry(OutputGeometry output, bool leftHalf) {
+WindowGeometry snappedWindowGeometry(OutputGeometry output, bool leftHalf, std::int32_t topInset) {
+  topInset = std::max(0, topInset);
   std::int32_t const width = std::max(kCompositorMinWindowWidth, output.width / 2);
-  std::int32_t const height = std::max(kCompositorMinWindowHeight, output.height - kCompositorTitleBarHeight);
+  std::int32_t const height = std::max(kCompositorMinWindowHeight, output.height - topInset);
   return {
       .x = leftHalf ? 0 : std::max(0, output.width - width),
-      .y = kCompositorTitleBarHeight,
+      .y = topInset,
       .width = width,
       .height = height,
   };
 }
 
-WindowGeometry maximizedWindowGeometry(OutputGeometry output) {
+WindowGeometry maximizedWindowGeometry(OutputGeometry output, std::int32_t topInset) {
+  topInset = std::max(0, topInset);
   return {
       .x = 0,
-      .y = kCompositorTitleBarHeight,
+      .y = topInset,
       .width = std::max(kCompositorMinWindowWidth, output.width),
-      .height = std::max(kCompositorMinWindowHeight, output.height - kCompositorTitleBarHeight),
+      .height = std::max(kCompositorMinWindowHeight, output.height - topInset),
   };
 }
 
@@ -46,13 +51,14 @@ WindowGeometry restoredDragGeometry(RestoreDragGeometry const& geometry) {
                  0.f,
                  1.f);
   int const maxX = std::max(0, geometry.output.width - restore.width);
-  int const maxY = std::max(kCompositorTitleBarHeight, geometry.output.height - restore.height);
+  std::int32_t const topInset = std::max(0, geometry.topInset);
+  int const maxY = std::max(topInset, geometry.output.height - restore.height);
   restore.x = std::clamp(static_cast<int>(std::lround(geometry.pointerX -
                                                        horizontalRatio * static_cast<float>(restore.width))),
                          0,
                          maxX);
   restore.y = std::clamp(static_cast<int>(std::lround(geometry.pointerY - geometry.dragOffsetY)),
-                         kCompositorTitleBarHeight,
+                         topInset,
                          maxY);
   return restore;
 }
@@ -82,9 +88,10 @@ WindowGeometry resizedWindowGeometry(ResizeDragGeometry const& geometry) {
   if (left) next.x = geometry.startWindow.x + (geometry.startWindow.width - next.width);
   if (top) next.y = geometry.startWindow.y + (geometry.startWindow.height - next.height);
   next.x = std::clamp(next.x, 0, std::max(0, geometry.output.width - kCompositorMinWindowWidth));
+  std::int32_t const topInset = std::max(0, geometry.topInset);
   next.y = std::clamp(next.y,
-                      kCompositorTitleBarHeight,
-                      std::max(kCompositorTitleBarHeight,
+                      topInset,
+                      std::max(topInset,
                                geometry.output.height - kCompositorMinWindowHeight));
   return next;
 }

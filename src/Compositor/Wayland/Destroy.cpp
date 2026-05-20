@@ -31,7 +31,9 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   if (dragSurface_ == surface) dragSurface_ = nullptr;
   if (resizeSurface_ == surface) resizeSurface_ = nullptr;
   if (closePressSurface_ == surface) closePressSurface_ = nullptr;
+  if (minimizePressSurface_ == surface) minimizePressSurface_ = nullptr;
   if (lastTitleClickSurface_ == surface) lastTitleClickSurface_ = nullptr;
+  if (lastPointerButtonSurface_ == surface) lastPointerButtonSurface_ = nullptr;
   if (cursorSurface_ == surface) cursorSurface_ = nullptr;
   if (lastActivationSurface_ == surface) lastActivationSurface_ = nullptr;
   for (auto& token : activationTokens_) {
@@ -124,6 +126,9 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
   while (auto* decoration = decorationFor(this, toplevel)) {
     wl_resource_destroy(decoration->resource);
   }
+  while (auto* cutouts = cutoutsFor(this, toplevel)) {
+    wl_resource_destroy(cutouts->resource);
+  }
   eraseResource(toplevels_, toplevel);
   if (activatePrevious) activateMostRecentToplevel(this, 0);
 }
@@ -178,6 +183,14 @@ void WaylandServer::Impl::destroyDmabufBuffer(DmabufBuffer* buffer) {
 
 void WaylandServer::Impl::destroyToplevelDecoration(ToplevelDecoration* decoration) {
   eraseResource(toplevelDecorations_, decoration);
+}
+
+void WaylandServer::Impl::destroyXxCutouts(XxCutouts* cutouts) {
+  if (cutouts && cutouts->toplevel && cutouts->toplevel->cutouts == cutouts) {
+    cutouts->toplevel->cutouts = nullptr;
+    cutouts->toplevel->cutoutsRejected = false;
+  }
+  eraseResource(cutouts_, cutouts);
 }
 
 void WaylandServer::Impl::destroyViewport(Viewport* viewport) {

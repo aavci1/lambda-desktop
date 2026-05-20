@@ -8,23 +8,67 @@
 namespace flux::compositor {
 namespace {
 
-constexpr float kWindowCornerRadius = 10.f;
-constexpr float kTitleBarButtonSize = 12.f;
-constexpr float kTitleBarButtonInset = 11.f;
-constexpr float kTitleBarButtonGap = 8.f;
+Color withOpacity(Color color, float opacity) {
+  color.a *= std::clamp(opacity, 0.f, 1.f);
+  return color;
+}
 
-ShadowStyle macWindowShadow(bool focused) {
+ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {
   return ShadowStyle{
-      .radius = focused ? 26.f : 18.f,
+      .radius = focused ? 30.f : 18.f,
       .offset = {0.f, focused ? 14.f : 9.f},
-      .color = focused ? Color{0.f, 0.f, 0.f, 0.36f}
-                       : Color{0.f, 0.f, 0.f, 0.20f},
+      .color = focused ? chrome.focusedShadowColor : chrome.unfocusedShadowColor,
   };
 }
 
-} // namespace
+bool usesCutoutChrome(CommittedSurfaceSnapshot const& surface) {
+  return surface.serverSideDecorated && surface.cutoutsBound && !surface.cutoutsRejected;
+}
 
-void drawWindowChrome(Canvas& canvas, TextSystem& textSystem, CommittedSurfaceSnapshot const& surface) {
+void drawControls(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome, float titleTop) {
+  float const windowX = static_cast<float>(surface.x);
+  float const windowWidth = static_cast<float>(surface.width);
+  float const buttonSize = static_cast<float>(chrome.buttonSize);
+  float const buttonY = titleTop + static_cast<float>(chrome.controlsInsetTop);
+  float const closeRight = windowX + windowWidth - static_cast<float>(chrome.controlsInsetRight);
+  float const closeX = closeRight - buttonSize;
+  float const minimizeX = closeX - static_cast<float>(chrome.buttonGap) - buttonSize;
+  float const groupOpacity = surface.focused ? 1.f : 0.6f;
+
+  auto drawButton = [&](float x, bool hovered, bool pressed, bool close) {
+    Rect const rect = Rect::sharp(x, buttonY, buttonSize, buttonSize);
+    bool const active = hovered || pressed;
+    if (active) {
+      Color const background = close ? chrome.closeHoverBackground : chrome.minimizeHoverBackground;
+      canvas.drawRect(rect,
+                      CornerRadius{chrome.buttonRadius},
+                      FillStyle::solid(withOpacity(background, groupOpacity)),
+                      StrokeStyle::none(),
+                      ShadowStyle::none());
+    }
+
+    Color glyph = close
+                      ? (active ? chrome.closeGlyphHoverColor : chrome.closeGlyphColor)
+                      : (active ? chrome.minimizeGlyphHoverColor : chrome.minimizeGlyphColor);
+    glyph = withOpacity(glyph, groupOpacity);
+    StrokeStyle stroke = StrokeStyle::solid(glyph, 1.6f);
+    stroke.cap = StrokeCap::Round;
+    if (close) {
+      canvas.drawLine({x + 8.f, buttonY + 8.f}, {x + 18.f, buttonY + 18.f}, stroke);
+      canvas.drawLine({x + 18.f, buttonY + 8.f}, {x + 8.f, buttonY + 18.f}, stroke);
+    } else {
+      canvas.drawLine({x + 8.f, buttonY + 17.f}, {x + 18.f, buttonY + 17.f}, stroke);
+    }
+  };
+
+  drawButton(minimizeX, surface.minimizeButtonHovered, surface.minimizeButtonPressed, false);
+  drawButton(closeX, surface.closeButtonHovered, surface.closeButtonPressed, true);
+}
+
+void drawDefaultChrome(Canvas& canvas,
+                       TextSystem& textSystem,
+                       CommittedSurfaceSnapshot const& surface,
+                       ChromeConfig const& chrome) {
   float const windowX = static_cast<float>(surface.x);
   float const windowY = static_cast<float>(surface.y);
   float const windowWidth = static_cast<float>(surface.width);
@@ -32,83 +76,73 @@ void drawWindowChrome(Canvas& canvas, TextSystem& textSystem, CommittedSurfaceSn
   float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
   if (titleBarHeight <= 0.f) return;
 
-  Rect const frameRect = Rect::sharp(windowX,
-                                     windowY - titleBarHeight,
-                                     windowWidth,
-                                     windowHeight + titleBarHeight);
-  CornerRadius const frameRadius{kWindowCornerRadius};
+  float const titleTop = windowY - titleBarHeight;
+  Rect const frameRect = Rect::sharp(windowX, titleTop, windowWidth, windowHeight + titleBarHeight);
+  CornerRadius const frameRadius{chrome.windowCornerRadius};
   canvas.drawRect(frameRect,
                   frameRadius,
-                  FillStyle::solid(Color{0.95f, 0.95f, 0.96f, 1.f}),
+                  FillStyle::solid(chrome.glassTint),
                   StrokeStyle::none(),
-                  macWindowShadow(surface.focused));
+                  windowShadow(chrome, surface.focused));
+  if (chrome.glassBlurRadius > 0.f) {
+    canvas.drawBackdropBlur(frameRect, chrome.glassBlurRadius, chrome.glassTint, frameRadius);
+  }
 
-  Color const titleFill =
-      surface.focused ? Color{0.88f, 0.88f, 0.89f, 1.f}
-                      : Color{0.78f, 0.79f, 0.81f, 1.f};
-  Color const borderColor =
-      surface.focused ? Color{0.48f, 0.49f, 0.52f, 1.f}
-                      : Color{0.58f, 0.59f, 0.62f, 1.f};
-  canvas.drawRect(Rect::sharp(windowX, windowY - titleBarHeight, windowWidth, titleBarHeight),
-                  CornerRadius{kWindowCornerRadius, kWindowCornerRadius, 0.f, 0.f},
-                  FillStyle::solid(titleFill),
-                  StrokeStyle::none(),
-                  ShadowStyle::none());
-  canvas.drawRect(frameRect,
-                  frameRadius,
-                  FillStyle::none(),
-                  StrokeStyle::solid(borderColor, 1.f),
-                  ShadowStyle::none());
+  canvas.drawLine({windowX, windowY}, {windowX + windowWidth, windowY},
+                  StrokeStyle::solid(chrome.borderLineColor, 0.5f));
+  canvas.drawLine({windowX + chrome.windowCornerRadius * 0.5f, titleTop + 0.5f},
+                  {windowX + windowWidth - chrome.windowCornerRadius * 0.5f, titleTop + 0.5f},
+                  StrokeStyle::solid(chrome.insetHighlightColor, 1.f));
 
-  float const buttonY = windowY - titleBarHeight + (titleBarHeight - kTitleBarButtonSize) * 0.5f;
-  float const closeX = windowX + kTitleBarButtonInset;
-  float const minimizeX = closeX + kTitleBarButtonSize + kTitleBarButtonGap;
-  float const zoomX = minimizeX + kTitleBarButtonSize + kTitleBarButtonGap;
-  auto drawTrafficLight = [&](float x, Color activeColor) {
-    Color const fill = surface.focused ? activeColor : Color{0.62f, 0.63f, 0.65f, 1.f};
-    canvas.drawCircle({x + kTitleBarButtonSize * 0.5f, buttonY + kTitleBarButtonSize * 0.5f},
-                      kTitleBarButtonSize * 0.5f,
-                      FillStyle::solid(fill),
-                      StrokeStyle::solid(Color{0.f, 0.f, 0.f, 0.14f}, 1.f));
-  };
-  drawTrafficLight(closeX, Color{1.00f, 0.37f, 0.32f, 1.f});
-  drawTrafficLight(minimizeX, Color{1.00f, 0.75f, 0.20f, 1.f});
-  drawTrafficLight(zoomX, Color{0.20f, 0.78f, 0.35f, 1.f});
-
-  float const titleLeft = windowX + 92.f;
-  float const titleWidth = std::max(0.f, windowWidth - 184.f);
+  float const controlsWidth = static_cast<float>(chrome.controlsWidth);
+  float const titleLeft = windowX + controlsWidth;
+  float const titleWidth = std::max(0.f, windowWidth - controlsWidth * 2.f);
   if (titleWidth > 0.f && !surface.title.empty()) {
     Font titleFont{};
-    titleFont.size = 13.f;
-    titleFont.weight = 500.f;
+    titleFont.size = chrome.titleTextFontSize;
+    titleFont.weight = chrome.titleTextFontWeight;
     TextLayoutOptions titleOptions{
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,
         .wrapping = TextWrapping::NoWrap,
         .maxLines = 1,
     };
-    Color const titleColor =
-        surface.focused ? Color{0.18f, 0.19f, 0.21f, 1.f}
-                        : Color{0.42f, 0.43f, 0.46f, 1.f};
+    Color const titleColor = withOpacity(chrome.titleTextColor, surface.focused ? 1.f : 0.6f);
     auto titleLayout =
         textSystem.layout(surface.title,
                           titleFont,
                           titleColor,
                           Rect::sharp(titleLeft,
-                                      windowY - titleBarHeight,
+                                      titleTop,
                                       titleWidth,
                                       titleBarHeight),
                           titleOptions);
     if (titleLayout) {
       canvas.save();
       canvas.clipRect(Rect::sharp(titleLeft,
-                                  windowY - titleBarHeight,
+                                  titleTop,
                                   titleWidth,
                                   titleBarHeight));
       canvas.drawTextLayout(*titleLayout, {0.f, 0.f});
       canvas.restore();
     }
   }
+
+  drawControls(canvas, surface, chrome, titleTop);
+}
+
+} // namespace
+
+void drawWindowChrome(Canvas& canvas,
+                      TextSystem& textSystem,
+                      CommittedSurfaceSnapshot const& surface,
+                      ChromeConfig const& chrome) {
+  if (!surface.serverSideDecorated) return;
+  if (usesCutoutChrome(surface)) {
+    drawControls(canvas, surface, chrome, static_cast<float>(surface.y));
+    return;
+  }
+  drawDefaultChrome(canvas, textSystem, surface, chrome);
 }
 
 void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview) {

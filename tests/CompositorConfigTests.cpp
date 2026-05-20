@@ -65,6 +65,8 @@ TEST_CASE("compositor config creates a default file when missing") {
   CHECK(loaded.config.backgroundColor.r == doctest::Approx(51.f / 255.f));
   CHECK(loaded.config.backgroundColor.g == doctest::Approx(128.f / 255.f));
   CHECK(loaded.config.backgroundColor.b == doctest::Approx(242.f / 255.f));
+  CHECK(loaded.config.chrome.titleBarHeight == 42);
+  CHECK(loaded.config.chrome.controlsWidth == 90);
 
   std::filesystem::remove_all(path.parent_path());
 }
@@ -168,6 +170,36 @@ TEST_CASE("compositor config parses shorthand and alpha colors") {
   CHECK(config.backgroundGradientEnd->g == doctest::Approx(2.f / 255.f));
   CHECK(config.backgroundGradientEnd->b == doctest::Approx(3.f / 255.f));
   CHECK(config.backgroundGradientEnd->a == doctest::Approx(128.f / 255.f));
+
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("compositor config parses chrome section") {
+  ScopedEnv configEnv("FLUX_COMPOSITOR_CONFIG");
+  ScopedEnv outputEnv("FLUX_COMPOSITOR_OUTPUT");
+  unsetenv("FLUX_COMPOSITOR_OUTPUT");
+  auto const path = tempConfigPath();
+  std::ofstream file(path);
+  file << "[chrome]\n";
+  file << "title_bar_height = 44\n";
+  file << "controls_width = 96\n";
+  file << "button_radius = 8.5\n";
+  file << "glass_tint = \"#ffffff80\"\n";
+  file << "close_hover_background = \"#ff0000\"\n";
+  file << "[chrome.dark]\n";
+  file << "title_text_color = \"#e6ecf7\"\n";
+  file.close();
+  setenv("FLUX_COMPOSITOR_CONFIG", path.c_str(), 1);
+
+  auto loaded = flux::compositor::loadConfigWithMetadata();
+  auto const& chrome = loaded.config.chrome;
+  CHECK(chrome.titleBarHeight == 44);
+  CHECK(chrome.controlsWidth == 96);
+  CHECK(chrome.buttonRadius == doctest::Approx(8.5f));
+  CHECK(chrome.glassTint.a == doctest::Approx(128.f / 255.f));
+  CHECK(chrome.closeHoverBackground.r == doctest::Approx(1.f));
+  REQUIRE(loaded.config.darkChrome);
+  CHECK(loaded.config.darkChrome->titleTextColor.r == doctest::Approx(230.f / 255.f));
 
   std::filesystem::remove(path);
 }

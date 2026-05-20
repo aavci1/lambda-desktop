@@ -4,6 +4,7 @@
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
+#include "xx-cutouts-v1-server-protocol.h"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
 
@@ -43,6 +44,7 @@ struct WaylandServer::Impl {
   struct DmabufParams;
   struct DmabufBuffer;
   struct ToplevelDecoration;
+  struct XxCutouts;
   struct Viewport;
   struct FractionalScale;
   struct CursorShapeDevice;
@@ -78,6 +80,7 @@ struct WaylandServer::Impl {
   void dispatch();
   void flushClients();
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);
+  void setChromeConfig(ChromeConfig config);
   void setPreferredScale(float scale);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
@@ -100,6 +103,7 @@ struct WaylandServer::Impl {
   void destroyDmabufParams(DmabufParams* params);
   void destroyDmabufBuffer(DmabufBuffer* buffer);
   void destroyToplevelDecoration(ToplevelDecoration* decoration);
+  void destroyXxCutouts(XxCutouts* cutouts);
   void destroyViewport(Viewport* viewport);
   void destroyFractionalScale(FractionalScale* fractionalScale);
   void destroyCursorShapeDevice(CursorShapeDevice* device);
@@ -140,6 +144,7 @@ struct WaylandServer::Impl {
   wl_global* primarySelectionManagerGlobal_ = nullptr;
   wl_global* dataDeviceManagerGlobal_ = nullptr;
   wl_global* activationGlobal_ = nullptr;
+  wl_global* cutoutsManagerGlobal_ = nullptr;
   std::string socketName_;
   std::string displayNameFile_;
   WaylandOutputInfo output_;
@@ -155,6 +160,7 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<DmabufParams>> dmabufParams_;
   std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
   std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
+  std::vector<std::unique_ptr<XxCutouts>> cutouts_;
   std::vector<std::unique_ptr<Viewport>> viewports_;
   std::vector<std::unique_ptr<FractionalScale>> fractionalScales_;
   std::vector<std::unique_ptr<CursorShapeDevice>> cursorShapeDevices_;
@@ -185,6 +191,7 @@ struct WaylandServer::Impl {
   Surface* dragSurface_ = nullptr;
   Surface* resizeSurface_ = nullptr;
   Surface* closePressSurface_ = nullptr;
+  Surface* minimizePressSurface_ = nullptr;
   Surface* lastTitleClickSurface_ = nullptr;
   Surface* cursorSurface_ = nullptr;
   CursorShape cursorShape_ = CursorShape::Arrow;
@@ -193,6 +200,8 @@ struct WaylandServer::Impl {
   std::int32_t cursorHotspotX_ = 0;
   std::int32_t cursorHotspotY_ = 0;
   std::uint32_t pointerEnterSerial_ = 0;
+  std::uint32_t lastPointerButtonSerial_ = 0;
+  Surface* lastPointerButtonSurface_ = nullptr;
   float dragOffsetX_ = 0.f;
   float dragOffsetY_ = 0.f;
   std::uint32_t lastTitleClickTimeMs_ = 0;
@@ -213,6 +222,7 @@ struct WaylandServer::Impl {
   std::string commandLauncherText_;
   std::string commandLauncherMessage_;
   std::vector<ShortcutBinding> shortcutBindings_;
+  ChromeConfig chromeConfig_;
   std::uint32_t shiftModifierIndex_ = ~0u;
   std::uint32_t ctrlModifierIndex_ = ~0u;
   std::uint32_t altModifierIndex_ = ~0u;
@@ -265,6 +275,7 @@ struct WaylandServer::Impl::Surface {
   bool pendingDestinationSet = false;
   bool snapped = false;
   bool maximized = false;
+  bool minimized = false;
   std::int32_t geometryAnimationStartX = 0;
   std::int32_t geometryAnimationStartY = 0;
   std::int32_t geometryAnimationStartWidth = 0;
@@ -467,6 +478,8 @@ void removeSurfaceFromFocusOrder(WaylandServer::Impl* server, WaylandServer::Imp
 void activateMostRecentToplevel(WaylandServer::Impl* server, std::uint32_t timeMs);
 WaylandServer::Impl::ToplevelDecoration* decorationFor(WaylandServer::Impl* server,
                                                        WaylandServer::Impl::XdgToplevel* toplevel);
+WaylandServer::Impl::XxCutouts* cutoutsFor(WaylandServer::Impl* server,
+                                           WaylandServer::Impl::XdgToplevel* toplevel);
 WaylandServer::Impl::XdgToplevel* toplevelForSurface(WaylandServer::Impl* server,
                                                      WaylandServer::Impl::Surface* surface);
 std::string titleForSurface(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface);
@@ -476,6 +489,15 @@ void sendToplevelConfigure(WaylandServer::Impl* server,
                            std::int32_t height);
 void sendToplevelStateConfigure(WaylandServer::Impl* server,
                                 WaylandServer::Impl::XdgToplevel* toplevel);
+bool toplevelServerSideDecorated(WaylandServer::Impl* server,
+                                 WaylandServer::Impl::XdgToplevel* toplevel);
+bool toplevelUsesCutouts(WaylandServer::Impl* server,
+                         WaylandServer::Impl::XdgToplevel* toplevel);
+void sendCutoutsConfigureIfNeeded(WaylandServer::Impl* server,
+                                  WaylandServer::Impl::XdgToplevel* toplevel,
+                                  std::int32_t width,
+                                  std::int32_t height,
+                                  bool force = false);
 WaylandServer::Impl::PointerConstraint* activePointerConstraint(WaylandServer::Impl* server);
 void updatePointerConstraintsForFocus(WaylandServer::Impl* server);
 void sendPrimarySelectionForFocus(WaylandServer::Impl* server);
@@ -513,6 +535,8 @@ struct WaylandServer::Impl::XdgToplevel {
   XdgSurface* xdgSurface = nullptr;
   std::string title;
   std::string appId;
+  XxCutouts* cutouts = nullptr;
+  bool cutoutsRejected = false;
 };
 
 struct WaylandServer::Impl::XdgPopup {
@@ -580,6 +604,18 @@ struct WaylandServer::Impl::ToplevelDecoration {
   wl_resource* resource = nullptr;
   XdgToplevel* toplevel = nullptr;
   std::uint32_t mode = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+};
+
+struct WaylandServer::Impl::XxCutouts {
+  WaylandServer::Impl* server = nullptr;
+  wl_resource* resource = nullptr;
+  XdgToplevel* toplevel = nullptr;
+  bool pendingControlsUnhandled = false;
+  bool lastSent = false;
+  std::int32_t lastX = 0;
+  std::int32_t lastY = 0;
+  std::int32_t lastWidth = 0;
+  std::int32_t lastHeight = 0;
 };
 
 } // namespace flux::compositor
