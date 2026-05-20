@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Compositor/Chrome/ChromeConfig.hpp"
+#include "Compositor/Surface/CommittedSurfacePainter.hpp"
 #include "Compositor/WaylandServer.hpp"
 
 #include <Flux/Graphics/Canvas.hpp>
@@ -22,12 +23,6 @@ struct CachedClientImage {
   bool logged = false;
 };
 
-struct SurfaceVisualState {
-  std::chrono::steady_clock::time_point firstSeen{};
-  CommittedSurfaceSnapshot lastSnapshot{};
-  bool hasLastSnapshot = false;
-};
-
 struct ClosingSurfaceVisual {
   CommittedSurfaceSnapshot snapshot{};
   std::shared_ptr<Image> image;
@@ -39,9 +34,6 @@ struct SurfaceRenderState {
   std::unordered_map<std::uint64_t, SurfaceVisualState> surfaceVisuals;
   std::unordered_map<std::uint64_t, ClosingSurfaceVisual> closingSurfaces;
 };
-
-[[nodiscard]] bool shouldTraceRenderSnapshot(CommittedSurfaceSnapshot const& current,
-                                             SurfaceVisualState const& visual);
 
 void drawSurfaceImage(Canvas& canvas,
                       CommittedSurfaceSnapshot const& surface,

@@ -21,4 +21,15 @@ Cutout events are sent before the matching `xdg_surface.configure` whenever the 
 
 In cutout mode, pointer events inside the controls reservation are compositor-owned. Pointer events elsewhere on the surface are delivered to the client, including the rest of the title-bar area. Clients that want draggable title-bar space should call `xdg_toplevel.move`; the compositor also supports Alt+left-drag anywhere on a toplevel as a fallback move gesture.
 
+## macOS Render Fixture
+
+The Linux compositor cannot run on macOS, but the window painter can be exercised with the Metal render-target fixture:
+
+```sh
+cmake --build build --target flux-compositor-render-fixture
+./build/flux-compositor-render-fixture build/compositor-window-chrome-fixture.png
+```
+
+The fixture renders synthetic Tier 1, Tier 2, and Tier 3 `CommittedSurfaceSnapshot`s through the same `drawCommittedSurfaceSnapshot` path used by the KMS compositor, reads back the offscreen Metal texture, and writes a PNG for visual inspection or pixel checks.
+
 Chrome defaults live under `[chrome]` in the compositor config and match the SADE values. `[chrome.dark]` can override those values for a future dark theme path.

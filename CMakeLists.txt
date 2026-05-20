@@ -573,6 +573,29 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
     ${CMAKE_DL_LIBS})
 endif()
 
+if(FLUX_PLATFORM_MACOS)
+  add_executable(flux-compositor-render-fixture
+    src/Compositor/Chrome/WindowChromeRenderer.cpp
+    src/Compositor/Surface/CommittedSurfacePainter.cpp
+    src/Compositor/Tools/RenderWindowChromeFixture.mm
+  )
+  target_include_directories(flux-compositor-render-fixture PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_compile_options(flux-compositor-render-fixture PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+  )
+  target_link_libraries(flux-compositor-render-fixture PRIVATE
+    flux
+    "-framework CoreGraphics"
+    "-framework Foundation"
+    "-framework ImageIO"
+    "-framework Metal")
+endif()
+
 option(FLUX_BUILD_COMPOSITOR
   "Build the phase-1 flux-compositor executable. Requires FLUX_PLATFORM=LINUX_KMS."
   OFF)
@@ -588,6 +611,7 @@ if(FLUX_BUILD_COMPOSITOR)
     src/Compositor/Config/AppliedCompositorConfig.cpp
     src/Compositor/Config/CompositorConfig.cpp
     src/Compositor/Input/KmsInputBridge.cpp
+    src/Compositor/Surface/CommittedSurfacePainter.cpp
     src/Compositor/Surface/SurfaceRenderer.cpp
     src/Compositor/Wayland/Globals/Activation.cpp
     src/Compositor/Wayland/Globals/Core.cpp
