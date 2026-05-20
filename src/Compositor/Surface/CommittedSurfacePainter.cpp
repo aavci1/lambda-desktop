@@ -34,6 +34,35 @@ bool renderSnapshotChanged(CommittedSurfaceSnapshot const& current,
          current.destinationHeight != previous.destinationHeight;
 }
 
+bool reachesEdge(float value, float edge) {
+  return std::abs(value - edge) <= 0.5f;
+}
+
+CornerRadius cornerRadiusForPiece(Rect const& full, Rect const& piece, CornerRadius const& outer) {
+  bool const left = reachesEdge(piece.x, full.x);
+  bool const top = reachesEdge(piece.y, full.y);
+  bool const right = reachesEdge(piece.x + piece.width, full.x + full.width);
+  bool const bottom = reachesEdge(piece.y + piece.height, full.y + full.height);
+  return CornerRadius{
+      left && top ? outer.topLeft : 0.f,
+      right && top ? outer.topRight : 0.f,
+      right && bottom ? outer.bottomRight : 0.f,
+      left && bottom ? outer.bottomLeft : 0.f,
+  };
+}
+
+void drawContentPiece(Canvas& canvas,
+                      Image& image,
+                      Rect const& source,
+                      Rect const& destination,
+                      Rect const& fullDestination,
+                      CornerRadius const& outerCorners) {
+  canvas.drawImage(image,
+                   source,
+                   destination,
+                   cornerRadiusForPiece(fullDestination, destination, outerCorners));
+}
+
 } // namespace
 
 bool shouldTraceRenderSnapshot(CommittedSurfaceSnapshot const& current,
@@ -87,7 +116,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                           ? CornerRadius{chrome.windowCornerRadius}
                                           : (titleBarHeight > 0.f
                                                  ? CornerRadius{0.f, 0.f, chrome.windowCornerRadius, chrome.windowCornerRadius}
-                                                 : CornerRadius{});
+                                                 : CornerRadius{chrome.windowCornerRadius});
   float const animationMs = static_cast<float>(
       std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
   float const openProgress = animationsEnabled ? easeOutCubic(animationMs / 140.f) : 1.f;
@@ -120,9 +149,11 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   float const contentHeight = clientContentSmallerThanFrame
                                   ? static_cast<float>(surface.destinationHeight)
                                   : windowHeight;
+  Rect const fullContentRect = Rect::sharp(windowX, windowY, windowWidth, windowHeight);
   canvas.save();
-  canvas.clipRect(Rect::sharp(windowX, windowY, windowWidth, windowHeight), contentCorners);
-  canvas.drawImage(clientImage,
+  canvas.clipRect(fullContentRect);
+  drawContentPiece(canvas,
+                   clientImage,
                    Rect::sharp(surface.sourceX,
                                surface.sourceY,
                                sourceWidth,
@@ -131,14 +162,16 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                windowY,
                                contentWidth,
                                contentHeight),
-                   CornerRadius{});
+                   fullContentRect,
+                   contentCorners);
   if (clientContentSmallerThanFrame) {
     float const rightPad = std::max(0.f, windowWidth - contentWidth);
     float const bottomPad = std::max(0.f, windowHeight - contentHeight);
     float const edgeSourceWidth = std::max(1.f, sourceWidth);
     float const edgeSourceHeight = std::max(1.f, sourceHeight);
     if (rightPad > 0.f) {
-      canvas.drawImage(clientImage,
+      drawContentPiece(canvas,
+                       clientImage,
                        Rect::sharp(surface.sourceX + edgeSourceWidth - 1.f,
                                    surface.sourceY,
                                    1.f,
@@ -147,10 +180,12 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                    windowY,
                                    rightPad,
                                    contentHeight),
-                       CornerRadius{});
+                       fullContentRect,
+                       contentCorners);
     }
     if (bottomPad > 0.f) {
-      canvas.drawImage(clientImage,
+      drawContentPiece(canvas,
+                       clientImage,
                        Rect::sharp(surface.sourceX,
                                    surface.sourceY + edgeSourceHeight - 1.f,
                                    edgeSourceWidth,
@@ -159,10 +194,12 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                    windowY + contentHeight,
                                    contentWidth,
                                    bottomPad),
-                       CornerRadius{});
+                       fullContentRect,
+                       contentCorners);
     }
     if (rightPad > 0.f && bottomPad > 0.f) {
-      canvas.drawImage(clientImage,
+      drawContentPiece(canvas,
+                       clientImage,
                        Rect::sharp(surface.sourceX + edgeSourceWidth - 1.f,
                                    surface.sourceY + edgeSourceHeight - 1.f,
                                    1.f,
@@ -171,7 +208,8 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                    windowY + contentHeight,
                                    rightPad,
                                    bottomPad),
-                       CornerRadius{});
+                       fullContentRect,
+                       contentCorners);
     }
   }
   canvas.restore();

@@ -400,30 +400,64 @@ int main(int argc, char** argv) {
     canvas.updateDpiScale(scale, scale);
 
     flux::compositor::ChromeConfig chrome{};
-    auto foreignImage = flux::Image::fromRgbaPixels(300, 190, makeForeignCsdPixels(300, 190), canvas.gpuDevice());
-    auto tier2Image = flux::Image::fromRgbaPixels(360, 230, makeTier2Pixels(360, 230), canvas.gpuDevice());
-    auto tier3Image =
-        flux::Image::fromRgbaPixels(460, 280, makeTier3Pixels(460, 280, chrome), canvas.gpuDevice());
-    if (!foreignImage || !tier2Image || !tier3Image) throw std::runtime_error("failed to create fixture images");
+    auto foreignImage = flux::Image::fromRgbaPixels(250, 150, makeForeignCsdPixels(250, 150), canvas.gpuDevice());
+    auto ssdFocusedImage = flux::Image::fromRgbaPixels(260, 160, makeTier2Pixels(260, 160), canvas.gpuDevice());
+    auto ssdUnfocusedImage = flux::Image::fromRgbaPixels(260, 160, makeTier2Pixels(260, 160), canvas.gpuDevice());
+    auto cutoutImage = flux::Image::fromRgbaPixels(300, 180, makeTier3Pixels(300, 180, chrome), canvas.gpuDevice());
+    auto rejectedImage = flux::Image::fromRgbaPixels(260, 170, makeTier2Pixels(260, 170), canvas.gpuDevice());
+    auto resizingImage = flux::Image::fromRgbaPixels(180, 125, makeTier2Pixels(180, 125), canvas.gpuDevice());
+    if (!foreignImage || !ssdFocusedImage || !ssdUnfocusedImage || !cutoutImage || !rejectedImage || !resizingImage) {
+      throw std::runtime_error("failed to create fixture images");
+    }
 
-    auto foreign = snapshot(1, 42, 76, 300, 190);
+    auto foreign = snapshot(1, 34, 58, 250, 150);
     foreign.focused = false;
 
-    auto tier2 = snapshot(2, 390, 116, 360, 230);
-    tier2.titleBarHeight = chrome.titleBarHeight;
-    tier2.title = "Tier 2 SSD";
-    tier2.serverSideDecorated = true;
-    tier2.focused = false;
+    auto ssdFocused = snapshot(2, 340, 86, 260, 160);
+    ssdFocused.titleBarHeight = chrome.titleBarHeight;
+    ssdFocused.title = "SSD focused";
+    ssdFocused.serverSideDecorated = true;
+    ssdFocused.focused = true;
 
-    auto tier3 = snapshot(3, 250, 300, 460, 280);
-    tier3.serverSideDecorated = true;
-    tier3.cutoutsBound = true;
-    tier3.closeButtonHovered = true;
-    tier3.focused = true;
+    auto ssdUnfocused = snapshot(3, 650, 86, 260, 160);
+    ssdUnfocused.titleBarHeight = chrome.titleBarHeight;
+    ssdUnfocused.title = "SSD inactive";
+    ssdUnfocused.serverSideDecorated = true;
+    ssdUnfocused.focused = false;
+
+    auto cutout = snapshot(4, 55, 340, 300, 180);
+    cutout.serverSideDecorated = true;
+    cutout.cutoutsBound = true;
+    cutout.closeButtonHovered = true;
+    cutout.focused = true;
+
+    auto rejected = snapshot(5, 395, 350, 260, 170);
+    rejected.titleBarHeight = chrome.titleBarHeight;
+    rejected.title = "Cutout rejected";
+    rejected.serverSideDecorated = true;
+    rejected.cutoutsBound = true;
+    rejected.cutoutsRejected = true;
+    rejected.focused = false;
+
+    auto resizing = snapshot(6, 700, 350, 220, 160);
+    resizing.titleBarHeight = chrome.titleBarHeight;
+    resizing.title = "Resize gap";
+    resizing.serverSideDecorated = true;
+    resizing.focused = true;
+    resizing.activeSizing = true;
+    resizing.bufferWidth = 180;
+    resizing.bufferHeight = 125;
+    resizing.sourceWidth = 180.f;
+    resizing.sourceHeight = 125.f;
+    resizing.destinationWidth = 180;
+    resizing.destinationHeight = 125;
 
     flux::compositor::SurfaceVisualState foreignVisual{};
-    flux::compositor::SurfaceVisualState tier2Visual{};
-    flux::compositor::SurfaceVisualState tier3Visual{};
+    flux::compositor::SurfaceVisualState ssdFocusedVisual{};
+    flux::compositor::SurfaceVisualState ssdUnfocusedVisual{};
+    flux::compositor::SurfaceVisualState cutoutVisual{};
+    flux::compositor::SurfaceVisualState rejectedVisual{};
+    flux::compositor::SurfaceVisualState resizingVisual{};
     auto const frameTime = std::chrono::steady_clock::now();
 
     target.beginFrame();
@@ -443,9 +477,15 @@ int main(int argc, char** argv) {
     flux::compositor::drawCommittedSurfaceSnapshot(
         canvas, textSystem, foreign, foreignVisual, *foreignImage, frameTime, chrome, false);
     flux::compositor::drawCommittedSurfaceSnapshot(
-        canvas, textSystem, tier2, tier2Visual, *tier2Image, frameTime, chrome, false);
+        canvas, textSystem, ssdFocused, ssdFocusedVisual, *ssdFocusedImage, frameTime, chrome, false);
     flux::compositor::drawCommittedSurfaceSnapshot(
-        canvas, textSystem, tier3, tier3Visual, *tier3Image, frameTime, chrome, false);
+        canvas, textSystem, ssdUnfocused, ssdUnfocusedVisual, *ssdUnfocusedImage, frameTime, chrome, false);
+    flux::compositor::drawCommittedSurfaceSnapshot(
+        canvas, textSystem, cutout, cutoutVisual, *cutoutImage, frameTime, chrome, false);
+    flux::compositor::drawCommittedSurfaceSnapshot(
+        canvas, textSystem, rejected, rejectedVisual, *rejectedImage, frameTime, chrome, false);
+    flux::compositor::drawCommittedSurfaceSnapshot(
+        canvas, textSystem, resizing, resizingVisual, *resizingImage, frameTime, chrome, false);
     target.endFrame();
 
     writePng(output, readBgraImage(vk, imageTarget, pixelWidth, pixelHeight), pixelWidth, pixelHeight);
