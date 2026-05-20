@@ -3043,6 +3043,7 @@ private:
   }
 
   void drawBackdropBlurPass(VkCommandBuffer commandBuffer,
+                            VulkanCommandState &state,
                             Texture *texture,
                             std::uint32_t first,
                             Rect const &clip,
@@ -3050,15 +3051,11 @@ private:
     if (!texture || !texture->descriptor)
       return;
     setViewportScissor(commandBuffer, clip, targetExtent);
-    VulkanDrawPushConstants const push = drawPushConstants();
     auto const &res = resources();
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropBlurPipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 0, 1,
-                            &quadDescriptorSet_, 0, nullptr);
-    vkCmdPushConstants(commandBuffer, res.backdropPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(push), &push);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, res.backdropPipelineLayout, 1, 1,
-                            &texture->descriptor, 0, nullptr);
+    bindPipeline(commandBuffer, state, res.backdropBlurPipeline, res.backdropPipelineLayout);
+    bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 0, quadDescriptorSet_);
+    pushDrawConstants(commandBuffer, state, res.backdropPipelineLayout);
+    bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 1, texture->descriptor);
     vkCmdDraw(commandBuffer, 6, 1, 0, first);
   }
 
@@ -3120,6 +3117,7 @@ private:
     debug::perf::recordBackdropBlurRun(copyPixels,
                                        blurPixels * 2u * static_cast<std::uint64_t>(kBackdropBlurIterations),
                                        2u * static_cast<std::uint64_t>(kBackdropBlurIterations));
+    VulkanCommandState blurState{};
     for (int i = 0; i < kBackdropBlurIterations; ++i) {
       transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
       beginColorRendering(commandBuffer,
@@ -3128,7 +3126,7 @@ private:
                           clear,
                           VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                           renderArea);
-      drawBackdropBlurPass(commandBuffer, blurSource, run.horizontalQuad, run.clip, blurExtent);
+      drawBackdropBlurPass(commandBuffer, blurState, blurSource, run.horizontalQuad, run.clip, blurExtent);
       vkCmdEndRendering(commandBuffer);
       transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ensureTextureDescriptor(backdropScratchTexture_);
@@ -3140,7 +3138,7 @@ private:
                           clear,
                           VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                           renderArea);
-      drawBackdropBlurPass(commandBuffer, &backdropScratchTexture_, run.verticalQuad, run.clip, blurExtent);
+      drawBackdropBlurPass(commandBuffer, blurState, &backdropScratchTexture_, run.verticalQuad, run.clip, blurExtent);
       vkCmdEndRendering(commandBuffer);
       transition(commandBuffer, backdropBlurTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ensureTextureDescriptor(backdropBlurTexture_);
