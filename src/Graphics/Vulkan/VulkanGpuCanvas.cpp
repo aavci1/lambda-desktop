@@ -1038,14 +1038,22 @@ public:
     if (targetMode_) {
       return;
     }
+    int const hintedFbW = resizeBoundsHintWidth_ > 0
+                              ? static_cast<int>(std::lround(static_cast<float>(resizeBoundsHintWidth_) * dpiScaleX_))
+                              : 0;
+    int const hintedFbH = resizeBoundsHintHeight_ > 0
+                              ? static_cast<int>(std::lround(static_cast<float>(resizeBoundsHintHeight_) * dpiScaleY_))
+                              : 0;
+    bool const hasResizeBoundsHint = hintedFbW > fbW || hintedFbH > fbH;
     bool const needsLargerSwapchain =
         !swapchain_ || swapExtent_.width == 0 || swapExtent_.height == 0 ||
         fbW > static_cast<int>(swapExtent_.width) || fbH > static_cast<int>(swapExtent_.height);
     if (needsLargerSwapchain) {
-      int const headroomW = swapchain_ ? std::clamp(fbW / 4, 128, 512) : 0;
-      int const headroomH = swapchain_ ? std::clamp(fbH / 4, 128, 512) : 0;
-      swapchainTargetWidth_ = fbW + headroomW;
-      swapchainTargetHeight_ = fbH + headroomH;
+      bool const addHeadroom = swapchain_ != VK_NULL_HANDLE;
+      swapchainTargetWidth_ = std::max(fbW + (addHeadroom ? std::max(512, fbW / 2) : 0),
+                                       hintedFbW);
+      swapchainTargetHeight_ = std::max(fbH + (addHeadroom ? std::max(512, fbH / 2) : 0),
+                                        hintedFbH);
       swapchainDirty_ = true;
       if (detail::resizeTraceEnabled()) {
         detail::resizeTrace(
@@ -1053,7 +1061,8 @@ public:
           "window=%u logical=%dx%d framebuffer=%dx%d target=%dx%d boundsHint=%dx%d dirty=1\n",
                      handle_, width_, height_, framebufferWidth_, framebufferHeight_,
                      swapchainTargetWidth_, swapchainTargetHeight_,
-                     resizeBoundsHintWidth_, resizeBoundsHintHeight_);
+                     hasResizeBoundsHint ? resizeBoundsHintWidth_ : 0,
+                     hasResizeBoundsHint ? resizeBoundsHintHeight_ : 0);
       }
     } else if (framebufferChanged && detail::resizeTraceEnabled()) {
       detail::resizeTrace(
@@ -2684,10 +2693,17 @@ private:
     if (!device_)
       return;
     auto const recreateStart = std::chrono::steady_clock::now();
+    auto phaseStart = recreateStart;
+    auto phaseMs = [&](std::chrono::steady_clock::time_point start) {
+      return static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - start).count()) / 1000.0;
+    };
     for (VkFence fence : frameFences_) {
       if (fence)
         vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
     }
+    double const waitFencesMs = phaseMs(phaseStart);
+    phaseStart = std::chrono::steady_clock::now();
     VkSwapchainKHR oldSwapchain = swapchain_;
     std::vector<VkImageView> oldViews = std::move(swapchainViews_);
     std::vector<VkSemaphore> oldImageRenderFinished = std::move(imageRenderFinished_);
@@ -2701,6 +2717,8 @@ private:
     vkGetPhysicalDeviceSurfacePresentModesKHR(physical_, surface_, &presentCount, nullptr);
     std::vector<VkPresentModeKHR> modes(presentCount);
     vkGetPhysicalDeviceSurfacePresentModesKHR(physical_, surface_, &presentCount, modes.data());
+    double const capsMs = phaseMs(phaseStart);
+    phaseStart = std::chrono::steady_clock::now();
     VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
     for (auto m : modes) {
       if (m == VK_PRESENT_MODE_MAILBOX_KHR) {
@@ -2740,6 +2758,8 @@ private:
     info.clipped = VK_TRUE;
     info.oldSwapchain = oldSwapchain;
     vkCheck(vkCreateSwapchainKHR(device_, &info, nullptr, &swapchain_), "vkCreateSwapchainKHR");
+    double const createMs = phaseMs(phaseStart);
+    phaseStart = std::chrono::steady_clock::now();
     std::uint32_t count = 0;
     vkGetSwapchainImagesKHR(device_, swapchain_, &count, nullptr);
     swapchainImages_.resize(count);
@@ -2759,6 +2779,8 @@ private:
       view.subresourceRange.layerCount = 1;
       vkCheck(vkCreateImageView(device_, &view, nullptr, &swapchainViews_[i]), "vkCreateImageView");
     }
+    double const imageSetupMs = phaseMs(phaseStart);
+    phaseStart = std::chrono::steady_clock::now();
     for (VkSemaphore semaphore : oldImageRenderFinished) {
       if (semaphore)
         vkDestroySemaphore(device_, semaphore, nullptr);
@@ -2767,14 +2789,18 @@ private:
       vkDestroyImageView(device_, view, nullptr);
     if (oldSwapchain)
       vkDestroySwapchainKHR(device_, oldSwapchain, nullptr);
+    double const oldDestroyMs = phaseMs(phaseStart);
     swapchainDirty_ = false;
     if (detail::resizeTraceEnabled()) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - recreateStart).count();
       detail::resizeTrace(
           "vulkan-recreate-swapchain",
-          "window=%u framebuffer=%dx%d extent=%ux%u images=%zu elapsed=%.3fms\n",
-                   handle_, framebufferWidth_, framebufferHeight_, swapExtent_.width, swapExtent_.height, swapchainImages_.size(),
+          "window=%u framebuffer=%dx%d target=%dx%d extent=%ux%u images=%zu "
+          "waitFences=%.3fms caps=%.3fms create=%.3fms imageSetup=%.3fms oldDestroy=%.3fms elapsed=%.3fms\n",
+                   handle_, framebufferWidth_, framebufferHeight_, swapchainTargetWidth_, swapchainTargetHeight_,
+                   swapExtent_.width, swapExtent_.height, swapchainImages_.size(),
+                   waitFencesMs, capsMs, createMs, imageSetupMs, oldDestroyMs,
                    static_cast<double>(elapsed) / 1000.0);
     }
   }
