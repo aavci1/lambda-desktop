@@ -119,6 +119,7 @@ scale = 2.0 # fallback scale for outputs without an override
 
 animations = true
 hardware_cursor = true
+idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 window_glass = true
 window_glass_opacity = 0.84
 
@@ -210,7 +211,7 @@ Set them before launching the compositor if you need to force a theme or size.
 - Input device permissions are still manual unless your session grants ACLs.
 - Popup support works for the test demos and uses popup-first pointer hit testing. The popup demo has visible hover/click validation. Broader `foot`/GTK/Qt/browser menu behavior still needs real-app validation with app configs that actually open popups.
 - Presentation-time feedback uses DRM vblank pacing timestamps, refresh intervals, and sequence counters when available. If the driver rejects vblank waits, the compositor falls back to compositor-clock timing.
-- Idle-inhibit protocol state is tracked; actual idle blanking and inhibition policy are not implemented yet.
+- Software idle blanking is available with `idle_blank_timeout_seconds`; `0` disables it. Active idle inhibitors prevent the compositor from blanking. DPMS/panel power-off is not implemented yet.
 
 ## Remaining Work
 

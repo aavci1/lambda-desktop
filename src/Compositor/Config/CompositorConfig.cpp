@@ -470,6 +470,7 @@ scale = 2.0 # fallback scale for outputs without an override
 
 animations = true
 hardware_cursor = true
+idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 window_glass = true
 window_glass_opacity = 0.84
 
@@ -739,6 +740,19 @@ CompositorConfig loadConfig() {
     } else {
       std::fprintf(stderr, "flux-compositor: ignoring invalid hardware_cursor value in %s\n", path->c_str());
     }
+  }
+
+  auto parseIdleBlankTimeout = [&](char const* key) -> bool {
+    if (!table.contains(key)) return false;
+    if (auto timeout = configInt(table, key); timeout && *timeout >= 0 && *timeout <= 86'400) {
+      config.idleBlankTimeoutSeconds = *timeout;
+    } else {
+      std::fprintf(stderr, "flux-compositor: ignoring invalid %s value in %s\n", key, path->c_str());
+    }
+    return true;
+  };
+  if (!parseIdleBlankTimeout("idle_blank_timeout_seconds") && !parseIdleBlankTimeout("idle_blank_timeout")) {
+    parseIdleBlankTimeout("screen_blank_timeout_seconds");
   }
 
   if (table.contains("window_glass")) {

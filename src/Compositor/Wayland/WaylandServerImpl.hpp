@@ -86,6 +86,7 @@ struct WaylandServer::Impl {
   void setPreferredScale(float scale);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
+  [[nodiscard]] bool hasIdleInhibitors() const noexcept;
   void sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
   void handlePointerPosition(double x, double y, std::uint32_t timeMs);

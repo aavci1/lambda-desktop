@@ -117,6 +117,13 @@ bool WaylandServer::Impl::hasActiveAnimations() const noexcept {
   });
 }
 
+bool WaylandServer::Impl::hasIdleInhibitors() const noexcept {
+  return std::any_of(idleInhibitors_.begin(), idleInhibitors_.end(), [](auto const& inhibitor) {
+    auto const* surface = inhibitor ? inhibitor->surface : nullptr;
+    return surface && surface->currentBuffer && !surface->minimized && surface->width > 0 && surface->height > 0;
+  });
+}
+
 void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing) {
   if (timing.monotonicNsec == 0) {
     timespec now{};

@@ -308,7 +308,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         .height = static_cast<std::int32_t>(output.height()),
         .refreshMilliHz = static_cast<std::int32_t>(output.refreshRateMilliHz()),
     });
-    device->setInputHandler([&wayland](flux::platform::KmsInputEvent const& event) {
+    auto lastInputActivity = SteadyClock::now();
+    bool inputActivityThisLoop = false;
+    bool idleBlanked = false;
+    device->setInputHandler([&](flux::platform::KmsInputEvent const& event) {
+      inputActivityThisLoop = true;
+      if (idleBlanked) return;
       dispatchKmsInputEvent(wayland, event);
     });
 
@@ -410,6 +415,19 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       auto const frameProfileStart = CompositorFrameProfile::Clock::now();
       auto phaseStart = frameProfileStart;
       canvas->beginFrame();
+      if (idleBlanked) {
+        canvas->clear(Color{0.f, 0.f, 0.f, 1.f});
+        output.hideCursor();
+        frameProfile.backgroundMs += CompositorFrameProfile::milliseconds(phaseStart);
+        phaseStart = CompositorFrameProfile::Clock::now();
+        canvas->present();
+        frameProfile.presentMs += CompositorFrameProfile::milliseconds(phaseStart);
+        ++frameProfile.frames;
+        frameProfile.totalMs += CompositorFrameProfile::milliseconds(frameProfileStart);
+        frameProfile.maybeLog();
+        loopStats.recordRender(renderStart);
+        return;
+      }
       drawCompositorBackground(*canvas,
                                appliedConfig,
                                static_cast<std::uint32_t>(wayland.logicalOutputWidth()),
@@ -499,6 +517,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       timingStart = LoopInstrumentation::Clock::now();
       wayland.dispatch();
       loopStats.recordDispatch(timingStart);
+      if (inputActivityThisLoop) {
+        lastInputActivity = SteadyClock::now();
+        inputActivityThisLoop = false;
+      }
       ++loopStats.configChecks;
       bool configReloaded = false;
       if (configChanged(loadedConfig)) {
@@ -524,12 +546,25 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         timingStart = LoopInstrumentation::Clock::now();
         wayland.dispatch();
         loopStats.recordDispatch(timingStart);
+        if (inputActivityThisLoop) {
+          lastInputActivity = SteadyClock::now();
+          inputActivityThisLoop = false;
+        }
         if (!device->isVtForeground()) {
           loopStats.maybeLog();
           continue;
         }
         handleVtResume();
         wasVtForeground = true;
+      }
+
+      bool const shouldIdleBlank =
+          appliedConfig.config.idleBlankTimeoutSeconds > 0 && !wayland.hasIdleInhibitors() &&
+          std::chrono::duration_cast<std::chrono::seconds>(SteadyClock::now() - lastInputActivity).count() >=
+              appliedConfig.config.idleBlankTimeoutSeconds;
+      if (shouldIdleBlank != idleBlanked) {
+        idleBlanked = shouldIdleBlank;
+        forceRender = true;
       }
 
       bool const renderNeeded = forceRender || animationFrameNeeded || pollWoke || configReloaded;

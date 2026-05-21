@@ -102,6 +102,12 @@ Expected result: a top layer-surface bar appears and renders non-black content.
 
 Expected result: the client receives presentation feedback. On KMS outputs with working `drmWaitVBlank`, feedback includes DRM vblank pacing timestamps, refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK` flags. If the driver rejects vblank waits, feedback falls back to compositor-clock timing.
 
+### Idle Blanking
+
+Set `idle_blank_timeout_seconds = 5` in `~/.config/flux-compositor/config.toml`, wait five seconds without input, then move the pointer or press a key.
+
+Expected result: the compositor renders a black frame after the timeout and redraws the desktop on input. Running `flux-compositor-idle-inhibit-demo` should keep the desktop visible while its inhibitor is active.
+
 ### Pointer Extensions
 
 ```sh

@@ -26,6 +26,7 @@ struct CompositorConfig {
   std::unordered_map<std::string, float> outputScales;
   bool animationsEnabled = true;
   bool hardwareCursorEnabled = true;
+  int idleBlankTimeoutSeconds = 0;
   ChromeConfig chrome;
   std::optional<ChromeConfig> darkChrome;
   std::vector<WaylandServer::ShortcutBinding> shortcutBindings;
