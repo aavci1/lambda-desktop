@@ -20,8 +20,10 @@
 #endif
 #include "SceneGraph/SceneBounds.hpp"
 #include "SceneGraph/SceneNodeInternal.hpp"
+#include "Detail/ResizeTrace.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -265,10 +267,37 @@ struct SceneRenderer::Impl {
 
     void render(SceneNode const &node) {
         debug::perf::recordSceneRenderPass();
+        bool const traceResize = ::flux::detail::resizeTraceEnabled();
+        auto const renderStart = traceResize ? std::chrono::steady_clock::now()
+                                             : std::chrono::steady_clock::time_point{};
+        std::int64_t prepareElapsed = 0;
         if (kEnablePreparedRenderCache) {
+            auto const prepareStart = traceResize ? std::chrono::steady_clock::now()
+                                                  : std::chrono::steady_clock::time_point{};
             prepareNodeCache(node);
+            if (traceResize) {
+                prepareElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - prepareStart).count();
+            }
         }
+        auto const traversalStart = traceResize ? std::chrono::steady_clock::now()
+                                                : std::chrono::steady_clock::time_point{};
         renderNode(node, 1.f, Point {});
+        if (traceResize) {
+            auto const traversalElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - traversalStart).count();
+            auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - renderStart).count();
+            std::string_view const rootKind = sceneNodeKindName(node.kind());
+            ::flux::detail::resizeTrace("scene-render",
+                                        "root=%.*s dirty=%d prepare=%.3fms traversal=%.3fms elapsed=%.3fms\n",
+                                        static_cast<int>(rootKind.size()),
+                                        rootKind.data(),
+                                        detail::SceneNodeAccess::subtreeDirty(node) ? 1 : 0,
+                                        static_cast<double>(prepareElapsed) / 1000.0,
+                                        static_cast<double>(traversalElapsed) / 1000.0,
+                                        static_cast<double>(elapsed) / 1000.0);
+        }
     }
 
     void prepareNodeCache(SceneNode const &node) {

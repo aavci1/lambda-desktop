@@ -975,8 +975,8 @@ public:
         fbW > static_cast<int>(swapExtent_.width) || fbH > static_cast<int>(swapExtent_.height);
     if (needsLargerSwapchain) {
       bool const addHeadroom = swapchain_ != VK_NULL_HANDLE;
-      swapchainTargetWidth_ = fbW + (addHeadroom ? std::max(128, fbW / 4) : 0);
-      swapchainTargetHeight_ = fbH + (addHeadroom ? std::max(128, fbH / 4) : 0);
+      swapchainTargetWidth_ = fbW + (addHeadroom ? std::max(512, fbW / 2) : 0);
+      swapchainTargetHeight_ = fbH + (addHeadroom ? std::max(512, fbH / 2) : 0);
       swapchainDirty_ = true;
       if (detail::resizeTraceEnabled()) {
         detail::resizeTrace(
@@ -1146,15 +1146,32 @@ public:
   }
 
   void presentImpl() {
+    bool const traceResize = detail::resizeTraceEnabled();
+    auto const phaseStart = [&] {
+      return traceResize ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    };
+    auto const phaseMs = [&](std::chrono::steady_clock::time_point start) {
+      if (!traceResize) return 0.0;
+      auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - start).count();
+      return static_cast<double>(elapsed) / 1000.0;
+    };
+
     VkFence const frameFence = frameFences_[currentFrame_];
     VkSemaphore const imageAvailable = imageAvailable_[currentFrame_];
     VkCommandBuffer const commandBuffer = commandBuffers_[currentFrame_];
 
+    auto start = phaseStart();
     vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
+    double const frameFenceMs = phaseMs(start);
+    start = phaseStart();
     destroyDeferredTextures(false);
+    double const deferredDestroyMs = phaseMs(start);
     std::uint32_t imageIndex = 0;
+    start = phaseStart();
     VkResult acquired = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, imageAvailable, VK_NULL_HANDLE,
                                               &imageIndex);
+    double const acquireMs = phaseMs(start);
     if (acquired == VK_ERROR_OUT_OF_DATE_KHR) {
       swapchainDirty_ = true;
       return;
@@ -1162,8 +1179,11 @@ public:
     if (acquired != VK_SUCCESS && acquired != VK_SUBOPTIMAL_KHR) {
       vkCheck(acquired, "vkAcquireNextImageKHR");
     }
+    double imageFenceMs = 0.0;
     if (imageInFlightFences_[imageIndex]) {
+      start = phaseStart();
       vkWaitForFences(device_, 1, &imageInFlightFences_[imageIndex], VK_TRUE, UINT64_MAX);
+      imageFenceMs = phaseMs(start);
     }
     imageInFlightFences_[imageIndex] = frameFence;
     if (imageIndex >= imageRenderFinished_.size() || !imageRenderFinished_[imageIndex]) {
@@ -1172,10 +1192,17 @@ public:
     }
     VkSemaphore const renderFinished = imageRenderFinished_[imageIndex];
 
+    start = phaseStart();
     uploadAtlasIfNeeded();
+    double const atlasMs = phaseMs(start);
+    start = phaseStart();
     auto backdropRuns = prepareBackdropBlurRuns();
+    double const backdropPrepareMs = phaseMs(start);
+    start = phaseStart();
     uploadFrameBuffers();
+    double const uploadMs = phaseMs(start);
 
+    start = phaseStart();
     vkResetCommandBuffer(commandBuffer, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     vkCheck(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer");
@@ -1195,8 +1222,12 @@ public:
     } else {
       transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED,
                  VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer, swapchainViews_[imageIndex], swapExtent_, clear,
-                          VK_ATTACHMENT_LOAD_OP_CLEAR);
+      beginColorRendering(commandBuffer,
+                          swapchainViews_[imageIndex],
+                          swapExtent_,
+                          clear,
+                          VK_ATTACHMENT_LOAD_OP_CLEAR,
+                          currentFramebufferPixelRect());
       drawOps(commandBuffer);
       vkCmdEndRendering(commandBuffer);
     }
@@ -1206,6 +1237,7 @@ public:
     transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
     vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
+    double const recordMs = phaseMs(start);
 
     VkSemaphoreSubmitInfo waitSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
     waitSemaphore.semaphore = imageAvailable;
@@ -1224,13 +1256,17 @@ public:
     submit.pSignalSemaphoreInfos = &signalSemaphore;
     resetFrameFenceIndex_ = currentFrame_;
     vkCheck(vkResetFences(device_, 1, &frameFence), "vkResetFences");
+    start = phaseStart();
     VkResult const submitted = vkQueueSubmit2(queue_, 1, &submit, frameFence);
+    double const submitMs = phaseMs(start);
     if (submitted != VK_SUCCESS) {
       recoverResetFrameFence();
       vkCheck(submitted, "vkQueueSubmit");
     }
     resetFrameFenceIndex_ = kNoResetFrameFence;
+    start = phaseStart();
     flushScreenshot();
+    double const screenshotMs = phaseMs(start);
 
     VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     presentInfo.waitSemaphoreCount = 1;
@@ -1238,7 +1274,9 @@ public:
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &swapchain_;
     presentInfo.pImageIndices = &imageIndex;
+    start = phaseStart();
     VkResult presented = vkQueuePresentKHR(queue_, &presentInfo);
+    double const presentQueueMs = phaseMs(start);
     if (presented == VK_ERROR_OUT_OF_DATE_KHR || presented == VK_SUBOPTIMAL_KHR) {
       swapchainDirty_ = true;
     } else {
@@ -1246,6 +1284,31 @@ public:
     }
     currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
     debug::perf::recordPresentedFrame();
+    if (traceResize) {
+      detail::resizeTrace(
+          "vulkan-present-detail",
+          "window=%u image=%u ops=%zu rects=%zu quads=%zu paths=%zu "
+          "waitFrame=%.3fms deferred=%.3fms acquire=%.3fms waitImage=%.3fms "
+          "atlas=%.3fms blurPrep=%.3fms upload=%.3fms record=%.3fms submit=%.3fms "
+          "screenshot=%.3fms queuePresent=%.3fms\n",
+          handle_,
+          imageIndex,
+          ops_.size(),
+          rects_.size(),
+          quads_.size(),
+          pathVerts_.size(),
+          frameFenceMs,
+          deferredDestroyMs,
+          acquireMs,
+          imageFenceMs,
+          atlasMs,
+          backdropPrepareMs,
+          uploadMs,
+          recordMs,
+          submitMs,
+          screenshotMs,
+          presentQueueMs);
+    }
   }
 
   void recordRenderTargetCommands(VkCommandBuffer commandBuffer, VkImage targetImage,
@@ -3181,6 +3244,18 @@ private:
                                    });
   }
 
+  VkExtent2D currentFramebufferExtent() const {
+    return VkExtent2D{
+        static_cast<std::uint32_t>(std::max(1, framebufferWidth_)),
+        static_cast<std::uint32_t>(std::max(1, framebufferHeight_)),
+    };
+  }
+
+  PixelRect currentFramebufferPixelRect() const {
+    VkExtent2D const extent = currentFramebufferExtent();
+    return PixelRect{0u, 0u, extent.width, extent.height};
+  }
+
   PixelRect pixelRectForLogicalClip(Rect clip, VkExtent2D extent) const {
     float const renderWidth = static_cast<float>(std::max(1u, extent.width));
     float const renderHeight = static_cast<float>(std::max(1u, extent.height));
@@ -3318,7 +3393,12 @@ private:
                             VkAttachmentLoadOp loadOp) {
     transition(commandBuffer, targetImage, targetLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
     targetLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-    beginColorRendering(commandBuffer, targetView, swapExtent_, clear, loadOp);
+    beginColorRendering(commandBuffer,
+                        targetView,
+                        swapExtent_,
+                        clear,
+                        loadOp,
+                        currentFramebufferPixelRect());
   }
 
   void drawOpsWithStackedBackdropBlur(VkCommandBuffer commandBuffer,
@@ -3443,12 +3523,7 @@ private:
   }
 
   void setViewportScissor(VkCommandBuffer commandBuffer, Rect clip) {
-    setViewportScissor(commandBuffer,
-                       clip,
-                       VkExtent2D{
-                           static_cast<std::uint32_t>(std::max(1, framebufferWidth_)),
-                           static_cast<std::uint32_t>(std::max(1, framebufferHeight_)),
-                       });
+    setViewportScissor(commandBuffer, clip, currentFramebufferExtent());
   }
 
   void setViewportScissor(VkCommandBuffer commandBuffer, Rect clip, VkExtent2D extent) {

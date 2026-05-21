@@ -7,6 +7,7 @@
 #include "SceneGraph/SceneNodeInternal.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <stdexcept>
 #include <utility>
@@ -17,6 +18,23 @@ namespace {
 
 thread_local int gTransientRelayoutDepth = 0;
 thread_local int gRelayoutDepth = 0;
+
+bool sameLayoutScalar(float a, float b) noexcept {
+    if (a == b) {
+        return true;
+    }
+    if (!std::isfinite(a) || !std::isfinite(b)) {
+        return false;
+    }
+    return std::fabs(a - b) <= 0.01f;
+}
+
+bool sameLayoutConstraints(LayoutConstraints const& a, LayoutConstraints const& b) noexcept {
+    return sameLayoutScalar(a.maxWidth, b.maxWidth) &&
+           sameLayoutScalar(a.maxHeight, b.maxHeight) &&
+           sameLayoutScalar(a.minWidth, b.minWidth) &&
+           sameLayoutScalar(a.minHeight, b.minHeight);
+}
 
 struct TransientRelayoutScope {
     explicit TransientRelayoutScope(bool enabled) noexcept : enabled_(enabled) {
@@ -182,6 +200,10 @@ bool SceneNode::relayout(LayoutConstraints const& constraints, bool storeConstra
         return false;
     }
     bool const effectiveStoreConstraints = storeConstraints && gTransientRelayoutDepth == 0;
+    if (effectiveStoreConstraints && hasLayoutConstraints_ &&
+        sameLayoutConstraints(layoutConstraints_, constraints) && !isSubtreeDirty()) {
+        return true;
+    }
     if (effectiveStoreConstraints) {
         setLayoutConstraints(constraints);
     }

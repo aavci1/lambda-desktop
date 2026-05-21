@@ -45,6 +45,23 @@ TextLayoutOptions textLayoutOptions(Text const& text) {
   return options;
 }
 
+bool canUseDirectTextLayout(TextLayoutOptions const& options) noexcept {
+  return options.horizontalAlignment == HorizontalAlignment::Leading &&
+         options.verticalAlignment == VerticalAlignment::Top;
+}
+
+float directTextMaxWidth(TextLayoutOptions const& options, Rect const& box) noexcept {
+  return options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
+}
+
+bool sameTextBox(Rect const& a, Rect const& b) noexcept {
+  constexpr float epsilon = 0.01f;
+  return std::fabs(a.x - b.x) <= epsilon &&
+         std::fabs(a.y - b.y) <= epsilon &&
+         std::fabs(a.width - b.width) <= epsilon &&
+         std::fabs(a.height - b.height) <= epsilon;
+}
+
 float finiteOrZero(float value) {
   return std::isfinite(value) ? std::max(0.f, value) : 0.f;
 }
@@ -96,6 +113,19 @@ LayoutConstraints fixedConstraints(Size size) {
       .minWidth = std::max(0.f, size.width),
       .minHeight = std::max(0.f, size.height),
   };
+}
+
+bool sameLayoutSize(Size const& a, Size const& b) noexcept {
+  constexpr float epsilon = 0.01f;
+  return std::fabs(a.width - b.width) <= epsilon &&
+         std::fabs(a.height - b.height) <= epsilon;
+}
+
+void relayoutToFixedSizeIfNeeded(scenegraph::SceneNode& node, Size const& size) {
+  if (sameLayoutSize(node.size(), size)) {
+    return;
+  }
+  node.relayout(fixedConstraints(size), false);
 }
 
 LayoutConstraints stackChildConstraints(LayoutConstraints constraints) {
@@ -353,7 +383,9 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
   }
 
   Rect const box{0.f, 0.f, finiteOrZero(frameSize.width), finiteOrZero(frameSize.height)};
-  auto layout = ctx.textSystem().layout(initialText, font, color, box, options);
+  auto layout = canUseDirectTextLayout(options)
+                    ? ctx.textSystem().layout(initialText, font, color, directTextMaxWidth(options, box), options)
+                    : ctx.textSystem().layout(initialText, font, color, box, options);
   auto node = std::make_unique<scenegraph::TextNode>(box, std::move(layout));
 
   auto* rawNode = node.get();
@@ -364,7 +396,8 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
   rawNode->setRelayout([rawNode, relayoutTextBinding = std::move(relayoutTextBinding),
                         relayoutColorBinding = std::move(relayoutColorBinding),
                         textSystemForRelayout, baseFont, fallbackTheme, themeSignal, options,
-                        wrapping = text.wrapping](LayoutConstraints const& constraints) mutable {
+                        wrapping = text.wrapping, lastText = initialText, lastColor = color,
+                        lastFont = font, lastBox = box](LayoutConstraints const& constraints) mutable {
     Theme const& currentTheme = themeSignal ? themeSignal->peek() : fallbackTheme;
     Font const currentFont = resolveFont(baseFont, currentTheme.bodyFont, currentTheme);
     std::string const currentText = relayoutTextBinding.evaluate();
@@ -383,8 +416,18 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
     }
     Rect const currentBox{0.f, 0.f, finiteOrZero(currentSize.width), finiteOrZero(currentSize.height)};
     rawNode->setSize(Size{currentBox.width, currentBox.height});
-    rawNode->setLayout(
-        textSystemForRelayout->layout(currentText, currentFont, currentColor, currentBox, options));
+    if (currentText == lastText && currentColor == lastColor && currentFont == lastFont &&
+        sameTextBox(currentBox, lastBox)) {
+      return;
+    }
+    rawNode->setLayout(canUseDirectTextLayout(options)
+                           ? textSystemForRelayout->layout(currentText, currentFont, currentColor,
+                                                           directTextMaxWidth(options, currentBox), options)
+                           : textSystemForRelayout->layout(currentText, currentFont, currentColor, currentBox, options));
+    lastText = currentText;
+    lastColor = currentColor;
+    lastFont = currentFont;
+    lastBox = currentBox;
   });
 
   if (text.text.isReactive() || text.color.isReactive() || themeSignal.has_value()) {
@@ -425,7 +468,10 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
           rawNode->setSize(currentSize);
         }
         Rect const currentBox{0.f, 0.f, finiteOrZero(currentSize.width), finiteOrZero(currentSize.height)};
-        rawNode->setLayout(textSystem->layout(currentText, currentFont, currentColor, currentBox, options));
+        rawNode->setLayout(canUseDirectTextLayout(options)
+                               ? textSystem->layout(currentText, currentFont, currentColor,
+                                                    directTextMaxWidth(options, currentBox), options)
+                               : textSystem->layout(currentText, currentFont, currentColor, currentBox, options));
         if (requestRedraw) {
           requestRedraw();
         }
@@ -502,7 +548,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
     }
     if (node) {
       if (active) {
-        node->relayout(fixedConstraints(slot->assignedSize), false);
+        relayoutToFixedSizeIfNeeded(*node, slot->assignedSize);
       }
       detail::setLayoutPosition(*node, layoutOrigin);
       mountedSize = node->size();
@@ -583,7 +629,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
       std::optional<layout::StackSlot> const& slot = slotsByMounted[childIndex];
       bool const active = slot.has_value();
       if (active && child.node) {
-        child.node->relayout(fixedConstraints(slot->assignedSize), false);
+        relayoutToFixedSizeIfNeeded(*child.node, slot->assignedSize);
         setMountedLayoutPosition(child, slot->origin);
         nextCollapsedOrigin =
             Point{slot->origin.x, slot->origin.y + slot->assignedSize.height + spacing};
@@ -694,7 +740,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
     }
     if (node) {
       if (active) {
-        node->relayout(fixedConstraints(slot->assignedSize), false);
+        relayoutToFixedSizeIfNeeded(*node, slot->assignedSize);
       }
       detail::setLayoutPosition(*node, layoutOrigin);
       mountedSize = node->size();
@@ -799,7 +845,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
       std::optional<layout::StackSlot> const& slot = slotsByMounted[childIndex];
       bool const active = slot.has_value();
       if (active && child.node) {
-        child.node->relayout(fixedConstraints(slot->assignedSize), false);
+        relayoutToFixedSizeIfNeeded(*child.node, slot->assignedSize);
         setMountedLayoutPosition(child, slot->origin);
         nextCollapsedOrigin =
             Point{slot->origin.x + slot->assignedSize.width + spacing, slot->origin.y};
@@ -866,7 +912,7 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
     MountContext childCtx = ctx.childWithSharedScope(childMeasure, childHints);
     auto node = child.mount(childCtx);
     if (node) {
-      node->relayout(fixedConstraints(childFrame), false);
+      relayoutToFixedSizeIfNeeded(*node, childFrame);
       Point const origin{
           layout::hAlignOffset(childFrame.width, width, stack.horizontalAlignment),
           layout::vAlignOffset(childFrame.height, height, stack.verticalAlignment),
@@ -929,7 +975,7 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
         childFrame.height = height;
       }
       if (child.node) {
-        child.node->relayout(fixedConstraints(childFrame), false);
+        relayoutToFixedSizeIfNeeded(*child.node, childFrame);
         setMountedLayoutPosition(child, Point{
             layout::hAlignOffset(childFrame.width, width, horizontalAlignment),
             layout::vAlignOffset(childFrame.height, height, verticalAlignment),

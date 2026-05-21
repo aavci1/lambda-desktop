@@ -56,6 +56,23 @@ Size scrollViewportHintForConstraints(ScrollAxis axis, LayoutConstraints const& 
   return viewportHint;
 }
 
+bool sameLayoutScalar(float a, float b) noexcept {
+  if (a == b) {
+    return true;
+  }
+  if (!std::isfinite(a) || !std::isfinite(b)) {
+    return false;
+  }
+  return std::fabs(a - b) <= 0.01f;
+}
+
+bool sameLayoutConstraints(LayoutConstraints const& a, LayoutConstraints const& b) noexcept {
+  return sameLayoutScalar(a.maxWidth, b.maxWidth) &&
+         sameLayoutScalar(a.maxHeight, b.maxHeight) &&
+         sameLayoutScalar(a.minWidth, b.minWidth) &&
+         sameLayoutScalar(a.minHeight, b.minHeight);
+}
+
 Size measureChild(Element const& child, MeasureContext& ctx, LayoutConstraints const& constraints,
                   TextSystem& textSystem) {
   ctx.pushConstraints(constraints, LayoutHints{});
@@ -448,9 +465,11 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
     }
     plan.childConstraints = layout::scrollChildConstraints(scrollView.axis, constraints, plan.viewport);
     rawContentGroup->setLayoutConstraints(plan.childConstraints);
-    for (std::size_t i = 0; i < mountedChildren.size(); ++i) {
-      if (mountedChildren[i] && mountedChildren[i]->relayout(plan.childConstraints)) {
-        (*childSizes)[i] = mountedChildren[i]->size();
+    if (!sameLayoutConstraints(premeasureConstraints, plan.childConstraints)) {
+      for (std::size_t i = 0; i < mountedChildren.size(); ++i) {
+        if (mountedChildren[i] && mountedChildren[i]->relayout(plan.childConstraints)) {
+          (*childSizes)[i] = mountedChildren[i]->size();
+        }
       }
     }
     plan.contentLayout =

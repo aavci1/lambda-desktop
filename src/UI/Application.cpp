@@ -585,18 +585,40 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
         auto const renderStart = traceResize ? std::chrono::steady_clock::now()
                                              : std::chrono::steady_clock::time_point{};
         Canvas& canvas = w->canvas();
+        auto phaseStart = renderStart;
         canvas.beginFrame();
+        std::int64_t beginElapsed = 0;
+        std::int64_t windowRenderElapsed = 0;
+        std::int64_t presentElapsed = 0;
+        if (traceResize) {
+          beginElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+              std::chrono::steady_clock::now() - phaseStart).count();
+          phaseStart = std::chrono::steady_clock::now();
+        }
         w->render(canvas);
+        if (traceResize) {
+          windowRenderElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+              std::chrono::steady_clock::now() - phaseStart).count();
+          phaseStart = std::chrono::steady_clock::now();
+        }
         canvas.present();
+        if (traceResize) {
+          presentElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+              std::chrono::steady_clock::now() - phaseStart).count();
+        }
         rendered = true;
         if (traceResize) {
           auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
               std::chrono::steady_clock::now() - renderStart).count();
           detail::resizeTrace("app-render",
-                              "present window=%u requireFrameReady=%d frameReady=%d elapsed=%.3fms\n",
+                              "present window=%u requireFrameReady=%d frameReady=%d "
+                              "begin=%.3fms render=%.3fms present=%.3fms elapsed=%.3fms\n",
                               w->handle(),
                               requireFrameReady ? 1 : 0,
                               hasFrameReady ? 1 : 0,
+                              static_cast<double>(beginElapsed) / 1000.0,
+                              static_cast<double>(windowRenderElapsed) / 1000.0,
+                              static_cast<double>(presentElapsed) / 1000.0,
                               static_cast<double>(elapsed) / 1000.0);
         }
       } catch (std::exception const& e) {
