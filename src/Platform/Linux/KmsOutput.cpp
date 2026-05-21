@@ -265,6 +265,7 @@ public:
     if (canvas_) canvas_.reset();
     VkDevice device = flux::VulkanContext::instance().device();
     for (auto& buffer : buffers_) {
+      closeRenderFence(buffer);
       if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
       if (buffer.view) vkDestroyImageView(device, buffer.view, nullptr);
       if (buffer.image) vkDestroyImage(device, buffer.image, nullptr);
@@ -292,27 +293,52 @@ public:
       if (static_cast<int>(next) != displayedBuffer_ && static_cast<int>(next) != pendingBuffer_) break;
     }
     renderBuffer_ = static_cast<int>(next);
+    closeRenderFence(buffers_[next]);
+    buffers_[next].renderComplete = bufferHasNoAsyncRenderFence(buffers_[next]);
+    buffers_[next].renderSubmittedNsec = 0;
+    buffers_[next].renderReadyNsec = 0;
     if (!flux::setVulkanRenderTargetSpecForCanvas(canvas_.get(), buffers_[next].spec)) {
       throw std::runtime_error("Failed to switch atomic KMS render target");
     }
   }
 
+  void markFrameRendered() {
+    if (renderBuffer_ < 0) return;
+    Buffer& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
+    buffer.renderSubmittedNsec = monotonicNanoseconds();
+    buffer.renderReadyNsec = 0;
+    closeRenderFence(buffer);
+    if (buffer.renderFinished == VK_NULL_HANDLE) {
+      buffer.renderComplete = true;
+      buffer.renderReadyNsec = buffer.renderSubmittedNsec;
+      return;
+    }
+    buffer.renderFenceFd = exportRenderSemaphoreFd(buffer.renderFinished);
+    buffer.renderComplete = false;
+    updateRenderFenceReadiness(buffer);
+  }
+
+  bool canSchedulePresent() {
+    if (pageFlipPending_ || renderBuffer_ < 0) return false;
+    Buffer& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
+    updateRenderFenceReadiness(buffer);
+    return buffer.renderComplete;
+  }
+
+  int renderReadyFd() const noexcept {
+    if (renderBuffer_ < 0 || pageFlipPending_) return -1;
+    Buffer const& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
+    return buffer.renderComplete ? -1 : buffer.renderFenceFd;
+  }
+
   std::uint32_t schedulePresent() {
     if (pageFlipPending_) throw std::runtime_error("KMS atomic page flip is already pending");
     if (renderBuffer_ < 0) prepareFrame();
-    Buffer const& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
-    int inFenceFd = -1;
+    if (!canSchedulePresent()) throw std::runtime_error("KMS atomic render buffer is not ready");
+    Buffer& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
     drmModeAtomicReq* request = drmModeAtomicAlloc();
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
-      if (planeInFenceFd_ != 0 && buffer.renderFinished != VK_NULL_HANDLE) {
-        inFenceFd = exportRenderSemaphoreFd(buffer.renderFinished);
-        addAtomicProperty(request,
-                          planeId_,
-                          planeInFenceFd_,
-                          static_cast<std::uint64_t>(inFenceFd),
-                          "plane.IN_FENCE_FD");
-      }
       if (!modesetDone_) {
         addAtomicProperty(request, connector_.connectorId, connectorCrtcId_, connector_.crtcId, "connector.CRTC_ID");
         addAtomicProperty(request, connector_.crtcId, crtcModeId_, modeBlob_, "crtc.MODE_ID");
@@ -341,14 +367,14 @@ public:
       pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
           .presentId = nextPresentId_++,
           .scheduledMonotonicNsec = monotonicNanoseconds(),
+          .renderSubmittedMonotonicNsec = buffer.renderSubmittedNsec,
+          .renderReadyMonotonicNsec = buffer.renderReadyNsec,
       };
+      std::uint64_t const commitStartNsec = monotonicNanoseconds();
       int const rc = drmModeAtomicCommit(fd_, request, flags, &pendingTiming_);
+      pendingTiming_.commitDurationNsec = monotonicNanoseconds() - commitStartNsec;
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit");
-      }
-      if (inFenceFd >= 0) {
-        close(inFenceFd);
-        inFenceFd = -1;
       }
       drmModeAtomicFree(request);
       request = nullptr;
@@ -358,7 +384,6 @@ public:
       pageFlipPending_ = true;
       return pendingTiming_.presentId;
     } catch (...) {
-      if (inFenceFd >= 0) close(inFenceFd);
       if (request) drmModeAtomicFree(request);
       throw;
     }
@@ -404,8 +429,39 @@ private:
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
     VkSemaphore renderFinished = VK_NULL_HANDLE;
+    int renderFenceFd = -1;
+    bool renderComplete = true;
+    std::uint64_t renderSubmittedNsec = 0;
+    std::uint64_t renderReadyNsec = 0;
     VulkanRenderTargetSpec spec{};
   };
+
+  static bool bufferHasNoAsyncRenderFence(Buffer const& buffer) noexcept {
+    return buffer.renderFinished == VK_NULL_HANDLE;
+  }
+
+  void closeRenderFence(Buffer& buffer) noexcept {
+    if (buffer.renderFenceFd >= 0) {
+      close(buffer.renderFenceFd);
+      buffer.renderFenceFd = -1;
+    }
+  }
+
+  void updateRenderFenceReadiness(Buffer& buffer) {
+    if (buffer.renderComplete) return;
+    if (buffer.renderFenceFd < 0) return;
+    pollfd pfd{.fd = buffer.renderFenceFd, .events = POLLIN, .revents = 0};
+    int const pollResult = poll(&pfd, 1, 0);
+    if (pollResult < 0) {
+      if (errno == EINTR) return;
+      throw std::system_error(errno, std::generic_category(), "poll KMS render sync fd");
+    }
+    if (pollResult > 0 && (pfd.revents & (POLLIN | POLLERR | POLLHUP)) != 0) {
+      closeRenderFence(buffer);
+      buffer.renderComplete = true;
+      buffer.renderReadyNsec = monotonicNanoseconds();
+    }
+  }
 
   void loadProperties() {
     connectorCrtcId_ = propertyId(fd_, connector_.connectorId, DRM_MODE_OBJECT_CONNECTOR, "CRTC_ID");
@@ -718,6 +774,18 @@ Canvas& KmsAtomicPresenter::canvas() {
 
 void KmsAtomicPresenter::prepareFrame() {
   if (impl_) impl_->prepareFrame();
+}
+
+void KmsAtomicPresenter::markFrameRendered() {
+  if (impl_) impl_->markFrameRendered();
+}
+
+bool KmsAtomicPresenter::canSchedulePresent() {
+  return impl_ && impl_->canSchedulePresent();
+}
+
+int KmsAtomicPresenter::renderReadyFd() const noexcept {
+  return impl_ ? impl_->renderReadyFd() : -1;
 }
 
 std::uint32_t KmsAtomicPresenter::schedulePresent() {

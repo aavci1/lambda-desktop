@@ -41,6 +41,9 @@ public:
     std::uint64_t sequence = 0;
     std::uint64_t monotonicNsec = 0;
     std::uint64_t scheduledMonotonicNsec = 0;
+    std::uint64_t renderSubmittedMonotonicNsec = 0;
+    std::uint64_t renderReadyMonotonicNsec = 0;
+    std::uint64_t commitDurationNsec = 0;
   };
 
   ~KmsAtomicPresenter();
@@ -52,6 +55,9 @@ public:
 
   Canvas& canvas();
   void prepareFrame();
+  void markFrameRendered();
+  [[nodiscard]] bool canSchedulePresent();
+  [[nodiscard]] int renderReadyFd() const noexcept;
   std::uint32_t schedulePresent();
   PageFlipTiming present();
   [[nodiscard]] std::optional<PageFlipTiming> dispatchPageFlipEvents();
