@@ -577,7 +577,7 @@ private:
     try {
       buffer.fbId = createFramebuffer(buffer.bo);
       importBufferToVulkan(buffer);
-      if (planeInFenceFd_ != 0) buffer.renderFinished = createExportableSemaphore();
+      if (useRenderInFence_) buffer.renderFinished = createExportableSemaphore();
       buffer.spec = VulkanRenderTargetSpec{
           .image = buffer.image,
           .view = buffer.view,
