@@ -518,6 +518,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (!device->isVtForeground()) continue;
       auto const frameTime = std::chrono::steady_clock::now();
       wayland.updateAnimations(monotonicMilliseconds(), appliedConfig.config.animationsEnabled);
+      timingStart = LoopInstrumentation::Clock::now();
+      wayland.dispatch();
+      loopStats.recordDispatch(timingStart);
 
       timingStart = LoopInstrumentation::Clock::now();
       renderCompositorFrame(frameTime, timingStart);
