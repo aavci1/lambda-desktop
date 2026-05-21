@@ -104,7 +104,7 @@ bool forceLinearScanout() {
 
 bool useKmsRenderInFence() {
   char const* value = std::getenv("FLUX_COMPOSITOR_USE_KMS_IN_FENCE");
-  return value && *value && std::strcmp(value, "0") != 0;
+  return !value || !*value || std::strcmp(value, "0") != 0;
 }
 
 std::uint32_t propertyId(int fd, std::uint32_t objectId, std::uint32_t objectType, char const* name) {
@@ -370,7 +370,6 @@ public:
   }
 
   int renderReadyFd() const noexcept {
-    if (useRenderInFence_) return -1;
     if (renderBuffer_ < 0) return -1;
     Buffer const& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
     return buffer.renderComplete ? -1 : buffer.renderFenceFd;

@@ -118,6 +118,19 @@ std::uint64_t clampRenderAheadLeadNsec(std::uint64_t lead, std::uint32_t refresh
   return std::max<std::uint64_t>(lead, 1'000'000ull);
 }
 
+std::uint64_t nominalRenderAheadLeadNsec(std::uint32_t refreshMilliHz) {
+  std::uint64_t const refresh = refreshNsec(refreshMilliHz);
+  return refresh > 0 ? (refresh * 3ull) / 8ull : 6'000'000ull;
+}
+
+std::uint64_t clampInteractiveRenderAheadLeadNsec(std::uint64_t lead, std::uint32_t refreshMilliHz) {
+  std::uint64_t const refresh = refreshNsec(refreshMilliHz);
+  if (refresh == 0) return clampRenderAheadLeadNsec(lead, refreshMilliHz);
+  std::uint64_t const minimumLead = std::max<std::uint64_t>(refresh / 4ull, 1'000'000ull);
+  std::uint64_t const maximumLead = std::max<std::uint64_t>(minimumLead, refresh / 2ull);
+  return std::clamp(lead, minimumLead, maximumLead);
+}
+
 std::uint64_t initialRenderAheadLeadNsec(std::uint32_t refreshMilliHz) {
   static double const configuredMs = [] {
     char const* value = std::getenv("FLUX_COMPOSITOR_RENDER_AHEAD_LEAD_MS");
@@ -126,10 +139,10 @@ std::uint64_t initialRenderAheadLeadNsec(std::uint32_t refreshMilliHz) {
     double parsed = std::strtod(value, &end);
     return end != value && parsed > 0.0 ? parsed : 0.0;
   }();
-  std::uint64_t const refresh = refreshNsec(refreshMilliHz);
   std::uint64_t const configuredLead = static_cast<std::uint64_t>(configuredMs * 1'000'000.0);
-  std::uint64_t const defaultLead = refresh > 0 ? (refresh * 3ull) / 4ull : 12'000'000ull;
-  return clampRenderAheadLeadNsec(std::max(configuredLead, defaultLead), refreshMilliHz);
+  std::uint64_t const defaultLead = nominalRenderAheadLeadNsec(refreshMilliHz);
+  if (configuredLead > 0) return clampRenderAheadLeadNsec(configuredLead, refreshMilliHz);
+  return clampInteractiveRenderAheadLeadNsec(defaultLead, refreshMilliHz);
 }
 
 PresentationTiming presentationTimingFromVblank(platform::KmsOutput::VblankTiming const& vblank,
@@ -540,14 +553,21 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       return atomicPresenter && atomicFrameDirty && !atomicReadyFrame.ready &&
              atomicPresenter->hasPendingPageFlip() && atomicRenderAheadDelayMs() == 0;
     };
-    auto updateAtomicRenderAheadLead = [&](std::uint64_t renderToReadyNsec) {
-      if (renderToReadyNsec == 0) return;
-      std::uint64_t const target =
-          clampRenderAheadLeadNsec(renderToReadyNsec + 2'000'000ull, output.refreshRateMilliHz());
+    auto updateAtomicRenderAheadLead = [&](std::uint64_t renderToReadyNsec, bool usedRenderFence) {
+      std::uint64_t const refresh = refreshNsec(output.refreshRateMilliHz());
+      std::uint64_t const guard = refresh > 0 ? refresh / 8ull : 2'000'000ull;
+      std::uint64_t const nominalLead = nominalRenderAheadLeadNsec(output.refreshRateMilliHz());
+      std::uint64_t target = nominalLead;
+      if (renderToReadyNsec > 0) {
+        target = renderToReadyNsec + guard;
+      } else if (!usedRenderFence) {
+        target = guard * 2ull;
+      }
+      target = clampInteractiveRenderAheadLeadNsec(target, output.refreshRateMilliHz());
       if (target >= atomicRenderAheadLeadEstimateNsec) {
-        atomicRenderAheadLeadEstimateNsec = target;
+        atomicRenderAheadLeadEstimateNsec = (atomicRenderAheadLeadEstimateNsec * 3ull + target) / 4ull;
       } else {
-        atomicRenderAheadLeadEstimateNsec = (atomicRenderAheadLeadEstimateNsec * 7ull + target) / 8ull;
+        atomicRenderAheadLeadEstimateNsec = (atomicRenderAheadLeadEstimateNsec + target * 3ull) / 4ull;
       }
     };
     auto pollFds = [&](std::array<int, 3>& storage) {
@@ -704,7 +724,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                   flip->renderReadyMonotonicNsec >= flip->renderSubmittedMonotonicNsec
               ? flip->renderReadyMonotonicNsec - flip->renderSubmittedMonotonicNsec
               : 0;
-      updateAtomicRenderAheadLead(renderToReadyNsec);
+      updateAtomicRenderAheadLead(renderToReadyNsec, flip->usedRenderFence);
       tracePacing("flip-complete id=%u hw=%d seq=%llu interval=%.3fms expected=%.3fms error=%+.3fms "
                   "queue=%.3fms render=%.3fms renderToReady=%.3fms readyToCommit=%.3fms "
                   "commit=%.3fms scheduledToCommit=%.3fms commitReturnToFlip=%.3fms "
