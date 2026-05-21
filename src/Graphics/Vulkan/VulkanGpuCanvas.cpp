@@ -1090,22 +1090,13 @@ public:
     if (targetMode_) {
       return;
     }
-    int const hintedFbW = resizeBoundsHintWidth_ > 0
-                              ? static_cast<int>(std::lround(static_cast<float>(resizeBoundsHintWidth_) * dpiScaleX_))
-                              : 0;
-    int const hintedFbH = resizeBoundsHintHeight_ > 0
-                              ? static_cast<int>(std::lround(static_cast<float>(resizeBoundsHintHeight_) * dpiScaleY_))
-                              : 0;
-    bool const hasResizeBoundsHint = hintedFbW > fbW || hintedFbH > fbH;
     bool const needsLargerSwapchain =
         !swapchain_ || swapExtent_.width == 0 || swapExtent_.height == 0 ||
         fbW > static_cast<int>(swapExtent_.width) || fbH > static_cast<int>(swapExtent_.height);
     if (needsLargerSwapchain) {
       bool const addHeadroom = swapchain_ != VK_NULL_HANDLE;
-      swapchainTargetWidth_ = std::max(fbW + (addHeadroom ? std::max(512, fbW / 2) : 0),
-                                       hintedFbW);
-      swapchainTargetHeight_ = std::max(fbH + (addHeadroom ? std::max(512, fbH / 2) : 0),
-                                        hintedFbH);
+      swapchainTargetWidth_ = fbW + (addHeadroom ? std::max(512, fbW / 2) : 0);
+      swapchainTargetHeight_ = fbH + (addHeadroom ? std::max(512, fbH / 2) : 0);
       swapchainDirty_ = true;
       if (detail::resizeTraceEnabled()) {
         detail::resizeTrace(
@@ -1113,8 +1104,8 @@ public:
           "window=%u logical=%dx%d framebuffer=%dx%d target=%dx%d boundsHint=%dx%d dirty=1\n",
                      handle_, width_, height_, framebufferWidth_, framebufferHeight_,
                      swapchainTargetWidth_, swapchainTargetHeight_,
-                     hasResizeBoundsHint ? resizeBoundsHintWidth_ : 0,
-                     hasResizeBoundsHint ? resizeBoundsHintHeight_ : 0);
+                     resizeBoundsHintWidth_,
+                     resizeBoundsHintHeight_);
       }
     } else if (framebufferChanged && detail::resizeTraceEnabled()) {
       detail::resizeTrace(
@@ -2815,18 +2806,37 @@ private:
         break;
       }
     }
+    std::uint32_t const requestedW =
+        static_cast<std::uint32_t>(std::max({1, framebufferWidth_, swapchainTargetWidth_}));
+    std::uint32_t const requestedH =
+        static_cast<std::uint32_t>(std::max({1, framebufferHeight_, swapchainTargetHeight_}));
+    VkExtent2D const requestedExtent{
+        std::clamp(requestedW, caps.minImageExtent.width, caps.maxImageExtent.width),
+        std::clamp(requestedH, caps.minImageExtent.height, caps.maxImageExtent.height),
+    };
     if (caps.currentExtent.width != UINT32_MAX) {
       swapExtent_ = caps.currentExtent;
     } else {
-      std::uint32_t const requestedW =
-          static_cast<std::uint32_t>(std::max({1, framebufferWidth_, swapchainTargetWidth_}));
-      std::uint32_t const requestedH =
-          static_cast<std::uint32_t>(std::max({1, framebufferHeight_, swapchainTargetHeight_}));
-      swapExtent_ = VkExtent2D{
-          std::clamp(requestedW, caps.minImageExtent.width, caps.maxImageExtent.width),
-          std::clamp(requestedH, caps.minImageExtent.height, caps.maxImageExtent.height),
-      };
+      swapExtent_ = requestedExtent;
     }
+    std::fprintf(stderr,
+                 "Flux Vulkan: swapchain extent window=%u framebuffer=%dx%d target=%dx%d "
+                 "caps current=%ux%u min=%ux%u max=%ux%u requested=%ux%u chosen=%ux%u\n",
+                 handle_,
+                 framebufferWidth_,
+                 framebufferHeight_,
+                 swapchainTargetWidth_,
+                 swapchainTargetHeight_,
+                 caps.currentExtent.width,
+                 caps.currentExtent.height,
+                 caps.minImageExtent.width,
+                 caps.minImageExtent.height,
+                 caps.maxImageExtent.width,
+                 caps.maxImageExtent.height,
+                 requestedExtent.width,
+                 requestedExtent.height,
+                 swapExtent_.width,
+                 swapExtent_.height);
     std::uint32_t const preferredImageCount =
         std::max<std::uint32_t>(caps.minImageCount + 2u, static_cast<std::uint32_t>(kMaxFramesInFlight));
     std::uint32_t imageCount = std::clamp(preferredImageCount,
@@ -2910,10 +2920,13 @@ private:
       detail::resizeTrace(
           "vulkan-recreate-swapchain",
           "window=%u framebuffer=%dx%d target=%dx%d extent=%ux%u images=%zu "
+          "capsCurrent=%ux%u requested=%ux%u "
           "presentFences=%zu waitFences=%.3fms caps=%.3fms create=%.3fms imageSetup=%.3fms "
           "oldDestroy=%.3fms elapsed=%.3fms\n",
                    handle_, framebufferWidth_, framebufferHeight_, swapchainTargetWidth_, swapchainTargetHeight_,
                    swapExtent_.width, swapExtent_.height, swapchainImages_.size(),
+                   caps.currentExtent.width, caps.currentExtent.height,
+                   requestedExtent.width, requestedExtent.height,
                    imagePresentFences_.size(),
                    waitFencesMs, capsMs, createMs, imageSetupMs, oldDestroyMs,
                    static_cast<double>(elapsed) / 1000.0);
