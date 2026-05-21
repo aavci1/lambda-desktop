@@ -117,17 +117,23 @@ bool WaylandServer::Impl::hasActiveAnimations() const noexcept {
   });
 }
 
-void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs) {
-  timespec now{};
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  std::uint64_t const seconds = static_cast<std::uint64_t>(now.tv_sec);
+void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing) {
+  if (timing.monotonicNsec == 0) {
+    timespec now{};
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    timing.monotonicNsec = static_cast<std::uint64_t>(now.tv_sec) * 1'000'000'000ull +
+                           static_cast<std::uint64_t>(now.tv_nsec);
+  }
+  if (timing.refreshNsec == 0 && output_.refreshMilliHz > 0) {
+    timing.refreshNsec =
+        static_cast<std::uint32_t>(1'000'000'000'000ull / static_cast<std::uint64_t>(output_.refreshMilliHz));
+  }
+  std::uint64_t const seconds = timing.monotonicNsec / 1'000'000'000ull;
+  std::uint32_t const nsec = static_cast<std::uint32_t>(timing.monotonicNsec % 1'000'000'000ull);
   std::uint32_t const tvSecHi = static_cast<std::uint32_t>(seconds >> 32u);
   std::uint32_t const tvSecLo = static_cast<std::uint32_t>(seconds & 0xffffffffu);
-  std::uint32_t const tvNsec = static_cast<std::uint32_t>(now.tv_nsec);
-  std::uint32_t const refreshNsec =
-      output_.refreshMilliHz > 0
-          ? static_cast<std::uint32_t>(1'000'000'000'000ull / static_cast<std::uint64_t>(output_.refreshMilliHz))
-          : 0u;
+  std::uint32_t const seqHi = static_cast<std::uint32_t>(timing.sequence >> 32u);
+  std::uint32_t const seqLo = static_cast<std::uint32_t>(timing.sequence & 0xffffffffu);
 
   for (auto const& surface : surfaces_) {
     std::vector<PresentationFeedback*> feedbacks = std::move(surface->presentationFeedbacks);
@@ -137,11 +143,11 @@ void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs) {
       wp_presentation_feedback_send_presented(feedback->resource,
                                               tvSecHi,
                                               tvSecLo,
-                                              tvNsec,
-                                              refreshNsec,
-                                              0,
-                                              0,
-                                              0);
+                                              nsec,
+                                              timing.refreshNsec,
+                                              seqHi,
+                                              seqLo,
+                                              timing.flags);
       wl_resource_destroy(feedback->resource);
     }
     std::vector<wl_resource*> callbacks = std::move(surface->frameCallbacks);

@@ -75,6 +75,12 @@ private:
 
 class KmsOutput {
 public:
+  struct VblankTiming {
+    bool hardware = false;
+    std::uint64_t sequence = 0;
+    std::uint64_t monotonicNsec = 0;
+  };
+
   KmsOutput();
   ~KmsOutput();
 
@@ -94,7 +100,7 @@ public:
 
   /// Lightweight vblank pacing approximation used by phase-1 compositor code.
   /// The KMS Window path still uses its existing frame scheduling.
-  void waitForVblank() const;
+  VblankTiming waitForVblank() const;
   [[nodiscard]] bool setCursorImage(std::span<std::uint32_t const> premultipliedArgbPixels,
                                     std::uint32_t width,
                                     std::uint32_t height,

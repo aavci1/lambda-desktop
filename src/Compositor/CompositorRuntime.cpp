@@ -12,6 +12,7 @@
 #include "Compositor/WaylandServer.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
+#include "presentation-time-server-protocol.h"
 
 #include <chrono>
 #include <charconv>
@@ -21,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <exception>
 #include <memory>
 #include <optional>
@@ -42,6 +44,13 @@ std::uint32_t monotonicMilliseconds() {
   return static_cast<std::uint32_t>(now.count());
 }
 
+std::uint64_t monotonicNanoseconds() {
+  timespec now{};
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  return static_cast<std::uint64_t>(now.tv_sec) * 1'000'000'000ull +
+         static_cast<std::uint64_t>(now.tv_nsec);
+}
+
 using SteadyClock = std::chrono::steady_clock;
 
 double elapsedMilliseconds(SteadyClock::time_point start) {
@@ -56,6 +65,26 @@ bool timingTraceEnabled() {
 void traceTiming(char const* label, SteadyClock::time_point start) {
   if (!timingTraceEnabled()) return;
   std::fprintf(stderr, "flux-compositor: timing %s %.3fms\n", label, elapsedMilliseconds(start));
+}
+
+std::uint32_t refreshNsec(std::uint32_t refreshMilliHz) {
+  return refreshMilliHz > 0
+             ? static_cast<std::uint32_t>(1'000'000'000'000ull / static_cast<std::uint64_t>(refreshMilliHz))
+             : 0u;
+}
+
+PresentationTiming presentationTimingFromVblank(platform::KmsOutput::VblankTiming const& vblank,
+                                                std::uint32_t refreshMilliHz,
+                                                std::uint64_t fallbackSequence) {
+  return PresentationTiming{
+      .monotonicNsec = vblank.monotonicNsec != 0 ? vblank.monotonicNsec : monotonicNanoseconds(),
+      .sequence = vblank.hardware ? vblank.sequence : fallbackSequence,
+      .refreshNsec = refreshNsec(refreshMilliHz),
+      .flags = vblank.hardware
+                   ? static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
+                                                WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK)
+                   : 0u,
+  };
 }
 
 struct LoopInstrumentation {
@@ -365,6 +394,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     bool skipNextVblank = true;
     bool wasVtForeground = device->isVtForeground();
     bool vtAcquireFramePending = false;
+    std::uint64_t softwarePresentationSequence = 0;
     constexpr int kIdlePollMs = 250;
     auto handleVtResume = [&] {
       auto const resumeStart = SteadyClock::now();
@@ -375,7 +405,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       skipNextVblank = true;
     };
     auto renderCompositorFrame = [&](std::chrono::steady_clock::time_point frameTime,
-                                     LoopInstrumentation::Clock::time_point renderStart) {
+                                     LoopInstrumentation::Clock::time_point renderStart,
+                                     PresentationTiming presentationTiming) {
       auto const frameProfileStart = CompositorFrameProfile::Clock::now();
       auto phaseStart = frameProfileStart;
       canvas->beginFrame();
@@ -448,7 +479,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       frameProfile.totalMs += CompositorFrameProfile::milliseconds(frameProfileStart);
       frameProfile.maybeLog();
       loopStats.recordRender(renderStart);
-      wayland.sendFrameCallbacks(monotonicMilliseconds());
+      wayland.sendFrameCallbacks(monotonicMilliseconds(), presentationTiming);
     };
 
     while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
@@ -509,10 +540,20 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
 
       timingStart = LoopInstrumentation::Clock::now();
+      PresentationTiming presentationTiming{};
       if (skipNextVblank) {
         skipNextVblank = false;
+        presentationTiming = PresentationTiming{
+            .monotonicNsec = monotonicNanoseconds(),
+            .sequence = ++softwarePresentationSequence,
+            .refreshNsec = refreshNsec(output.refreshRateMilliHz()),
+            .flags = 0u,
+        };
       } else {
-        output.waitForVblank();
+        auto const vblank = output.waitForVblank();
+        if (!vblank.hardware) ++softwarePresentationSequence;
+        presentationTiming =
+            presentationTimingFromVblank(vblank, output.refreshRateMilliHz(), softwarePresentationSequence);
         loopStats.recordVblank(timingStart);
       }
       if (!device->isVtForeground()) continue;
@@ -523,7 +564,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       loopStats.recordDispatch(timingStart);
 
       timingStart = LoopInstrumentation::Clock::now();
-      renderCompositorFrame(frameTime, timingStart);
+      renderCompositorFrame(frameTime, timingStart, presentationTiming);
       if (vtAcquireFramePending) {
         vtAcquireFramePending = false;
         device->acknowledgeVtAcquire();

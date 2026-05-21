@@ -100,7 +100,7 @@ Expected result: a top layer-surface bar appears and renders non-black content.
 ./build-kms-compositor/flux-compositor-presentation-time-demo
 ```
 
-Expected result: the client receives presentation feedback. Current precision is compositor-clock based rather than final hardware presentation precision.
+Expected result: the client receives presentation feedback. On KMS outputs with working `drmWaitVBlank`, feedback includes DRM vblank pacing timestamps, refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK` flags. If the driver rejects vblank waits, feedback falls back to compositor-clock timing.
 
 ### Pointer Extensions
 

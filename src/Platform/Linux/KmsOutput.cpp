@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <cstring>
 #include <cstdio>
+#include <ctime>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -35,6 +36,13 @@ std::uint32_t refreshRateMilliHz(drmModeModeInfo const& mode) {
 std::chrono::nanoseconds frameInterval(std::uint32_t refreshMilliHz) {
   if (refreshMilliHz == 0) refreshMilliHz = 60'000u;
   return std::chrono::nanoseconds(1'000'000'000'000ll / refreshMilliHz);
+}
+
+std::uint64_t monotonicNowNsec() {
+  timespec now{};
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  return static_cast<std::uint64_t>(now.tv_sec) * 1'000'000'000ull +
+         static_cast<std::uint64_t>(now.tv_nsec);
 }
 
 std::uint32_t cursorDimension(int fd, std::uint64_t cap) {
@@ -135,12 +143,20 @@ VkSurfaceKHR KmsOutput::createVulkanSurface(VkInstance instance) const {
   return impl_->device_->app_->createVulkanSurface(instance, &impl_->connector_);
 }
 
-void KmsOutput::waitForVblank() const {
+KmsOutput::VblankTiming KmsOutput::waitForVblank() const {
   if (impl_ && !impl_->vblankWaitDisabled_) {
     drmVBlank vblank{};
     vblank.request.type = DRM_VBLANK_RELATIVE;
     vblank.request.sequence = 1;
-    if (drmWaitVBlank(impl_->drmFd(), &vblank) == 0) return;
+    if (drmWaitVBlank(impl_->drmFd(), &vblank) == 0) {
+      std::uint64_t const sec = static_cast<std::uint64_t>(vblank.reply.tval_sec);
+      std::uint64_t const usec = static_cast<std::uint64_t>(vblank.reply.tval_usec);
+      return VblankTiming{
+          .hardware = true,
+          .sequence = static_cast<std::uint64_t>(vblank.reply.sequence),
+          .monotonicNsec = sec * 1'000'000'000ull + usec * 1'000ull,
+      };
+    }
     impl_->vblankWaitDisabled_ = true;
     std::fprintf(stderr,
                  "[flux:kms] drmWaitVBlank failed for connector %s: %s; falling back to timer pacing.\n",
@@ -148,6 +164,11 @@ void KmsOutput::waitForVblank() const {
                  std::strerror(errno));
   }
   std::this_thread::sleep_for(frameInterval(refreshRateMilliHz()));
+  return VblankTiming{
+      .hardware = false,
+      .sequence = 0,
+      .monotonicNsec = monotonicNowNsec(),
+  };
 }
 
 bool KmsOutput::setCursorImage(std::span<std::uint32_t const> premultipliedArgbPixels,

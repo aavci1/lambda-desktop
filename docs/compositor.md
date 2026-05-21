@@ -580,7 +580,7 @@ Protocols to implement, in rough priority order:
 - **`zwlr_layer_shell_v1`**: required for panels, status bars, on-screen displays, notification daemons. Even if the compositor doesn't have a panel yet, this protocol's existence is what makes future panel work possible. Layer-shell clients render at fixed Z-order positions (background, bottom, top, overlay). Implemented with basic size/configure/anchor/margin handling and a purpose-built `flux-compositor-layer-shell-demo`.
 - **`wp_viewporter`**: lets clients specify a source-region and destination-size for their surface, used heavily by video players and apps doing pixel-level scaling. Implemented, with a purpose-built `flux-compositor-viewport-demo` smoke client.
 - **`xdg_output_v1`**: gives clients logical output information (position, scale). Needed by apps that care about screen geometry. Implemented for the current single-output layout.
-- **`wp_presentation_time`**: gives clients precise vblank-timing information for frame pacing. Used by video players and games for smooth playback. Initial implementation exposes the global, announces `CLOCK_MONOTONIC`, and sends one-shot presented/discarded feedback after compositor presentation. Hardware-derived timestamps, refresh counters, and sync-output association remain hardening work.
+- **`wp_presentation_time`**: gives clients vblank-timing information for frame pacing. Used by video players and games for smooth playback. The compositor exposes the global, announces `CLOCK_MONOTONIC`, and sends one-shot presented/discarded feedback after compositor presentation. Feedback uses DRM vblank pacing timestamps, refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK` flags when available; it falls back to compositor-clock timing if DRM vblank waits are unavailable. Sync-output association remains hardening work.
 - **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window. Relative pointer motion is implemented and smoke-tested with `flux-compositor-relative-pointer-demo`; pointer constraints are implemented with focus-driven lock/confine activation and smoke-tested with `flux-compositor-pointer-constraints-demo`.
 - **`wp_cursor_shape_v1`**: lets clients request a system cursor by name rather than supplying a buffer. Newer protocol; modern toolkits use it. Implemented for pointer devices with compositor-drawn Xcursor theme images.
 - **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard, drag-and-drop, and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `flux-compositor-primary-selection-demo`; regular clipboard selection is implemented for focused clients and smoke-tested with `flux-compositor-clipboard-demo`; drag-and-drop is implemented for UTF-8 text payloads with source/target action negotiation and smoke-tested with `flux-compositor-dnd-demo`.
@@ -610,7 +610,7 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 - ✗ A Firefox or Chromium build configured for Wayland runs and is usable.
 - ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager`, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed.
 - ✓ A purpose-built test layer-shell client renders at the top layer.
-- ◐ A purpose-built presentation-time client receives `clock_id` and presented feedback after its committed frame is presented; hardware-precise timestamps and refresh counters remain pending.
+- ◐ A purpose-built presentation-time client receives `clock_id` and presented feedback after its committed frame is presented; DRM vblank pacing timestamps and refresh counters are wired when available, while sync-output association and final page-flip completion precision remain pending.
 - ✓ A purpose-built relative-pointer client receives relative motion deltas while its window has pointer focus.
 - ◐ A purpose-built popup client can create, render, and dismiss a positioned popup without taking an input grab; full popup input-grab semantics remain pending.
 - ◐ A purpose-built activation client can request an activation token and ask the compositor to raise/focus another window.
@@ -811,7 +811,7 @@ Tracked as work proceeds. Removed when answered.
 
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
 - Phase 3: Subsurface hit testing remains separate from the popup hit-test fix. Subsurfaces render relative to parents, but pointer routing still needs explicit subsurface ordering and coordinate translation.
-- Phase 4: `wp_presentation_time` currently uses a compositor-sampled `CLOCK_MONOTONIC` timestamp after `canvas->present()`. Hardware-derived presentation timestamps and refresh counters should be surfaced from the render/output path when video/game smoothness work needs that precision.
+- Phase 4: `wp_presentation_time` now uses DRM vblank pacing timestamps, refresh intervals, and sequence counters when available, with compositor-clock fallback if DRM vblank waits are unavailable. Sync-output association and final page-flip completion precision remain open for video/game smoothness validation.
 - Phase 5: Does multi-output land in v1 or post-v1?
 
 ### 12.3 Remaining implementation work
@@ -826,7 +826,7 @@ Hardware or real-app validation work:
 
 - Real-app validation: continue testing `foot` and add GTK/Qt/browser coverage when those apps are available.
 - Popup hardening: popup hit testing is now popup-first and nested popup bounds are unit-tested. Broader real-app menu behavior remains pending, and full xdg-popup input-grab semantics are still intentionally deferred because the earlier grab path froze the test laptop.
-- Presentation timing: replace the initial `wp_presentation_time` feedback with hardware-derived timestamps, refresh counters, and sync-output association.
+- Presentation timing: add sync-output association and validate the DRM-vblank-backed feedback path with video/game workloads; final page-flip completion precision is still not exposed.
 - Frame pacing: adaptive sync and triple-buffering remain pending.
 - Idle behavior: `zwp_idle_inhibit_manager_v1` tracks inhibitors, but actual idle blanking is not implemented.
 - Input/session polish: development still uses manual `/dev/input/event*` ACLs; proper seat/session brokering is still pending.

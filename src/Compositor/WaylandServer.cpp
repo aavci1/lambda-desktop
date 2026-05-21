@@ -86,8 +86,8 @@ bool WaylandServer::hasActiveAnimations() const noexcept {
   return impl_->hasActiveAnimations();
 }
 
-void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs) {
-  impl_->sendFrameCallbacks(timeMs);
+void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing) {
+  impl_->sendFrameCallbacks(timeMs, timing);
 }
 
 void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t timeMs) {
