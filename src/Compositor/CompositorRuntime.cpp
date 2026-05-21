@@ -794,15 +794,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                      appliedConfig.config.animationsEnabled);
       std::array<int, 3> eventFdStorage{};
       std::span<int const> const eventFds = pollFds(eventFdStorage);
-      bool const atomicFrameAlreadyQueued =
-          atomicPresenter && atomicPresenter->hasPendingPageFlip() && atomicReadyFrame.ready;
       bool const atomicFrameAwaitingRender =
           atomicPresenter && atomicReadyFrame.ready && !atomicPresenter->hasPendingPageFlip() &&
           atomicPresenter->renderReadyFd() >= 0;
-      int const pollTimeoutMs =
-          forceRender || (animationFrameNeeded && !atomicFrameAlreadyQueued && !atomicFrameAwaitingRender)
-              ? 0
-              : kIdlePollMs;
+      bool const atomicFrameAwaitingPresentation =
+          atomicPresenter && atomicReadyFrame.ready &&
+          (atomicPresenter->hasPendingPageFlip() || atomicFrameAwaitingRender);
+      bool const animationCanRenderNow = animationFrameNeeded && !atomicFrameAwaitingPresentation;
+      int const pollTimeoutMs = forceRender || animationCanRenderNow ? 0 : kIdlePollMs;
       auto timingStart = LoopInstrumentation::Clock::now();
       auto const pollResult = device->pollEventDetails(pollTimeoutMs, eventFds);
       bool const pollWoke = pollResult.woke;
@@ -879,7 +878,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
 
       bool const nonPageFlipWake =
           pollResult.inputOrSystem || waylandWoke || (pollWoke && (!pageFlipWoke || !pageFlipCompleted));
-      bool const renderNeeded = forceRender || animationFrameNeeded || nonPageFlipWake || hadInputActivity ||
+      bool const renderNeeded = forceRender || animationCanRenderNow || nonPageFlipWake || hadInputActivity ||
                                 configReloaded;
       if (pollWoke || renderNeeded) {
         tracePacing("loop woke=%d system=%d extra=0x%llx waylandWake=%d pageFlipWake=%d "
