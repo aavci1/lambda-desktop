@@ -743,13 +743,15 @@ private:
     queueResizeEvent();
     applyCursor(currentCursor_);
     requestResizeRedraw();
-    flushDeferredRedraw();
+    if (!dispatchingWaylandEvents_) {
+      flushDeferredRedraw();
+    }
     if (detail::resizeTraceEnabled()) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start).count();
       detail::resizeTrace("wayland-window", 
-          "apply-configure window=%u size=%dx%d framePending=%d elapsed=%.3fms\n",
-          handle_, width, height, framePending_ ? 1 : 0,
+          "apply-configure window=%u size=%dx%d framePending=%d batched=%d elapsed=%.3fms\n",
+          handle_, width, height, framePending_ ? 1 : 0, dispatchingWaylandEvents_ ? 1 : 0,
           static_cast<double>(elapsed) / 1000.0);
     }
   }
@@ -960,7 +962,9 @@ private:
 
   void dispatchReadyEvents(int timeoutMs) {
     while (wl_display_prepare_read(display_) != 0) {
+      dispatchingWaylandEvents_ = true;
       wl_display_dispatch_pending(display_);
+      dispatchingWaylandEvents_ = false;
     }
     wl_display_flush(display_);
 
@@ -974,7 +978,9 @@ private:
     } else {
       wl_display_cancel_read(display_);
     }
+    dispatchingWaylandEvents_ = true;
     wl_display_dispatch_pending(display_);
+    dispatchingWaylandEvents_ = false;
   }
 
   void flushDeferredRedraw() {
@@ -1078,6 +1084,7 @@ private:
   bool resizeRedrawPending_ = false;
   bool pendingResizeEvent_ = false;
   Size pendingResizeSize_{};
+  bool dispatchingWaylandEvents_ = false;
   bool framePending_ = false;
   int wakePipe_[2]{-1, -1};
 };
