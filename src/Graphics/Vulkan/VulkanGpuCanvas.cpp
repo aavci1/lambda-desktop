@@ -77,6 +77,14 @@ bool renderTargetFrameCacheDisabled() {
   return disabled;
 }
 
+bool vulkanPresentFencesDisabled() {
+  static bool const disabled = [] {
+    char const* value = std::getenv("FLUX_VULKAN_PRESENT_FENCES");
+    return value && (*value == '0' || std::strcmp(value, "false") == 0 || std::strcmp(value, "off") == 0);
+  }();
+  return disabled;
+}
+
 struct VulkanImage;
 void evictImageTexturesFor(VulkanImage const *image);
 struct SharedVulkanCore;
@@ -1407,12 +1415,43 @@ public:
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &swapchain_;
     presentInfo.pImageIndices = &imageIndex;
+    VkFence presentFence = VK_NULL_HANDLE;
+    VkSwapchainPresentFenceInfoKHR presentFenceInfo{VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_KHR};
+    double presentFenceWaitMs = 0.0;
+    double presentFenceResetMs = 0.0;
+    bool const usePresentFence = shared_ && shared_->swapchainMaintenance1 && !presentFenceRuntimeDisabled_ &&
+                                 imageIndex < imagePresentFences_.size() &&
+                                 imagePresentFences_[imageIndex] != VK_NULL_HANDLE;
+    if (usePresentFence) {
+      presentFence = imagePresentFences_[imageIndex];
+      start = phaseStart();
+      VkResult const waitResult = vkWaitForFences(device_, 1, &presentFence, VK_TRUE, 1000000000ull);
+      presentFenceWaitMs = phaseMs(start);
+      if (waitResult == VK_TIMEOUT) {
+        presentFenceRuntimeDisabled_ = true;
+        presentFence = VK_NULL_HANDLE;
+        std::fprintf(stderr,
+                     "Flux Vulkan: disabling present fences after timeout on window %u image %u\n",
+                     handle_, imageIndex);
+      } else {
+        vkCheck(waitResult, "vkWaitForFences(presentFence)");
+        start = phaseStart();
+        vkCheck(vkResetFences(device_, 1, &presentFence), "vkResetFences(presentFence)");
+        presentFenceResetMs = phaseMs(start);
+        presentFenceInfo.swapchainCount = 1;
+        presentFenceInfo.pFences = &presentFence;
+      }
+    }
     VkPresentTimeGOOGLE presentTime{.presentID = nextPresentId_, .desiredPresentTime = 0};
     VkPresentTimesInfoGOOGLE presentTimes{VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE};
     if (getPastPresentationTiming_) {
       presentTimes.swapchainCount = 1;
       presentTimes.pTimes = &presentTime;
       presentInfo.pNext = &presentTimes;
+    }
+    if (presentFence) {
+      presentFenceInfo.pNext = presentInfo.pNext;
+      presentInfo.pNext = &presentFenceInfo;
     }
     start = phaseStart();
     VkResult presented = vkQueuePresentKHR(queue_, &presentInfo);
@@ -1436,7 +1475,8 @@ public:
           "window=%u image=%u ops=%zu rects=%zu quads=%zu paths=%zu "
           "waitFrame=%.3fms deferred=%.3fms acquire=%.3fms waitImage=%.3fms "
           "atlas=%.3fms blurPrep=%.3fms upload=%.3fms record=%.3fms submit=%.3fms "
-          "screenshot=%.3fms queuePresent=%.3fms\n",
+          "screenshot=%.3fms presentFence=%d waitPresentFence=%.3fms resetPresentFence=%.3fms "
+          "queuePresent=%.3fms\n",
           handle_,
           imageIndex,
           ops_.size(),
@@ -1453,6 +1493,9 @@ public:
           recordMs,
           submitMs,
           screenshotMs,
+          presentFence ? 1 : 0,
+          presentFenceWaitMs,
+          presentFenceResetMs,
           presentQueueMs);
     }
   }
@@ -2751,10 +2794,12 @@ private:
     VkSwapchainKHR oldSwapchain = swapchain_;
     std::vector<VkImageView> oldViews = std::move(swapchainViews_);
     std::vector<VkSemaphore> oldImageRenderFinished = std::move(imageRenderFinished_);
+    std::vector<VkFence> oldImagePresentFences = std::move(imagePresentFences_);
     swapchain_ = VK_NULL_HANDLE;
     swapchainImages_.clear();
     swapchainViews_.clear();
     imageRenderFinished_.clear();
+    imagePresentFences_.clear();
     VkSurfaceCapabilitiesKHR caps{};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_, surface_, &caps);
     std::uint32_t presentCount = 0;
@@ -2810,10 +2855,20 @@ private:
     vkGetSwapchainImagesKHR(device_, swapchain_, &count, swapchainImages_.data());
     imageInFlightFences_.assign(count, VK_NULL_HANDLE);
     imageRenderFinished_.resize(count, VK_NULL_HANDLE);
+    if (shared_ && shared_->swapchainMaintenance1 && !vulkanPresentFencesDisabled() &&
+        !presentFenceRuntimeDisabled_) {
+      imagePresentFences_.resize(count, VK_NULL_HANDLE);
+    }
     swapchainViews_.resize(count);
     VkSemaphoreCreateInfo sem{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    VkFenceCreateInfo presentFenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    presentFenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     for (std::size_t i = 0; i < swapchainImages_.size(); ++i) {
       vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &imageRenderFinished_[i]), "vkCreateSemaphore");
+      if (!imagePresentFences_.empty()) {
+        vkCheck(vkCreateFence(device_, &presentFenceInfo, nullptr, &imagePresentFences_[i]),
+                "vkCreateFence(presentFence)");
+      }
       VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
       view.image = swapchainImages_[i];
       view.viewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -2829,6 +2884,20 @@ private:
       if (semaphore)
         vkDestroySemaphore(device_, semaphore, nullptr);
     }
+    for (VkFence fence : oldImagePresentFences) {
+      if (fence) {
+        VkResult const waitResult = vkWaitForFences(device_, 1, &fence, VK_TRUE, 1000000000ull);
+        if (waitResult == VK_TIMEOUT) {
+          presentFenceRuntimeDisabled_ = true;
+          std::fprintf(stderr,
+                       "Flux Vulkan: present fence did not signal before swapchain destroy on window %u\n",
+                       handle_);
+        } else {
+          vkCheck(waitResult, "vkWaitForFences(oldPresentFence)");
+        }
+        vkDestroyFence(device_, fence, nullptr);
+      }
+    }
     for (VkImageView view : oldViews)
       vkDestroyImageView(device_, view, nullptr);
     if (oldSwapchain)
@@ -2841,9 +2910,11 @@ private:
       detail::resizeTrace(
           "vulkan-recreate-swapchain",
           "window=%u framebuffer=%dx%d target=%dx%d extent=%ux%u images=%zu "
-          "waitFences=%.3fms caps=%.3fms create=%.3fms imageSetup=%.3fms oldDestroy=%.3fms elapsed=%.3fms\n",
+          "presentFences=%zu waitFences=%.3fms caps=%.3fms create=%.3fms imageSetup=%.3fms "
+          "oldDestroy=%.3fms elapsed=%.3fms\n",
                    handle_, framebufferWidth_, framebufferHeight_, swapchainTargetWidth_, swapchainTargetHeight_,
                    swapExtent_.width, swapExtent_.height, swapchainImages_.size(),
+                   imagePresentFences_.size(),
                    waitFencesMs, capsMs, createMs, imageSetupMs, oldDestroyMs,
                    static_cast<double>(elapsed) / 1000.0);
     }
@@ -2859,6 +2930,11 @@ private:
         vkDestroySemaphore(device_, semaphore, nullptr);
     }
     imageRenderFinished_.clear();
+    for (VkFence fence : imagePresentFences_) {
+      if (fence)
+        vkDestroyFence(device_, fence, nullptr);
+    }
+    imagePresentFences_.clear();
     if (swapchain_) {
       vkDestroySwapchainKHR(device_, swapchain_, nullptr);
       swapchain_ = VK_NULL_HANDLE;
@@ -4352,6 +4428,7 @@ private:
   VkExtent2D swapExtent_{};
   std::vector<VkImage> swapchainImages_;
   std::vector<VkFence> imageInFlightFences_;
+  std::vector<VkFence> imagePresentFences_;
   std::vector<VkImageView> swapchainViews_;
   std::vector<VkSemaphore> imageRenderFinished_;
   Texture backdropSceneTexture_;
@@ -4368,6 +4445,7 @@ private:
   std::string pendingScreenshotPath_;
   bool debugScreenshotWritten_ = false;
   bool swapchainDirty_ = true;
+  bool presentFenceRuntimeDisabled_ = false;
   std::unordered_map<VulkanImage const *, std::unique_ptr<Texture>> imageTextures_;
   std::vector<PendingTextureDestroy> pendingTextureDestroys_;
   std::vector<PendingTextureUpload> pendingTextureUploads_;
