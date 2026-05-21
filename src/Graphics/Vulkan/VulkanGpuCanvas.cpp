@@ -1038,22 +1038,14 @@ public:
     if (targetMode_) {
       return;
     }
-    int const hintedFbW = resizeBoundsHintWidth_ > 0
-                              ? static_cast<int>(std::lround(static_cast<float>(resizeBoundsHintWidth_) * dpiScaleX_))
-                              : 0;
-    int const hintedFbH = resizeBoundsHintHeight_ > 0
-                              ? static_cast<int>(std::lround(static_cast<float>(resizeBoundsHintHeight_) * dpiScaleY_))
-                              : 0;
-    bool const hasResizeBoundsHint = hintedFbW > fbW || hintedFbH > fbH;
     bool const needsLargerSwapchain =
         !swapchain_ || swapExtent_.width == 0 || swapExtent_.height == 0 ||
         fbW > static_cast<int>(swapExtent_.width) || fbH > static_cast<int>(swapExtent_.height);
     if (needsLargerSwapchain) {
-      bool const addHeadroom = swapchain_ != VK_NULL_HANDLE;
-      swapchainTargetWidth_ = std::max(fbW + (addHeadroom ? std::max(512, fbW / 2) : 0),
-                                       hintedFbW);
-      swapchainTargetHeight_ = std::max(fbH + (addHeadroom ? std::max(512, fbH / 2) : 0),
-                                        hintedFbH);
+      int const headroomW = swapchain_ ? std::clamp(fbW / 4, 128, 512) : 0;
+      int const headroomH = swapchain_ ? std::clamp(fbH / 4, 128, 512) : 0;
+      swapchainTargetWidth_ = fbW + headroomW;
+      swapchainTargetHeight_ = fbH + headroomH;
       swapchainDirty_ = true;
       if (detail::resizeTraceEnabled()) {
         detail::resizeTrace(
@@ -1061,8 +1053,7 @@ public:
           "window=%u logical=%dx%d framebuffer=%dx%d target=%dx%d boundsHint=%dx%d dirty=1\n",
                      handle_, width_, height_, framebufferWidth_, framebufferHeight_,
                      swapchainTargetWidth_, swapchainTargetHeight_,
-                     hasResizeBoundsHint ? resizeBoundsHintWidth_ : 0,
-                     hasResizeBoundsHint ? resizeBoundsHintHeight_ : 0);
+                     resizeBoundsHintWidth_, resizeBoundsHintHeight_);
       }
     } else if (framebufferChanged && detail::resizeTraceEnabled()) {
       detail::resizeTrace(

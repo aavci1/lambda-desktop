@@ -271,9 +271,12 @@ public:
       gbm_ = gbm_create_device(fd_);
       if (!gbm_) throw std::runtime_error("gbm_create_device failed for KMS atomic presenter");
       flux::VulkanContext::instance().ensureInitialized();
+      createCommandPool();
       createBuffers();
       canvas_ = flux::createVulkanRenderTargetCanvas(buffers_[0].spec, textSystem_);
       if (!canvas_) throw std::runtime_error("Failed to create atomic KMS render-target canvas");
+      std::fprintf(stderr,
+                   "flux-compositor: atomic KMS presenter uses optimal offscreen render targets with copy to scanout\n");
     } catch (...) {
       cleanup();
       throw;
@@ -285,9 +288,13 @@ public:
   void cleanup() {
     if (canvas_) canvas_.reset();
     VkDevice device = flux::VulkanContext::instance().device();
+    if (device) vkDeviceWaitIdle(device);
     for (auto& buffer : buffers_) {
       closeRenderFence(buffer);
       if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
+      if (buffer.offscreenView) vkDestroyImageView(device, buffer.offscreenView, nullptr);
+      if (buffer.offscreenImage) vkDestroyImage(device, buffer.offscreenImage, nullptr);
+      if (buffer.offscreenMemory) vkFreeMemory(device, buffer.offscreenMemory, nullptr);
       if (buffer.view) vkDestroyImageView(device, buffer.view, nullptr);
       if (buffer.image) vkDestroyImage(device, buffer.image, nullptr);
       if (buffer.memory) vkFreeMemory(device, buffer.memory, nullptr);
@@ -295,6 +302,8 @@ public:
       if (buffer.bo) gbm_bo_destroy(buffer.bo);
     }
     buffers_.clear();
+    if (commandPool_) vkDestroyCommandPool(device, commandPool_, nullptr);
+    commandPool_ = VK_NULL_HANDLE;
     if (modeBlob_ != 0) drmModeDestroyPropertyBlob(fd_, modeBlob_);
     modeBlob_ = 0;
     if (gbm_) gbm_device_destroy(gbm_);
@@ -321,6 +330,7 @@ public:
     buffers_[next].renderComplete = bufferHasNoAsyncRenderFence(buffers_[next]);
     buffers_[next].renderSubmittedNsec = 0;
     buffers_[next].renderReadyNsec = 0;
+    beginRenderCommandBuffer(buffers_[next]);
     if (!flux::setVulkanRenderTargetSpecForCanvas(canvas_.get(), buffers_[next].spec)) {
       throw std::runtime_error("Failed to switch atomic KMS render target");
     }
@@ -329,10 +339,12 @@ public:
   void markFrameRendered() {
     if (renderBuffer_ < 0) return;
     Buffer& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
+    finishRenderCommandBuffer(buffer);
     buffer.renderSubmittedNsec = monotonicNanoseconds();
     buffer.renderReadyNsec = 0;
     closeRenderFence(buffer);
     if (buffer.renderFinished == VK_NULL_HANDLE) {
+      vkQueueWaitIdle(flux::VulkanContext::instance().queue());
       buffer.renderComplete = true;
       buffer.renderReadyNsec = buffer.renderSubmittedNsec;
       return;
@@ -478,6 +490,11 @@ private:
     VkImage image = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
+    VkImage offscreenImage = VK_NULL_HANDLE;
+    VkDeviceMemory offscreenMemory = VK_NULL_HANDLE;
+    VkImageView offscreenView = VK_NULL_HANDLE;
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    bool commandBufferRecording = false;
     VkSemaphore renderFinished = VK_NULL_HANDLE;
     int renderFenceFd = -1;
     bool renderComplete = true;
@@ -538,6 +555,14 @@ private:
     }
   }
 
+  void createCommandPool() {
+    VkCommandPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = flux::VulkanContext::instance().queueFamily();
+    vkCheck(vkCreateCommandPool(flux::VulkanContext::instance().device(), &poolInfo, nullptr, &commandPool_),
+            "vkCreateCommandPool atomic KMS presenter");
+  }
+
   void createModeBlob() {
     if (drmModeCreatePropertyBlob(fd_, &connector_.mode, sizeof(connector_.mode), &modeBlob_) != 0) {
       throw std::system_error(errno, std::generic_category(), "drmModeCreatePropertyBlob");
@@ -581,16 +606,18 @@ private:
     try {
       buffer.fbId = createFramebuffer(buffer.bo);
       importBufferToVulkan(buffer);
+      createOffscreenTarget(buffer);
+      allocateCommandBuffer(buffer);
       if (useAsyncRenderFence_) buffer.renderFinished = createExportableSemaphore();
       buffer.spec = VulkanRenderTargetSpec{
-          .image = buffer.image,
-          .view = buffer.view,
+          .image = buffer.offscreenImage,
+          .view = buffer.offscreenView,
           .format = VK_FORMAT_B8G8R8A8_UNORM,
           .width = connector_.mode.hdisplay,
           .height = connector_.mode.vdisplay,
           .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-          .finalLayout = VK_IMAGE_LAYOUT_GENERAL,
-          .signalSemaphore = buffer.renderFinished,
+          .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+          .commandBuffer = buffer.commandBuffer,
       };
       std::fprintf(stderr,
                    "flux-compositor: atomic scanout buffer %ux%u modifier=0x%016llx stride=%u\n",
@@ -603,6 +630,137 @@ private:
       throw;
     }
     return buffer;
+  }
+
+  void createOffscreenTarget(Buffer& buffer) {
+    VkDevice device = flux::VulkanContext::instance().device();
+    VkPhysicalDevice physical = flux::VulkanContext::instance().physicalDevice();
+    VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
+    imageInfo.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                      VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkCheck(vkCreateImage(device, &imageInfo, nullptr, &buffer.offscreenImage),
+            "vkCreateImage atomic KMS offscreen target");
+
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(device, buffer.offscreenImage, &requirements);
+    VkMemoryAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocateInfo.allocationSize = requirements.size;
+    allocateInfo.memoryTypeIndex =
+        findVulkanMemoryType(physical, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    vkCheck(vkAllocateMemory(device, &allocateInfo, nullptr, &buffer.offscreenMemory),
+            "vkAllocateMemory atomic KMS offscreen target");
+    vkCheck(vkBindImageMemory(device, buffer.offscreenImage, buffer.offscreenMemory, 0),
+            "vkBindImageMemory atomic KMS offscreen target");
+
+    VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    viewInfo.image = buffer.offscreenImage;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.layerCount = 1;
+    vkCheck(vkCreateImageView(device, &viewInfo, nullptr, &buffer.offscreenView),
+            "vkCreateImageView atomic KMS offscreen target");
+  }
+
+  void allocateCommandBuffer(Buffer& buffer) {
+    VkCommandBufferAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    allocateInfo.commandPool = commandPool_;
+    allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocateInfo.commandBufferCount = 1;
+    vkCheck(vkAllocateCommandBuffers(flux::VulkanContext::instance().device(), &allocateInfo, &buffer.commandBuffer),
+            "vkAllocateCommandBuffers atomic KMS presenter");
+  }
+
+  static void transitionImage(VkCommandBuffer commandBuffer,
+                              VkImage image,
+                              VkImageLayout oldLayout,
+                              VkImageLayout newLayout,
+                              VkPipelineStageFlags2 srcStage,
+                              VkPipelineStageFlags2 dstStage,
+                              VkAccessFlags2 srcAccess,
+                              VkAccessFlags2 dstAccess) {
+    VkImageMemoryBarrier2 barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+    barrier.srcStageMask = srcStage;
+    barrier.srcAccessMask = srcAccess;
+    barrier.dstStageMask = dstStage;
+    barrier.dstAccessMask = dstAccess;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = 1;
+    VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    dependency.imageMemoryBarrierCount = 1;
+    dependency.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(commandBuffer, &dependency);
+  }
+
+  void beginRenderCommandBuffer(Buffer& buffer) {
+    if (!buffer.commandBuffer) return;
+    vkCheck(vkResetCommandBuffer(buffer.commandBuffer, 0), "vkResetCommandBuffer atomic KMS presenter");
+    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkCheck(vkBeginCommandBuffer(buffer.commandBuffer, &beginInfo), "vkBeginCommandBuffer atomic KMS presenter");
+    buffer.commandBufferRecording = true;
+  }
+
+  void finishRenderCommandBuffer(Buffer& buffer) {
+    if (!buffer.commandBuffer || !buffer.commandBufferRecording) return;
+    transitionImage(buffer.commandBuffer,
+                    buffer.image,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_PIPELINE_STAGE_2_NONE,
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    VK_ACCESS_2_NONE,
+                    VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    VkImageCopy copy{};
+    copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.srcSubresource.layerCount = 1;
+    copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.dstSubresource.layerCount = 1;
+    copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
+    vkCmdCopyImage(buffer.commandBuffer,
+                   buffer.offscreenImage,
+                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   buffer.image,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   1,
+                   &copy);
+    transitionImage(buffer.commandBuffer,
+                    buffer.image,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_IMAGE_LAYOUT_GENERAL,
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    VK_ACCESS_2_MEMORY_READ_BIT);
+    vkCheck(vkEndCommandBuffer(buffer.commandBuffer), "vkEndCommandBuffer atomic KMS presenter");
+    buffer.commandBufferRecording = false;
+
+    VkCommandBufferSubmitInfo commandBufferInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+    commandBufferInfo.commandBuffer = buffer.commandBuffer;
+    VkSemaphoreSubmitInfo signalSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+    signalSemaphore.semaphore = buffer.renderFinished;
+    signalSemaphore.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    submit.commandBufferInfoCount = 1;
+    submit.pCommandBufferInfos = &commandBufferInfo;
+    submit.signalSemaphoreInfoCount = buffer.renderFinished ? 1u : 0u;
+    submit.pSignalSemaphoreInfos = buffer.renderFinished ? &signalSemaphore : nullptr;
+    vkCheck(vkQueueSubmit2(flux::VulkanContext::instance().queue(), 1, &submit, VK_NULL_HANDLE),
+            "vkQueueSubmit2 atomic KMS presenter");
   }
 
   VkSemaphore createExportableSemaphore() {
@@ -699,7 +857,7 @@ private:
       imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
       imageInfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
       imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                        VK_IMAGE_USAGE_SAMPLED_BIT;
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
       imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
       imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
       vkCheck(vkCreateImage(device, &imageInfo, nullptr, &buffer.image), "vkCreateImage atomic KMS buffer");
@@ -771,6 +929,9 @@ private:
     VkDevice device = flux::VulkanContext::instance().device();
     if (buffer.view) vkDestroyImageView(device, buffer.view, nullptr);
     if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
+    if (buffer.offscreenView) vkDestroyImageView(device, buffer.offscreenView, nullptr);
+    if (buffer.offscreenImage) vkDestroyImage(device, buffer.offscreenImage, nullptr);
+    if (buffer.offscreenMemory) vkFreeMemory(device, buffer.offscreenMemory, nullptr);
     if (buffer.image) vkDestroyImage(device, buffer.image, nullptr);
     if (buffer.memory) vkFreeMemory(device, buffer.memory, nullptr);
     if (buffer.fbId) drmModeRmFB(fd_, buffer.fbId);
@@ -784,6 +945,7 @@ private:
   KmsConnector connector_{};
   TextSystem& textSystem_;
   gbm_device* gbm_ = nullptr;
+  VkCommandPool commandPool_ = VK_NULL_HANDLE;
   std::uint32_t planeId_ = 0;
   std::uint32_t modeBlob_ = 0;
   std::uint32_t connectorCrtcId_ = 0;
