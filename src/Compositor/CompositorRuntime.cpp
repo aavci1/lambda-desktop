@@ -311,6 +311,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     auto lastInputActivity = SteadyClock::now();
     bool inputActivityThisLoop = false;
     bool idleBlanked = false;
+    bool displayTimingSupportLogged = false;
     device->setInputHandler([&](flux::platform::KmsInputEvent const& event) {
       inputActivityThisLoop = true;
       if (idleBlanked) return;
@@ -492,6 +493,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       pruneSurfaceRenderState(surfaceRenderState, liveSurfaceIds);
       phaseStart = CompositorFrameProfile::Clock::now();
       canvas->present();
+      if (!displayTimingSupportLogged && flux::vulkanCanvasSupportsDisplayTiming(canvas.get())) {
+        std::fprintf(stderr, "flux-compositor: Vulkan display timing available\n");
+        displayTimingSupportLogged = true;
+      }
       frameProfile.presentMs += CompositorFrameProfile::milliseconds(phaseStart);
       ++frameProfile.frames;
       frameProfile.totalMs += CompositorFrameProfile::milliseconds(frameProfileStart);

@@ -217,7 +217,7 @@ Set them before launching the compositor if you need to force a theme or size.
 
 - Real-app validation beyond `foot`, especially GTK, Qt, and browser clients.
 - Popup menu validation with real applications; full xdg-popup input-grab semantics remain deferred.
-- Presentation-time final page-flip completion precision and broader video/game validation.
+- Presentation-time delayed page-flip completion feedback where Vulkan display timing is available, plus broader video/game validation.
 - Adaptive sync and triple-buffering.
 - Proper input/session brokering instead of manual `/dev/input/event*` ACLs.
 - Full multi-output desktop layout if it lands in v1.

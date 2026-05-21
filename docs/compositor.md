@@ -811,7 +811,7 @@ Tracked as work proceeds. Removed when answered.
 
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
 - Phase 3: Subsurface hit testing remains separate from the popup hit-test fix. Subsurfaces render relative to parents, but pointer routing still needs explicit subsurface ordering and coordinate translation.
-- Phase 4: `wp_presentation_time` now sends `sync_output` and uses DRM vblank pacing timestamps, refresh intervals, and sequence counters when available, with compositor-clock fallback if DRM vblank waits are unavailable. Final page-flip completion precision remains open for video/game smoothness validation.
+- Phase 4: `wp_presentation_time` now sends `sync_output` and uses DRM vblank pacing timestamps, refresh intervals, and sequence counters when available, with compositor-clock fallback if DRM vblank waits are unavailable. The Vulkan backend enables `VK_GOOGLE_display_timing` opportunistically and can poll past presentation timings when the driver supports it; Wayland feedback is not delayed on those completion records yet.
 - Phase 5: Does multi-output land in v1 or post-v1?
 
 ### 12.3 Remaining implementation work
@@ -826,7 +826,7 @@ Hardware or real-app validation work:
 
 - Real-app validation: continue testing `foot` and add GTK/Qt/browser coverage when those apps are available.
 - Popup hardening: popup hit testing is now popup-first and nested popup bounds are unit-tested. Broader real-app menu behavior remains pending, and full xdg-popup input-grab semantics are still intentionally deferred because the earlier grab path froze the test laptop.
-- Presentation timing: validate the DRM-vblank-backed feedback path with video/game workloads; final page-flip completion precision is still not exposed.
+- Presentation timing: validate the DRM-vblank-backed feedback path with video/game workloads, then wire optional Vulkan past-presentation records into delayed `wp_presentation_time` feedback where `VK_GOOGLE_display_timing` is available.
 - Frame pacing: adaptive sync and triple-buffering remain pending.
 - Idle behavior: compositor-side software idle blanking is implemented and idle inhibitors suppress it; DPMS/panel power-off remains unimplemented.
 - Input/session polish: development still uses manual `/dev/input/event*` ACLs; proper seat/session brokering is still pending.

@@ -102,6 +102,8 @@ Expected result: a top layer-surface bar appears and renders non-black content.
 
 Expected result: the client receives presentation feedback. It should print `sync_output` before `presented`. On KMS outputs with working `drmWaitVBlank`, feedback includes DRM vblank pacing timestamps, refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK` flags. If the driver rejects vblank waits, feedback falls back to compositor-clock timing.
 
+If the Vulkan driver supports `VK_GOOGLE_display_timing`, the compositor logs `Vulkan display timing available` after the first present. Those past-presentation records are framework-visible, but Wayland feedback is still sent from the DRM-vblank timing path.
+
 ### Idle Blanking
 
 Set `idle_blank_timeout_seconds = 5` in `~/.config/flux-compositor/config.toml`, wait five seconds without input, then move the pointer or press a key.

@@ -378,6 +378,7 @@ struct SharedVulkanCore {
     std::unordered_map<GlyphKey, GlyphSlot, GlyphKeyHash> glyphs;
   } resources;
   std::uint32_t refs = 0;
+  bool googleDisplayTiming = false;
 };
 
 std::mutex gVulkanCoreMutex;
@@ -574,11 +575,14 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
       if (needsPresent) {
         appendUniqueExtension(deviceExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
       }
+      std::uint32_t extensionCount = 0;
+      vkEnumerateDeviceExtensionProperties(d, nullptr, &extensionCount, nullptr);
+      std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+      vkEnumerateDeviceExtensionProperties(d, nullptr, &extensionCount, availableExtensions.data());
+      if (needsPresent && extensionAvailable(availableExtensions, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME)) {
+        appendUniqueExtension(deviceExtensions, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
+      }
       if (!deviceExtensions.empty()) {
-        std::uint32_t extensionCount = 0;
-        vkEnumerateDeviceExtensionProperties(d, nullptr, &extensionCount, nullptr);
-        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-        vkEnumerateDeviceExtensionProperties(d, nullptr, &extensionCount, availableExtensions.data());
         std::vector<std::string> missingExtensions;
         for (std::string const &extension : deviceExtensions) {
           if (!extensionAvailable(availableExtensions, extension.c_str())) {
@@ -629,6 +633,8 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
           info.enabledExtensionCount = static_cast<std::uint32_t>(deviceExtensionNames.size());
           info.ppEnabledExtensionNames = deviceExtensionNames.empty() ? nullptr : deviceExtensionNames.data();
           vkCheck(vkCreateDevice(gVulkanCore.physical, &info, nullptr, &gVulkanCore.device), "vkCreateDevice");
+          gVulkanCore.googleDisplayTiming =
+              containsExtension(deviceExtensions, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
           VmaAllocatorCreateInfo allocatorInfo{};
           allocatorInfo.physicalDevice = gVulkanCore.physical;
           allocatorInfo.device = gVulkanCore.device;
@@ -883,6 +889,10 @@ public:
     allocator_ = shared->allocator;
     queue_ = shared->queue;
     queueFamily_ = shared->queueFamily;
+    if (shared->googleDisplayTiming) {
+      getPastPresentationTiming_ = reinterpret_cast<PFN_vkGetPastPresentationTimingGOOGLE>(
+          vkGetDeviceProcAddr(device_, "vkGetPastPresentationTimingGOOGLE"));
+    }
     createCommandObjects();
     chooseSurfaceFormat();
     ensureSharedResources();
@@ -915,6 +925,39 @@ public:
     createCommandObjects();
     ensureSharedResources();
     registerCanvas();
+  }
+
+  bool supportsDisplayTiming() const noexcept {
+    return getPastPresentationTiming_ != nullptr && swapchain_ != VK_NULL_HANDLE;
+  }
+
+  std::vector<VulkanPastPresentationTiming> pollPastPresentationTimings() {
+    if (!supportsDisplayTiming()) {
+      return {};
+    }
+    std::uint32_t count = 0;
+    VkResult result = getPastPresentationTiming_(device_, swapchain_, &count, nullptr);
+    if (result != VK_SUCCESS || count == 0) {
+      return {};
+    }
+    std::vector<VkPastPresentationTimingGOOGLE> timings(count);
+    result = getPastPresentationTiming_(device_, swapchain_, &count, timings.data());
+    if (result != VK_SUCCESS) {
+      return {};
+    }
+    timings.resize(count);
+    std::vector<VulkanPastPresentationTiming> out;
+    out.reserve(timings.size());
+    for (auto const& timing : timings) {
+      out.push_back(VulkanPastPresentationTiming{
+          .presentId = timing.presentID,
+          .desiredPresentTime = timing.desiredPresentTime,
+          .actualPresentTime = timing.actualPresentTime,
+          .earliestPresentTime = timing.earliestPresentTime,
+          .presentMargin = timing.presentMargin,
+      });
+    }
+    return out;
   }
 
   ~VulkanCanvas() override {
@@ -1290,6 +1333,13 @@ public:
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &swapchain_;
     presentInfo.pImageIndices = &imageIndex;
+    VkPresentTimeGOOGLE presentTime{.presentID = nextPresentId_, .desiredPresentTime = 0};
+    VkPresentTimesInfoGOOGLE presentTimes{VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE};
+    if (getPastPresentationTiming_) {
+      presentTimes.swapchainCount = 1;
+      presentTimes.pTimes = &presentTime;
+      presentInfo.pNext = &presentTimes;
+    }
     start = phaseStart();
     VkResult presented = vkQueuePresentKHR(queue_, &presentInfo);
     double const presentQueueMs = phaseMs(start);
@@ -1297,6 +1347,9 @@ public:
       swapchainDirty_ = true;
     } else {
       vkCheck(presented, "vkQueuePresentKHR");
+    }
+    if (getPastPresentationTiming_ && (presented == VK_SUCCESS || presented == VK_SUBOPTIMAL_KHR)) {
+      ++nextPresentId_;
     }
     currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
     debug::perf::recordPresentedFrame();
@@ -4031,6 +4084,8 @@ private:
   VmaAllocator allocator_ = VK_NULL_HANDLE;
   VkQueue queue_ = VK_NULL_HANDLE;
   SharedVulkanCore *shared_ = nullptr;
+  PFN_vkGetPastPresentationTimingGOOGLE getPastPresentationTiming_ = nullptr;
+  std::uint32_t nextPresentId_ = 1;
   std::uint32_t queueFamily_ = 0;
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   std::array<VkCommandBuffer, kMaxFramesInFlight> commandBuffers_{};
@@ -4154,6 +4209,16 @@ void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logic
   if (auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas)) {
     vulkan->setResizeBoundsHint(logicalWidth, logicalHeight);
   }
+}
+
+bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan && vulkan->supportsDisplayTiming();
+}
+
+std::vector<VulkanPastPresentationTiming> pollVulkanCanvasPastPresentationTimings(Canvas* canvas) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan ? vulkan->pollPastPresentationTimings() : std::vector<VulkanPastPresentationTiming>{};
 }
 
 std::shared_ptr<Image> Image::fromExternalVulkan(VkImage image, VkImageView view, VkFormat format,
