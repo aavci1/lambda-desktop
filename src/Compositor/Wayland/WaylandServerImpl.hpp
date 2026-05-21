@@ -53,6 +53,7 @@ struct WaylandServer::Impl {
   struct IdleInhibitor;
   struct LayerSurface;
   struct PresentationFeedback;
+  struct PendingPresentationBatch;
   struct RelativePointer;
   struct PointerConstraint;
   struct PrimarySelectionDevice;
@@ -88,6 +89,7 @@ struct WaylandServer::Impl {
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
   [[nodiscard]] bool hasIdleInhibitors() const noexcept;
   void sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing);
+  void completePresentationFeedbacks(std::vector<PresentationCompletion> const& completions, std::uint32_t timeMs);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
   void handlePointerPosition(double x, double y, std::uint32_t timeMs);
   void handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs);
@@ -175,6 +177,7 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<IdleInhibitor>> idleInhibitors_;
   std::vector<std::unique_ptr<LayerSurface>> layerSurfaces_;
   std::vector<std::unique_ptr<PresentationFeedback>> presentationFeedbacks_;
+  std::vector<PendingPresentationBatch> pendingPresentationBatches_;
   std::vector<std::unique_ptr<RelativePointer>> relativePointers_;
   std::vector<std::unique_ptr<PointerConstraint>> pointerConstraints_;
   std::vector<std::unique_ptr<PrimarySelectionDevice>> primarySelectionDevices_;
@@ -415,6 +418,13 @@ struct WaylandServer::Impl::PresentationFeedback {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
+};
+
+struct WaylandServer::Impl::PendingPresentationBatch {
+  std::uint32_t backendPresentId = 0;
+  std::uint32_t queuedAtMs = 0;
+  PresentationTiming fallbackTiming;
+  std::vector<PresentationFeedback*> feedbacks;
 };
 
 struct WaylandServer::Impl::RelativePointer {

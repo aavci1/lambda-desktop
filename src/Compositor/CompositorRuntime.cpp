@@ -312,6 +312,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     bool inputActivityThisLoop = false;
     bool idleBlanked = false;
     bool displayTimingSupportLogged = false;
+    bool useVulkanPresentationCompletion = false;
     device->setInputHandler([&](flux::platform::KmsInputEvent const& event) {
       inputActivityThisLoop = true;
       if (idleBlanked) return;
@@ -497,11 +498,27 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         std::fprintf(stderr, "flux-compositor: Vulkan display timing available\n");
         displayTimingSupportLogged = true;
       }
+      std::vector<PresentationCompletion> presentationCompletions;
+      auto pastPresentationTimings = flux::pollVulkanCanvasPastPresentationTimings(canvas.get());
+      if (!pastPresentationTimings.empty()) {
+        useVulkanPresentationCompletion = true;
+        presentationCompletions.reserve(pastPresentationTimings.size());
+        for (auto const& timing : pastPresentationTimings) {
+          presentationCompletions.push_back(PresentationCompletion{
+              .backendPresentId = timing.presentId,
+              .monotonicNsec = timing.actualPresentTime,
+          });
+        }
+      }
+      if (useVulkanPresentationCompletion) {
+        presentationTiming.backendPresentId = flux::lastVulkanCanvasPresentId(canvas.get());
+      }
       frameProfile.presentMs += CompositorFrameProfile::milliseconds(phaseStart);
       ++frameProfile.frames;
       frameProfile.totalMs += CompositorFrameProfile::milliseconds(frameProfileStart);
       frameProfile.maybeLog();
       loopStats.recordRender(renderStart);
+      wayland.completePresentationFeedbacks(presentationCompletions, monotonicMilliseconds());
       wayland.sendFrameCallbacks(monotonicMilliseconds(), presentationTiming);
     };
 

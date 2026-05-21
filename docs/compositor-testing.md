@@ -102,7 +102,7 @@ Expected result: a top layer-surface bar appears and renders non-black content.
 
 Expected result: the client receives presentation feedback. It should print `sync_output` before `presented`. On KMS outputs with working `drmWaitVBlank`, feedback includes DRM vblank pacing timestamps, refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK` flags. If the driver rejects vblank waits, feedback falls back to compositor-clock timing.
 
-If the Vulkan driver supports `VK_GOOGLE_display_timing`, the compositor logs `Vulkan display timing available` after the first present. Those past-presentation records are framework-visible, but Wayland feedback is still sent from the DRM-vblank timing path.
+If the Vulkan driver supports `VK_GOOGLE_display_timing`, the compositor logs `Vulkan display timing available` after the first present. After the first past-presentation record arrives, `wp_presentation_time` feedback is delayed until the matching Vulkan completion record is available; if a record does not arrive promptly, the compositor falls back to DRM-vblank timing for that feedback.
 
 ### Idle Blanking
 

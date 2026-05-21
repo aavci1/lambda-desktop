@@ -931,6 +931,10 @@ public:
     return getPastPresentationTiming_ != nullptr && swapchain_ != VK_NULL_HANDLE;
   }
 
+  std::uint32_t lastPresentId() const noexcept {
+    return lastSubmittedPresentId_;
+  }
+
   std::vector<VulkanPastPresentationTiming> pollPastPresentationTimings() {
     if (!supportsDisplayTiming()) {
       return {};
@@ -1349,7 +1353,10 @@ public:
       vkCheck(presented, "vkQueuePresentKHR");
     }
     if (getPastPresentationTiming_ && (presented == VK_SUCCESS || presented == VK_SUBOPTIMAL_KHR)) {
+      lastSubmittedPresentId_ = presentTime.presentID;
       ++nextPresentId_;
+    } else {
+      lastSubmittedPresentId_ = 0;
     }
     currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
     debug::perf::recordPresentedFrame();
@@ -4086,6 +4093,7 @@ private:
   SharedVulkanCore *shared_ = nullptr;
   PFN_vkGetPastPresentationTimingGOOGLE getPastPresentationTiming_ = nullptr;
   std::uint32_t nextPresentId_ = 1;
+  std::uint32_t lastSubmittedPresentId_ = 0;
   std::uint32_t queueFamily_ = 0;
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   std::array<VkCommandBuffer, kMaxFramesInFlight> commandBuffers_{};
@@ -4214,6 +4222,11 @@ void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logic
 bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas) {
   auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
   return vulkan && vulkan->supportsDisplayTiming();
+}
+
+std::uint32_t lastVulkanCanvasPresentId(Canvas* canvas) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan ? vulkan->lastPresentId() : 0u;
 }
 
 std::vector<VulkanPastPresentationTiming> pollVulkanCanvasPastPresentationTimings(Canvas* canvas) {

@@ -94,6 +94,11 @@ void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming 
   impl_->sendFrameCallbacks(timeMs, timing);
 }
 
+void WaylandServer::completePresentationFeedbacks(std::vector<PresentationCompletion> const& completions,
+                                                  std::uint32_t timeMs) {
+  impl_->completePresentationFeedbacks(completions, timeMs);
+}
+
 void WaylandServer::handlePointerMotion(double dx, double dy, std::uint32_t timeMs) {
   impl_->handlePointerMotion(dx, dy, timeMs);
 }

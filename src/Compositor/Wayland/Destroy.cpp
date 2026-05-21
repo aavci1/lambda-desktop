@@ -262,6 +262,17 @@ void WaylandServer::Impl::destroyPresentationFeedback(PresentationFeedback* feed
     eraseFeedback(feedback->surface->pendingPresentationFeedbacks);
     eraseFeedback(feedback->surface->presentationFeedbacks);
   }
+  if (feedback) {
+    for (auto& batch : pendingPresentationBatches_) {
+      batch.feedbacks.erase(std::remove(batch.feedbacks.begin(), batch.feedbacks.end(), feedback),
+                            batch.feedbacks.end());
+    }
+    pendingPresentationBatches_.erase(
+        std::remove_if(pendingPresentationBatches_.begin(),
+                       pendingPresentationBatches_.end(),
+                       [](PendingPresentationBatch const& batch) { return batch.feedbacks.empty(); }),
+        pendingPresentationBatches_.end());
+  }
   eraseResource(presentationFeedbacks_, feedback);
 }
 

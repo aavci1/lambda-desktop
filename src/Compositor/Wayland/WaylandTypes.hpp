@@ -32,8 +32,14 @@ struct WaylandOutputInfo {
 struct PresentationTiming {
   std::uint64_t monotonicNsec = 0;
   std::uint64_t sequence = 0;
+  std::uint32_t backendPresentId = 0;
   std::uint32_t refreshNsec = 0;
   std::uint32_t flags = 0;
+};
+
+struct PresentationCompletion {
+  std::uint32_t backendPresentId = 0;
+  std::uint64_t monotonicNsec = 0;
 };
 
 struct CommittedSurfaceSnapshot {

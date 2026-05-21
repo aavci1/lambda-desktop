@@ -43,6 +43,7 @@ public:
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
   [[nodiscard]] bool hasIdleInhibitors() const noexcept;
   void sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing);
+  void completePresentationFeedbacks(std::vector<PresentationCompletion> const& completions, std::uint32_t timeMs);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);
   void handlePointerPosition(double x, double y, std::uint32_t timeMs);
   void handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs);
