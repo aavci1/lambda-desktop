@@ -18,6 +18,7 @@ namespace {
 constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
 constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
+constexpr std::uint32_t kFallbackConfigureLeadMs = 16;
 
 float clamp01(float value) {
   return std::clamp(value, 0.f, 1.f);
@@ -35,10 +36,17 @@ std::int32_t lerpInt(std::int32_t from, std::int32_t to, float t) {
                                                static_cast<float>(to - from) * t));
 }
 
+std::uint32_t refreshIntervalMs(std::uint32_t refreshMilliHz) {
+  if (refreshMilliHz == 0) return kFallbackConfigureLeadMs;
+  std::uint64_t const interval = 1'000'000ull / static_cast<std::uint64_t>(refreshMilliHz);
+  return static_cast<std::uint32_t>(std::clamp<std::uint64_t>(interval, 1ull, 33ull));
+}
+
 } // namespace
 
 void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
   bool sentConfigure = false;
+  std::uint32_t const configureLeadMs = refreshIntervalMs(output_.refreshMilliHz);
   for (auto const& surface : surfaces_) {
     if (!surface->geometryAnimationActive) continue;
 
@@ -48,6 +56,11 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
                   static_cast<float>(kGeometryAnimationMs)
             : 1.f;
     float const progress = easeInOutCubic(linearProgress);
+    float const configureProgress =
+        animationsEnabled
+            ? easeInOutCubic(static_cast<float>(timeMs + configureLeadMs - surface->geometryAnimationStartedAtMs) /
+                             static_cast<float>(kGeometryAnimationMs))
+            : 1.f;
     std::int32_t const nextX = lerpInt(surface->geometryAnimationStartX, surface->geometryAnimationTargetX, progress);
     std::int32_t const nextY = lerpInt(surface->geometryAnimationStartY, surface->geometryAnimationTargetY, progress);
     std::int32_t const nextWidth =
@@ -56,16 +69,26 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
     std::int32_t const nextHeight =
         std::max(kMinWindowHeight,
                  lerpInt(surface->geometryAnimationStartHeight, surface->geometryAnimationTargetHeight, progress));
+    std::int32_t const configureWidth =
+        std::max(kMinWindowWidth,
+                 lerpInt(surface->geometryAnimationStartWidth,
+                         surface->geometryAnimationTargetWidth,
+                         configureProgress));
+    std::int32_t const configureHeight =
+        std::max(kMinWindowHeight,
+                 lerpInt(surface->geometryAnimationStartHeight,
+                         surface->geometryAnimationTargetHeight,
+                         configureProgress));
 
     surface->windowX = nextX;
     surface->windowY = nextY;
     setConfiguredFrameSize(surface.get(), nextWidth, nextHeight);
     traceResizeSurface("animation-frame", surface.get());
-    if (nextWidth != surface->geometryAnimationLastConfigureWidth ||
-        nextHeight != surface->geometryAnimationLastConfigureHeight) {
-      surface->geometryAnimationLastConfigureWidth = nextWidth;
-      surface->geometryAnimationLastConfigureHeight = nextHeight;
-      sendToplevelConfigure(this, toplevelForSurface(this, surface.get()), nextWidth, nextHeight);
+    if (configureWidth != surface->geometryAnimationLastConfigureWidth ||
+        configureHeight != surface->geometryAnimationLastConfigureHeight) {
+      surface->geometryAnimationLastConfigureWidth = configureWidth;
+      surface->geometryAnimationLastConfigureHeight = configureHeight;
+      sendToplevelConfigure(this, toplevelForSurface(this, surface.get()), configureWidth, configureHeight);
       sentConfigure = true;
     }
 
