@@ -44,6 +44,7 @@ public:
     std::uint64_t renderSubmittedMonotonicNsec = 0;
     std::uint64_t renderReadyMonotonicNsec = 0;
     std::uint64_t commitDurationNsec = 0;
+    bool usedRenderFence = false;
   };
 
   ~KmsAtomicPresenter();
@@ -56,6 +57,7 @@ public:
   Canvas& canvas();
   void prepareFrame();
   void markFrameRendered();
+  [[nodiscard]] bool updateRenderReady();
   [[nodiscard]] bool canSchedulePresent();
   [[nodiscard]] int renderReadyFd() const noexcept;
   std::uint32_t schedulePresent();

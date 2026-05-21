@@ -173,12 +173,32 @@ bool WaylandServer::Impl::hasIdleInhibitors() const noexcept {
   });
 }
 
+void WaylandServer::Impl::releasePendingBuffers() {
+  std::uint64_t releaseCount = 0;
+  for (auto const& surface : surfaces_) {
+    if (!surface || surface->pendingBufferReleases.empty()) continue;
+    std::vector<wl_resource*> releases = std::move(surface->pendingBufferReleases);
+    surface->pendingBufferReleases.clear();
+    for (wl_resource* buffer : releases) {
+      if (!buffer) continue;
+      wl_buffer_send_release(buffer);
+      ++releaseCount;
+    }
+  }
+  if (releaseCount > 0) {
+    flux::detail::resizeTrace("compositor",
+                              "buffer-releases count=%llu\n",
+                              static_cast<unsigned long long>(releaseCount));
+  }
+}
+
 void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing) {
   sendPresentationFeedbacks(timeMs, timing);
   sendFrameCallbacksOnly(timeMs);
 }
 
 void WaylandServer::Impl::sendFrameCallbacksOnly(std::uint32_t timeMs) {
+  releasePendingBuffers();
   std::uint64_t callbackCount = 0;
   for (auto const& surface : surfaces_) {
     std::vector<wl_resource*> callbacks = std::move(surface->frameCallbacks);

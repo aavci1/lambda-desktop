@@ -69,6 +69,14 @@ constexpr int kBackdropBlurIterations = 2;
 constexpr std::uint32_t kBackdropBlurDownsample = 2;
 constexpr float kBackdropBlurRadiusBoost = 1.2f;
 
+bool renderTargetFrameCacheDisabled() {
+  static bool const disabled = [] {
+    char const* value = std::getenv("FLUX_RENDER_TARGET_DISABLE_FRAME_CACHE");
+    return value && *value && std::strcmp(value, "0") != 0;
+  }();
+  return disabled;
+}
+
 struct VulkanImage;
 void evictImageTexturesFor(VulkanImage const *image);
 struct SharedVulkanCore;
@@ -1405,13 +1413,45 @@ public:
     }
   }
 
+  struct RenderTargetRecordStats {
+    double atlasMs = 0.0;
+    double backdropPrepareMs = 0.0;
+    double uploadMs = 0.0;
+    double textureUploadRecordMs = 0.0;
+    double drawRecordMs = 0.0;
+    std::size_t backdropRuns = 0;
+  };
+
   void recordRenderTargetCommands(VkCommandBuffer commandBuffer, VkImage targetImage,
                                   VkImageView targetView, VkImageLayout initialLayout,
-                                  VkImageLayout finalLayout) {
+                                  VkImageLayout finalLayout,
+                                  RenderTargetRecordStats* stats = nullptr) {
+    bool const traceResize = stats && detail::resizeTraceEnabled();
+    auto const phaseStart = [&] {
+      return traceResize ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    };
+    auto const phaseMs = [&](std::chrono::steady_clock::time_point start) {
+      if (!traceResize) return 0.0;
+      auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - start).count();
+      return static_cast<double>(elapsed) / 1000.0;
+    };
+
+    auto start = phaseStart();
     uploadAtlasIfNeeded();
+    if (stats) stats->atlasMs = phaseMs(start);
+    start = phaseStart();
     auto backdropRuns = prepareBackdropBlurRuns();
+    if (stats) {
+      stats->backdropPrepareMs = phaseMs(start);
+      stats->backdropRuns = backdropRuns.size();
+    }
+    start = phaseStart();
     uploadFrameBuffers();
+    if (stats) stats->uploadMs = phaseMs(start);
+    start = phaseStart();
     recordPendingTextureUploads(commandBuffer);
+    if (stats) stats->textureUploadRecordMs = phaseMs(start);
 
     VkClearValue clear{};
     clear.color.float32[0] = clearColor_.r;
@@ -1419,6 +1459,7 @@ public:
     clear.color.float32[2] = clearColor_.b;
     clear.color.float32[3] = clearColor_.a;
     VkImageLayout targetLayout = initialLayout;
+    start = phaseStart();
     if (!backdropRuns.empty() && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
       drawOpsWithStackedBackdropBlur(commandBuffer,
                                      targetImage,
@@ -1433,6 +1474,7 @@ public:
       drawOps(commandBuffer);
       vkCmdEndRendering(commandBuffer);
     }
+    if (stats) stats->drawRecordMs = phaseMs(start);
     transition(commandBuffer, targetImage, targetLayout, finalLayout);
   }
 
@@ -1450,6 +1492,7 @@ public:
           !externalCommandBuffer &&
           !targetSpec_.waitSemaphore &&
           !targetSpec_.signalSemaphore &&
+          !renderTargetFrameCacheDisabled() &&
           !resources().atlasDirty;
       std::uint64_t const requestedFrameSignature =
           canReuseCompletedFrame ? renderTargetFrameSignature() : 0;
@@ -1462,26 +1505,51 @@ public:
       }
       VkCommandBuffer commandBuffer = targetSpec_.commandBuffer;
       VkFence frameFence = VK_NULL_HANDLE;
+      bool const traceResize = detail::resizeTraceEnabled();
+      auto const phaseStart = [&] {
+        return traceResize ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+      };
+      auto const phaseMs = [&](std::chrono::steady_clock::time_point start) {
+        if (!traceResize) return 0.0;
+        auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - start).count();
+        return static_cast<double>(elapsed) / 1000.0;
+      };
+      double waitFrameMs = 0.0;
+      double deferredDestroyMs = 0.0;
+      double beginMs = 0.0;
+      double endMs = 0.0;
+      double submitMs = 0.0;
       if (!externalCommandBuffer) {
         frameFence = frameFences_[currentFrame_];
         commandBuffer = commandBuffers_[currentFrame_];
+        auto start = phaseStart();
         vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
+        waitFrameMs = phaseMs(start);
+        start = phaseStart();
         destroyDeferredTextures(false);
         destroyDeferredBuffers(false);
+        deferredDestroyMs = phaseMs(start);
+        start = phaseStart();
         vkResetCommandBuffer(commandBuffer, 0);
         VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         vkCheck(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer");
+        beginMs = phaseMs(start);
       }
 
+      RenderTargetRecordStats recordStats{};
       recordRenderTargetCommands(commandBuffer, targetSpec_.image, targetSpec_.view,
-                                 targetSpec_.initialLayout, targetSpec_.finalLayout);
+                                 targetSpec_.initialLayout, targetSpec_.finalLayout,
+                                 traceResize ? &recordStats : nullptr);
 
       if (externalCommandBuffer) {
         return;
       }
 
+      auto start = phaseStart();
       vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
+      endMs = phaseMs(start);
 
       VkSemaphoreSubmitInfo waitSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
       waitSemaphore.semaphore = targetSpec_.waitSemaphore;
@@ -1500,7 +1568,9 @@ public:
       submit.pSignalSemaphoreInfos = targetSpec_.signalSemaphore ? &signalSemaphore : nullptr;
       resetFrameFenceIndex_ = currentFrame_;
       vkCheck(vkResetFences(device_, 1, &frameFence), "vkResetFences");
+      start = phaseStart();
       VkResult const submitted = vkQueueSubmit2(queue_, 1, &submit, frameFence);
+      submitMs = phaseMs(start);
       if (submitted != VK_SUCCESS) {
         recoverResetFrameFence();
         vkCheck(submitted, "vkQueueSubmit2");
@@ -1517,6 +1587,33 @@ public:
       }
       currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
       debug::perf::recordPresentedFrame();
+      if (traceResize) {
+        detail::resizeTrace(
+            "vulkan-render-target-detail",
+            "window=%u target=%ux%u ops=%zu rects=%zu quads=%zu paths=%zu backdropRuns=%zu "
+            "waitFrame=%.3fms deferred=%.3fms begin=%.3fms atlas=%.3fms blurPrep=%.3fms "
+            "upload=%.3fms textureUploadRecord=%.3fms drawRecord=%.3fms end=%.3fms submit=%.3fms "
+            "signal=%d\n",
+            handle_,
+            targetSpec_.width,
+            targetSpec_.height,
+            ops_.size(),
+            rects_.size(),
+            quads_.size(),
+            pathVerts_.size(),
+            recordStats.backdropRuns,
+            waitFrameMs,
+            deferredDestroyMs,
+            beginMs,
+            recordStats.atlasMs,
+            recordStats.backdropPrepareMs,
+            recordStats.uploadMs,
+            recordStats.textureUploadRecordMs,
+            recordStats.drawRecordMs,
+            endMs,
+            submitMs,
+            targetSpec_.signalSemaphore ? 1 : 0);
+      }
     } catch (std::exception const &e) {
       recoverResetFrameFence();
       renderTargetFrameCacheValid_ = false;

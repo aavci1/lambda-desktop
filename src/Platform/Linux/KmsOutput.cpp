@@ -11,6 +11,7 @@
 #include <chrono>
 #include <atomic>
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <cstdio>
 #include <optional>
@@ -94,6 +95,16 @@ std::uint32_t findVulkanMemoryType(VkPhysicalDevice physical,
 std::uint64_t gbmModifier(gbm_bo* bo) {
   std::uint64_t const modifier = gbm_bo_get_modifier(bo);
   return modifier == DRM_FORMAT_MOD_INVALID ? DRM_FORMAT_MOD_LINEAR : modifier;
+}
+
+bool forceLinearScanout() {
+  char const* value = std::getenv("FLUX_COMPOSITOR_FORCE_LINEAR_SCANOUT");
+  return value && *value && std::strcmp(value, "0") != 0;
+}
+
+bool useKmsRenderInFence() {
+  char const* value = std::getenv("FLUX_COMPOSITOR_USE_KMS_IN_FENCE");
+  return !value || !*value || std::strcmp(value, "0") != 0;
 }
 
 std::uint32_t propertyId(int fd, std::uint32_t objectId, std::uint32_t objectType, char const* name) {
@@ -246,6 +257,12 @@ public:
       }
       planeId_ = primaryPlaneForCrtc(fd_, connector_.crtcId);
       loadProperties();
+      useRenderInFence_ = useKmsRenderInFence() && planeInFenceFd_ != 0;
+      if (planeInFenceFd_ != 0) {
+        std::fprintf(stderr,
+                     "flux-compositor: atomic KMS render fence mode: %s\n",
+                     useRenderInFence_ ? "kms-in-fence" : "wait-before-commit");
+      }
       createModeBlob();
       gbm_ = gbm_create_device(fd_);
       if (!gbm_) throw std::runtime_error("gbm_create_device failed for KMS atomic presenter");
@@ -290,7 +307,10 @@ public:
     std::size_t next = displayedBuffer_ >= 0 ? static_cast<std::size_t>(displayedBuffer_) : 0u;
     for (std::size_t i = 0; i < buffers_.size(); ++i) {
       next = (next + 1u) % buffers_.size();
-      if (static_cast<int>(next) != displayedBuffer_ && static_cast<int>(next) != pendingBuffer_) break;
+      if (static_cast<int>(next) != displayedBuffer_ && static_cast<int>(next) != pendingBuffer_ &&
+          static_cast<int>(next) != renderBuffer_) {
+        break;
+      }
     }
     renderBuffer_ = static_cast<int>(next);
     closeRenderFence(buffers_[next]);
@@ -318,15 +338,24 @@ public:
     updateRenderFenceReadiness(buffer);
   }
 
-  bool canSchedulePresent() {
-    if (pageFlipPending_ || renderBuffer_ < 0) return false;
+  bool updateRenderReady() {
+    if (renderBuffer_ < 0) return true;
     Buffer& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
     updateRenderFenceReadiness(buffer);
     return buffer.renderComplete;
   }
 
+  bool canSchedulePresent() {
+    if (renderBuffer_ < 0) return false;
+    bool const renderReady = updateRenderReady();
+    if (pageFlipPending_) return false;
+    Buffer const& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
+    return renderReady || canUseRenderFence(buffer);
+  }
+
   int renderReadyFd() const noexcept {
-    if (renderBuffer_ < 0 || pageFlipPending_) return -1;
+    if (useRenderInFence_) return -1;
+    if (renderBuffer_ < 0) return -1;
     Buffer const& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
     return buffer.renderComplete ? -1 : buffer.renderFenceFd;
   }
@@ -339,6 +368,7 @@ public:
     drmModeAtomicReq* request = drmModeAtomicAlloc();
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
+      bool const useRenderFence = !buffer.renderComplete && canUseRenderFence(buffer);
       if (!modesetDone_) {
         addAtomicProperty(request, connector_.connectorId, connectorCrtcId_, connector_.crtcId, "connector.CRTC_ID");
         addAtomicProperty(request, connector_.crtcId, crtcModeId_, modeBlob_, "crtc.MODE_ID");
@@ -362,6 +392,13 @@ public:
       addAtomicProperty(request, planeId_, planeCrtcY_, 0, "plane.CRTC_Y");
       addAtomicProperty(request, planeId_, planeCrtcW_, connector_.mode.hdisplay, "plane.CRTC_W");
       addAtomicProperty(request, planeId_, planeCrtcH_, connector_.mode.vdisplay, "plane.CRTC_H");
+      if (useRenderFence) {
+        addAtomicProperty(request,
+                          planeId_,
+                          planeInFenceFd_,
+                          static_cast<std::uint64_t>(buffer.renderFenceFd),
+                          "plane.IN_FENCE_FD");
+      }
       std::uint32_t flags = DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT;
       if (!modesetDone_) flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
       pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
@@ -369,12 +406,17 @@ public:
           .scheduledMonotonicNsec = monotonicNanoseconds(),
           .renderSubmittedMonotonicNsec = buffer.renderSubmittedNsec,
           .renderReadyMonotonicNsec = buffer.renderReadyNsec,
+          .usedRenderFence = useRenderFence,
       };
       std::uint64_t const commitStartNsec = monotonicNanoseconds();
       int const rc = drmModeAtomicCommit(fd_, request, flags, &pendingTiming_);
       pendingTiming_.commitDurationNsec = monotonicNanoseconds() - commitStartNsec;
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit");
+      }
+      if (useRenderFence) {
+        closeRenderFence(buffer);
+        buffer.renderComplete = true;
       }
       drmModeAtomicFree(request);
       request = nullptr;
@@ -440,6 +482,10 @@ private:
     return buffer.renderFinished == VK_NULL_HANDLE;
   }
 
+  bool canUseRenderFence(Buffer const& buffer) const noexcept {
+    return useRenderInFence_ && buffer.renderFenceFd >= 0;
+  }
+
   void closeRenderFence(Buffer& buffer) noexcept {
     if (buffer.renderFenceFd >= 0) {
       close(buffer.renderFenceFd);
@@ -499,14 +545,23 @@ private:
 
   Buffer createBuffer() {
     Buffer buffer{};
-    constexpr std::uint64_t modifiers[] = {DRM_FORMAT_MOD_LINEAR};
-    buffer.bo = gbm_bo_create_with_modifiers2(gbm_,
-                                              connector_.mode.hdisplay,
-                                              connector_.mode.vdisplay,
-                                              GBM_FORMAT_ARGB8888,
-                                              modifiers,
-                                              1,
-                                              GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
+    if (!forceLinearScanout()) {
+      buffer.bo = gbm_bo_create(gbm_,
+                                connector_.mode.hdisplay,
+                                connector_.mode.vdisplay,
+                                GBM_FORMAT_ARGB8888,
+                                GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
+    }
+    if (!buffer.bo) {
+      constexpr std::uint64_t modifiers[] = {DRM_FORMAT_MOD_LINEAR};
+      buffer.bo = gbm_bo_create_with_modifiers2(gbm_,
+                                                connector_.mode.hdisplay,
+                                                connector_.mode.vdisplay,
+                                                GBM_FORMAT_ARGB8888,
+                                                modifiers,
+                                                1,
+                                                GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
+    }
     if (!buffer.bo) {
       buffer.bo = gbm_bo_create(gbm_,
                                 connector_.mode.hdisplay,
@@ -529,6 +584,12 @@ private:
           .finalLayout = VK_IMAGE_LAYOUT_GENERAL,
           .signalSemaphore = buffer.renderFinished,
       };
+      std::fprintf(stderr,
+                   "flux-compositor: atomic scanout buffer %ux%u modifier=0x%016llx stride=%u\n",
+                   gbm_bo_get_width(buffer.bo),
+                   gbm_bo_get_height(buffer.bo),
+                   static_cast<unsigned long long>(gbmModifier(buffer.bo)),
+                   gbm_bo_get_stride_for_plane(buffer.bo, 0));
     } catch (...) {
       destroyPartialBuffer(buffer);
       throw;
@@ -729,6 +790,7 @@ private:
   std::uint32_t planeCrtcW_ = 0;
   std::uint32_t planeCrtcH_ = 0;
   std::uint32_t planeInFenceFd_ = 0;
+  bool useRenderInFence_ = false;
   bool modesetDone_ = false;
   bool pageFlipPending_ = false;
   int displayedBuffer_ = -1;
@@ -778,6 +840,10 @@ void KmsAtomicPresenter::prepareFrame() {
 
 void KmsAtomicPresenter::markFrameRendered() {
   if (impl_) impl_->markFrameRendered();
+}
+
+bool KmsAtomicPresenter::updateRenderReady() {
+  return impl_ ? impl_->updateRenderReady() : true;
 }
 
 bool KmsAtomicPresenter::canSchedulePresent() {

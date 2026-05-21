@@ -479,6 +479,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       AtomicFrameProfile profile{};
     };
     AtomicReadyFrame atomicReadyFrame{};
+    bool atomicReplacementRenderedForPendingFlip = false;
     constexpr int kIdlePollMs = 250;
     auto pollFds = [&](std::array<int, 3>& storage) {
       std::size_t count = 0;
@@ -488,7 +489,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         int const flipFd = atomicPresenter->eventFd();
         if (flipFd >= 0) storage[count++] = flipFd;
       }
-      if (atomicPresenter && atomicReadyFrame.ready && !atomicPresenter->hasPendingPageFlip()) {
+      if (atomicPresenter && atomicReadyFrame.ready) {
         int const readyFd = atomicPresenter->renderReadyFd();
         if (readyFd >= 0) storage[count++] = readyFd;
       }
@@ -552,6 +553,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       wayland.sendFrameCallbacksOnly(monotonicMilliseconds());
       wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
       frame = {};
+      atomicReplacementRenderedForPendingFlip = false;
       forceRender = false;
       return true;
     };
@@ -588,7 +590,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       wayland.completePresentationFeedbacks({completion}, monotonicMilliseconds());
       tracePacing("flip-complete id=%u hw=%d seq=%llu interval=%.3fms expected=%.3fms error=%+.3fms "
                   "queue=%.3fms render=%.3fms renderToReady=%.3fms readyToCommit=%.3fms "
-                  "commit=%.3fms scheduledDelta=%.3fms\n",
+                  "commit=%.3fms scheduledDelta=%.3fms renderFence=%d\n",
                   flip->presentId,
                   flip->hardware ? 1 : 0,
                   static_cast<unsigned long long>(flip->sequence),
@@ -611,7 +613,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                   static_cast<double>(flip->commitDurationNsec) / 1'000'000.0,
                   completedScheduledNsec > 0 && flip->scheduledMonotonicNsec >= completedScheduledNsec
                       ? static_cast<double>(flip->scheduledMonotonicNsec - completedScheduledNsec) / 1'000'000.0
-                      : 0.0);
+                      : 0.0,
+                  flip->usedRenderFence ? 1 : 0);
       return true;
     };
     auto renderCompositorFrame = [&](std::chrono::steady_clock::time_point frameTime,
@@ -794,14 +797,21 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                      appliedConfig.config.animationsEnabled);
       std::array<int, 3> eventFdStorage{};
       std::span<int const> const eventFds = pollFds(eventFdStorage);
+      bool const atomicPageFlipPendingBeforePoll =
+          atomicPresenter && atomicPresenter->hasPendingPageFlip();
       bool const atomicFrameAwaitingRender =
-          atomicPresenter && atomicReadyFrame.ready && !atomicPresenter->hasPendingPageFlip() &&
-          atomicPresenter->renderReadyFd() >= 0;
-      bool const atomicFrameAwaitingPresentation =
           atomicPresenter && atomicReadyFrame.ready &&
-          (atomicPresenter->hasPendingPageFlip() || atomicFrameAwaitingRender);
-      bool const animationCanRenderNow = animationFrameNeeded && !atomicFrameAwaitingPresentation;
-      int const pollTimeoutMs = forceRender || animationCanRenderNow ? 0 : kIdlePollMs;
+          atomicPresenter->renderReadyFd() >= 0;
+      bool const atomicFrameBlockedBeforePoll =
+          atomicPresenter && (atomicPageFlipPendingBeforePoll || atomicFrameAwaitingRender ||
+                              atomicReadyFrame.ready);
+      bool const renderAheadNeededBeforePoll =
+          animationFrameNeeded && atomicPageFlipPendingBeforePoll && !atomicReadyFrame.ready;
+      bool const animationCanRenderBeforePoll =
+          animationFrameNeeded && !atomicFrameBlockedBeforePoll;
+      int const pollTimeoutMs = forceRender || animationCanRenderBeforePoll || renderAheadNeededBeforePoll
+                                    ? 0
+                                    : kIdlePollMs;
       auto timingStart = LoopInstrumentation::Clock::now();
       auto const pollResult = device->pollEventDetails(pollTimeoutMs, eventFds);
       bool const pollWoke = pollResult.woke;
@@ -813,11 +823,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const pageFlipWoke = pageFlipFdPolled && pollMaskHas(pollResult.extraReadableMask, pageFlipFdIndex);
       std::size_t const renderReadyFdIndex = pageFlipFdIndex + (pageFlipFdPolled ? 1u : 0u);
       bool const renderReadyFdPolled =
-          atomicPresenter && atomicReadyFrame.ready && !atomicPresenter->hasPendingPageFlip() &&
-          atomicPresenter->renderReadyFd() >= 0;
+          atomicPresenter && atomicReadyFrame.ready && atomicPresenter->renderReadyFd() >= 0;
       bool const renderReadyWoke =
           renderReadyFdPolled && pollMaskHas(pollResult.extraReadableMask, renderReadyFdIndex);
+      bool renderReadyUpdated =
+          renderReadyWoke && atomicPresenter ? atomicPresenter->updateRenderReady() : false;
       bool const pageFlipCompleted = dispatchAtomicPageFlip();
+      if (pageFlipCompleted) atomicReplacementRenderedForPendingFlip = false;
       timingStart = LoopInstrumentation::Clock::now();
       wayland.dispatch();
       loopStats.recordDispatch(timingStart);
@@ -841,6 +853,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const vtForeground = device->isVtForeground();
       if (vtForeground && !wasVtForeground) {
         atomicReadyFrame = {};
+        atomicReplacementRenderedForPendingFlip = false;
         handleVtResume();
       }
       wasVtForeground = vtForeground;
@@ -876,14 +889,35 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         forceRender = true;
       }
 
+      if (!renderReadyUpdated && atomicPresenter && atomicReadyFrame.ready) {
+        renderReadyUpdated = atomicPresenter->updateRenderReady();
+      }
+
       bool const nonPageFlipWake =
           pollResult.inputOrSystem || waylandWoke || (pollWoke && (!pageFlipWoke || !pageFlipCompleted));
-      bool const renderNeeded = forceRender || animationCanRenderNow || nonPageFlipWake || hadInputActivity ||
-                                configReloaded;
+      bool const atomicPageFlipPending = atomicPresenter && atomicPresenter->hasPendingPageFlip();
+      bool const atomicReadyFrameAwaitingRender =
+          atomicPresenter && atomicReadyFrame.ready &&
+          atomicPresenter->renderReadyFd() >= 0;
+      bool const atomicReadyFrameRenderComplete =
+          atomicPresenter && atomicReadyFrame.ready && atomicPresenter->renderReadyFd() < 0;
+      bool const atomicFrameBlocked =
+          atomicPresenter && (atomicPageFlipPending || atomicReadyFrameAwaitingRender || atomicReadyFrame.ready);
+      bool const renderAheadNeeded =
+          animationFrameNeeded && atomicPageFlipPending && !atomicReadyFrame.ready;
+      bool const animationCanRenderNow = animationFrameNeeded && !atomicFrameBlocked;
+      bool const replaceAtomicReadyFrame =
+          atomicPresenter && atomicPageFlipPending && atomicReadyFrame.ready &&
+          !atomicReadyFrameRenderComplete &&
+          !atomicReplacementRenderedForPendingFlip &&
+          (forceRender || nonPageFlipWake || hadInputActivity || configReloaded);
+      bool const renderNeeded = forceRender || animationCanRenderNow || renderAheadNeeded || nonPageFlipWake ||
+                                hadInputActivity || configReloaded;
       if (pollWoke || renderNeeded) {
         tracePacing("loop woke=%d system=%d extra=0x%llx waylandWake=%d pageFlipWake=%d "
                     "pageFlipDone=%d input=%d nonFlipWake=%d force=%d anim=%d config=%d render=%d "
-                    "ready=%d pendingFlip=%d renderReadyFd=%d renderReadyWake=%d\n",
+                    "ready=%d pendingFlip=%d renderReadyFd=%d renderReadyWake=%d renderAheadNeed=%d "
+                    "replaceReady=%d renderReadyNow=%d\n",
                     pollWoke ? 1 : 0,
                     pollResult.inputOrSystem ? 1 : 0,
                     static_cast<unsigned long long>(pollResult.extraReadableMask),
@@ -899,7 +933,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                     atomicReadyFrame.ready ? 1 : 0,
                     atomicPresenter && atomicPresenter->hasPendingPageFlip() ? 1 : 0,
                     renderReadyFdPolled ? 1 : 0,
-                    renderReadyWoke ? 1 : 0);
+                    renderReadyWoke ? 1 : 0,
+                    renderAheadNeeded ? 1 : 0,
+                    replaceAtomicReadyFrame ? 1 : 0,
+                    renderReadyUpdated ? 1 : 0);
       }
       if (!renderNeeded) {
         if (atomicPresenter && atomicReadyFrame.ready && !atomicPresenter->hasPendingPageFlip() &&
@@ -920,7 +957,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         continue;
       }
       if (atomicPresenter && atomicPresenter->hasPendingPageFlip()) {
-        if (!atomicReadyFrame.ready && device->isVtForeground()) {
+        if ((!atomicReadyFrame.ready || replaceAtomicReadyFrame) && device->isVtForeground()) {
           timingStart = LoopInstrumentation::Clock::now();
           PresentationTiming presentationTiming{
               .monotonicNsec = monotonicNanoseconds(),
@@ -935,6 +972,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           loopStats.recordDispatch(timingStart);
           timingStart = LoopInstrumentation::Clock::now();
           renderCompositorFrame(frameTime, timingStart, presentationTiming, true);
+          if (replaceAtomicReadyFrame) atomicReplacementRenderedForPendingFlip = true;
           forceRender = false;
         }
         loopStats.maybeLog();

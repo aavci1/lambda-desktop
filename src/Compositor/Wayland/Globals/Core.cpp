@@ -481,9 +481,15 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     return;
   }
 
+  wl_resource* const previousBuffer = surface->currentBuffer;
+  bool const previousDmabufHeld = surface->dmabufBuffer != nullptr;
+  if (previousBuffer && previousDmabufHeld && previousBuffer != surface->pendingBuffer) {
+    surface->pendingBufferReleases.push_back(previousBuffer);
+  }
   surface->currentBuffer = surface->pendingBuffer;
   surface->pendingBuffer = nullptr;
   surface->pendingBufferAttached = false;
+  bool releaseCurrentBufferImmediately = false;
   if (surface->currentBuffer) {
     if (auto* shmBuffer = shmBufferFor(surface->server, surface->currentBuffer)) {
       std::vector<std::uint8_t> pixels;
@@ -501,6 +507,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->dmabufBuffer = nullptr;
         ++surface->serial;
         traceResizeSurface("commit-shm", surface);
+        releaseCurrentBufferImmediately = true;
       }
     } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->currentBuffer)) {
       if (dmabufBuffer->width > 0 && dmabufBuffer->height > 0 && !dmabufBuffer->planes.empty()) {
@@ -524,8 +531,10 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
                      dmabufBuffer->planes.front().stride,
                      static_cast<unsigned long long>(dmabufBuffer->planes.front().modifier));
       }
+    } else {
+      releaseCurrentBufferImmediately = true;
     }
-    wl_buffer_send_release(surface->currentBuffer);
+    if (releaseCurrentBufferImmediately) wl_buffer_send_release(surface->currentBuffer);
   } else {
     surface->rgbaPixels.reset();
     surface->rgbaFullyOpaque = false;

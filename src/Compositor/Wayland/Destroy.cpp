@@ -99,6 +99,13 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
     wl_resource_destroy(callback);
   }
   surface->frameCallbacks.clear();
+  for (wl_resource* buffer : surface->pendingBufferReleases) {
+    if (buffer) wl_buffer_send_release(buffer);
+  }
+  surface->pendingBufferReleases.clear();
+  if (surface->currentBuffer && surface->dmabufBuffer) {
+    wl_buffer_send_release(surface->currentBuffer);
+  }
   eraseResource(surfaces_, surface);
   if (activatePrevious) activateMostRecentToplevel(this, 0);
 }

@@ -88,6 +88,7 @@ struct WaylandServer::Impl {
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
   [[nodiscard]] bool hasIdleInhibitors() const noexcept;
+  void releasePendingBuffers();
   void sendFrameCallbacksOnly(std::uint32_t timeMs);
   void sendPresentationFeedbacks(std::uint32_t timeMs, PresentationTiming timing);
   void sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing);
@@ -315,6 +316,7 @@ struct WaylandServer::Impl::Surface {
   std::int32_t restoreWidth = 0;
   std::int32_t restoreHeight = 0;
   DmabufBuffer* dmabufBuffer = nullptr;
+  std::vector<wl_resource*> pendingBufferReleases;
   BackgroundEffect* backgroundEffect = nullptr;
   std::vector<CommittedSurfaceSnapshot::RegionRect> backgroundBlurRects;
   std::vector<CommittedSurfaceSnapshot::RegionRect> pendingBackgroundBlurRects;
