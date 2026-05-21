@@ -1041,11 +1041,15 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         renderReadyUpdated = atomicPresenter->updateRenderReady();
       }
 
-      bool const nonPageFlipWake =
-          pollResult.inputOrSystem || waylandWoke || (pollWoke && (!pageFlipWoke || !pageFlipCompleted));
+      bool const genericRenderWake =
+          !atomicPresenter &&
+          (pollResult.inputOrSystem || waylandWoke || (pollWoke && (!pageFlipWoke || !pageFlipCompleted)));
       if (forceRender || pollResult.inputOrSystem || waylandWoke || hadInputActivity || configReloaded ||
           animationFrameNeeded) {
-        atomicFrameDirty = true;
+        if (!atomicPresenter || forceRender || waylandWoke || hadInputActivity || configReloaded ||
+            animationFrameNeeded) {
+          atomicFrameDirty = true;
+        }
       }
       bool const atomicPageFlipPending = atomicPresenter && atomicPresenter->hasPendingPageFlip();
       bool const atomicReadyFrameAwaitingRender =
@@ -1057,7 +1061,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           atomicPresenter && atomicFrameDirty && atomicPageFlipPending && !atomicReadyFrame.ready;
       bool const animationCanRenderNow = animationFrameNeeded && !atomicFrameBlocked;
       bool const renderNeeded =
-          forceRender || animationCanRenderNow || renderAheadNeeded || nonPageFlipWake ||
+          forceRender || animationCanRenderNow || renderAheadNeeded || genericRenderWake ||
           hadInputActivity || configReloaded ||
           (atomicPresenter && atomicFrameDirty && !atomicReadyFrame.ready);
       if (pollWoke || renderNeeded) {
@@ -1072,7 +1076,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                     pageFlipWoke ? 1 : 0,
                     pageFlipCompleted ? 1 : 0,
                     hadInputActivity ? 1 : 0,
-                    nonPageFlipWake ? 1 : 0,
+                    genericRenderWake ? 1 : 0,
                     forceRender ? 1 : 0,
                     animationFrameNeeded ? 1 : 0,
                     configReloaded ? 1 : 0,
