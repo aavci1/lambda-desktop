@@ -88,6 +88,8 @@ struct WaylandServer::Impl {
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
   [[nodiscard]] bool hasIdleInhibitors() const noexcept;
+  void sendFrameCallbacksOnly(std::uint32_t timeMs);
+  void sendPresentationFeedbacks(std::uint32_t timeMs, PresentationTiming timing);
   void sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing);
   void completePresentationFeedbacks(std::vector<PresentationCompletion> const& completions, std::uint32_t timeMs);
   void handlePointerMotion(double dx, double dy, std::uint32_t timeMs);

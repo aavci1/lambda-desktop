@@ -173,6 +173,23 @@ bool WaylandServer::Impl::hasIdleInhibitors() const noexcept {
 }
 
 void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing) {
+  sendPresentationFeedbacks(timeMs, timing);
+  sendFrameCallbacksOnly(timeMs);
+}
+
+void WaylandServer::Impl::sendFrameCallbacksOnly(std::uint32_t timeMs) {
+  for (auto const& surface : surfaces_) {
+    std::vector<wl_resource*> callbacks = std::move(surface->frameCallbacks);
+    surface->frameCallbacks.clear();
+    for (wl_resource* callback : callbacks) {
+      wl_callback_send_done(callback, timeMs);
+      wl_resource_destroy(callback);
+    }
+  }
+  flushClients();
+}
+
+void WaylandServer::Impl::sendPresentationFeedbacks(std::uint32_t timeMs, PresentationTiming timing) {
   normalizePresentationTiming(output_, timing);
   std::vector<PresentationFeedback*> delayedFeedbacks;
   for (auto const& surface : surfaces_) {
@@ -185,12 +202,6 @@ void WaylandServer::Impl::sendFrameCallbacks(std::uint32_t timeMs, PresentationT
       } else {
         sendPresentationFeedback(*this, feedback, timing);
       }
-    }
-    std::vector<wl_resource*> callbacks = std::move(surface->frameCallbacks);
-    surface->frameCallbacks.clear();
-    for (wl_resource* callback : callbacks) {
-      wl_callback_send_done(callback, timeMs);
-      wl_resource_destroy(callback);
     }
   }
   if (!delayedFeedbacks.empty()) {
@@ -220,7 +231,8 @@ void WaylandServer::Impl::completePresentationFeedbacks(std::vector<Presentation
     PresentationTiming timing = it->fallbackTiming;
     if (completion != completions.end()) {
       timing.monotonicNsec = completion->monotonicNsec;
-      timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_HW_COMPLETION);
+      if (completion->sequence != 0) timing.sequence = completion->sequence;
+      timing.flags |= completion->flags | static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_HW_COMPLETION);
     }
     std::vector<PresentationFeedback*> feedbacks = std::move(it->feedbacks);
     it = pendingPresentationBatches_.erase(it);

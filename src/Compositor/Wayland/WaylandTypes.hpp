@@ -40,6 +40,8 @@ struct PresentationTiming {
 struct PresentationCompletion {
   std::uint32_t backendPresentId = 0;
   std::uint64_t monotonicNsec = 0;
+  std::uint64_t sequence = 0;
+  std::uint32_t flags = 0;
 };
 
 struct CommittedSurfaceSnapshot {

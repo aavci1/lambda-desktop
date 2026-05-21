@@ -562,6 +562,7 @@ elseif(FLUX_PLATFORM_LINUX_KMS)
   target_include_directories(flux PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols)
   target_link_libraries(flux PRIVATE
     PkgConfig::LIBDRM
+    PkgConfig::GBM
     PkgConfig::LIBINPUT
     PkgConfig::LIBUDEV
     PkgConfig::WAYLAND_SERVER

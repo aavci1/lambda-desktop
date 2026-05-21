@@ -11,15 +11,55 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
 
 #include <vulkan/vulkan.h>
 
-namespace flux::platform {
+namespace flux {
+
+class Canvas;
+class TextSystem;
+
+namespace platform {
 
 class KmsOutput;
+
+class KmsAtomicPresenter {
+public:
+  struct PageFlipTiming {
+    bool hardware = false;
+    std::uint32_t presentId = 0;
+    std::uint64_t sequence = 0;
+    std::uint64_t monotonicNsec = 0;
+  };
+
+  ~KmsAtomicPresenter();
+
+  KmsAtomicPresenter(KmsAtomicPresenter const&) = delete;
+  KmsAtomicPresenter& operator=(KmsAtomicPresenter const&) = delete;
+  KmsAtomicPresenter(KmsAtomicPresenter&&) noexcept;
+  KmsAtomicPresenter& operator=(KmsAtomicPresenter&&) noexcept;
+
+  Canvas& canvas();
+  void prepareFrame();
+  std::uint32_t schedulePresent();
+  PageFlipTiming present();
+  [[nodiscard]] std::optional<PageFlipTiming> dispatchPageFlipEvents();
+  [[nodiscard]] bool hasPendingPageFlip() const noexcept;
+  [[nodiscard]] int eventFd() const noexcept;
+
+private:
+  class Impl;
+
+  explicit KmsAtomicPresenter(std::unique_ptr<Impl> impl);
+
+  std::unique_ptr<Impl> impl_;
+
+  friend class KmsOutput;
+};
 
 struct KmsInputEvent {
   enum class Kind {
@@ -109,6 +149,8 @@ public:
   [[nodiscard]] bool moveCursor(std::int32_t x, std::int32_t y) const;
   void hideCursor() const;
 
+  [[nodiscard]] std::unique_ptr<KmsAtomicPresenter> createAtomicPresenter(TextSystem& textSystem) const;
+
 private:
   class Impl;
 
@@ -119,6 +161,7 @@ private:
   friend class KmsDevice::Impl;
 };
 
-} // namespace flux::platform
+} // namespace platform
+} // namespace flux
 
 #endif // FLUX_VULKAN

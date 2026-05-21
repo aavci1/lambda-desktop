@@ -30,6 +30,7 @@ VkInstance ensureSharedVulkanInstance();
 std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface, unsigned int handle, TextSystem& textSystem);
 std::unique_ptr<Canvas> createVulkanRenderTargetCanvas(VulkanRenderTargetSpec const& spec,
                                                        TextSystem& textSystem);
+bool setVulkanRenderTargetSpecForCanvas(Canvas* canvas, VulkanRenderTargetSpec const& spec);
 
 bool beginRecordedOpsCaptureForCanvas(Canvas* canvas, VulkanFrameRecorder* target);
 void endRecordedOpsCaptureForCanvas(Canvas* canvas);

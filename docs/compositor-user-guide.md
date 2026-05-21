@@ -217,8 +217,10 @@ Set them before launching the compositor if you need to force a theme or size.
 
 - Real-app validation beyond `foot`, especially GTK, Qt, and browser clients.
 - Popup menu validation with real applications; full xdg-popup input-grab semantics remain deferred.
-- Broader video/game validation of presentation-time completion feedback.
+- Hardware validation of the new GBM/atomic-KMS page-flip completion path, then broader video/game validation of presentation-time feedback.
 - Adaptive sync and triple-buffering.
 - Proper input/session brokering instead of manual `/dev/input/event*` ACLs.
 - Full multi-output desktop layout if it lands in v1.
 - Install/session-manager packaging documentation.
+
+Set `FLUX_COMPOSITOR_PRESENT=vulkan-display` only for debugging if you need to compare against the previous Vulkan-display presenter.

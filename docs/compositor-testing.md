@@ -100,9 +100,11 @@ Expected result: a top layer-surface bar appears and renders non-black content.
 ./build-kms-compositor/flux-compositor-presentation-time-demo
 ```
 
-Expected result: the client receives presentation feedback. It should print `sync_output` before `presented`. On KMS outputs with working `drmWaitVBlank`, feedback includes DRM vblank pacing timestamps, refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK` flags. If the driver rejects vblank waits, feedback falls back to compositor-clock timing.
+Expected result: the client receives presentation feedback. It should print `sync_output` before `presented`. On the default GBM/atomic-KMS presenter, feedback is sent from the DRM page-flip completion event and includes refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK`/`HW_COMPLETION` flags.
 
-If the Vulkan driver supports `VK_GOOGLE_display_timing`, the compositor logs `Vulkan display timing available` after the first present. After the first past-presentation record arrives, `wp_presentation_time` feedback is delayed until the matching Vulkan completion record is available; if a record does not arrive promptly, the compositor falls back to DRM-vblank timing for that feedback.
+The legacy Vulkan-display presenter can still use DRM vblank timing, and if the Vulkan driver supports `VK_GOOGLE_display_timing`, the compositor logs `Vulkan display timing available` after the first present. After the first past-presentation record arrives, `wp_presentation_time` feedback is delayed until the matching Vulkan completion record is available; if a record does not arrive promptly, the compositor falls back to DRM-vblank timing for that feedback.
+
+Set `FLUX_COMPOSITOR_PRESENT=vulkan-display` before launching the compositor to force the legacy presenter for comparison while the atomic-KMS path is being hardware-smoked.
 
 ### Idle Blanking
 

@@ -194,8 +194,8 @@ This phase is mostly setup and confidence-building. The real compositor work sta
 - The compositor repository is created with the layout from §1.9.
 - `main.cpp` initializes via Flux's KMS+Vulkan infrastructure.
 - An output is selected (the first connected one).
-- A `RenderTarget` is created backed by KMS framebuffer images.
-- A render loop drives page flips at vblank.
+- A render target is created over GBM scanout buffers, and those buffers are presented with atomic KMS commits.
+- A render loop drives page flips and receives page-flip completion events from DRM.
 - Each frame, the target is cleared to a solid color.
 - SIGINT / SIGTERM cause clean shutdown: stop the render loop, release the RenderTarget, release the KMS framebuffers, release DRM master, exit.
 
@@ -580,7 +580,7 @@ Protocols to implement, in rough priority order:
 - **`zwlr_layer_shell_v1`**: required for panels, status bars, on-screen displays, notification daemons. Even if the compositor doesn't have a panel yet, this protocol's existence is what makes future panel work possible. Layer-shell clients render at fixed Z-order positions (background, bottom, top, overlay). Implemented with basic size/configure/anchor/margin handling and a purpose-built `flux-compositor-layer-shell-demo`.
 - **`wp_viewporter`**: lets clients specify a source-region and destination-size for their surface, used heavily by video players and apps doing pixel-level scaling. Implemented, with a purpose-built `flux-compositor-viewport-demo` smoke client.
 - **`xdg_output_v1`**: gives clients logical output information (position, scale). Needed by apps that care about screen geometry. Implemented for the current single-output layout.
-- **`wp_presentation_time`**: gives clients vblank-timing information for frame pacing. Used by video players and games for smooth playback. The compositor exposes the global, announces `CLOCK_MONOTONIC`, and sends one-shot presented/discarded feedback after compositor presentation. Feedback includes `sync_output` for the single active output and uses DRM vblank pacing timestamps, refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK` flags when available; it falls back to compositor-clock timing if DRM vblank waits are unavailable. Final page-flip completion precision remains hardening work.
+- **`wp_presentation_time`**: gives clients vblank-timing information for frame pacing. Used by video players and games for smooth playback. The compositor exposes the global, announces `CLOCK_MONOTONIC`, and sends one-shot presented/discarded feedback after compositor presentation. Feedback includes `sync_output` for the single active output. The default GBM/atomic-KMS presentation path uses DRM page-flip completion events with refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK`/`HW_COMPLETION` flags. The legacy Vulkan-display path can still use DRM vblank timing and optional `VK_GOOGLE_display_timing` completion records.
 - **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window. Relative pointer motion is implemented and smoke-tested with `flux-compositor-relative-pointer-demo`; pointer constraints are implemented with focus-driven lock/confine activation and smoke-tested with `flux-compositor-pointer-constraints-demo`.
 - **`wp_cursor_shape_v1`**: lets clients request a system cursor by name rather than supplying a buffer. Newer protocol; modern toolkits use it. Implemented for pointer devices with compositor-drawn Xcursor theme images.
 - **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard, drag-and-drop, and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `flux-compositor-primary-selection-demo`; regular clipboard selection is implemented for focused clients and smoke-tested with `flux-compositor-clipboard-demo`; drag-and-drop is implemented for UTF-8 text payloads with source/target action negotiation and smoke-tested with `flux-compositor-dnd-demo`.
@@ -610,7 +610,7 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 - ✗ A Firefox or Chromium build configured for Wayland runs and is usable.
 - ◐ The protocols are exposed via the compositor's `wl_registry` globals and clients can negotiate them. `xdg_output_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager`, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed.
 - ✓ A purpose-built test layer-shell client renders at the top layer.
-- ◐ A purpose-built presentation-time client receives `clock_id`, `sync_output`, and presented feedback after its committed frame is presented; DRM vblank pacing timestamps and refresh counters are wired when available, while final page-flip completion precision remains pending.
+- ◐ A purpose-built presentation-time client receives `clock_id`, `sync_output`, and presented feedback after its committed frame is presented; the default GBM/atomic-KMS path is wired to DRM page-flip completion events and still needs hardware smoke validation.
 - ✓ A purpose-built relative-pointer client receives relative motion deltas while its window has pointer focus.
 - ◐ A purpose-built popup client can create, render, and dismiss a positioned popup without taking an input grab; full popup input-grab semantics remain pending.
 - ◐ A purpose-built activation client can request an activation token and ask the compositor to raise/focus another window.
@@ -762,11 +762,11 @@ This section is updated as work progresses. Entries record completion of each ph
 
 | Phase | Status | Started | Completed | Notes |
 |-------|--------|---------|-----------|-------|
-| Phase 1: First pixels | Basic TTY smoke passed | 2026-05-16 | - | Blue background, VT switching, and explicit compositor termination are verified on hardware; Ctrl+C is ignored by the compositor so terminal clients can use it, while kernel-log, CPU-idle, and kill-path checks remain pending. |
+| Phase 1: First pixels | Atomic KMS backend compiling | 2026-05-16 | - | Blue background, VT switching, and explicit compositor termination were verified on the earlier Vulkan-display path. The compositor now defaults to GBM scanout buffers plus atomic KMS page flips; hardware smoke validation is pending. Ctrl+C is ignored by the compositor so terminal clients can use it, while kernel-log, CPU-idle, and kill-path checks remain pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_subcompositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, basic subsurface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, double-click maximize/restore, shortcuts, title text, close-on-click-release, and non-grabbing xdg-popup rendering/dismissal are implemented with a popup smoke demo. Popup input grabs remain deferred. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed with smoke demos where useful. Current Wayland globals, including core surfaces and xdg-shell/decoration, live in `src/Compositor/Wayland/Globals/`; window/input-management lives in `src/Compositor/Window/WindowManager.cpp`; server lifecycle, snapshots, frame scheduling, and destroy cleanup live in dedicated `src/Compositor/Wayland/` files. |
-| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, cursor theme/size, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme with no built-in cursor artwork, compatible cursor images use a KMS cursor plane, frame pacing waits for DRM vblank when available, and user/testing docs exist; adaptive sync/triple buffering and install/session docs remain pending. |
+| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, cursor theme/size, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme with no built-in cursor artwork, compatible cursor images use a KMS cursor plane, the compositor default presentation path uses GBM/atomic KMS with page-flip completion events, and user/testing docs exist; adaptive sync/triple buffering and install/session docs remain pending. |
 
 ### 12.1 Framework changes log
 
@@ -804,6 +804,7 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-18 | 7c74c1a | Updated compositor status to reflect docs and popup geometry test coverage. | Documentation-only status update. |
 | 2026-05-18 | 141ebd7 | Added config-file support for compositor cursor theme and size with Xcursor environment fallback. | Linux compositor-only cursor configuration; no Metal API involved. |
 | 2026-05-18 | 7fec81f | Added `flux-compositor --config PATH` and `--help` so test configs can be selected without editing environment variables. | Linux compositor-only executable usability; no Metal API involved. |
+| 2026-05-21 | local working tree | Added an initial GBM/atomic-KMS presenter for compositor-owned scanout buffers and exposed render-target retargeting for Vulkan canvases. | Linux/KMS-only presentation backend; Mac continues to use `CAMetalLayer`. |
 
 ### 12.2 Open questions
 
@@ -811,7 +812,8 @@ Tracked as work proceeds. Removed when answered.
 
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
 - Phase 3: Subsurface hit testing remains separate from the popup hit-test fix. Subsurfaces render relative to parents, but pointer routing still needs explicit subsurface ordering and coordinate translation.
-- Phase 4: `wp_presentation_time` now sends `sync_output` and uses DRM vblank pacing timestamps, refresh intervals, and sequence counters when available, with compositor-clock fallback if DRM vblank waits are unavailable. The Vulkan backend enables `VK_GOOGLE_display_timing` opportunistically; once the first past-presentation record arrives, Wayland presentation feedback is delayed until the matching Vulkan completion record is available, with a bounded fallback to DRM-vblank timing if completion records do not arrive promptly.
+- Phase 4: `wp_presentation_time` now sends `sync_output`. The default GBM/atomic-KMS path reports DRM page-flip completion timestamps; the legacy Vulkan-display path uses DRM vblank timing and can delay feedback on optional `VK_GOOGLE_display_timing` records.
+- Presentation backend escape hatch: `FLUX_COMPOSITOR_PRESENT=vulkan-display` forces the legacy Vulkan-display presenter for debugging while the atomic-KMS path is being hardware-smoked.
 - Phase 5: Does multi-output land in v1 or post-v1?
 
 ### 12.3 Remaining implementation work
@@ -826,7 +828,7 @@ Hardware or real-app validation work:
 
 - Real-app validation: continue testing `foot` and add GTK/Qt/browser coverage when those apps are available.
 - Popup hardening: popup hit testing is now popup-first and nested popup bounds are unit-tested. Broader real-app menu behavior remains pending, and full xdg-popup input-grab semantics are still intentionally deferred because the earlier grab path froze the test laptop.
-- Presentation timing: validate DRM-vblank and optional Vulkan-display-timing feedback paths with video/game workloads.
+- Presentation timing: hardware-smoke the new GBM/atomic-KMS page-flip completion path, then validate it with video/game workloads.
 - Frame pacing: adaptive sync and triple-buffering remain pending.
 - Idle behavior: compositor-side software idle blanking is implemented and idle inhibitors suppress it; DPMS/panel power-off remains unimplemented.
 - Input/session polish: development still uses manual `/dev/input/event*` ACLs; proper seat/session brokering is still pending.

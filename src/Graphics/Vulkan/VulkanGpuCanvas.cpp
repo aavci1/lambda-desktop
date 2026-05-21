@@ -931,6 +931,18 @@ public:
     return getPastPresentationTiming_ != nullptr && swapchain_ != VK_NULL_HANDLE;
   }
 
+  bool setRenderTargetSpec(VulkanRenderTargetSpec const& spec) {
+    if (!targetMode_ || !spec.image || !spec.view || spec.width == 0 || spec.height == 0) {
+      return false;
+    }
+    targetSpec_ = spec;
+    framebufferWidth_ = static_cast<int>(spec.width);
+    framebufferHeight_ = static_cast<int>(spec.height);
+    swapExtent_ = VkExtent2D{spec.width, spec.height};
+    renderTargetFrameCacheValid_ = false;
+    return true;
+  }
+
   std::uint32_t lastPresentId() const noexcept {
     return lastSubmittedPresentId_;
   }
@@ -4168,6 +4180,11 @@ std::unique_ptr<Canvas> createVulkanCanvas(VkSurfaceKHR surface, unsigned int ha
 std::unique_ptr<Canvas> createVulkanRenderTargetCanvas(VulkanRenderTargetSpec const& spec,
                                                        TextSystem& textSystem) {
   return std::make_unique<VulkanCanvas>(spec, textSystem);
+}
+
+bool setVulkanRenderTargetSpecForCanvas(Canvas* canvas, VulkanRenderTargetSpec const& spec) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan && vulkan->setRenderTargetSpec(spec);
 }
 
 bool beginRecordedOpsCaptureForCanvas(Canvas *canvas, VulkanFrameRecorder *target) {

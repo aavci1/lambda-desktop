@@ -90,6 +90,14 @@ bool WaylandServer::hasIdleInhibitors() const noexcept {
   return impl_->hasIdleInhibitors();
 }
 
+void WaylandServer::sendFrameCallbacksOnly(std::uint32_t timeMs) {
+  impl_->sendFrameCallbacksOnly(timeMs);
+}
+
+void WaylandServer::sendPresentationFeedbacks(std::uint32_t timeMs, PresentationTiming timing) {
+  impl_->sendPresentationFeedbacks(timeMs, timing);
+}
+
 void WaylandServer::sendFrameCallbacks(std::uint32_t timeMs, PresentationTiming timing) {
   impl_->sendFrameCallbacks(timeMs, timing);
 }
