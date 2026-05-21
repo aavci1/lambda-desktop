@@ -549,6 +549,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       frame.timing.backendPresentId = presentId;
       frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                        WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
+      wayland.sendFrameCallbacksOnly(monotonicMilliseconds());
       wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
       frame = {};
       forceRender = false;
@@ -585,7 +586,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                        : 0u,
       };
       wayland.completePresentationFeedbacks({completion}, monotonicMilliseconds());
-      wayland.sendFrameCallbacksOnly(monotonicMilliseconds());
       tracePacing("flip-complete id=%u hw=%d seq=%llu interval=%.3fms expected=%.3fms error=%+.3fms "
                   "queue=%.3fms render=%.3fms renderToReady=%.3fms readyToCommit=%.3fms "
                   "commit=%.3fms scheduledDelta=%.3fms\n",
