@@ -65,6 +65,7 @@ bool cutoutsRejected(WaylandServer::Impl const* server, WaylandServer::Impl::Sur
 enum class ChromeButton {
   None,
   Close,
+  Maximize,
   Minimize,
 };
 
@@ -85,6 +86,7 @@ ChromeButton chromeButtonAt(WaylandServer::Impl const* server,
     return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
   };
   if (contains(rects.closeButton)) return ChromeButton::Close;
+  if (contains(rects.maximizeButton)) return ChromeButton::Maximize;
   if (contains(rects.minimizeButton)) return ChromeButton::Minimize;
   return ChromeButton::None;
 }
@@ -120,6 +122,8 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .cutoutsRejected = rejected,
       .closeButtonHovered = hovered == ChromeButton::Close,
       .closeButtonPressed = server->closePressSurface_ == surface,
+      .maximizeButtonHovered = hovered == ChromeButton::Maximize,
+      .maximizeButtonPressed = server->maximizePressSurface_ == surface,
       .minimizeButtonHovered = hovered == ChromeButton::Minimize,
       .minimizeButtonPressed = server->minimizePressSurface_ == surface,
 	      .focused = server->keyboardFocus_ == surface,

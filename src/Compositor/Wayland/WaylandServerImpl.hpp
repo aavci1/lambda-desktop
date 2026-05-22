@@ -208,6 +208,7 @@ struct WaylandServer::Impl {
   Surface* dragSurface_ = nullptr;
   Surface* resizeSurface_ = nullptr;
   Surface* closePressSurface_ = nullptr;
+  Surface* maximizePressSurface_ = nullptr;
   Surface* minimizePressSurface_ = nullptr;
   Surface* lastTitleClickSurface_ = nullptr;
   Surface* cursorSurface_ = nullptr;
@@ -540,6 +541,11 @@ void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface);
 void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs);
 void removeSurfaceFromFocusOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void activateMostRecentToplevel(WaylandServer::Impl* server, std::uint32_t timeMs);
+void minimizeToplevel(WaylandServer::Impl* server,
+                      WaylandServer::Impl::Surface* surface,
+                      std::uint32_t timeMs);
+void maximizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
+bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 WaylandServer::Impl::ToplevelDecoration* decorationFor(WaylandServer::Impl* server,
                                                        WaylandServer::Impl::XdgToplevel* toplevel);
 WaylandServer::Impl::XxCutouts* cutoutsFor(WaylandServer::Impl* server,

@@ -84,6 +84,8 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, surface.cutoutsRejected);
   hashValue(hash, surface.closeButtonHovered);
   hashValue(hash, surface.closeButtonPressed);
+  hashValue(hash, surface.maximizeButtonHovered);
+  hashValue(hash, surface.maximizeButtonPressed);
   hashValue(hash, surface.minimizeButtonHovered);
   hashValue(hash, surface.minimizeButtonPressed);
   hashValue(hash, surface.focused);

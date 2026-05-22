@@ -79,6 +79,8 @@ struct CommittedSurfaceSnapshot {
   bool cutoutsRejected = false;
   bool closeButtonHovered = false;
   bool closeButtonPressed = false;
+  bool maximizeButtonHovered = false;
+  bool maximizeButtonPressed = false;
   bool minimizeButtonHovered = false;
   bool minimizeButtonPressed = false;
   bool focused = false;

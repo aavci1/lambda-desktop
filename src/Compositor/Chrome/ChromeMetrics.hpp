@@ -11,9 +11,9 @@ namespace flux::compositor {
 struct ChromeControlsMetrics {
   float titleBarHeight = 0.f;
   float controlsWidth = 0.f;
+  float controlWidth = 0.f;
   float buttonSize = 0.f;
   float buttonRadius = 0.f;
-  float buttonGap = 0.f;
   float insetRight = 0.f;
   float insetTop = 0.f;
 };
@@ -21,6 +21,7 @@ struct ChromeControlsMetrics {
 struct ChromeControlRects {
   Rect controls{};
   Rect closeButton{};
+  Rect maximizeButton{};
   Rect minimizeButton{};
 };
 
@@ -32,17 +33,17 @@ inline ChromeControlsMetrics chromeControlsMetrics(ChromeConfig const& chrome, f
   float const buttonFromInset = std::max(0.f, height - scaledTopInset * 2.f);
   float const maxButton = std::max(0.f, height - 2.f);
   float const buttonSize = std::min({scaledButton, buttonFromInset, maxButton});
-  float const buttonGap = std::max(0.f, static_cast<float>(chrome.buttonGap) * scale);
   float const insetRight = std::max(0.f, static_cast<float>(chrome.controlsInsetRight) * scale);
-  float const minControlsWidth = insetRight * 2.f + buttonSize * 2.f + buttonGap;
+  float const minControlsWidth = height * 3.f;
   float const controlsWidth =
       std::max(static_cast<float>(chrome.controlsWidth) * scale, minControlsWidth);
+  float const controlWidth = controlsWidth / 3.f;
   return ChromeControlsMetrics{
       .titleBarHeight = height,
       .controlsWidth = controlsWidth,
+      .controlWidth = controlWidth,
       .buttonSize = buttonSize,
       .buttonRadius = std::min(std::max(0.f, chrome.buttonRadius * scale), buttonSize * 0.5f),
-      .buttonGap = buttonGap,
       .insetRight = insetRight,
       .insetTop = std::max(0.f, (height - buttonSize) * 0.5f),
   };
@@ -59,15 +60,13 @@ inline ChromeControlRects chromeControlRects(ChromeConfig const& chrome,
                                              float titleBarHeight) {
   ChromeControlsMetrics const metrics = chromeControlsMetrics(chrome, titleBarHeight);
   float const controlsLeft = frameLeft + std::max(0.f, frameWidth - metrics.controlsWidth);
-  float const buttonTop = frameTop + metrics.insetTop;
-  float const closeRight = frameLeft + frameWidth - metrics.insetRight;
-  float const closeLeft = closeRight - metrics.buttonSize;
-  float const minimizeRight = closeLeft - metrics.buttonGap;
-  float const minimizeLeft = minimizeRight - metrics.buttonSize;
+  float const closeLeft = controlsLeft + metrics.controlWidth * 2.f;
+  float const maximizeLeft = controlsLeft + metrics.controlWidth;
   return ChromeControlRects{
       .controls = Rect::sharp(controlsLeft, frameTop, metrics.controlsWidth, metrics.titleBarHeight),
-      .closeButton = Rect::sharp(closeLeft, buttonTop, metrics.buttonSize, metrics.buttonSize),
-      .minimizeButton = Rect::sharp(minimizeLeft, buttonTop, metrics.buttonSize, metrics.buttonSize),
+      .closeButton = Rect::sharp(closeLeft, frameTop, metrics.controlWidth, metrics.titleBarHeight),
+      .maximizeButton = Rect::sharp(maximizeLeft, frameTop, metrics.controlWidth, metrics.titleBarHeight),
+      .minimizeButton = Rect::sharp(controlsLeft, frameTop, metrics.controlWidth, metrics.titleBarHeight),
   };
 }
 

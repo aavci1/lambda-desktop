@@ -67,7 +67,7 @@ TEST_CASE("compositor config creates a default file when missing") {
   CHECK(loaded.config.backgroundColor.g == doctest::Approx(128.f / 255.f));
   CHECK(loaded.config.backgroundColor.b == doctest::Approx(242.f / 255.f));
   CHECK(loaded.config.chrome.titleBarHeight == 28);
-  CHECK(loaded.config.chrome.controlsWidth == 58);
+  CHECK(loaded.config.chrome.controlsWidth == 84);
 
   std::filesystem::remove_all(path.parent_path());
 }
@@ -228,13 +228,21 @@ TEST_CASE("chrome controls scale and center with title bar height") {
 
   auto const metrics = flux::compositor::chromeControlsMetrics(chrome);
   CHECK(metrics.buttonSize == doctest::Approx(32.f));
-  CHECK(metrics.buttonGap == doctest::Approx(8.f));
+  CHECK(metrics.controlsWidth == doctest::Approx(168.f));
+  CHECK(metrics.controlWidth == doctest::Approx(56.f));
   CHECK(metrics.insetTop == doctest::Approx(12.f));
 
   auto const rects = flux::compositor::chromeControlRects(chrome, 10.f, 20.f, 300.f, 56.f);
-  CHECK(rects.closeButton.y == doctest::Approx(32.f));
-  CHECK(rects.closeButton.height == doctest::Approx(32.f));
-  CHECK(rects.minimizeButton.height == doctest::Approx(32.f));
+  CHECK(rects.controls.x == doctest::Approx(142.f));
+  CHECK(rects.minimizeButton.x == doctest::Approx(142.f));
+  CHECK(rects.maximizeButton.x == doctest::Approx(198.f));
+  CHECK(rects.closeButton.x == doctest::Approx(254.f));
+  CHECK(rects.closeButton.y == doctest::Approx(20.f));
+  CHECK(rects.closeButton.height == doctest::Approx(56.f));
+  CHECK(rects.minimizeButton.height == doctest::Approx(56.f));
+  CHECK(rects.maximizeButton.height == doctest::Approx(56.f));
+  CHECK(rects.minimizeButton.x + rects.minimizeButton.width == doctest::Approx(rects.maximizeButton.x));
+  CHECK(rects.maximizeButton.x + rects.maximizeButton.width == doctest::Approx(rects.closeButton.x));
 }
 
 TEST_CASE("compositor config reports file changes") {

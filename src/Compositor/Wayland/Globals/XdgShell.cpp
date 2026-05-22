@@ -37,6 +37,19 @@ void fillToplevelStates(WaylandServer::Impl* server,
   if (server->keyboardFocus_ == surface) appendToplevelState(states, XDG_TOPLEVEL_STATE_ACTIVATED);
 }
 
+void sendToplevelWmCapabilities(WaylandServer::Impl::XdgToplevel* toplevel) {
+  if (!toplevel || !toplevel->resource ||
+      wl_resource_get_version(toplevel->resource) < XDG_TOPLEVEL_WM_CAPABILITIES_SINCE_VERSION) {
+    return;
+  }
+  wl_array capabilities;
+  wl_array_init(&capabilities);
+  appendToplevelState(&capabilities, XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE);
+  appendToplevelState(&capabilities, XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE);
+  xdg_toplevel_send_wm_capabilities(toplevel->resource, &capabilities);
+  wl_array_release(&capabilities);
+}
+
 void sendToplevelConfigureInternal(WaylandServer::Impl* server,
                                    WaylandServer::Impl::XdgToplevel* toplevel,
                                    std::int32_t width,
@@ -482,6 +495,7 @@ void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32
                         xdgSurface->server->toplevels_.size(),
                         xdgSurface->surface->windowX,
                         xdgSurface->surface->windowY);
+  sendToplevelWmCapabilities(raw);
   sendToplevelConfigureInternal(xdgSurface->server, raw, 0, 0, false);
 }
 
@@ -771,6 +785,24 @@ void xdgToplevelMove(wl_client*, wl_resource* resource, wl_resource*, std::uint3
   server->snapPreviewTargetWindow_ = {};
 }
 
+void xdgToplevelSetMaximized(wl_client*, wl_resource* resource) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
+  maximizeToplevel(toplevel->server, toplevel->xdgSurface->surface);
+}
+
+void xdgToplevelUnsetMaximized(wl_client*, wl_resource* resource) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
+  restoreToplevel(toplevel->server, toplevel->xdgSurface->surface);
+}
+
+void xdgToplevelSetMinimized(wl_client*, wl_resource* resource) {
+  auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
+  if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
+  minimizeToplevel(toplevel->server, toplevel->xdgSurface->surface, monotonicMilliseconds());
+}
+
 struct xdg_toplevel_interface const xdgToplevelImpl{
     .destroy = xdgToplevelDestroy,
     .set_parent = [](wl_client*, wl_resource*, wl_resource*) {},
@@ -781,11 +813,11 @@ struct xdg_toplevel_interface const xdgToplevelImpl{
     .resize = xdgToplevelResize,
     .set_max_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
     .set_min_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
-    .set_maximized = [](wl_client*, wl_resource*) {},
-    .unset_maximized = [](wl_client*, wl_resource*) {},
+    .set_maximized = xdgToplevelSetMaximized,
+    .unset_maximized = xdgToplevelUnsetMaximized,
     .set_fullscreen = [](wl_client*, wl_resource*, wl_resource*) {},
     .unset_fullscreen = [](wl_client*, wl_resource*) {},
-    .set_minimized = [](wl_client*, wl_resource*) {},
+    .set_minimized = xdgToplevelSetMinimized,
 };
 
 } // namespace

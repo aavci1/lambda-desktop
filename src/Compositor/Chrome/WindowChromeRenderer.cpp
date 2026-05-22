@@ -6,6 +6,7 @@
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 
 #include <algorithm>
+#include <cmath>
 
 namespace flux::compositor {
 namespace {
@@ -41,40 +42,78 @@ void drawControls(Canvas& canvas,
   ChromeControlsMetrics const metrics = chromeControlsMetrics(chrome, titleBarHeight);
   ChromeControlRects const rects = chromeControlRects(chrome, windowX, titleTop, windowWidth, titleBarHeight);
   float const buttonSize = metrics.buttonSize;
-  float const buttonY = rects.closeButton.y;
   float const groupOpacity = surface.focused ? 1.f : 0.6f;
-  float const glyphInset = std::max(3.f, buttonSize * 0.32f);
-  float const glyphMin = glyphInset;
-  float const glyphMax = buttonSize - glyphInset;
-  float const minimizeY = buttonY + buttonSize * 0.66f;
+  float const glyphInset = std::max(3.f, buttonSize * 0.28f);
+  Rect const titleClip = Rect::sharp(windowX, titleTop, windowWidth, titleBarHeight);
+  CornerRadius const titleClipRadius{chrome.windowCornerRadius.topLeft,
+                                     chrome.windowCornerRadius.topRight,
+                                     0.f,
+                                     0.f};
 
-  auto drawButton = [&](Rect const& rect, bool hovered, bool pressed, bool close) {
+  auto glyphRect = [&](Rect const& rect) {
+    return Rect::sharp(rect.x + (rect.width - buttonSize) * 0.5f,
+                       rect.y + (rect.height - buttonSize) * 0.5f,
+                       buttonSize,
+                       buttonSize);
+  };
+
+  enum class ControlKind {
+    Minimize,
+    Maximize,
+    Close,
+  };
+
+  auto hoverRadius = [&](Rect const& rect) {
+    float const right = windowX + windowWidth;
+    if (std::abs((rect.x + rect.width) - right) <= 0.5f) {
+      return CornerRadius{0.f, chrome.windowCornerRadius.topRight, 0.f, 0.f};
+    }
+    return CornerRadius{};
+  };
+
+  auto drawButton = [&](Rect const& rect, bool hovered, bool pressed, ControlKind kind) {
     bool const active = hovered || pressed;
     if (active) {
-      Color const background = close ? chrome.closeHoverBackground : chrome.minimizeHoverBackground;
+      Color const background = kind == ControlKind::Close ? chrome.closeHoverBackground : chrome.minimizeHoverBackground;
       canvas.drawRect(rect,
-                      CornerRadius{metrics.buttonRadius},
+                      hoverRadius(rect),
                       FillStyle::solid(withOpacity(background, groupOpacity)),
                       StrokeStyle::none(),
                       ShadowStyle::none());
     }
 
-    Color glyph = close
+    Color glyph = kind == ControlKind::Close
                       ? (active ? chrome.closeGlyphHoverColor : chrome.closeGlyphColor)
                       : (active ? chrome.minimizeGlyphHoverColor : chrome.minimizeGlyphColor);
     glyph = withOpacity(glyph, groupOpacity);
     StrokeStyle stroke = StrokeStyle::solid(glyph, 1.6f);
     stroke.cap = StrokeCap::Round;
-    if (close) {
-      canvas.drawLine({rect.x + glyphMin, buttonY + glyphMin}, {rect.x + glyphMax, buttonY + glyphMax}, stroke);
-      canvas.drawLine({rect.x + glyphMax, buttonY + glyphMin}, {rect.x + glyphMin, buttonY + glyphMax}, stroke);
+    Rect const glyphBounds = glyphRect(rect);
+    float const glyphMinX = glyphBounds.x + glyphInset;
+    float const glyphMaxX = glyphBounds.x + glyphBounds.width - glyphInset;
+    float const glyphMinY = glyphBounds.y + glyphInset;
+    float const glyphMaxY = glyphBounds.y + glyphBounds.height - glyphInset;
+    if (kind == ControlKind::Close) {
+      canvas.drawLine({glyphMinX, glyphMinY}, {glyphMaxX, glyphMaxY}, stroke);
+      canvas.drawLine({glyphMaxX, glyphMinY}, {glyphMinX, glyphMaxY}, stroke);
+    } else if (kind == ControlKind::Maximize) {
+      Rect const box = Rect::sharp(glyphMinX,
+                                   glyphMinY,
+                                   std::max(0.f, glyphMaxX - glyphMinX),
+                                   std::max(0.f, glyphMaxY - glyphMinY));
+      canvas.drawRect(box, CornerRadius{}, FillStyle::none(), stroke, ShadowStyle::none());
     } else {
-      canvas.drawLine({rect.x + glyphMin, minimizeY}, {rect.x + glyphMax, minimizeY}, stroke);
+      float const minimizeY = glyphBounds.y + glyphBounds.height * 0.5f;
+      canvas.drawLine({glyphMinX, minimizeY}, {glyphMaxX, minimizeY}, stroke);
     }
   };
 
-  drawButton(rects.minimizeButton, surface.minimizeButtonHovered, surface.minimizeButtonPressed, false);
-  drawButton(rects.closeButton, surface.closeButtonHovered, surface.closeButtonPressed, true);
+  canvas.save();
+  canvas.clipRect(titleClip, titleClipRadius, true);
+  drawButton(rects.minimizeButton, surface.minimizeButtonHovered, surface.minimizeButtonPressed, ControlKind::Minimize);
+  drawButton(rects.maximizeButton, surface.maximizeButtonHovered, surface.maximizeButtonPressed, ControlKind::Maximize);
+  drawButton(rects.closeButton, surface.closeButtonHovered, surface.closeButtonPressed, ControlKind::Close);
+  canvas.restore();
 }
 
 void drawDefaultChrome(Canvas& canvas,

@@ -311,6 +311,7 @@ bool controlsRegionContains(ChromeHitContext const& context, float x, float y) {
 enum class ChromeButton {
   None,
   Close,
+  Maximize,
   Minimize,
 };
 
@@ -330,6 +331,14 @@ ChromeButton chromeButtonAt(ChromeHitContext const& context, float x, float y) {
                     rects.closeButton.x + rects.closeButton.width,
                     rects.closeButton.y + rects.closeButton.height)) {
     return ChromeButton::Close;
+  }
+  if (containsPoint(x,
+                    y,
+                    rects.maximizeButton.x,
+                    rects.maximizeButton.y,
+                    rects.maximizeButton.x + rects.maximizeButton.width,
+                    rects.maximizeButton.y + rects.maximizeButton.height)) {
+    return ChromeButton::Maximize;
   }
   if (containsPoint(x,
                     y,
@@ -460,6 +469,12 @@ WaylandServer::Impl::Surface* minimizeButtonAt(WaylandServer::Impl* server, floa
   return chromeButtonAt(*context, x, y) == ChromeButton::Minimize ? context->surface : nullptr;
 }
 
+WaylandServer::Impl::Surface* maximizeButtonAt(WaylandServer::Impl* server, float x, float y) {
+  auto context = topChromeHitContext(server, x, y);
+  if (!context) return nullptr;
+  return chromeButtonAt(*context, x, y) == ChromeButton::Maximize ? context->surface : nullptr;
+}
+
 WaylandServer::Impl::Surface* resizeGripAt(WaylandServer::Impl* server, float x, float y, std::uint32_t& edges) {
   edges = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
   auto context = topChromeHitContext(server, x, y);
@@ -480,8 +495,9 @@ WaylandServer::Impl::Surface* resizeOrCloseChromeAt(WaylandServer::Impl* server,
   auto context = topChromeHitContext(server, x, y);
   if (!context) return nullptr;
 
-  if (chromeButtonAt(*context, x, y) == ChromeButton::Close) {
-    closeButton = true;
+  ChromeButton const button = chromeButtonAt(*context, x, y);
+  if (button != ChromeButton::None) {
+    closeButton = button == ChromeButton::Close;
     return context->surface;
   }
 
@@ -1523,6 +1539,12 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         minimizePressSurface_ = minimizeTarget;
         return;
       }
+      if (Surface* maximizeTarget = maximizeButtonAt(this, pointerX_, pointerY_)) {
+        raiseSurface(this, maximizeTarget);
+        setKeyboardFocus(this, maximizeTarget);
+        maximizePressSurface_ = maximizeTarget;
+        return;
+      }
       if (chromeControlTarget && resizeEdges != XDG_TOPLEVEL_RESIZE_EDGE_NONE) {
         raiseSurface(this, chromeControlTarget);
         setKeyboardFocus(this, chromeControlTarget);
@@ -1594,6 +1616,16 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         flushClients();
       }
       minimizePressSurface_ = nullptr;
+      sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+      updateCompositorCursorForPointer(this);
+      return;
+    } else if (maximizePressSurface_) {
+      Surface* maximizeTarget = maximizeButtonAt(this, pointerX_, pointerY_);
+      if (maximizeTarget && maximizeTarget == maximizePressSurface_) {
+        toggleMaximizedToplevel(this, maximizePressSurface_);
+        flushClients();
+      }
+      maximizePressSurface_ = nullptr;
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       updateCompositorCursorForPointer(this);
       return;

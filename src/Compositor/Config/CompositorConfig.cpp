@@ -476,12 +476,11 @@ window_glass_opacity = 0.84
 
 [chrome]
 title_bar_height = 28
-controls_width = 58
+controls_width = 84
 controls_inset_right = 8
 controls_inset_top = 6
 button_size = 16
 button_radius = 5
-button_gap = 4
 close_glyph_color = "#5b6781"
 close_glyph_hover_color = "#ffffff"
 close_hover_background = "#e25555"

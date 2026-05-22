@@ -9,7 +9,7 @@ namespace flux::compositor {
 
 struct ChromeConfig {
   std::int32_t titleBarHeight = 28;
-  std::int32_t controlsWidth = 58;
+  std::int32_t controlsWidth = 84;
   std::int32_t controlsInsetRight = 8;
   std::int32_t controlsInsetTop = 6;
   std::int32_t buttonSize = 16;

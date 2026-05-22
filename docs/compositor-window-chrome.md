@@ -39,11 +39,10 @@ The title bar and frame metrics are configurable from `[chrome]`. The commonly t
 ```toml
 [chrome]
 title_bar_height = 28
-controls_width = 58
+controls_width = 84
 controls_inset_right = 8
 controls_inset_top = 6
 button_size = 16
-button_gap = 4
 resize_grip_size = 4
 window_corner_radius = 14
 window_border_color = "#d8dee899"
@@ -63,4 +62,4 @@ bottom_left = 14
 
 The resize grip is a thin hit-test ring around the visible rounded frame, not a full square strip. With the default 4 px grip, most of the 28 px title bar remains available for dragging while the rounded corners still expose diagonal resize handles.
 
-Window controls are laid out from the active `title_bar_height`. `button_size`, `button_gap`, `controls_width`, `controls_inset_right`, `controls_inset_top`, and `button_radius` are treated as the 28 px title-bar baseline and scale proportionally when the title bar gets taller or shorter. Buttons are vertically centered in the title bar after scaling.
+Window controls are laid out from the active `title_bar_height`. `controls_width` is split into contiguous minimize, maximize, and close segments using the full title-bar height for hover, press, and click handling. `button_size`, `controls_width`, `controls_inset_top`, and `button_radius` are treated as the 28 px title-bar baseline and scale proportionally when the title bar gets taller or shorter. Glyphs are centered inside their segments after scaling.
