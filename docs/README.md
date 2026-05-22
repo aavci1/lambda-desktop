@@ -9,6 +9,7 @@
 | [ui-view-body-style.md](ui-view-body-style.md) | Formatting conventions for declarative `body()` trees |
 | [event_queue.md](event_queue.md) | `EventQueue` API, dispatch order, threading, macOS integration |
 | [compositor.md](compositor.md) | Living compositor implementation spec and status |
+| [lambda-shell-spec.md](lambda-shell-spec.md) | Lambda desktop shell scope, process boundary, surfaces, and window-manager integration |
 | [compositor-user-guide.md](compositor-user-guide.md) | Running, configuring, and using the Linux KMS compositor |
 | [compositor-testing.md](compositor-testing.md) | TTY test checklist and expected results for compositor demos |
 | [compositor-cleanup-spec.md](compositor-cleanup-spec.md) | Completed compositor cleanup plan and rationale |
