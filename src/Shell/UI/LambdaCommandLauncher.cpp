@@ -98,10 +98,6 @@ flux::Element resultTile(DockItem item,
 
 flux::Element LambdaCommandLauncher::body() const {
   std::vector<flux::Element> layers;
-  layers.push_back(flux::Rectangle{}
-      .size(static_cast<float>(props.width), static_cast<float>(props.height))
-      .fill(rgba(0.03f, 0.05f, 0.10f, 0.26f)));
-
   LauncherLayout const layout = launcherLayout(props.width);
   layers.push_back(flux::Rectangle{}
       .size(layout.fieldW, 48.f)
@@ -126,11 +122,21 @@ flux::Element LambdaCommandLauncher::body() const {
     layers.push_back(resultTile(results[i], i == static_cast<std::size_t>(highlighted), x, y, props.onActivateResult));
   }
 
-  auto root = flux::ZStack{
-      .children = std::move(layers),
+  std::vector<flux::Element> stackChildren;
+  auto backdrop = flux::Rectangle{}
+                      .size(static_cast<float>(props.width), static_cast<float>(props.height))
+                      .fill(rgba(0.03f, 0.05f, 0.10f, 0.26f));
+  if (props.onDismiss) {
+    backdrop = std::move(backdrop).onTap(props.onDismiss);
+  }
+  stackChildren.push_back(std::move(backdrop));
+  for (auto& layer : layers) {
+    stackChildren.push_back(std::move(layer));
+  }
+
+  return flux::ZStack{
+      .children = std::move(stackChildren),
   }.size(static_cast<float>(props.width), static_cast<float>(props.height));
-  if (props.onDismiss) root = std::move(root).onTap(props.onDismiss);
-  return root;
 }
 
 } // namespace lambda_shell

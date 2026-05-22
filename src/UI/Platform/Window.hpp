@@ -70,6 +70,9 @@ public:
   virtual void completeAnimationFrame(bool /*needsAnotherFrame*/) {}
 
   virtual void setCursor(Cursor /*kind*/) {}
+
+  /// Layer-shell surfaces only. No-op on xdg toplevel windows.
+  virtual void setLayerShellKeyboardInteractive(bool /*enabled*/) {}
 };
 
 } // namespace platform

@@ -303,13 +303,15 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
   set(FLUX_FRACTIONAL_SCALE_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/fractional-scale-v1.xml")
   set(FLUX_XX_CUTOUTS_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/xx-cutouts-v1.xml")
   set(FLUX_WLR_LAYER_SHELL_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/wlr-layer-shell-unstable-v1.xml")
+  set(FLUX_EXT_BACKGROUND_EFFECT_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols/ext-background-effect-v1.xml")
   foreach(_flux_wayland_protocol_xml IN ITEMS
       "${FLUX_XDG_SHELL_XML}"
       "${FLUX_XDG_DECORATION_XML}"
       "${FLUX_VIEWPORTER_XML}"
       "${FLUX_FRACTIONAL_SCALE_XML}"
       "${FLUX_XX_CUTOUTS_XML}"
-      "${FLUX_WLR_LAYER_SHELL_XML}")
+      "${FLUX_WLR_LAYER_SHELL_XML}"
+      "${FLUX_EXT_BACKGROUND_EFFECT_XML}")
     if(NOT EXISTS "${_flux_wayland_protocol_xml}")
       message(FATAL_ERROR
         "Flux: required Wayland protocol XML not found: ${_flux_wayland_protocol_xml}. "
@@ -382,6 +384,17 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     DEPENDS ${FLUX_WLR_LAYER_SHELL_XML}
     VERBATIM
   )
+  add_custom_command(
+    OUTPUT
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-client-protocol.h
+      ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header ${FLUX_EXT_BACKGROUND_EFFECT_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code ${FLUX_EXT_BACKGROUND_EFFECT_XML}
+            ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-protocol.c
+    DEPENDS ${FLUX_EXT_BACKGROUND_EFFECT_XML}
+    VERBATIM
+  )
   set(_flux_vulkan_shader_headers)
   foreach(_flux_shader rect.vert rect.frag image.vert image.frag backdrop.frag backdrop_blur.frag path.vert path.frag)
     string(REPLACE "." "_" _flux_shader_name ${_flux_shader})
@@ -425,6 +438,7 @@ elseif(FLUX_PLATFORM_LINUX_WAYLAND)
     ${FLUX_WAYLAND_PROTOCOL_DIR}/fractional-scale-v1-protocol.c
     ${FLUX_WAYLAND_PROTOCOL_DIR}/xx-cutouts-v1-protocol.c
     ${FLUX_WAYLAND_PROTOCOL_DIR}/wlr-layer-shell-unstable-v1-protocol.c
+    ${FLUX_WAYLAND_PROTOCOL_DIR}/ext-background-effect-v1-protocol.c
   )
 elseif(FLUX_PLATFORM_LINUX_KMS)
   find_package(PkgConfig REQUIRED)
@@ -555,6 +569,10 @@ endif()
 target_link_libraries(flux PRIVATE libtess2)
 
 add_library(lambda-shell-ui STATIC
+  src/Shell/ShellController.cpp
+  src/Shell/ShellIpc.cpp
+  src/Shell/ShellJson.cpp
+  src/Shell/ShellModel.cpp
   src/Shell/UI/LambdaCommandLauncher.cpp
   src/Shell/UI/LambdaDock.cpp
   src/Shell/UI/LambdaShellTypes.cpp
@@ -757,12 +775,9 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
 
   add_executable(lambda-shell
     src/Shell/LambdaShell.cpp
-    src/Compositor/Protocols/ext-background-effect-v1-protocol.c
-    src/Compositor/Protocols/viewporter-protocol.c
   )
   target_include_directories(lambda-shell PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Compositor/Protocols
   )
   target_compile_options(lambda-shell PRIVATE
     -Wall
@@ -771,10 +786,8 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
   )
   target_link_libraries(lambda-shell PRIVATE
     lambda-shell-ui
-    PkgConfig::WAYLAND_CLIENT
-    PkgConfig::XKBCOMMON
-    PkgConfig::VULKAN
-    ${CMAKE_DL_LIBS})
+    flux
+  )
   add_custom_command(TARGET lambda-shell POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:lambda-shell>/fonts"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different

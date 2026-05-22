@@ -58,9 +58,18 @@ bool launcherPointerInsideContent(int width,
                                   double x,
                                   double y);
 
+struct SystemStatus {
+  std::string network = "unknown";
+  std::string wifi = "unknown";
+  std::string bluetooth = "unknown";
+  std::string volume = "unknown";
+  std::string battery = "unknown";
+};
+
 struct TopBarProps {
   std::string title;
   std::string timeText;
+  SystemStatus system{};
   std::function<void()> onOpenLauncher;
 };
 

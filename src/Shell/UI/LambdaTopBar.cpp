@@ -55,17 +55,37 @@ flux::Element LambdaTopBar::body() const {
     }.size(16.f, 16.f));
   }
 
+  auto launcherButton = flux::Text{
+      .text = "λ",
+      .font = flux::Font{.size = 16.f, .weight = 900.f},
+      .color = text,
+      .horizontalAlignment = flux::HorizontalAlignment::Center,
+      .verticalAlignment = flux::VerticalAlignment::Center,
+  }.size(22.f, static_cast<float>(kTopBarHeight));
+  if (props.onOpenLauncher) {
+    launcherButton = std::move(launcherButton).onTap(props.onOpenLauncher);
+  }
+
+  std::vector<flux::Element> leading;
+  leading.push_back(std::move(launcherButton));
+  if (!props.title.empty()) {
+    leading.push_back(flux::Text{
+        .text = props.title,
+        .font = flux::Font{.size = 13.f, .weight = 620.f},
+        .color = rgba(0.92f, 0.94f, 0.98f, 1.f),
+        .verticalAlignment = flux::VerticalAlignment::Center,
+    });
+  }
+
   return flux::HStack{
       .spacing = 10.f,
       .alignment = flux::Alignment::Center,
       .children = flux::children(
-          flux::Text{
-              .text = "λ",
-              .font = flux::Font{.size = 16.f, .weight = 900.f},
-              .color = text,
-              .horizontalAlignment = flux::HorizontalAlignment::Center,
-              .verticalAlignment = flux::VerticalAlignment::Center,
-          }.size(22.f, static_cast<float>(kTopBarHeight)),
+          flux::HStack{
+              .spacing = 8.f,
+              .alignment = flux::Alignment::Center,
+              .children = std::move(leading),
+          },
           flux::Spacer{},
           flux::HStack{
               .spacing = 6.f,

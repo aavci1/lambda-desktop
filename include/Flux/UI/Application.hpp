@@ -124,6 +124,11 @@ public:
   ObserverHandle onNextFrameNeeded(std::function<void()> callback);
   void unobserveNextFrame(ObserverHandle handle);
 
+  /// Registers a non-blocking file descriptor polled each `exec()` iteration before platform I/O.
+  /// Returns an opaque id for `unregisterEventPollSource`. `fd` must stay valid until unregister.
+  std::uint64_t registerEventPollSource(int fd, std::function<void()> onReadable);
+  void unregisterEventPollSource(std::uint64_t id);
+
   friend class Window;
   friend class EventQueue;
 private:

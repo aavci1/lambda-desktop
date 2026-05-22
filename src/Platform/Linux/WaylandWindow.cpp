@@ -14,6 +14,7 @@
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
 #include "Detail/ResizeTrace.hpp"
+#include "ext-background-effect-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
@@ -114,6 +115,7 @@ struct SharedWaylandConnection {
   std::uint32_t decorationManagerVersion = 0;
   xx_cutouts_manager_v1* cutoutsManager = nullptr;
   zwlr_layer_shell_v1* layerShell = nullptr;
+  ext_background_effect_manager_v1* backgroundEffectManager = nullptr;
   wl_seat* seat = nullptr;
   wl_pointer* pointer = nullptr;
   wl_cursor_theme* cursorTheme = nullptr;
@@ -286,6 +288,10 @@ void releaseWaylandConnection() {
     zwlr_layer_shell_v1_destroy(gWaylandConnection.layerShell);
     gWaylandConnection.layerShell = nullptr;
   }
+  if (gWaylandConnection.backgroundEffectManager) {
+    ext_background_effect_manager_v1_destroy(gWaylandConnection.backgroundEffectManager);
+    gWaylandConnection.backgroundEffectManager = nullptr;
+  }
   if (gWaylandConnection.shm) {
     wl_shm_destroy(gWaylandConnection.shm);
     gWaylandConnection.shm = nullptr;
@@ -361,6 +367,7 @@ public:
       if (shared_->keyboardFocus == this) shared_->keyboardFocus = nullptr;
     }
     if (frameCallback_) wl_callback_destroy(frameCallback_);
+    if (backgroundEffect_) ext_background_effect_surface_v1_destroy(backgroundEffect_);
     if (layerSurface_) zwlr_layer_surface_v1_destroy(layerSurface_);
     if (cutouts_) xx_cutouts_v1_destroy(cutouts_);
     if (decoration_) zxdg_toplevel_decoration_v1_destroy(decoration_);
@@ -398,13 +405,28 @@ public:
 
   void resize(Size const& newSize) override {
     size_ = newSize;
+    if (layerSurface_) {
+      zwlr_layer_surface_v1_set_size(layerSurface_,
+                                     static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.width)))),
+                                     static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.height)))));
+      commitSurface();
+    }
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     if (canvas_) canvas_->resize(static_cast<int>(std::lround(size_.width)),
                                  static_cast<int>(std::lround(size_.height)));
     updateViewportDestination();
+    updateBackgroundEffectRegion();
     queueResizeEvent();
     applyCursor(currentCursor_);
     requestResizeRedraw();
+  }
+
+  void setLayerShellKeyboardInteractive(bool enabled) override {
+    if (!layerSurface_) {
+      return;
+    }
+    zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_, enabled ? 1u : 0u);
+    commitSurface();
   }
 
   void setMinSize(Size size) override {
@@ -797,6 +819,7 @@ private:
     if (canvas_) canvas_->resize(static_cast<int>(std::lround(size_.width)),
                                  static_cast<int>(std::lround(size_.height)));
     updateViewportDestination();
+    updateBackgroundEffectRegion();
     if (fluxWindow_) fluxWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     queueResizeEvent();
     applyCursor(currentCursor_);
@@ -971,6 +994,32 @@ private:
     }
   }
 
+  void commitSurface() {
+    if (surface_) {
+      wl_surface_commit(surface_);
+      if (display_) {
+        wl_display_flush(display_);
+      }
+    }
+  }
+
+  void updateBackgroundEffectRegion() {
+    if (!layerShellConfig_.backgroundBlur || !shared_ || !shared_->backgroundEffectManager || !shared_->compositor ||
+        !surface_) {
+      return;
+    }
+    int const width = std::max(1, static_cast<int>(std::lround(size_.width)));
+    int const height = std::max(1, static_cast<int>(std::lround(size_.height)));
+    if (!backgroundEffect_) {
+      backgroundEffect_ = ext_background_effect_manager_v1_get_background_effect(shared_->backgroundEffectManager,
+                                                                                 surface_);
+    }
+    wl_region* region = wl_compositor_create_region(shared_->compositor);
+    wl_region_add(region, 0, 0, width, height);
+    ext_background_effect_surface_v1_set_blur_region(backgroundEffect_, region);
+    wl_region_destroy(region);
+  }
+
   void configureLayerShellSurface() {
     if (!shared_ || !shared_->layerShell) {
       throw std::runtime_error("Wayland compositor does not expose zwlr_layer_shell_v1");
@@ -994,6 +1043,7 @@ private:
     zwlr_layer_surface_v1_set_exclusive_zone(layerSurface_, layerShellConfig_.exclusiveZone);
     zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_,
                                                      layerShellConfig_.keyboardInteractive ? 1u : 0u);
+    updateBackgroundEffectRegion();
   }
 
   void requestCutouts() {
@@ -1127,6 +1177,7 @@ private:
 	  xdg_surface* xdgSurface_ = nullptr;
 	  xdg_toplevel* toplevel_ = nullptr;
 	  zwlr_layer_surface_v1* layerSurface_ = nullptr;
+	  ext_background_effect_surface_v1* backgroundEffect_ = nullptr;
 	  zxdg_toplevel_decoration_v1* decoration_ = nullptr;
   xx_cutouts_v1* cutouts_ = nullptr;
   wp_viewport* viewport_ = nullptr;
@@ -1228,6 +1279,9 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
 	  } else if (std::strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
 	    shared->layerShell = static_cast<zwlr_layer_shell_v1*>(
 	        wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 1));
+	  } else if (std::strcmp(interface, ext_background_effect_manager_v1_interface.name) == 0) {
+	    shared->backgroundEffectManager = static_cast<ext_background_effect_manager_v1*>(
+	        wl_registry_bind(registry, name, &ext_background_effect_manager_v1_interface, 1));
 	  } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
     auto output = std::make_unique<SharedWaylandConnection::Output>();
     output->name = name;

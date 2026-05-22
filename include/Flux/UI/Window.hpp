@@ -65,6 +65,8 @@ struct LayerShellOptions {
   int marginLeft = 0;
   int exclusiveZone = 0;
   bool keyboardInteractive = false;
+  /// When supported by the compositor, apply a blurred background effect to the full surface region.
+  bool backgroundBlur = false;
 };
 
 struct WindowConfig {
@@ -103,6 +105,7 @@ public:
   Window& operator=(Window&&) = delete;
 
   Size getSize() const;
+  void resize(Size const& size);
   void setTitle(std::string title);
   void setDecorationMode(WindowDecorationMode mode);
   WindowDecorationMode decorationMode() const;
@@ -111,6 +114,8 @@ public:
   void beginWindowResize(WindowResizeEdge edge);
   void requestClose();
   void setFullscreen(bool fullscreen);
+  /// Layer-shell windows only. Updates keyboard focus routing on the compositor.
+  void setLayerShellKeyboardInteractive(bool enabled);
   unsigned int handle() const;
 
   /// Lazily creates the backing canvas on first use.

@@ -16,7 +16,9 @@
 #include <algorithm>
 #include <chrono>
 #include <climits>
+#include <poll.h>
 #include <cstdio>
+#include <unistd.h>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -225,6 +227,27 @@ struct Application::Impl {
   std::vector<TimerEntry> timers_;
   std::uint64_t nextTimerId_ = 1;
   bool animationFramePulseQueued_ = false;
+
+  struct PollSourceEntry {
+    std::uint64_t id = 0;
+    int fd = -1;
+    std::function<void()> onReadable;
+  };
+  std::vector<PollSourceEntry> pollSources_;
+  std::uint64_t nextPollSourceId_ = 1;
+
+  void dispatchPollSources() {
+    for (auto const& source : pollSources_) {
+      if (source.fd < 0 || !source.onReadable) {
+        continue;
+      }
+      pollfd pfd{.fd = source.fd, .events = POLLIN, .revents = 0};
+      int const ready = poll(&pfd, 1, 0);
+      if (ready > 0 && (pfd.revents & POLLIN)) {
+        source.onReadable();
+      }
+    }
+  }
 
   int nextTimerTimeoutMs() const {
     using namespace std::chrono;
@@ -654,8 +677,26 @@ void Application::cancelTimer(std::uint64_t timerId) {
   std::erase_if(d->timers_, [&](Impl::TimerEntry const& t) { return t.id == timerId; });
 }
 
+std::uint64_t Application::registerEventPollSource(int fd, std::function<void()> onReadable) {
+  if (fd < 0) {
+    return 0;
+  }
+  std::uint64_t const id = d->nextPollSourceId_++;
+  d->pollSources_.push_back(Impl::PollSourceEntry{.id = id, .fd = fd, .onReadable = std::move(onReadable)});
+  wakeEventLoop();
+  return id;
+}
+
+void Application::unregisterEventPollSource(std::uint64_t id) {
+  if (id == 0) {
+    return;
+  }
+  std::erase_if(d->pollSources_, [&](Impl::PollSourceEntry const& entry) { return entry.id == id; });
+}
+
 int Application::exec() {
   while (!d->quit_) {
+    d->dispatchPollSources();
     using namespace std::chrono;
     auto const now = steady_clock::now();
     for (auto& t : d->timers_) {

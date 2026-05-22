@@ -125,6 +125,11 @@ Size Window::getSize() const {
   return d->platform_->currentSize();
 }
 
+void Window::resize(Size const& size) {
+  d->platform_->resize(size);
+  requestRedraw();
+}
+
 void Window::setTitle(std::string title) {
   d->platform_->setTitle(std::move(title));
 }
@@ -167,6 +172,10 @@ void Window::requestClose() {
 
 void Window::setFullscreen(bool fullscreen) {
   d->platform_->setFullscreen(fullscreen);
+}
+
+void Window::setLayerShellKeyboardInteractive(bool enabled) {
+  d->platform_->setLayerShellKeyboardInteractive(enabled);
 }
 
 unsigned int Window::handle() const {
