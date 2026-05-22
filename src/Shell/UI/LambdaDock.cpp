@@ -133,9 +133,7 @@ flux::Element LambdaDock::body() const {
   }.padding(static_cast<float>(kDockPaddingY), static_cast<float>(kDockPaddingX),
             static_cast<float>(kDockPaddingY), static_cast<float>(kDockPaddingX))
    .size(static_cast<float>(props.width), static_cast<float>(dockHeight()))
-   .fill(rgba(0.02f, 0.03f, 0.06f, 0.72f))
-   .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.12f), 0.8f))
-   .cornerRadius(18.f);
+   .fill(flux::Colors::transparent);
 }
 
 } // namespace lambda_shell

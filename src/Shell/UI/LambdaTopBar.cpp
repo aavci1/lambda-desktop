@@ -80,8 +80,7 @@ flux::Element LambdaTopBar::body() const {
           }),
   }.padding(0.f, 12.f, 0.f, 14.f)
    .height(static_cast<float>(kTopBarHeight))
-   .fill(rgba(0.02f, 0.03f, 0.06f, 0.72f))
-   .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.10f), 0.5f));
+   .fill(flux::Colors::transparent);
 }
 
 } // namespace lambda_shell
