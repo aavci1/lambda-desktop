@@ -23,25 +23,12 @@ layout(std430, set = 0, binding = 0) readonly buffer Rects {
   RectInstance instances[];
 } rects;
 
-float roundedDistance(vec2 p, vec2 size, vec4 radii) {
-  float r = 0.0;
-  vec2 c = p;
-  if (p.x < radii.x && p.y < radii.x) {
-    r = radii.x;
-    c = p - vec2(r, r);
-  } else if (p.x > size.x - radii.y && p.y < radii.y) {
-    r = radii.y;
-    c = p - vec2(size.x - r, r);
-  } else if (p.x > size.x - radii.z && p.y > size.y - radii.z) {
-    r = radii.z;
-    c = p - vec2(size.x - r, size.y - r);
-  } else if (p.x < radii.w && p.y > size.y - radii.w) {
-    r = radii.w;
-    c = p - vec2(r, size.y - r);
-  } else {
-    return -1.0;
-  }
-  return length(c) - r;
+float roundedRectSDF(vec2 p, vec2 halfSize, vec4 radii) {
+  float r = (p.x > 0.0)
+              ? ((p.y > 0.0) ? radii.z : radii.y)
+              : ((p.y > 0.0) ? radii.w : radii.x);
+  vec2 q = abs(p) - halfSize + vec2(r);
+  return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
 }
 
 vec4 sampleStops(RectInstance r, float t) {
@@ -87,27 +74,29 @@ vec4 fillColor(RectInstance r, vec2 p) {
 void main() {
   RectInstance r = rects.instances[vInstance];
   vec2 size = r.rect.zw;
-  if (vLocal.x < 0.0 || vLocal.y < 0.0 || vLocal.x > size.x || vLocal.y > size.y) {
-    discard;
-  }
-  float d = roundedDistance(vLocal, size, r.radii);
-  float fillAlpha = 1.0 - smoothstep(-0.5, 0.5, d);
-  if (fillAlpha <= 0.0) {
-    discard;
-  }
-  vec4 color = fillColor(r, vLocal);
+  vec2 halfSize = size * 0.5;
+  vec2 local = vLocal - halfSize;
+  float d = roundedRectSDF(local, halfSize, r.radii);
+  float fillCoverage = 1.0 - smoothstep(-0.75, 0.75, d);
   float strokeWidth = r.params.z;
+  float strokeCoverage = 0.0;
   if (strokeWidth > 0.0) {
-    vec2 innerP = vLocal - vec2(strokeWidth);
-    vec2 innerSize = size - vec2(strokeWidth * 2.0);
-    vec4 innerRadii = max(vec4(0.0), r.radii - vec4(strokeWidth));
-    bool insideInnerBox = innerP.x >= 0.0 && innerP.y >= 0.0 &&
-                          innerP.x <= innerSize.x && innerP.y <= innerSize.y;
-    float innerD = insideInnerBox ? roundedDistance(innerP, innerSize, innerRadii) : 1.0;
-    float innerAlpha = insideInnerBox ? 1.0 - smoothstep(-0.5, 0.5, innerD) : 0.0;
-    float strokeAlpha = fillAlpha * (1.0 - innerAlpha);
-    color = mix(color, r.stroke, strokeAlpha);
+    float strokeDistance = abs(d) - strokeWidth * 0.5;
+    strokeCoverage = 1.0 - smoothstep(-0.75, 0.75, strokeDistance);
   }
-  color.a *= fillAlpha * r.params.w;
+  float shapeCoverage = max(fillCoverage, strokeCoverage);
+  if (shapeCoverage <= 0.001) {
+    discard;
+  }
+  vec4 fill = fillColor(r, vLocal);
+  float fillAlpha = fill.a * fillCoverage;
+  float strokeAlpha = r.stroke.a * strokeCoverage;
+  float outAlpha = strokeAlpha + fillAlpha * (1.0 - strokeAlpha);
+  if (outAlpha <= 0.001) {
+    discard;
+  }
+  vec3 outRgb = (r.stroke.rgb * strokeAlpha + fill.rgb * fillAlpha * (1.0 - strokeAlpha)) / outAlpha;
+  vec4 color = vec4(outRgb, outAlpha);
+  color.a *= r.params.w;
   outColor = color;
 }

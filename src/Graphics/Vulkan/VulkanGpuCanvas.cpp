@@ -1800,7 +1800,7 @@ public:
     encodeFill(fill, inst);
     Color sc{};
     if (stroke.solidColor(&sc) && stroke.width > 0.f) {
-      putColor(inst.stroke, sc, opacity);
+      putColor(inst.stroke, sc, 1.f);
       inst.params[2] = stroke.width;
     }
     inst.params[3] = opacity;

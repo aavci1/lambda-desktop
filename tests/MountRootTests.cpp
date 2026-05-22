@@ -58,7 +58,7 @@ public:
 
   std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
 
-  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float,
+  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
                                            flux::Point& outBearing) override {
@@ -94,7 +94,7 @@ public:
 
   std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
 
-  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float,
+  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
                                            flux::Point& outBearing) override {
