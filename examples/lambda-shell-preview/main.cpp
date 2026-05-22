@@ -109,7 +109,7 @@ struct LambdaShellPreviewRoot {
                     .position(0.f, 0.f));
     layers.push_back(Element{PreviewAppCard{.activeApp = active}}
                          .position(220.f, 185.f));
-    layers.push_back(Element{lambda_shell::LambdaDockSurface{lambda_shell::DockProps{
+    layers.push_back(Element{lambda_shell::LambdaDock{lambda_shell::DockProps{
         .items = items,
         .hoverIndex = -1,
         .width = dockWidth,

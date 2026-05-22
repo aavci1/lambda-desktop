@@ -361,7 +361,7 @@ void drawDock(ShellClient& client) {
   renderComponent(client,
                   s,
                   canvas,
-                  lambda_shell::LambdaDockSurface{lambda_shell::DockProps{
+                  lambda_shell::LambdaDock{lambda_shell::DockProps{
                       .items = client.dockItems,
                       .hoverIndex = hoverIndex,
                       .width = s.width,
