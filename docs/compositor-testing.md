@@ -206,11 +206,11 @@ git diff --check
 ## Useful Logs
 
 - `compositor.log`: stderr from the compositor session.
-- `~/.local/state/flux-compositor/crash.log`: durable compositor crash breadcrumbs. The compositor opens this automatically, appends low-volume lifecycle/surface/DMABUF/frame-stall events, and fsyncs each entry so the last events should survive a compositor crash or hard reset. Override with `FLUX_COMPOSITOR_CRASH_LOG=/path/to/log`.
+- `~/.local/state/flux-compositor/crash.log`: durable compositor crash breadcrumbs when enabled with `FLUX_COMPOSITOR_CRASH_LOG=1` or `FLUX_COMPOSITOR_CRASH_LOG=/path/to/log`. The compositor appends low-volume lifecycle/surface/DMABUF/frame-stall events and fsyncs each entry so the last events should survive a compositor crash or hard reset.
 
 ### Instrumentation Environment
 
-Boolean-style variables are enabled by any non-empty value except `0` unless noted otherwise.
+Boolean-style variables are enabled by any non-empty value except `0`. Unset instrumentation variables should not emit logs, create trace files, take timing samples, or do per-frame trace work.
 
 Compositor traces:
 
@@ -223,7 +223,8 @@ Compositor traces:
 - `FLUX_COMPOSITOR_TIMING=1`: prints coarse compositor timing lines to stderr.
 - `FLUX_COMPOSITOR_PACING_TRACE=1`: logs atomic page-flip scheduling and completion cadence to stderr and `/tmp/flux-compositor-pacing.log`.
 - `FLUX_COMPOSITOR_PACING_TRACE_LOG=/path/to/log`: overrides the pacing trace log path.
-- `FLUX_COMPOSITOR_CRASH_LOG=/path/to/log`: overrides the durable crash breadcrumb path. Crash logging is initialized without needing an enable variable.
+- `FLUX_COMPOSITOR_CRASH_LOG=1`: enables durable crash breadcrumbs at the default path.
+- `FLUX_COMPOSITOR_CRASH_LOG=/path/to/log`: enables durable crash breadcrumbs at a custom path.
 
 Resize traces:
 
@@ -249,7 +250,6 @@ Graphics debug and performance toggles:
 
 - `FLUX_DEBUG_SCREENSHOT_PATH=/path/to/image`: writes one Vulkan debug screenshot.
 - `FLUX_RENDER_TARGET_DISABLE_FRAME_CACHE=1`: disables render target frame caching.
-- `FLUX_VULKAN_PRESENT_FENCES=0`, `false`, or `off`: disables Vulkan present fences.
 
 For resize/vblank investigation, launch the compositor like this:
 

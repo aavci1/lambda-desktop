@@ -4,6 +4,7 @@
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
 
+#include <Flux/Debug/DebugFlags.hpp>
 #include <Flux/UI/Application.hpp>
 #include <Flux/UI/EventQueue.hpp>
 #include <Flux/UI/Events.hpp>
@@ -68,8 +69,8 @@ MouseButton mouseButtonFromLinux(std::uint32_t button) {
 }
 
 bool debugDecorations() {
-  char const* value = std::getenv("FLUX_DEBUG_WAYLAND_DECORATIONS");
-  return value && *value && std::strcmp(value, "0") != 0;
+  static bool const enabled = debug::envNonZero(std::getenv("FLUX_DEBUG_WAYLAND_DECORATIONS"));
+  return enabled;
 }
 
 char const* const* cursorNames(Cursor cursor) {

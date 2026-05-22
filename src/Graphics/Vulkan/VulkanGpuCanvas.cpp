@@ -72,7 +72,7 @@ constexpr float kBackdropBlurRadiusBoost = 1.2f;
 bool renderTargetFrameCacheDisabled() {
   static bool const disabled = [] {
     char const* value = std::getenv("FLUX_RENDER_TARGET_DISABLE_FRAME_CACHE");
-    return value && *value && std::strcmp(value, "0") != 0;
+    return debug::envNonZero(value);
   }();
   return disabled;
 }
@@ -4422,7 +4422,7 @@ private:
   void writeDebugScreenshotIfRequested(VkCommandBuffer commandBuffer, VkImage source) {
     if (debugScreenshotWritten_)
       return;
-    char const *path = std::getenv("FLUX_DEBUG_SCREENSHOT_PATH");
+    static char const *const path = std::getenv("FLUX_DEBUG_SCREENSHOT_PATH");
     if (!path || !*path)
       return;
     Buffer staging{};

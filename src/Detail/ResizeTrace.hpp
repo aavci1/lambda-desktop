@@ -1,10 +1,11 @@
 #pragma once
 
+#include <Flux/Debug/DebugFlags.hpp>
+
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <ctime>
 
 namespace flux::detail {
@@ -12,7 +13,7 @@ namespace flux::detail {
 inline bool resizeTraceEnabled() {
   static bool const enabled = [] {
     char const* value = std::getenv("FLUX_RESIZE_TRACE");
-    return value && *value && std::strcmp(value, "0") != 0;
+    return debug::envNonZero(value);
   }();
   return enabled;
 }

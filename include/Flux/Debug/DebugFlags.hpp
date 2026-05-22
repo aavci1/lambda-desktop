@@ -5,9 +5,12 @@
 
 namespace flux::debug {
 
+inline bool envNonZero(char const* value) {
+  return value && value[0] != '\0' && std::strcmp(value, "0") != 0;
+}
+
 inline bool envTruthy(char const* value) {
-  return value && value[0] != '\0' && std::strcmp(value, "0") != 0 &&
-         std::strcmp(value, "false") != 0;
+  return envNonZero(value);
 }
 
 inline bool inputEnabled() {

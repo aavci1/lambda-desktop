@@ -2,6 +2,7 @@
 
 #include "UI/Platform/WindowFactory.hpp"
 
+#include <Flux/Debug/DebugFlags.hpp>
 #include <Flux/UI/Application.hpp>
 #include <Flux/UI/EventQueue.hpp>
 
@@ -97,8 +98,8 @@ void restoreTerminationSignalHandlers() {
 }
 
 bool debugKms() {
-  char const* value = std::getenv("FLUX_DEBUG_KMS");
-  return value && *value && std::strcmp(value, "0") != 0;
+  static bool const enabled = debug::envNonZero(std::getenv("FLUX_DEBUG_KMS"));
+  return enabled;
 }
 
 void debugLog(char const* format, ...) {

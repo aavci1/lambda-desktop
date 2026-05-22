@@ -1,5 +1,6 @@
 #include <Flux/Platform/Linux/KmsOutput.hpp>
 
+#include <Flux/Debug/DebugFlags.hpp>
 #include <Flux/Graphics/RenderTarget.hpp>
 #include <Flux/Graphics/VulkanContext.hpp>
 
@@ -125,7 +126,7 @@ std::uint64_t gbmModifier(gbm_bo* bo) {
 
 bool forceLinearScanout() {
   char const* value = std::getenv("FLUX_COMPOSITOR_FORCE_LINEAR_SCANOUT");
-  return value && *value && std::strcmp(value, "0") != 0;
+  return debug::envNonZero(value);
 }
 
 bool useKmsRenderInFence() {

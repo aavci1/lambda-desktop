@@ -1,5 +1,7 @@
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 
+#include <Flux/Debug/DebugFlags.hpp>
+
 #include <dlfcn.h>
 #include <execinfo.h>
 #include <signal.h>
@@ -104,7 +106,7 @@ std::mutex &traceMutex() {
 bool cpuSamplerEnabled() {
   static bool const enabled = [] {
     char const *value = std::getenv("FLUX_COMPOSITOR_SAMPLE_TRACE");
-    return value && *value && std::strcmp(value, "0") != 0;
+    return debug::envNonZero(value);
   }();
   return enabled;
 }
@@ -408,7 +410,7 @@ void maybeLog(CpuTraceState &traceState) {
 bool cpuTraceEnabled() noexcept {
   static bool const enabled = [] {
     char const *value = std::getenv("FLUX_COMPOSITOR_CPU_TRACE");
-    return value && *value && std::strcmp(value, "0") != 0;
+    return debug::envNonZero(value);
   }();
   return enabled;
 }

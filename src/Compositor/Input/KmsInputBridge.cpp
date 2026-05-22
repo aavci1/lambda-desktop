@@ -1,15 +1,16 @@
 #include "Compositor/Input/KmsInputBridge.hpp"
 
+#include <Flux/Debug/DebugFlags.hpp>
+
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 
 namespace flux::compositor {
 namespace {
 
 bool debugCompositorInput() {
-  char const* value = std::getenv("FLUX_DEBUG_COMPOSITOR_INPUT");
-  return value && *value && std::strcmp(value, "0") != 0;
+  static bool const enabled = debug::envNonZero(std::getenv("FLUX_DEBUG_COMPOSITOR_INPUT"));
+  return enabled;
 }
 
 } // namespace

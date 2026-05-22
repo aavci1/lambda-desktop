@@ -1,5 +1,7 @@
 #include "Compositor/Diagnostics/CrashLog.hpp"
 
+#include <Flux/Debug/DebugFlags.hpp>
+
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
@@ -24,9 +26,14 @@ namespace {
 std::atomic<int> gCrashLogFd{-1};
 std::string gCrashLogPath;
 
+bool crashLogRequested() noexcept {
+  static bool const requested = debug::envNonZero(std::getenv("FLUX_COMPOSITOR_CRASH_LOG"));
+  return requested;
+}
+
 std::string defaultCrashLogPath() {
   if (char const* configured = std::getenv("FLUX_COMPOSITOR_CRASH_LOG");
-      configured && *configured) {
+      debug::envNonZero(configured) && std::strcmp(configured, "1") != 0) {
     return configured;
   }
   if (char const* stateHome = std::getenv("XDG_STATE_HOME"); stateHome && *stateHome) {
@@ -88,6 +95,7 @@ void terminateHandler() noexcept {
 } // namespace
 
 void initializeCrashLog() {
+  if (!crashLogRequested()) return;
   if (gCrashLogFd.load(std::memory_order_relaxed) >= 0) return;
 
   gCrashLogPath = defaultCrashLogPath();
@@ -114,6 +122,7 @@ void initializeCrashLog() {
 }
 
 void installCrashHandlers() {
+  if (!crashLogEnabled()) return;
   std::set_terminate(terminateHandler);
 
   struct sigaction action {};
@@ -128,6 +137,7 @@ void installCrashHandlers() {
 }
 
 bool crashLogEnabled() noexcept {
+  if (!crashLogRequested()) return false;
   return gCrashLogFd.load(std::memory_order_relaxed) >= 0;
 }
 
@@ -136,6 +146,7 @@ char const* crashLogPath() noexcept {
 }
 
 void crashLog(char const* format, ...) {
+  if (!crashLogRequested() || gCrashLogFd.load(std::memory_order_relaxed) < 0 || !format) return;
   va_list args;
   va_start(args, format);
   crashLogV(format, args);
@@ -163,6 +174,7 @@ void crashLogV(char const* format, va_list args) {
 }
 
 void crashLogSignalSafe(char const* message) noexcept {
+  if (!crashLogRequested()) return;
   int const fd = gCrashLogFd.load(std::memory_order_relaxed);
   if (fd < 0 || !message) return;
   writeAll(fd, message, std::strlen(message));

@@ -1,6 +1,7 @@
 #include "Compositor/CompositorRuntime.hpp"
 
 #include <Flux/Graphics/VulkanContext.hpp>
+#include <Flux/Debug/DebugFlags.hpp>
 #include <Flux/Platform/Linux/KmsOutput.hpp>
 
 #include "Compositor/Chrome/CursorRenderer.hpp"
@@ -62,13 +63,13 @@ double elapsedMilliseconds(SteadyClock::time_point start) {
 }
 
 bool timingTraceEnabled() {
-  char const* value = std::getenv("FLUX_COMPOSITOR_TIMING");
-  return value && *value && std::strcmp(value, "0") != 0;
+  static bool const enabled = debug::envNonZero(std::getenv("FLUX_COMPOSITOR_TIMING"));
+  return enabled;
 }
 
 bool pacingTraceEnabled() {
-  char const* value = std::getenv("FLUX_COMPOSITOR_PACING_TRACE");
-  return value && *value && std::strcmp(value, "0") != 0;
+  static bool const enabled = debug::envNonZero(std::getenv("FLUX_COMPOSITOR_PACING_TRACE"));
+  return enabled;
 }
 
 bool forceVulkanDisplayPresenter() {
@@ -164,7 +165,7 @@ PresentationTiming presentationTimingFromVblank(platform::KmsOutput::VblankTimin
 struct LoopInstrumentation {
   using Clock = std::chrono::steady_clock;
 
-  bool enabled = std::getenv("FLUX_COMPOSITOR_IDLE_PROFILE") != nullptr;
+  bool enabled = debug::envNonZero(std::getenv("FLUX_COMPOSITOR_IDLE_PROFILE"));
   Clock::time_point windowStart = Clock::now();
   std::uint64_t loops = 0;
   std::uint64_t frames = 0;
@@ -262,7 +263,7 @@ struct LoopInstrumentation {
 struct CompositorFrameProfile {
   using Clock = std::chrono::steady_clock;
 
-  bool enabled = std::getenv("FLUX_COMPOSITOR_PROFILE") != nullptr;
+  bool enabled = debug::envNonZero(std::getenv("FLUX_COMPOSITOR_PROFILE"));
   Clock::time_point windowStart = Clock::now();
   std::uint64_t frames = 0;
   std::uint64_t surfaces = 0;
