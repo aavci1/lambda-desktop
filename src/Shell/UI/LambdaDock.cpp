@@ -109,32 +109,40 @@ flux::Element dockIcon(DockItem item, bool hover, std::function<void()> onTap) {
 } // namespace
 
 flux::Element LambdaDock::body() const {
-  std::vector<flux::Element> children;
-  children.reserve(props.items.size());
-  for (std::size_t i = 0; i < props.items.size(); ++i) {
-    DockItem const& item = props.items[i];
-    if (item.kind == "separator") {
-      children.push_back(flux::Rectangle{}
-          .size(static_cast<float>(kDockSeparatorWidth), 30.f)
-          .fill(rgba(1.f, 1.f, 1.f, 0.30f)));
-      continue;
-    }
-    std::function<void()> onTap;
-    if (item.kind == "launcher") {
-      onTap = props.onOpenLauncher;
-    } else if (props.onActivateItem) {
-      onTap = [callback = props.onActivateItem, item] { callback(item); };
-    }
-    children.push_back(dockIcon(item, props.hoverIndex == static_cast<int>(i), std::move(onTap)));
-  }
+  auto const items = props.items;
+  auto const width = props.width;
+  auto const onOpenLauncher = props.onOpenLauncher;
+  auto const onActivateItem = props.onActivateItem;
+  int const hoverIndex = props.hoverIndex;
+
   return flux::HStack{
       .spacing = static_cast<float>(kDockGap),
       .alignment = flux::Alignment::Center,
-      .children = std::move(children),
-  }.padding(static_cast<float>(kDockPaddingY), static_cast<float>(kDockPaddingX),
-            static_cast<float>(kDockPaddingY), static_cast<float>(kDockPaddingX))
-   .size(static_cast<float>(props.width), static_cast<float>(dockHeight()))
-   .fill(flux::Colors::transparent);
+      .children = flux::children(flux::For(
+          items,
+          [](DockItem const& item) { return item.id; },
+          [onOpenLauncher, onActivateItem, hoverIndex](
+              DockItem const& item, flux::Reactive::Signal<std::size_t> const& indexSignal) {
+            if (item.kind == "separator") {
+              return flux::Rectangle{}
+                  .size(static_cast<float>(kDockSeparatorWidth), 30.f)
+                  .fill(rgba(1.f, 1.f, 1.f, 0.30f));
+            }
+            std::function<void()> onTap;
+            if (item.kind == "launcher") {
+              onTap = onOpenLauncher;
+            } else if (onActivateItem) {
+              onTap = [callback = onActivateItem, item] { callback(item); };
+            }
+            bool const hover = hoverIndex >= 0 && static_cast<int>(indexSignal()) == hoverIndex;
+            return dockIcon(item, hover, std::move(onTap));
+          })),
+  }
+      .padding(static_cast<float>(kDockPaddingY), static_cast<float>(kDockPaddingX),
+               static_cast<float>(kDockPaddingY), static_cast<float>(kDockPaddingX))
+      .size(flux::Reactive::Bindable<float>{[width] { return static_cast<float>(width.evaluate()); }},
+            static_cast<float>(dockHeight()))
+      .fill(flux::Colors::transparent);
 }
 
 } // namespace lambda_shell

@@ -54,33 +54,43 @@ flux::IconName dockIconName(DockItem const& item) {
 }
 
 flux::Element resultTile(DockItem item,
-                         bool active,
+                         flux::Reactive::Bindable<bool> active,
                          float x,
                          float y,
                          std::function<void(DockItem const&)> onActivateResult) {
   std::vector<flux::Element> layers;
   layers.push_back(flux::Rectangle{}
       .size(126.f, 96.f)
-      .fill(active ? rgba(0.18f, 0.40f, 0.86f, 0.82f) : rgba(1.f, 1.f, 1.f, 0.54f))
+      .fill(flux::Reactive::Bindable<flux::FillStyle>{[active] {
+        return active.evaluate() ? flux::FillStyle::solid(rgba(0.18f, 0.40f, 0.86f, 0.82f))
+                                 : flux::FillStyle::solid(rgba(1.f, 1.f, 1.f, 0.54f));
+      }})
       .cornerRadius(14.f));
   layers.push_back(flux::Rectangle{}
       .size(40.f, 40.f)
       .position(43.f, 14.f)
-      .fill(active ? gradient(rgba(0.35f, 0.64f, 1.f, 1.f), rgba(0.13f, 0.40f, 0.93f, 1.f))
-                   : gradient(rgba(0.96f, 0.97f, 0.99f, 1.f), rgba(0.82f, 0.86f, 0.93f, 1.f)))
+      .fill(flux::Reactive::Bindable<flux::FillStyle>{[active] {
+        return active.evaluate()
+            ? gradient(rgba(0.35f, 0.64f, 1.f, 1.f), rgba(0.13f, 0.40f, 0.93f, 1.f))
+            : gradient(rgba(0.96f, 0.97f, 0.99f, 1.f), rgba(0.82f, 0.86f, 0.93f, 1.f));
+      }})
       .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.68f), 0.9f))
       .cornerRadius(11.f));
   layers.push_back(flux::Text{
       .text = icon(dockIconName(item)),
       .font = flux::Font{.family = "Material Symbols Rounded", .size = 31.f, .weight = 780.f},
-      .color = active ? rgba(1.f, 1.f, 1.f, 1.f) : rgba(0.10f, 0.15f, 0.25f, 1.f),
+      .color = flux::Reactive::Bindable<flux::Color>{[active] {
+        return active.evaluate() ? rgba(1.f, 1.f, 1.f, 1.f) : rgba(0.10f, 0.15f, 0.25f, 1.f);
+      }},
       .horizontalAlignment = flux::HorizontalAlignment::Center,
       .verticalAlignment = flux::VerticalAlignment::Center,
   }.size(40.f, 40.f).position(43.f, 14.f));
   layers.push_back(flux::Text{
       .text = item.label,
       .font = flux::Font{.size = 12.5f, .weight = 620.f},
-      .color = active ? rgba(1.f, 1.f, 1.f, 1.f) : rgba(0.08f, 0.12f, 0.22f, 1.f),
+      .color = flux::Reactive::Bindable<flux::Color>{[active] {
+        return active.evaluate() ? rgba(1.f, 1.f, 1.f, 1.f) : rgba(0.08f, 0.12f, 0.22f, 1.f);
+      }},
       .horizontalAlignment = flux::HorizontalAlignment::Center,
       .verticalAlignment = flux::VerticalAlignment::Center,
   }.size(98.f, 18.f).position(14.f, 62.f));
@@ -97,8 +107,26 @@ flux::Element resultTile(DockItem item,
 } // namespace
 
 flux::Element LambdaCommandLauncher::body() const {
+  auto const results = props.results;
+  auto const query = props.query;
+  auto const highlighted = props.highlighted;
+  auto const widthBinding = props.width;
+  auto const heightBinding = props.height;
+  auto const onActivateResult = props.onActivateResult;
+  auto const onDismiss = props.onDismiss;
+
+  flux::Reactive::Bindable<std::string> queryText{[query] {
+    std::string const value = query();
+    return value.empty() ? "Command" : value;
+  }};
+  flux::Reactive::Bindable<flux::Color> queryColor{[query] {
+    return query().empty() ? rgba(0.32f, 0.34f, 0.40f, 1.f) : rgba(0.05f, 0.08f, 0.14f, 1.f);
+  }};
+
+  int const width = widthBinding.evaluate();
+  LauncherLayout const layout = launcherLayout(width);
+
   std::vector<flux::Element> layers;
-  LauncherLayout const layout = launcherLayout(props.width);
   layers.push_back(flux::Rectangle{}
       .size(layout.fieldW, 48.f)
       .position(layout.fieldX, layout.fieldY)
@@ -106,28 +134,34 @@ flux::Element LambdaCommandLauncher::body() const {
       .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.72f), 1.f))
       .cornerRadius(14.f));
   layers.push_back(flux::Text{
-      .text = props.query.empty() ? "Command" : props.query,
+      .text = queryText,
       .font = flux::Font{.size = 18.f, .weight = 540.f},
-      .color = props.query.empty() ? rgba(0.32f, 0.34f, 0.40f, 1.f) : rgba(0.05f, 0.08f, 0.14f, 1.f),
+      .color = queryColor,
       .verticalAlignment = flux::VerticalAlignment::Center,
   }.size(layout.fieldW - 36.f, 24.f).position(layout.fieldX + 18.f, layout.fieldY + 12.f));
 
-  auto results = launcherResults(props.items, props.query);
-  int const highlighted = results.empty() ? 0 : std::clamp(props.highlighted, 0, static_cast<int>(results.size()) - 1);
-  for (std::size_t i = 0; i < results.size(); ++i) {
-    int const col = static_cast<int>(i) % layout.columns;
-    int const row = static_cast<int>(i) / layout.columns;
-    float const x = static_cast<float>(layout.startX + col * (layout.tileW + layout.gap));
-    float const y = layout.fieldY + 76.f + static_cast<float>(row * (layout.tileH + layout.gap));
-    layers.push_back(resultTile(results[i], i == static_cast<std::size_t>(highlighted), x, y, props.onActivateResult));
-  }
+  layers.push_back(flux::Element{flux::For(
+      results,
+      [](DockItem const& item) { return item.id; },
+      [layout, highlighted, onActivateResult](
+          DockItem const& item, flux::Reactive::Signal<std::size_t> const& indexSignal) {
+        flux::Reactive::Bindable<bool> active{[highlighted, indexSignal] {
+          return static_cast<int>(indexSignal()) == highlighted.evaluate();
+        }};
+        int const index = static_cast<int>(indexSignal());
+        int const col = index % layout.columns;
+        int const row = index / layout.columns;
+        float const x = static_cast<float>(layout.startX + col * (layout.tileW + layout.gap));
+        float const y = layout.fieldY + 76.f + static_cast<float>(row * (layout.tileH + layout.gap));
+        return resultTile(item, active, x, y, onActivateResult);
+      })});
 
   std::vector<flux::Element> stackChildren;
   auto backdrop = flux::Rectangle{}
-                      .size(static_cast<float>(props.width), static_cast<float>(props.height))
+                      .size(static_cast<float>(width), static_cast<float>(heightBinding.evaluate()))
                       .fill(rgba(0.03f, 0.05f, 0.10f, 0.26f));
-  if (props.onDismiss) {
-    backdrop = std::move(backdrop).onTap(props.onDismiss);
+  if (onDismiss) {
+    backdrop = std::move(backdrop).onTap(onDismiss);
   }
   stackChildren.push_back(std::move(backdrop));
   for (auto& layer : layers) {
@@ -136,7 +170,7 @@ flux::Element LambdaCommandLauncher::body() const {
 
   return flux::ZStack{
       .children = std::move(stackChildren),
-  }.size(static_cast<float>(props.width), static_cast<float>(props.height));
+  }.size(static_cast<float>(width), static_cast<float>(heightBinding.evaluate()));
 }
 
 } // namespace lambda_shell

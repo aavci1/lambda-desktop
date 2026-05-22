@@ -68,14 +68,20 @@ flux::Element LambdaTopBar::body() const {
 
   std::vector<flux::Element> leading;
   leading.push_back(std::move(launcherButton));
-  if (!props.title.empty()) {
-    leading.push_back(flux::Text{
-        .text = props.title,
-        .font = flux::Font{.size = 13.f, .weight = 620.f},
-        .color = rgba(0.92f, 0.94f, 0.98f, 1.f),
-        .verticalAlignment = flux::VerticalAlignment::Center,
-    });
-  }
+  auto const title = props.title;
+  leading.push_back(flux::Show(
+      [title] { return !title.evaluate().empty(); },
+      [title] {
+        return flux::Text{
+            .text = title,
+            .font = flux::Font{.size = 13.f, .weight = 620.f},
+            .color = rgba(0.92f, 0.94f, 0.98f, 1.f),
+            .verticalAlignment = flux::VerticalAlignment::Center,
+        };
+      },
+      [] {
+        return flux::Rectangle{}.size(0.f, 0.f);
+      }));
 
   return flux::HStack{
       .spacing = 10.f,

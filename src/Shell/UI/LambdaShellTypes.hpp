@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Flux/Core/Geometry.hpp>
+#include <Flux/Reactive/Bindable.hpp>
+#include <Flux/Reactive/Signal.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -26,6 +28,8 @@ struct DockItem {
   bool running = false;
   bool focused = false;
   bool disabled = false;
+
+  bool operator==(DockItem const& other) const = default;
 };
 
 struct LauncherLayout {
@@ -64,30 +68,31 @@ struct SystemStatus {
   std::string bluetooth = "unknown";
   std::string volume = "unknown";
   std::string battery = "unknown";
+
+  bool operator==(SystemStatus const& other) const = default;
 };
 
 struct TopBarProps {
-  std::string title;
-  std::string timeText;
+  flux::Reactive::Bindable<std::string> title;
+  flux::Reactive::Bindable<std::string> timeText;
   SystemStatus system{};
   std::function<void()> onOpenLauncher;
 };
 
 struct DockProps {
-  std::vector<DockItem> items;
+  flux::Signal<std::vector<DockItem>> items;
   int hoverIndex = -1;
-  int width = 1;
+  flux::Reactive::Bindable<int> width{1};
   std::function<void()> onOpenLauncher;
   std::function<void(DockItem const&)> onActivateItem;
 };
 
 struct CommandLauncherProps {
-  std::vector<DockItem> items;
-  std::string query;
-  int highlighted = 0;
-  int width = 1;
-  int height = 1;
-  bool open = false;
+  flux::Signal<std::vector<DockItem>> results;
+  flux::Signal<std::string> query;
+  flux::Reactive::Bindable<int> highlighted{0};
+  flux::Reactive::Bindable<int> width{1};
+  flux::Reactive::Bindable<int> height{1};
   std::function<void(DockItem const&)> onActivateResult;
   std::function<void()> onDismiss;
 };

@@ -7,17 +7,7 @@
 
 namespace lambda_shell {
 
-void ShellModel::setOnChanged(ChangeCallback callback) {
-  onChanged_ = std::move(callback);
-}
-
-void ShellModel::notifyChanged() {
-  if (onChanged_) {
-    onChanged_();
-  }
-}
-
-std::string ShellModel::timeText() const {
+std::string ShellModel::formatTimeText() {
   char buffer[64]{};
   std::time_t now = std::time(nullptr);
   std::tm local{};
@@ -26,18 +16,31 @@ std::string ShellModel::timeText() const {
   return buffer;
 }
 
+void ShellModel::refreshLauncherResults() {
+  launcherResults_.set(lambda_shell::launcherResults(dockItems_.peek(), query_.peek()));
+}
+
 void ShellModel::setPreviewFocus(std::string_view appId) {
-  for (auto& item : dockItems_) {
+  auto items = dockItems_.peek();
+  for (auto& item : items) {
     item.running = !appId.empty() && item.kind == "app" && item.appId == appId;
     item.focused = item.running;
-    if (item.focused) activeTitle_ = item.label;
   }
-  if (appId.empty()) activeTitle_.clear();
-  notifyChanged();
+  dockItems_.set(std::move(items));
+  if (!appId.empty()) {
+    for (auto const& item : dockItems_.peek()) {
+      if (item.focused) {
+        activeTitle_.set(item.label);
+        return;
+      }
+    }
+  } else {
+    activeTitle_.set(std::string{});
+  }
 }
 
 void ShellModel::resetDockItems() {
-  dockItems_ = {
+  dockItems_.set({
       {"launcher", "launcher", "Launcher", {}, false, false, false},
       {"sep1", "separator", "", {}, false, false, false},
       {"files", "app", "Files", "files", false, false, false},
@@ -49,7 +52,8 @@ void ShellModel::resetDockItems() {
       {"music", "app", "Music", "music", false, false, false},
       {"sep2", "separator", "", {}, false, false, false},
       {"trash", "trash", "Trash", "trash", false, false, true},
-  };
+  });
+  refreshLauncherResults();
 }
 
 bool ShellModel::appIdMatches(std::string_view requested, std::string_view actual) {
@@ -60,13 +64,23 @@ bool ShellModel::appIdMatches(std::string_view requested, std::string_view actua
   return false;
 }
 
+bool ShellModel::dockItemsVisualStateEqual(std::vector<DockItem> const& a,
+                                           std::vector<DockItem> const& b) {
+  if (a.size() != b.size()) return false;
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    if (a[i].running != b[i].running || a[i].focused != b[i].focused) return false;
+  }
+  return true;
+}
+
 void ShellModel::applySnapshot(std::string_view json) {
-  for (auto& item : dockItems_) {
+  auto items = dockItems_.peek();
+  for (auto& item : items) {
     item.running = false;
     item.focused = false;
   }
-  activeTitle_.clear();
-  for (auto& item : dockItems_) {
+  std::string nextTitle;
+  for (auto& item : items) {
     if (item.appId.empty()) continue;
     std::size_t search = 0;
     while (search < json.size()) {
@@ -82,63 +96,81 @@ void ShellModel::applySnapshot(std::string_view json) {
         item.focused = objectEnd != std::string_view::npos &&
                        json.substr(valueEnd, objectEnd - valueEnd).find("\"focused\":true") != std::string_view::npos;
         if (item.focused) {
-          activeTitle_ = jsonStringField(json, "title", pos);
-          if (activeTitle_.empty()) activeTitle_ = item.label;
+          nextTitle = jsonStringField(json, "title", pos);
+          if (nextTitle.empty()) nextTitle = item.label;
         }
         break;
       }
       search = valueEnd + 1u;
     }
   }
-  systemStatus_.network = jsonStringField(json, "network");
-  systemStatus_.wifi = jsonStringField(json, "wifi");
-  systemStatus_.bluetooth = jsonStringField(json, "bluetooth");
-  systemStatus_.volume = jsonStringField(json, "volume");
-  systemStatus_.battery = jsonStringField(json, "battery");
-  notifyChanged();
+
+  SystemStatus nextStatus{
+      .network = jsonStringField(json, "network"),
+      .wifi = jsonStringField(json, "wifi"),
+      .bluetooth = jsonStringField(json, "bluetooth"),
+      .volume = jsonStringField(json, "volume"),
+      .battery = jsonStringField(json, "battery"),
+  };
+
+  if (!dockItemsVisualStateEqual(items, dockItems_.peek())) {
+    dockItems_.set(std::move(items));
+    refreshLauncherResults();
+  }
+  if (nextTitle != activeTitle_.peek()) {
+    activeTitle_.set(std::move(nextTitle));
+  }
+  if (!(nextStatus == systemStatus_.peek())) {
+    systemStatus_.set(std::move(nextStatus));
+  }
 }
 
 void ShellModel::openLauncher() {
-  if (launcherOpen_) return;
-  launcherOpen_ = true;
-  query_.clear();
-  highlighted_ = 0;
+  if (launcherOpen_.peek()) return;
+  launcherOpen_.set(true);
+  query_.set(std::string{});
+  highlighted_.set(0);
+  refreshLauncherResults();
 }
 
 void ShellModel::closeLauncher() {
-  if (!launcherOpen_) return;
-  launcherOpen_ = false;
-  query_.clear();
-  highlighted_ = 0;
+  if (!launcherOpen_.peek()) return;
+  launcherOpen_.set(false);
+  query_.set(std::string{});
+  highlighted_.set(0);
+  refreshLauncherResults();
 }
 
 void ShellModel::setQuery(std::string query) {
-  query_ = std::move(query);
-  highlighted_ = 0;
+  query_.set(std::move(query));
+  highlighted_.set(0);
+  refreshLauncherResults();
 }
 
 void ShellModel::setHighlighted(int index) {
-  highlighted_ = index;
+  highlighted_.set(index);
 }
 
 void ShellModel::moveHighlight(int delta) {
-  auto results = launcherResults();
+  auto const results = launcherResults_.peek();
   if (results.empty()) return;
-  highlighted_ = std::clamp(highlighted_ + delta, 0, static_cast<int>(results.size()) - 1);
+  highlighted_.set(std::clamp(highlighted_.peek() + delta, 0, static_cast<int>(results.size()) - 1));
 }
 
 void ShellModel::appendQueryText(std::string_view text) {
-  if (query_.size() >= 128u) return;
-  query_.append(text);
-  highlighted_ = 0;
+  std::string next = query_.peek();
+  if (next.size() >= 128u) return;
+  next.append(text);
+  query_.set(std::move(next));
+  highlighted_.set(0);
+  refreshLauncherResults();
 }
 
 void ShellModel::backspaceQuery() {
-  if (!query_.empty()) query_.pop_back();
-}
-
-std::vector<DockItem> ShellModel::launcherResults() const {
-  return lambda_shell::launcherResults(dockItems_, query_);
+  std::string next = query_.peek();
+  if (!next.empty()) next.pop_back();
+  query_.set(std::move(next));
+  refreshLauncherResults();
 }
 
 void ShellModel::activateItem(DockItem const& item, std::function<void(std::string const& line)> sendIpc) {

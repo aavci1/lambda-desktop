@@ -11,7 +11,7 @@ namespace lambda_shell {
 
 /// Single-window layout used by the cross-platform shell preview and design tooling.
 struct ShellDesktopView {
-  ShellModel const& model;
+  ShellModel& model;
   std::function<void()> onOpenLauncher;
   std::function<void(DockItem const&)> onActivateItem;
   std::function<void(DockItem const&)> onActivateLauncherResult;
@@ -21,6 +21,7 @@ struct ShellDesktopView {
   float height = 620.f;
 
   flux::Element body() const {
+    auto const open = model.launcherOpenSignal();
     int const dockW = dockWidth(model.dockItems());
     float const dockX = (width - static_cast<float>(dockW)) * 0.5f;
     float const dockY = height - static_cast<float>(dockHeight()) - static_cast<float>(kDockBottom);
@@ -38,14 +39,19 @@ struct ShellDesktopView {
                          .position(0.f, 0.f));
     layers.push_back(flux::Element{ShellDockView{model, onOpenLauncher, onActivateItem}}.position(dockX, dockY));
 
-    if (model.launcherOpen()) {
-      layers.push_back(flux::Element{ShellLauncherView{
-          model,
-          onActivateLauncherResult,
-          onDismissLauncher,
-          onLauncherKeyDown,
-      }}.position(0.f, 0.f));
-    }
+    layers.push_back(flux::Show(
+        open,
+        [this] {
+          return flux::Element{ShellLauncherView{
+              model,
+              onActivateLauncherResult,
+              onDismissLauncher,
+              onLauncherKeyDown,
+          }}.position(0.f, 0.f).size(width, height);
+        },
+        [] {
+          return flux::Rectangle{}.size(0.f, 0.f);
+        }));
 
     return flux::ZStack{.children = std::move(layers)}.size(width, height);
   }

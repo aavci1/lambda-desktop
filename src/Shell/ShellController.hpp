@@ -27,12 +27,12 @@ public:
   ShellIpc& ipc() noexcept { return ipc_; }
 
 private:
-  void remountTopBarView();
-  void remountDockView();
-  void remountLauncherView();
-  void remountPreviewView();
-  void remountAllViews();
+  void mountProductionViews();
+  void mountPreviewView();
   void requestRedraws();
+  void requestTopBarRedraw();
+  void requestDockRedraw();
+  void requestLauncherRedraw();
   void handleIpcLine(std::string_view line);
   void syncLauncherWindow();
   void handleLauncherKey(flux::InputEvent const& event);
@@ -53,8 +53,8 @@ private:
   float previewHeight_ = 620.f;
   bool launcherModalClaimed_ = false;
   bool lastLauncherOpen_ = false;
+  int lastDockWidth_ = 0;
   std::uint64_t ipcPollId_ = 0;
-  std::uint64_t clockTimerId_ = 0;
 };
 
 flux::WindowConfig topBarWindowConfig();
