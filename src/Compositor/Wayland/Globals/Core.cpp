@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
@@ -469,6 +470,16 @@ void traceCrashSurfaceCommit(WaylandServer::Impl::Surface* surface,
                              std::uint32_t format) {
   if (!surface) return;
   ++surface->commitCount;
+  diagnostics::recordSurfaceCommit(
+      surface->id,
+      kind == 1u ? diagnostics::CpuSurfaceCommitKind::Shm
+                 : kind == 2u ? diagnostics::CpuSurfaceCommitKind::Dmabuf
+                              : kindName && std::strcmp(kindName, "empty") == 0
+                                    ? diagnostics::CpuSurfaceCommitKind::Empty
+                                    : kind == 0u ? diagnostics::CpuSurfaceCommitKind::State
+                                                 : diagnostics::CpuSurfaceCommitKind::Other,
+      surface->width,
+      surface->height);
   bool const isStateOnlyCommit = kind == 0u;
   bool const changed = surface->width != surface->lastLoggedCommitWidth ||
                        surface->height != surface->lastLoggedCommitHeight ||

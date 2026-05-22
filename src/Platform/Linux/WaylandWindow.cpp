@@ -503,7 +503,6 @@ public:
   }
 
   void acknowledgeAnimationFrameTick() override {
-    framePending_ = false;
   }
 
   void completeAnimationFrame(bool needsAnotherFrame) override {
@@ -512,6 +511,7 @@ public:
                    handle_, needsAnotherFrame ? 1 : 0);
     }
     wl_display_flush(display_);
+    framePending_ = false;
     if (needsAnotherFrame) requestAnimationFrame();
   }
 
@@ -612,7 +612,6 @@ private:
       wl_callback_destroy(callback);
     }
     if (!self->framePending_) return;
-    self->framePending_ = false;
     if (detail::resizeTraceEnabled()) {
       detail::resizeTrace("wayland-window", "frame-done window=%u size=%dx%d\n",
                    self->handle_, static_cast<int>(std::lround(self->size_.width)),

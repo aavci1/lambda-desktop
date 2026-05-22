@@ -678,7 +678,11 @@ if(FLUX_BUILD_COMPOSITOR)
     flux
     tomlplusplus::tomlplusplus
     PkgConfig::WAYLAND_SERVER
-    PkgConfig::LIBDRM)
+    PkgConfig::LIBDRM
+    ${CMAKE_DL_LIBS})
+  if(UNIX AND NOT APPLE)
+    target_link_options(flux-compositor PRIVATE -rdynamic)
+  endif()
 
   add_executable(flux-compositor-shm-demo
     src/Compositor/ShmDemoClient.cpp

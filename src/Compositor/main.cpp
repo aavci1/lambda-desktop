@@ -1,5 +1,6 @@
 #include "Compositor/CompositorRuntime.hpp"
 #include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Diagnostics/CpuTrace.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -25,6 +26,7 @@ void printUsage(char const* argv0) {
 int main(int argc, char** argv) {
   flux::compositor::diagnostics::initializeCrashLog();
   flux::compositor::diagnostics::installCrashHandlers();
+  flux::compositor::diagnostics::initializeCpuSampler();
   flux::compositor::diagnostics::crashLog("main argc=%d", argc);
 
   flux::compositor::KmsCompositorOptions options{};

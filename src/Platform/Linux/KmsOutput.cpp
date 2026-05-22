@@ -380,7 +380,9 @@ public:
     }
     buffer.renderFenceFd = exportRenderSemaphoreFd(buffer.renderFinished);
     buffer.renderComplete = false;
-    updateRenderFenceReadiness(buffer);
+    if (!canUseRenderFence(buffer)) {
+      updateRenderFenceReadiness(buffer);
+    }
   }
 
   bool updateRenderReady() {

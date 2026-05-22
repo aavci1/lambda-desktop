@@ -184,27 +184,35 @@ struct LoopInstrumentation {
     return std::chrono::duration<double, std::milli>(end - begin).count();
   }
 
-  void recordPoll(Clock::time_point begin, bool woke) {
+  void recordPoll(Clock::time_point begin, bool woke, int timeoutMs) {
     ++polls;
     if (woke) ++pollWakeups;
+    if (!enabled && !diagnostics::cpuTraceEnabled())
+      return;
     double const elapsed = milliseconds(begin, Clock::now());
     pollMs += elapsed;
-    diagnostics::recordCpuPoll(elapsed, woke);
+    diagnostics::recordCpuPoll(elapsed, woke, timeoutMs);
   }
 
   void recordDispatch(Clock::time_point begin) {
     ++dispatches;
+    if (!enabled && !diagnostics::cpuTraceEnabled())
+      return;
     double const elapsed = milliseconds(begin, Clock::now());
     dispatchMs += elapsed;
     diagnostics::recordCpuDispatch(elapsed);
   }
 
   void recordVblank(Clock::time_point begin) {
+    if (!enabled)
+      return;
     vblankMs += milliseconds(begin, Clock::now());
   }
 
   void recordRender(Clock::time_point begin) {
     ++frames;
+    if (!enabled)
+      return;
     renderMs += milliseconds(begin, Clock::now());
   }
 
@@ -509,6 +517,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     CursorRenderState cursorState;
     LoopInstrumentation loopStats;
     CompositorFrameProfile frameProfile;
+    bool const detailedFrameProfile =
+        diagnostics::cpuTraceEnabled() || frameProfile.enabled || pacingTraceEnabled();
     std::uint32_t const hardwareCursorWidth = output.cursorWidth();
     std::uint32_t const hardwareCursorHeight = output.cursorHeight();
     bool const hardwareCursorAvailable = hardwareCursorWidth > 0 && hardwareCursorHeight > 0;
@@ -524,6 +534,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     std::uint64_t lastAtomicFlipNsec = 0;
     std::uint64_t lastAtomicScheduledNsec = 0;
     double lastAtomicScheduledRenderMs = 0.0;
+    auto nextConfigCheckAt = SteadyClock::now();
     struct AtomicFrameProfile {
       double backgroundMs = 0.0;
       double snapshotMs = 0.0;
@@ -532,6 +543,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       double launcherMs = 0.0;
       double cursorMs = 0.0;
       double presentMs = 0.0;
+      double canvasPresentMs = 0.0;
+      double kmsPresentMs = 0.0;
       double totalMs = 0.0;
       std::size_t activeSizingSurfaces = 0;
       std::int32_t maxBufferWidth = 0;
@@ -848,7 +861,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                      LoopInstrumentation::Clock::time_point renderStart,
                                      PresentationTiming presentationTiming,
                                      bool renderAheadFrame) {
-      auto const frameProfileStart = CompositorFrameProfile::Clock::now();
+      auto const profileNow = [&] {
+        return detailedFrameProfile ? CompositorFrameProfile::Clock::now()
+                                    : CompositorFrameProfile::Clock::time_point{};
+      };
+      auto const profileMs = [&](CompositorFrameProfile::Clock::time_point start) {
+        return detailedFrameProfile ? CompositorFrameProfile::milliseconds(start) : 0.0;
+      };
+      auto const frameProfileStart = profileNow();
       auto phaseStart = frameProfileStart;
       AtomicFrameProfile atomicFrameProfile{};
       if (atomicPresenter) atomicPresenter->prepareFrame();
@@ -857,13 +877,19 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (idleBlanked) {
         canvas->clear(Color{0.f, 0.f, 0.f, 1.f});
         output.hideCursor();
-        atomicFrameProfile.backgroundMs = CompositorFrameProfile::milliseconds(phaseStart);
+        atomicFrameProfile.backgroundMs = profileMs(phaseStart);
         frameProfile.backgroundMs += atomicFrameProfile.backgroundMs;
-        phaseStart = CompositorFrameProfile::Clock::now();
+        phaseStart = profileNow();
+        auto const canvasPresentStart = profileNow();
         canvas->present();
-        if (atomicPresenter) atomicPresenter->markFrameRendered();
-        atomicFrameProfile.presentMs = CompositorFrameProfile::milliseconds(phaseStart);
-        atomicFrameProfile.totalMs = CompositorFrameProfile::milliseconds(frameProfileStart);
+        atomicFrameProfile.canvasPresentMs = profileMs(canvasPresentStart);
+        if (atomicPresenter) {
+          auto const kmsPresentStart = profileNow();
+          atomicPresenter->markFrameRendered();
+          atomicFrameProfile.kmsPresentMs = profileMs(kmsPresentStart);
+        }
+        atomicFrameProfile.presentMs = profileMs(phaseStart);
+        atomicFrameProfile.totalMs = profileMs(frameProfileStart);
         frameProfile.presentMs += atomicFrameProfile.presentMs;
         ++frameProfile.frames;
         frameProfile.totalMs += atomicFrameProfile.totalMs;
@@ -876,12 +902,16 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
             .launcherMs = atomicFrameProfile.launcherMs,
             .cursorMs = atomicFrameProfile.cursorMs,
             .presentMs = atomicFrameProfile.presentMs,
+            .canvasPresentMs = atomicFrameProfile.canvasPresentMs,
+            .kmsPresentMs = atomicFrameProfile.kmsPresentMs,
             .totalMs = atomicFrameProfile.totalMs,
         });
         frameProfile.maybeLog();
         loopStats.recordRender(renderStart);
         if (atomicPresenter) {
-          double const renderMs = LoopInstrumentation::milliseconds(renderStart, LoopInstrumentation::Clock::now());
+          double const renderMs = detailedFrameProfile
+                                      ? LoopInstrumentation::milliseconds(renderStart, LoopInstrumentation::Clock::now())
+                                      : 0.0;
           atomicReadyFrame = AtomicReadyFrame{
               .ready = true,
               .timing = presentationTiming,
@@ -901,9 +931,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                appliedConfig,
                                static_cast<std::uint32_t>(wayland.logicalOutputWidth()),
                                static_cast<std::uint32_t>(wayland.logicalOutputHeight()));
-      atomicFrameProfile.backgroundMs = CompositorFrameProfile::milliseconds(phaseStart);
+      atomicFrameProfile.backgroundMs = profileMs(phaseStart);
       frameProfile.backgroundMs += atomicFrameProfile.backgroundMs;
-      phaseStart = CompositorFrameProfile::Clock::now();
+      phaseStart = profileNow();
       auto snapPreview = wayland.snapPreview();
       bool snapPreviewDrawn = false;
       auto committedSurfaces = wayland.committedSurfaces();
@@ -973,12 +1003,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         }
       }
       loopStats.lastSurfaceCount = committedSurfaces.size();
-      atomicFrameProfile.snapshotMs = CompositorFrameProfile::milliseconds(phaseStart);
+      atomicFrameProfile.snapshotMs = profileMs(phaseStart);
       frameProfile.snapshotMs += atomicFrameProfile.snapshotMs;
       frameProfile.surfaces += committedSurfaces.size();
       std::unordered_set<std::uint64_t> liveSurfaceIds;
       liveSurfaceIds.reserve(committedSurfaces.size());
-      phaseStart = CompositorFrameProfile::Clock::now();
+      phaseStart = profileNow();
       for (auto const& clientSurface : committedSurfaces) {
         if (snapPreview && !snapPreviewDrawn && snapPreview->surfaceId == clientSurface.id) {
           drawSnapPreview(*canvas, *snapPreview, appliedConfig.config.chrome);
@@ -1000,26 +1030,26 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (snapPreview && !snapPreviewDrawn) {
         drawSnapPreview(*canvas, *snapPreview, appliedConfig.config.chrome);
       }
-      atomicFrameProfile.surfaceMs = CompositorFrameProfile::milliseconds(phaseStart);
+      atomicFrameProfile.surfaceMs = profileMs(phaseStart);
       frameProfile.surfaceMs += atomicFrameProfile.surfaceMs;
-      phaseStart = CompositorFrameProfile::Clock::now();
+      phaseStart = profileNow();
       captureClosingSurfaces(surfaceRenderState,
                              liveSurfaceIds,
                              frameTime,
                              appliedConfig.config.animationsEnabled);
       drawClosingSurfaces(*canvas, surfaceRenderState, frameTime);
-      atomicFrameProfile.closingMs = CompositorFrameProfile::milliseconds(phaseStart);
+      atomicFrameProfile.closingMs = profileMs(phaseStart);
       frameProfile.closingMs += atomicFrameProfile.closingMs;
-      phaseStart = CompositorFrameProfile::Clock::now();
+      phaseStart = profileNow();
       drawCommandLauncher(*canvas,
                           textSystem,
                           wayland.commandLauncher(),
                           appliedConfig.config.chrome,
                           wayland.logicalOutputWidth(),
                           wayland.logicalOutputHeight());
-      atomicFrameProfile.launcherMs = CompositorFrameProfile::milliseconds(phaseStart);
+      atomicFrameProfile.launcherMs = profileMs(phaseStart);
       frameProfile.launcherMs += atomicFrameProfile.launcherMs;
-      phaseStart = CompositorFrameProfile::Clock::now();
+      phaseStart = profileNow();
       drawCompositorCursor(wayland,
                            *canvas,
                            output,
@@ -1027,17 +1057,25 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                            appliedConfig.config.cursorTheme,
                            appliedConfig.config.cursorSize,
                            appliedConfig.config.hardwareCursorEnabled && hardwareCursorAvailable);
-      atomicFrameProfile.cursorMs = CompositorFrameProfile::milliseconds(phaseStart);
+      atomicFrameProfile.cursorMs = profileMs(phaseStart);
       frameProfile.cursorMs += atomicFrameProfile.cursorMs;
       pruneSurfaceRenderState(surfaceRenderState, liveSurfaceIds);
-      phaseStart = CompositorFrameProfile::Clock::now();
+      phaseStart = profileNow();
       std::vector<PresentationCompletion> presentationCompletions;
+      auto const canvasPresentStart = profileNow();
       canvas->present();
-      if (atomicPresenter) atomicPresenter->markFrameRendered();
-      atomicFrameProfile.presentMs = CompositorFrameProfile::milliseconds(phaseStart);
-      atomicFrameProfile.totalMs = CompositorFrameProfile::milliseconds(frameProfileStart);
+      atomicFrameProfile.canvasPresentMs = profileMs(canvasPresentStart);
       if (atomicPresenter) {
-        double const renderMs = LoopInstrumentation::milliseconds(renderStart, LoopInstrumentation::Clock::now());
+        auto const kmsPresentStart = profileNow();
+        atomicPresenter->markFrameRendered();
+        atomicFrameProfile.kmsPresentMs = profileMs(kmsPresentStart);
+      }
+      atomicFrameProfile.presentMs = profileMs(phaseStart);
+      atomicFrameProfile.totalMs = profileMs(frameProfileStart);
+      if (atomicPresenter) {
+        double const renderMs = detailedFrameProfile
+                                    ? LoopInstrumentation::milliseconds(renderStart, LoopInstrumentation::Clock::now())
+                                    : 0.0;
         atomicReadyFrame = AtomicReadyFrame{
             .ready = true,
             .timing = presentationTiming,
@@ -1082,6 +1120,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           .launcherMs = atomicFrameProfile.launcherMs,
           .cursorMs = atomicFrameProfile.cursorMs,
           .presentMs = atomicFrameProfile.presentMs,
+          .canvasPresentMs = atomicFrameProfile.canvasPresentMs,
+          .kmsPresentMs = atomicFrameProfile.kmsPresentMs,
           .totalMs = atomicFrameProfile.totalMs,
       });
       frameProfile.maybeLog();
@@ -1093,9 +1133,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     };
     auto noteContentSerialChange = [&] {
       std::uint64_t const contentSerial = wayland.contentSerial();
-      if (contentSerial == lastKnownContentSerial) return;
+      if (contentSerial == lastKnownContentSerial) return false;
       atomicFrameDirty = true;
       lastKnownContentSerial = contentSerial;
+      return true;
     };
     auto acknowledgeVtAcquireAfterFrame = [&] {
       if (!vtAcquireFramePending) return;
@@ -1148,7 +1189,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       auto timingStart = LoopInstrumentation::Clock::now();
       auto const pollResult = device->pollEventDetails(pollTimeoutMs, eventFds);
       bool const pollWoke = pollResult.woke;
-      loopStats.recordPoll(timingStart, pollWoke);
+      loopStats.recordPoll(timingStart, pollWoke, pollTimeoutMs);
       bool const waylandFdPolled = wayland.eventFd() >= 0;
       bool const waylandWoke = waylandFdPolled && pollMaskHas(pollResult.extraReadableMask, 0);
       std::size_t const pageFlipFdIndex = waylandFdPolled ? 1u : 0u;
@@ -1162,11 +1203,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool renderReadyUpdated =
           renderReadyWoke && atomicPresenter ? atomicPresenter->updateRenderReady() : false;
       bool const pageFlipCompleted = dispatchAtomicPageFlip();
+      if (pollWoke) {
+        diagnostics::recordCpuWakeSources(pollResult.inputOrSystem,
+                                          waylandWoke,
+                                          pageFlipWoke,
+                                          renderReadyWoke);
+      }
       if (waylandWoke) {
         timingStart = LoopInstrumentation::Clock::now();
         wayland.dispatch();
         loopStats.recordDispatch(timingStart);
-        noteContentSerialChange();
+        diagnostics::recordWaylandDispatch(noteContentSerialChange());
       }
       maybeCrashHeartbeat("main-loop");
       bool const hadInputActivity = inputActivityThisLoop;
@@ -1176,7 +1223,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
       ++loopStats.configChecks;
       bool configReloaded = false;
-      if (configChanged(loadedConfig)) {
+      auto const nowForConfig = SteadyClock::now();
+      bool const shouldCheckConfig = nowForConfig >= nextConfigCheckAt;
+      if (shouldCheckConfig) {
+        nextConfigCheckAt = nowForConfig + std::chrono::milliseconds(500);
+      }
+      if (shouldCheckConfig && configChanged(loadedConfig)) {
         auto const previousOutputSelector = loadedConfig.config.outputSelector;
         loadedConfig = loadConfigWithMetadata();
         if (loadedConfig.config.outputSelector != previousOutputSelector) {
@@ -1202,12 +1254,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         std::span<int const> const vtEventFds = pollFds(vtEventFdStorage);
         timingStart = LoopInstrumentation::Clock::now();
         bool const vtPollWoke = device->pollEvents(kIdlePollMs, vtEventFds);
-        loopStats.recordPoll(timingStart, vtPollWoke);
+        loopStats.recordPoll(timingStart, vtPollWoke, kIdlePollMs);
         dispatchAtomicPageFlip();
         timingStart = LoopInstrumentation::Clock::now();
         wayland.dispatch();
         loopStats.recordDispatch(timingStart);
-        noteContentSerialChange();
+        diagnostics::recordWaylandDispatch(noteContentSerialChange());
         if (inputActivityThisLoop) {
           lastInputActivity = SteadyClock::now();
           inputActivityThisLoop = false;
@@ -1361,6 +1413,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       timingStart = LoopInstrumentation::Clock::now();
       wayland.dispatch();
       loopStats.recordDispatch(timingStart);
+      diagnostics::recordWaylandDispatch(noteContentSerialChange());
 
       timingStart = LoopInstrumentation::Clock::now();
       renderCompositorFrame(frameTime, timingStart, presentationTiming, false);
