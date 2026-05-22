@@ -17,11 +17,18 @@ void main() {
     return;
   }
 
-  vec2 unitOffset = axis * (1.0 / vec2(textureSize(tex, 0))) * (radius / 8.0);
-  vec4 c = texture(tex, vUv) * 0.11283128;
-  c += (texture(tex, vUv + unitOffset * 1.4712388) + texture(tex, vUv - unitOffset * 1.4712388)) * 0.20525718;
-  c += (texture(tex, vUv + unitOffset * 3.4323776) + texture(tex, vUv - unitOffset * 3.4323776)) * 0.14059407;
-  c += (texture(tex, vUv + unitOffset * 5.3954768) + texture(tex, vUv - unitOffset * 5.3954768)) * 0.07114279;
-  c += (texture(tex, vUv + unitOffset * 7.3592315) + texture(tex, vUv - unitOffset * 7.3592315)) * 0.02659033;
-  outColor = c;
+  const int sampleRadius = 16;
+  vec2 texel = axis / vec2(textureSize(tex, 0));
+  float sigma = max(radius * 0.45, 0.5);
+  vec4 color = vec4(0.0);
+  float totalWeight = 0.0;
+
+  for (int i = -sampleRadius; i <= sampleRadius; ++i) {
+    float x = (float(i) / float(sampleRadius)) * radius;
+    float weight = exp(-0.5 * (x * x) / (sigma * sigma));
+    color += texture(tex, vUv + texel * x) * weight;
+    totalWeight += weight;
+  }
+
+  outColor = color / max(totalWeight, 0.0001);
 }

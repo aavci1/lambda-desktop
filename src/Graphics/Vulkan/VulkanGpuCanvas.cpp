@@ -3218,12 +3218,13 @@ private:
                                                       kBackdropBlurDownsample));
     int const targetH = static_cast<int>(std::max(1u, (swapExtent_.height + kBackdropBlurDownsample - 1u) /
                                                       kBackdropBlurDownsample));
+    VkFormat const backdropFormat = backdropRenderTargetFormat();
     auto ensure = [&](Texture &texture) {
-      if (texture.image && texture.width == targetW && texture.height == targetH) {
+      if (texture.image && texture.width == targetW && texture.height == targetH && texture.format == backdropFormat) {
         return;
       }
       destroyTexture(texture);
-      createRenderTargetTexture(texture, targetW, targetH);
+      createRenderTargetTexture(texture, targetW, targetH, backdropFormat);
       clearBackdropBlurCache();
     };
     ensure(backdropSceneTexture_);
@@ -3472,11 +3473,16 @@ private:
     }
     CachedBackdropBlur &entry = backdropBlurCache_[index];
     VkExtent2D const extent = backdropTextureExtent();
+    VkFormat const backdropFormat = backdropRenderTargetFormat();
     if (!entry.texture.image ||
         entry.texture.width != static_cast<int>(extent.width) ||
-        entry.texture.height != static_cast<int>(extent.height)) {
+        entry.texture.height != static_cast<int>(extent.height) ||
+        entry.texture.format != backdropFormat) {
       destroyTexture(entry.texture);
-      createRenderTargetTexture(entry.texture, static_cast<int>(extent.width), static_cast<int>(extent.height));
+      createRenderTargetTexture(entry.texture,
+                                static_cast<int>(extent.width),
+                                static_cast<int>(extent.height),
+                                backdropFormat);
       entry.valid = false;
       entry.signature = 0;
     }
@@ -4246,10 +4252,28 @@ private:
     pendingTextureUploads_.clear();
   }
 
-  void createRenderTargetTexture(Texture &tex, int width, int height) {
+  VkFormat backdropRenderTargetFormat() const {
+    VkFormat constexpr preferred = VK_FORMAT_R16G16B16A16_SFLOAT;
+    VkFormatProperties properties{};
+    vkGetPhysicalDeviceFormatProperties(physical_, preferred, &properties);
+    VkFormatFeatureFlags constexpr required = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                                              VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                              VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                                              VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                                              VK_FORMAT_FEATURE_BLIT_DST_BIT;
+    if ((properties.optimalTilingFeatures & required) == required) return preferred;
+    return surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormat_.format;
+  }
+
+  void createRenderTargetTexture(Texture &tex,
+                                 int width,
+                                 int height,
+                                 VkFormat requestedFormat = VK_FORMAT_UNDEFINED) {
     tex.width = width;
     tex.height = height;
-    tex.format = surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormat_.format;
+    tex.format = requestedFormat == VK_FORMAT_UNDEFINED
+                     ? (surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormat_.format)
+                     : requestedFormat;
     VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     image.imageType = VK_IMAGE_TYPE_2D;
     image.format = tex.format;
