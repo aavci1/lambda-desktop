@@ -74,9 +74,22 @@ flux::IconName dockIconName(DockItem const& item) {
   return flux::IconName::Apps;
 }
 
-flux::Element dockIcon(DockItem item, bool hover, std::function<void()> onTap) {
+flux::Element dockIconAt(std::size_t index,
+                         DockItem const& item,
+                         flux::Signal<std::vector<DockItem>> const& items,
+                         bool hover,
+                         std::function<void()> onTap) {
   IconPalette const palette = iconPalette(item);
   float const lift = hover ? -5.f : 0.f;
+  flux::Reactive::Bindable<bool> running{[items, index] {
+    auto const& dockItems = items();
+    return index < dockItems.size() && dockItems[index].running;
+  }};
+  flux::Reactive::Bindable<bool> focused{[items, index] {
+    auto const& dockItems = items();
+    return index < dockItems.size() && dockItems[index].focused;
+  }};
+
   std::vector<flux::Element> layers;
   layers.push_back(flux::Rectangle{}
       .size(40.f, 40.f)
@@ -91,14 +104,27 @@ flux::Element dockIcon(DockItem item, bool hover, std::function<void()> onTap) {
       .horizontalAlignment = flux::HorizontalAlignment::Center,
       .verticalAlignment = flux::VerticalAlignment::Center,
   }.size(40.f, 40.f).position(4.f, 4.f + lift));
-  if (item.running) {
-    float const dotY = 48.f + lift;
-    layers.push_back(flux::Rectangle{}
-        .size(item.focused ? 6.f : 5.f, item.focused ? 6.f : 5.f)
-        .position(21.f, dotY)
-        .fill(item.focused ? rgba(0.35f, 0.72f, 1.f, 1.f) : rgba(1.f, 1.f, 1.f, 0.72f))
-        .cornerRadius(3.f));
-  }
+
+  float const dotY = 48.f + lift;
+  layers.push_back(flux::Show(
+      [running] { return running.evaluate(); },
+      [focused, dotY] {
+        return flux::ZStack{
+            .children = flux::children(flux::Rectangle{}
+                .size(flux::Reactive::Bindable<float>{[focused] { return focused.evaluate() ? 6.f : 5.f; }},
+                      flux::Reactive::Bindable<float>{[focused] { return focused.evaluate() ? 6.f : 5.f; }})
+                .position(21.f, dotY)
+                .fill(flux::Reactive::Bindable<flux::FillStyle>{[focused] {
+                  return focused.evaluate() ? flux::FillStyle::solid(rgba(0.35f, 0.72f, 1.f, 1.f))
+                                          : flux::FillStyle::solid(rgba(1.f, 1.f, 1.f, 0.72f));
+                }})
+                .cornerRadius(3.f)),
+        };
+      },
+      [] {
+        return flux::Rectangle{}.size(0.f, 0.f);
+      }));
+
   auto element = flux::ZStack{
       .children = std::move(layers),
   }.size(static_cast<float>(kDockCell), static_cast<float>(dockHeight()));
@@ -115,28 +141,31 @@ flux::Element LambdaDock::body() const {
   auto const onActivateItem = props.onActivateItem;
   int const hoverIndex = props.hoverIndex;
 
+  std::vector<flux::Element> children;
+  std::vector<DockItem> const snapshot = items.peek();
+  children.reserve(snapshot.size());
+  for (std::size_t i = 0; i < snapshot.size(); ++i) {
+    DockItem const& item = snapshot[i];
+    if (item.kind == "separator") {
+      children.push_back(flux::Rectangle{}
+          .size(static_cast<float>(kDockSeparatorWidth), 30.f)
+          .fill(rgba(1.f, 1.f, 1.f, 0.30f)));
+      continue;
+    }
+    std::function<void()> onTap;
+    if (item.kind == "launcher") {
+      onTap = onOpenLauncher;
+    } else if (onActivateItem) {
+      onTap = [callback = onActivateItem, item] { callback(item); };
+    }
+    bool const hover = hoverIndex >= 0 && static_cast<int>(i) == hoverIndex;
+    children.push_back(dockIconAt(i, item, items, hover, std::move(onTap)));
+  }
+
   return flux::HStack{
       .spacing = static_cast<float>(kDockGap),
       .alignment = flux::Alignment::Center,
-      .children = flux::children(flux::For(
-          items,
-          [](DockItem const& item) { return item.id; },
-          [onOpenLauncher, onActivateItem, hoverIndex](
-              DockItem const& item, flux::Reactive::Signal<std::size_t> const& indexSignal) {
-            if (item.kind == "separator") {
-              return flux::Rectangle{}
-                  .size(static_cast<float>(kDockSeparatorWidth), 30.f)
-                  .fill(rgba(1.f, 1.f, 1.f, 0.30f));
-            }
-            std::function<void()> onTap;
-            if (item.kind == "launcher") {
-              onTap = onOpenLauncher;
-            } else if (onActivateItem) {
-              onTap = [callback = onActivateItem, item] { callback(item); };
-            }
-            bool const hover = hoverIndex >= 0 && static_cast<int>(indexSignal()) == hoverIndex;
-            return dockIcon(item, hover, std::move(onTap));
-          })),
+      .children = std::move(children),
   }
       .padding(static_cast<float>(kDockPaddingY), static_cast<float>(kDockPaddingX),
                static_cast<float>(kDockPaddingY), static_cast<float>(kDockPaddingX))
