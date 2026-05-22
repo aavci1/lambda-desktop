@@ -101,9 +101,6 @@ struct LambdaShellPreviewRoot {
                                         rgba(0.14f, 0.20f, 0.33f, 1.f),
                                         {0.f, 0.f},
                                         {1.f, 1.f})));
-    layers.push_back(Rectangle{}
-        .size(static_cast<float>(kWindowWidth), static_cast<float>(lambda_shell::kTopBarHeight))
-        .fill(rgba(0.02f, 0.03f, 0.06f, 0.72f)));
     layers.push_back(Element{lambda_shell::LambdaTopBar{lambda_shell::TopBarProps{
         .title = "Lambda",
         .timeText = "Fri May 22 19:30",

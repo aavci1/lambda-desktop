@@ -1,6 +1,7 @@
 #include "Shell/UI/LambdaTopBar.hpp"
 
 #include <Flux/Core/Color.hpp>
+#include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/IconName.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
@@ -78,7 +79,9 @@ flux::Element LambdaTopBar::body() const {
               .verticalAlignment = flux::VerticalAlignment::Center,
           }),
   }.padding(0.f, 12.f, 0.f, 14.f)
-   .height(static_cast<float>(kTopBarHeight));
+   .height(static_cast<float>(kTopBarHeight))
+   .fill(rgba(0.02f, 0.03f, 0.06f, 0.72f))
+   .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.10f), 0.5f));
 }
 
 } // namespace lambda_shell
