@@ -40,7 +40,19 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
     selectionSource_ = nullptr;
     sendSelectionForFocus(this);
   }
-  if (dragSurface_ == surface) dragSurface_ = nullptr;
+  if (dragSurface_ == surface) {
+    dragSurface_ = nullptr;
+    dragSnapTarget_.reset();
+    dragSnapTargetStartedAtMs_ = 0;
+  }
+  if (snapPreviewSurfaceId_ == surface->id) {
+    snapPreviewVisible_ = false;
+    snapPreviewDropPending_ = false;
+    snapPreviewSurfaceId_ = 0;
+    snapPreviewStartedAtMs_ = 0;
+    snapPreviewStartWindow_ = {};
+    snapPreviewTargetWindow_ = {};
+  }
   if (resizeSurface_ == surface) resizeSurface_ = nullptr;
   if (closePressSurface_ == surface) closePressSurface_ = nullptr;
   if (minimizePressSurface_ == surface) minimizePressSurface_ = nullptr;

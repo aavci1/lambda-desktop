@@ -36,26 +36,65 @@ TEST_CASE("compositor snap geometry can use a zero chrome inset") {
   CHECK(maximized.height == 1080);
 }
 
-TEST_CASE("compositor snap preview appears only near output edges") {
+TEST_CASE("compositor snap preview appears only within a small edge threshold") {
   flux::compositor::OutputGeometry const output{.width = 1280, .height = 720};
   CHECK(flux::compositor::snapPreviewGeometry({.x = 64, .y = 96, .width = 400, .height = 240}, output) == std::nullopt);
+  CHECK(flux::compositor::snapPreviewGeometry({.x = 16, .y = 96, .width = 400, .height = 240}, output) == std::nullopt);
 
-  auto left = flux::compositor::snapPreviewGeometry({.x = 16, .y = 96, .width = 400, .height = 240}, output);
+  auto left = flux::compositor::snapPreviewGeometry({
+      .x = flux::compositor::kCompositorSnapEdgeThreshold,
+      .y = 96,
+      .width = 400,
+      .height = 240,
+  }, output);
   REQUIRE(left);
   CHECK(left->x == 0);
   CHECK(left->width == 640);
 
-  auto right = flux::compositor::snapPreviewGeometry({.x = 900, .y = 96, .width = 360, .height = 240}, output);
+  auto right = flux::compositor::snapPreviewGeometry({.x = 920, .y = 96, .width = 360, .height = 240}, output);
   REQUIRE(right);
   CHECK(right->x == 640);
   CHECK(right->width == 640);
 
-  auto top = flux::compositor::snapPreviewGeometry({.x = 280, .y = 40, .width = 500, .height = 320}, output);
+  auto top = flux::compositor::snapPreviewGeometry({
+      .x = 280,
+      .y = flux::compositor::kCompositorTitleBarHeight,
+      .width = 500,
+      .height = 320,
+  }, output);
   REQUIRE(top);
   CHECK(top->x == 0);
   CHECK(top->y == flux::compositor::kCompositorTitleBarHeight);
   CHECK(top->width == 1280);
   CHECK(top->height == 692);
+}
+
+TEST_CASE("compositor snap preview supports quarter targets") {
+  flux::compositor::OutputGeometry const output{.width = 1280, .height = 720};
+
+  auto topLeft = flux::compositor::snapPreviewGeometry({
+      .x = 0,
+      .y = flux::compositor::kCompositorTitleBarHeight,
+      .width = 360,
+      .height = 240,
+  }, output);
+  REQUIRE(topLeft);
+  CHECK(topLeft->x == 0);
+  CHECK(topLeft->y == flux::compositor::kCompositorTitleBarHeight);
+  CHECK(topLeft->width == 640);
+  CHECK(topLeft->height == 346);
+
+  auto bottomRight = flux::compositor::snapPreviewGeometry({
+      .x = 920,
+      .y = 480,
+      .width = 360,
+      .height = 240,
+  }, output);
+  REQUIRE(bottomRight);
+  CHECK(bottomRight->x == 640);
+  CHECK(bottomRight->y == 374);
+  CHECK(bottomRight->width == 640);
+  CHECK(bottomRight->height == 346);
 }
 
 TEST_CASE("compositor restored drag geometry keeps title bar under cursor") {
@@ -128,26 +167,24 @@ TEST_CASE("compositor geometry stays valid on tiny outputs") {
   CHECK(maximized.height == flux::compositor::kCompositorMinWindowHeight);
 }
 
-TEST_CASE("compositor snap preview edge threshold is inclusive") {
+TEST_CASE("compositor snap preview rejects points outside the small edge threshold") {
   flux::compositor::OutputGeometry const output{.width = 1000, .height = 700};
 
   auto left = flux::compositor::snapPreviewGeometry({
-      .x = flux::compositor::kCompositorSnapEdgeThreshold,
+      .x = flux::compositor::kCompositorSnapEdgeThreshold + 1,
       .y = 100,
       .width = 300,
       .height = 200,
   }, output);
-  REQUIRE(left);
-  CHECK(left->x == 0);
+  CHECK(left == std::nullopt);
 
   auto top = flux::compositor::snapPreviewGeometry({
       .x = 300,
-      .y = flux::compositor::kCompositorTitleBarHeight + flux::compositor::kCompositorSnapEdgeThreshold,
+      .y = flux::compositor::kCompositorTitleBarHeight + flux::compositor::kCompositorSnapEdgeThreshold + 1,
       .width = 300,
       .height = 200,
   }, output);
-  REQUIRE(top);
-  CHECK(top->width == output.width);
+  CHECK(top == std::nullopt);
 }
 
 TEST_CASE("compositor popup geometry uses anchor gravity and parent-relative configure") {

@@ -170,7 +170,9 @@ Mouse behavior:
 - Click the left title bar close button to close a window.
 - Drag title bar to move a window.
 - Drag a snapped or maximized title bar to restore it once dragging starts.
-- Drag left, right, or top edge of the output to preview snap or maximize.
+- Drag to within a few pixels of the left or right output edge, then hold briefly to preview half snap.
+- Drag to within a few pixels of an output corner, then hold briefly to preview quarter snap.
+- Drag to within a few pixels of the top output edge, then hold briefly to preview maximize.
 - Drag window edges and corners to resize.
 - Click a window to focus it and raise it.
 

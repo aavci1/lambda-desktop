@@ -8,14 +8,63 @@ namespace flux::compositor {
 std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window,
                                                  OutputGeometry output,
                                                  std::int32_t topInset) {
-  if (window.width <= 0) return std::nullopt;
+  auto const target = snapTargetForWindow(window, output, topInset);
+  if (!target) return std::nullopt;
+  return snapTargetGeometry(output, *target, topInset);
+}
+
+std::optional<SnapTarget> snapTargetForWindow(WindowGeometry const& window,
+                                             OutputGeometry output,
+                                             std::int32_t topInset) {
+  if (window.width <= 0 || window.height <= 0 || output.width <= 0 || output.height <= 0) {
+    return std::nullopt;
+  }
   topInset = std::max(0, topInset);
-  bool const topEdge = window.y <= topInset + kCompositorSnapEdgeThreshold;
-  if (topEdge) return maximizedWindowGeometry(output, topInset);
-  bool const leftHalf = window.x <= kCompositorSnapEdgeThreshold;
-  bool const rightHalf = window.x + window.width >= output.width - kCompositorSnapEdgeThreshold;
-  if (!leftHalf && !rightHalf) return std::nullopt;
-  return snappedWindowGeometry(output, leftHalf, topInset);
+  bool const left = window.x <= kCompositorSnapEdgeThreshold;
+  bool const right = window.x + window.width >= output.width - kCompositorSnapEdgeThreshold;
+  bool const top = window.y <= topInset + kCompositorSnapEdgeThreshold;
+  bool const bottom = window.y + window.height >= output.height - kCompositorSnapEdgeThreshold;
+  if (left || right) {
+    bool const useLeft = left && (!right || window.x + window.width / 2 <= output.width / 2);
+    if (top) return useLeft ? SnapTarget::TopLeftQuarter : SnapTarget::TopRightQuarter;
+    if (bottom) return useLeft ? SnapTarget::BottomLeftQuarter : SnapTarget::BottomRightQuarter;
+    return useLeft ? SnapTarget::LeftHalf : SnapTarget::RightHalf;
+  }
+  if (top) return SnapTarget::Maximized;
+  return std::nullopt;
+}
+
+WindowGeometry snapTargetGeometry(OutputGeometry output, SnapTarget target, std::int32_t topInset) {
+  topInset = std::max(0, topInset);
+  std::int32_t const halfWidth = std::max(kCompositorMinWindowWidth, output.width / 2);
+  std::int32_t const availableHeight = std::max(0, output.height - topInset);
+  std::int32_t const topHalfHeight = std::max(kCompositorMinWindowHeight, availableHeight / 2);
+  std::int32_t const bottomHalfHeight =
+      std::max(kCompositorMinWindowHeight, availableHeight - availableHeight / 2);
+  switch (target) {
+  case SnapTarget::LeftHalf:
+  case SnapTarget::RightHalf:
+    return snappedWindowGeometry(output, target == SnapTarget::LeftHalf, topInset);
+  case SnapTarget::TopLeftQuarter:
+    return {.x = 0, .y = topInset, .width = halfWidth, .height = topHalfHeight};
+  case SnapTarget::TopRightQuarter:
+    return {.x = std::max(0, output.width - halfWidth),
+            .y = topInset,
+            .width = halfWidth,
+            .height = topHalfHeight};
+  case SnapTarget::BottomLeftQuarter:
+    return {.x = 0,
+            .y = std::max(topInset, output.height - bottomHalfHeight),
+            .width = halfWidth,
+            .height = bottomHalfHeight};
+  case SnapTarget::BottomRightQuarter:
+    return {.x = std::max(0, output.width - halfWidth),
+            .y = std::max(topInset, output.height - bottomHalfHeight),
+            .width = halfWidth,
+            .height = bottomHalfHeight};
+  case SnapTarget::Maximized: return maximizedWindowGeometry(output, topInset);
+  }
+  return maximizedWindowGeometry(output, topInset);
 }
 
 WindowGeometry snappedWindowGeometry(OutputGeometry output, bool leftHalf, std::int32_t topInset) {

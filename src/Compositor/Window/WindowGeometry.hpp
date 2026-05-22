@@ -7,7 +7,7 @@
 namespace flux::compositor {
 
 constexpr std::int32_t kCompositorTitleBarHeight = 28;
-constexpr std::int32_t kCompositorSnapEdgeThreshold = 32;
+constexpr std::int32_t kCompositorSnapEdgeThreshold = 8;
 constexpr std::int32_t kCompositorMinWindowWidth = 160;
 constexpr std::int32_t kCompositorMinWindowHeight = 120;
 
@@ -63,6 +63,16 @@ struct WindowGeometry {
   std::int32_t height = 0;
 };
 
+enum class SnapTarget : std::uint8_t {
+  LeftHalf,
+  RightHalf,
+  TopLeftQuarter,
+  TopRightQuarter,
+  BottomLeftQuarter,
+  BottomRightQuarter,
+  Maximized,
+};
+
 struct ResizeDragGeometry {
   float startPointerX = 0.f;
   float startPointerY = 0.f;
@@ -110,6 +120,12 @@ struct PopupGeometry {
 [[nodiscard]] std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window,
                                                                OutputGeometry output,
                                                                std::int32_t topInset = kCompositorTitleBarHeight);
+[[nodiscard]] std::optional<SnapTarget> snapTargetForWindow(WindowGeometry const& window,
+                                                            OutputGeometry output,
+                                                            std::int32_t topInset = kCompositorTitleBarHeight);
+[[nodiscard]] WindowGeometry snapTargetGeometry(OutputGeometry output,
+                                                SnapTarget target,
+                                                std::int32_t topInset = kCompositorTitleBarHeight);
 [[nodiscard]] WindowGeometry snappedWindowGeometry(OutputGeometry output,
                                                   bool leftHalf,
                                                   std::int32_t topInset = kCompositorTitleBarHeight);

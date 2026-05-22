@@ -29,6 +29,8 @@ constexpr std::int32_t kTitleBarHeight = kCompositorTitleBarHeight;
 constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
 constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
+constexpr std::uint32_t kSnapDwellMs = 250;
+constexpr std::uint32_t kSnapPreviewAnimationMs = 180;
 constexpr std::uint32_t kInvalidModifierIndex = ~0u;
 
 bool isManagedToplevel(WaylandServer::Impl::Surface const* surface) {
@@ -176,6 +178,21 @@ std::uint32_t monotonicMilliseconds() {
   clock_gettime(CLOCK_MONOTONIC, &now);
   return static_cast<std::uint32_t>(static_cast<std::uint64_t>(now.tv_sec) * 1000ull +
                                     static_cast<std::uint64_t>(now.tv_nsec) / 1'000'000ull);
+}
+
+float clamp01(float value) {
+  return std::clamp(value, 0.f, 1.f);
+}
+
+float easeOutCubic(float value) {
+  float const t = clamp01(value);
+  float const inverse = 1.f - t;
+  return 1.f - inverse * inverse * inverse;
+}
+
+std::int32_t lerpInt(std::int32_t from, std::int32_t to, float progress) {
+  return static_cast<std::int32_t>(std::lround(static_cast<float>(from) +
+                                               static_cast<float>(to - from) * progress));
 }
 
 WaylandServer::Impl::XdgPopup* popupForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
@@ -526,6 +543,14 @@ void lowerSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
   server->surfaces_.insert(server->surfaces_.begin(), std::move(item));
 }
 
+WaylandServer::Impl::Surface* surfaceById(WaylandServer::Impl* server, std::uint64_t surfaceId) {
+  auto found = std::find_if(server->surfaces_.begin(), server->surfaces_.end(),
+                            [surfaceId](auto const& candidate) {
+                              return candidate && candidate->id == surfaceId;
+                            });
+  return found == server->surfaces_.end() ? nullptr : found->get();
+}
+
 void removeSurfaceFromFocusOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!server || !surface) return;
   server->focusOrder_.erase(std::remove(server->focusOrder_.begin(), server->focusOrder_.end(), surface),
@@ -781,21 +806,178 @@ bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs) {
   return true;
 }
 
-std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const* server) {
-  WaylandServer::Impl::Surface const* surface = server->dragSurface_;
-  if (!surface) return std::nullopt;
-  auto* mutableServer = const_cast<WaylandServer::Impl*>(server);
-  auto preview = snapPreviewGeometry(windowGeometryFor(surface),
-                                     outputGeometryFor(server),
-                                     topInsetForSurface(mutableServer, surface));
-  if (!preview) return std::nullopt;
-  return SnapPreviewSnapshot{
-      .surfaceId = surface->id,
-      .x = preview->x,
-      .y = 0,
-      .width = preview->width,
-      .height = std::max(kMinWindowHeight, server->logicalOutputHeight()),
+void resetDragSnapState(WaylandServer::Impl* server) {
+  server->dragSnapTarget_.reset();
+  server->dragSnapTargetStartedAtMs_ = 0;
+}
+
+void clearSnapPreview(WaylandServer::Impl* server) {
+  resetDragSnapState(server);
+  server->snapPreviewVisible_ = false;
+  server->snapPreviewDropPending_ = false;
+  server->snapPreviewSurfaceId_ = 0;
+  server->snapPreviewStartedAtMs_ = 0;
+  server->snapPreviewStartWindow_ = {};
+  server->snapPreviewTargetWindow_ = {};
+}
+
+WindowGeometry frameGeometryFor(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
+  std::int32_t const topInset = topInsetForSurface(server, surface);
+  WindowGeometry const content = windowGeometryFor(surface);
+  return {
+      .x = content.x,
+      .y = content.y - topInset,
+      .width = content.width,
+      .height = content.height + topInset,
   };
+}
+
+WindowGeometry snapPreviewFrameGeometry(WaylandServer::Impl* server,
+                                        WaylandServer::Impl::Surface const* surface,
+                                        SnapTarget target) {
+  std::int32_t const topInset = topInsetForSurface(server, surface);
+  WindowGeometry const content = snapTargetGeometry(outputGeometryFor(server), target, topInset);
+  return {
+      .x = content.x,
+      .y = content.y - topInset,
+      .width = content.width,
+      .height = content.height + topInset,
+  };
+}
+
+WindowGeometry snapPreviewCurrentWindow(WaylandServer::Impl* server, std::uint32_t nowMs) {
+  if (!server->snapPreviewVisible_ || server->snapPreviewStartedAtMs_ == 0) {
+    return server->snapPreviewTargetWindow_;
+  }
+  std::uint32_t const elapsed = nowMs - server->snapPreviewStartedAtMs_;
+  if (elapsed >= kSnapPreviewAnimationMs) {
+    server->snapPreviewStartedAtMs_ = 0;
+    server->snapPreviewStartWindow_ = server->snapPreviewTargetWindow_;
+    return server->snapPreviewTargetWindow_;
+  }
+  float const progress = easeOutCubic(static_cast<float>(elapsed) /
+                                      static_cast<float>(kSnapPreviewAnimationMs));
+  WindowGeometry const start = server->snapPreviewStartWindow_;
+  WindowGeometry const end = server->snapPreviewTargetWindow_;
+  return {
+      .x = lerpInt(start.x, end.x, progress),
+      .y = lerpInt(start.y, end.y, progress),
+      .width = std::max(1, lerpInt(start.width, end.width, progress)),
+      .height = std::max(1, lerpInt(start.height, end.height, progress)),
+  };
+}
+
+void animateSnapPreviewTo(WaylandServer::Impl* server,
+                          WaylandServer::Impl::Surface const* surface,
+                          WindowGeometry target,
+                          std::uint32_t nowMs) {
+  WindowGeometry const current =
+      server->snapPreviewVisible_ ? snapPreviewCurrentWindow(server, nowMs) : frameGeometryFor(server, surface);
+  if (server->snapPreviewVisible_ &&
+      server->snapPreviewTargetWindow_.x == target.x &&
+      server->snapPreviewTargetWindow_.y == target.y &&
+      server->snapPreviewTargetWindow_.width == target.width &&
+      server->snapPreviewTargetWindow_.height == target.height) {
+    return;
+  }
+  server->snapPreviewVisible_ = true;
+  server->snapPreviewSurfaceId_ = surface ? surface->id : 0;
+  server->snapPreviewStartedAtMs_ = nowMs;
+  server->snapPreviewStartWindow_ = current;
+  server->snapPreviewTargetWindow_ = target;
+}
+
+std::optional<SnapTarget> activeDragSnapTarget(WaylandServer::Impl* server,
+                                               WaylandServer::Impl::Surface const* surface,
+                                               std::uint32_t nowMs) {
+  if (!surface) {
+    clearSnapPreview(server);
+    return std::nullopt;
+  }
+  auto const target =
+      snapTargetForWindow(windowGeometryFor(surface),
+                          outputGeometryFor(server),
+                          topInsetForSurface(server, surface));
+  if (!target) {
+    clearSnapPreview(server);
+    return std::nullopt;
+  }
+  if (!server->dragSnapTarget_ || *server->dragSnapTarget_ != *target) {
+    WindowGeometry const targetFrame = snapPreviewFrameGeometry(server, surface, *target);
+    if (server->snapPreviewVisible_) {
+      server->dragSnapTarget_ = target;
+      server->dragSnapTargetStartedAtMs_ = nowMs;
+      animateSnapPreviewTo(server, surface, targetFrame, nowMs);
+      return target;
+    }
+    server->dragSnapTarget_ = target;
+    server->dragSnapTargetStartedAtMs_ = nowMs;
+    server->snapPreviewTargetWindow_ = targetFrame;
+    return std::nullopt;
+  }
+  if (nowMs - server->dragSnapTargetStartedAtMs_ < kSnapDwellMs) {
+    return std::nullopt;
+  }
+  animateSnapPreviewTo(server, surface, snapPreviewFrameGeometry(server, surface, *target), nowMs);
+  return target;
+}
+
+std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const* server) {
+  auto* mutableServer = const_cast<WaylandServer::Impl*>(server);
+  std::uint32_t const now = monotonicMilliseconds();
+  if (WaylandServer::Impl::Surface const* surface = server->dragSurface_) {
+    activeDragSnapTarget(mutableServer, surface, now);
+  }
+  if (!server->snapPreviewVisible_) return std::nullopt;
+  if (server->snapPreviewDropPending_) {
+    WaylandServer::Impl::Surface* surface = surfaceById(mutableServer, server->snapPreviewSurfaceId_);
+    if (!surface) {
+      clearSnapPreview(mutableServer);
+      return std::nullopt;
+    }
+    WindowGeometry const currentFrame = frameGeometryFor(mutableServer, surface);
+    WindowGeometry const target = server->snapPreviewTargetWindow_;
+    if (!surface->geometryAnimationActive &&
+        currentFrame.x == target.x &&
+        currentFrame.y == target.y &&
+        currentFrame.width == target.width &&
+        currentFrame.height == target.height) {
+      clearSnapPreview(mutableServer);
+      return std::nullopt;
+    }
+  }
+  WindowGeometry const current = snapPreviewCurrentWindow(mutableServer, now);
+  WindowGeometry const end = server->snapPreviewTargetWindow_;
+  return SnapPreviewSnapshot{
+      .surfaceId = server->snapPreviewSurfaceId_,
+      .x = current.x,
+      .y = current.y,
+      .width = current.width,
+      .height = current.height,
+      .targetX = end.x,
+      .targetY = end.y,
+      .targetWidth = end.width,
+      .targetHeight = end.height,
+  };
+}
+
+std::optional<int> WaylandServer::Impl::snapPreviewWakeDelayMs() const {
+  if (!dragSurface_ && !snapPreviewVisible_) return std::nullopt;
+  auto* server = const_cast<WaylandServer::Impl*>(this);
+  std::uint32_t const now = monotonicMilliseconds();
+  if (!dragSurface_) {
+    if (snapPreviewStartedAtMs_ > 0 && now - snapPreviewStartedAtMs_ <= kSnapPreviewAnimationMs) return 0;
+    return std::nullopt;
+  }
+  auto const activeTarget = activeDragSnapTarget(server, dragSurface_, now);
+  if (activeTarget) {
+    if (snapPreviewStartedAtMs_ > 0 && now - snapPreviewStartedAtMs_ <= kSnapPreviewAnimationMs) return 0;
+    return std::nullopt;
+  }
+  if (!dragSnapTarget_) return std::nullopt;
+  std::uint32_t const elapsed = now - dragSnapTargetStartedAtMs_;
+  if (elapsed >= kSnapDwellMs) return 0;
+  return static_cast<int>(kSnapDwellMs - elapsed);
 }
 
 void startGeometryAnimation(WaylandServer::Impl* server,
@@ -827,7 +1009,7 @@ void startGeometryAnimation(WaylandServer::Impl* server,
   server->flushClients();
 }
 
-void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, bool leftHalf) {
+void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, SnapTarget target) {
   if (!isManagedToplevel(surface)) return;
   if (!surface->snapped && !surface->maximized) {
     surface->restoreX = surface->windowX;
@@ -835,17 +1017,20 @@ void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
     surface->restoreWidth = displayWidth(surface);
     surface->restoreHeight = displayHeight(surface);
   }
-  WindowGeometry const target = snappedWindowGeometry(outputGeometryFor(server),
-                                                      leftHalf,
-                                                      topInsetForSurface(server, surface));
+  WindowGeometry const geometry =
+      snapTargetGeometry(outputGeometryFor(server), target, topInsetForSurface(server, surface));
   surface->snapped = true;
   surface->maximized = false;
   startGeometryAnimation(server,
                          surface,
-                         target.x,
-                         target.y,
-                         target.width,
-                         target.height);
+                         geometry.x,
+                         geometry.y,
+                         geometry.width,
+                         geometry.height);
+}
+
+void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, bool leftHalf) {
+  snapToplevel(server, surface, leftHalf ? SnapTarget::LeftHalf : SnapTarget::RightHalf);
 }
 
 bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
@@ -916,6 +1101,7 @@ void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Sur
   surface->snapped = false;
   surface->maximized = false;
   surface->geometryAnimationActive = false;
+  clearSnapPreview(server);
   server->dragOffsetX_ = server->pointerX_ - static_cast<float>(surface->windowX);
   server->dragOffsetY_ = server->pointerY_ - static_cast<float>(surface->windowY);
   sendToplevelConfigure(server, toplevelForSurface(server, surface), restored.width, restored.height);
@@ -1127,6 +1313,7 @@ void updateDrag(WaylandServer::Impl* server) {
   int const maxY = std::max(topInset, server->logicalOutputHeight() - displayHeight(surface));
   surface->windowX = std::clamp(static_cast<int>(server->pointerX_ - server->dragOffsetX_), 0, maxX);
   surface->windowY = std::clamp(static_cast<int>(server->pointerY_ - server->dragOffsetY_), topInset, maxY);
+  activeDragSnapTarget(server, surface, monotonicMilliseconds());
 }
 
 void updateResize(WaylandServer::Impl* server) {
@@ -1316,6 +1503,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
           dragSurface_ = moveTarget;
           dragOffsetX_ = pointerX_ - static_cast<float>(moveTarget->windowX);
           dragOffsetY_ = pointerY_ - static_cast<float>(moveTarget->windowY);
+          clearSnapPreview(this);
           return;
         }
       }
@@ -1342,6 +1530,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         chromeControlTarget->snapped = false;
         chromeControlTarget->maximized = false;
         chromeControlTarget->geometryAnimationActive = false;
+        clearSnapPreview(this);
         resizeSurface_ = chromeControlTarget;
         resizeStartX_ = pointerX_;
         resizeStartY_ = pointerY_;
@@ -1377,12 +1566,14 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         lastTitleClickTimeMs_ = timeMs;
         if (doubleClick) {
           dragSurface_ = nullptr;
+          clearSnapPreview(this);
           toggleMaximizedToplevel(this, chromeTarget);
           return;
         }
         dragSurface_ = chromeTarget;
         dragOffsetX_ = pointerX_ - static_cast<float>(chromeTarget->windowX);
         dragOffsetY_ = pointerY_ - static_cast<float>(chromeTarget->windowY);
+        clearSnapPreview(this);
         return;
       }
     } else if (closePressSurface_) {
@@ -1417,14 +1608,16 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
       updateCompositorCursorForPointer(this);
       return;
     } else if (dragSurface_) {
-      if (auto preview = snapPreviewForDrag(this)) {
-        if (preview->width >= logicalOutputWidth()) {
+      if (auto target = activeDragSnapTarget(this, dragSurface_, monotonicMilliseconds())) {
+        if (*target == SnapTarget::Maximized) {
           maximizeToplevel(this, dragSurface_);
         } else {
-          snapToplevel(this, dragSurface_, preview->x == 0);
+          snapToplevel(this, dragSurface_, *target);
         }
+        snapPreviewDropPending_ = true;
       }
       dragSurface_ = nullptr;
+      resetDragSnapState(this);
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       updateCompositorCursorForPointer(this);
       return;

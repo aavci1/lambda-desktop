@@ -46,6 +46,10 @@ std::optional<SnapPreviewSnapshot> WaylandServer::snapPreview() const {
   return impl_->snapPreview();
 }
 
+std::optional<int> WaylandServer::snapPreviewWakeDelayMs() const {
+  return impl_->snapPreviewWakeDelayMs();
+}
+
 CommandLauncherSnapshot WaylandServer::commandLauncher() const {
   return impl_->commandLauncher();
 }

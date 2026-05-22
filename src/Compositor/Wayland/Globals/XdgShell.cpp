@@ -761,6 +761,14 @@ void xdgToplevelMove(wl_client*, wl_resource* resource, wl_resource*, std::uint3
   server->dragSurface_ = surface;
   server->dragOffsetX_ = server->pointerX_ - static_cast<float>(surface->windowX);
   server->dragOffsetY_ = server->pointerY_ - static_cast<float>(surface->windowY);
+  server->dragSnapTarget_.reset();
+  server->dragSnapTargetStartedAtMs_ = 0;
+  server->snapPreviewVisible_ = false;
+  server->snapPreviewDropPending_ = false;
+  server->snapPreviewSurfaceId_ = 0;
+  server->snapPreviewStartedAtMs_ = 0;
+  server->snapPreviewStartWindow_ = {};
+  server->snapPreviewTargetWindow_ = {};
 }
 
 struct xdg_toplevel_interface const xdgToplevelImpl{

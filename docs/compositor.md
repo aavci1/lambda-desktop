@@ -63,7 +63,7 @@ Pure Wayland. Apps that don't support Wayland natively don't run. This is a deli
 
 ### 1.7 Stacking window management
 
-Windows stack. Click-to-focus. Drag title bar to move. Drag corner to resize. Snap to halves on edge drag. No tiling, no tags, no workspaces in v1. Tiling can be a future addition; workspaces too.
+Windows stack. Click-to-focus. Drag title bar to move. Drag corner to resize. Snap to halves or quarters by moving within a few pixels of an output edge/corner and pausing briefly. No tiling, no tags, no workspaces in v1. Tiling can be a future addition; workspaces too.
 
 ### 1.8 Hybrid compositor chrome
 
@@ -485,7 +485,7 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 - Click-to-focus.
 - Drag title bar to move window.
 - Drag corner to resize window (xdg-shell's resize protocol).
-- Snap to halves on edge drag (compositor-driven, not a protocol feature).
+- Snap to halves or quarters on edge/corner drag after a short dwell (compositor-driven, not a protocol feature).
 - Double-click titlebar to maximize or restore.
 - xdg_decoration_v1 for server-side decoration negotiation.
 - Window chrome drawn via Flux Canvas: title bar with app name, left-side close button, rounded corners, and soft shadow.
@@ -536,7 +536,7 @@ Window management state is held in the compositor, not in Wayland. Wayland tells
 - ✓ Keyboard input is routed to the focused window, including modifier updates and text-editing keys verified by Flux demos.
 - ✓ Cursor renders correctly and follows the pointer.
 - ✓ Cursor changes when the client supplies a cursor surface through `wl_pointer.set_cursor`.
-- ✓ Snap-to-half works from Super+Left/Super+Right and dragging from the titlebar restores the previous size without losing the cursor/titlebar grab.
+- ✓ Snap-to-half works from Super+Left/Super+Right; titlebar edge/corner drag supports half/quarter snap previews; dragging from a snapped/maximized titlebar restores the previous size without losing the cursor/titlebar grab.
 - ✓ Double-clicking the titlebar maximizes/restores the window.
 - ✓ Super+Q closes the focused window; the compositor close button sends xdg_toplevel close on click release.
 - ◐ xdg-popup-based menus appear and dismiss correctly. The smoke demo creates, renders, repositions, outside-click-dismisses, and Escape-dismisses popups without an input grab; full popup input-grab semantics and broader real-app menu validation remain pending.
@@ -639,7 +639,7 @@ Total new code this phase: ~4000 LOC.
 
 ## 8. Phase 5: Animation, polish, daily-driveability
 
-**Status:** initial polish work in progress. New toplevels now get a short compositor-side fade/scale-in animation, closed surfaces fade out briefly, snap/maximize geometry changes are animated, titlebar drag-to-edge shows a snap preview before release, startup config can set the background color or disable animations, and live window resize avoids stale-content scaling while reducing Vulkan swapchain churn.
+**Status:** initial polish work in progress. New toplevels now get a short compositor-side fade/scale-in animation, closed surfaces fade out briefly, snap/maximize geometry changes are animated, titlebar drag-to-edge/corner shows an animated snap preview after a short dwell, startup config can set the background color or disable animations, and live window resize avoids stale-content scaling while reducing Vulkan swapchain churn.
 
 ### 8.1 Goal
 
@@ -647,7 +647,7 @@ The compositor feels good to use. It can be a daily driver for desktop work. The
 
 ### 8.2 Scope
 
-- **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in, close fade-out, server-driven snap/maximize geometry animation, and snap preview overlay are implemented. Titlebar drag to the top edge maximizes; Super+Up maximizes and Super+Down restores maximized/snapped windows.
+- **Window animations:** open, close, move, resize, snap. All driven by Flux's animation infrastructure (which is mature). Open animation: fade-in or scale-up. Close: fade-out. Move/resize: rubber-band physics or simple smoothing. Snap: preview overlay during drag, animated commit. Initial open fade/scale-in, close fade-out, server-driven snap/maximize geometry animation, and snap preview overlay are implemented. Titlebar drag to the top edge maximizes; dragging to left/right edges snaps halves; dragging to corners snaps quarters; Super+Up maximizes and Super+Down restores maximized/snapped windows.
 - **Configuration file:** `~/.config/flux-compositor/config.toml`. The compositor creates this file with defaults on first launch when it does not exist; `FLUX_COMPOSITOR_CONFIG=/path/to/config.toml` can override the path for testing. Keybindings, window-management preferences, animation toggles, output selection, and output scaling live here. Current parsing and hot reload support `background = "#RRGGBB"`, `background_gradient = "#RRGGBB,#RRGGBB"`, `wallpaper = "/path/to/file.jpg"`, `wallpaper_mode = "cover"` (`cover`, `contain`, `stretch`, `center`, or `tile`), `output = "HDMI-A-1"` or `output = "secondary"`, fallback `scale = 2.0`, per-connector `[outputs."DP-1"] scale = 2.0` overrides, `animations = false`, `hardware_cursor = false`, `idle_blank_timeout_seconds = 300`, and a `[keybindings]` section for compositor shortcuts including `launch_command = "super+space"`. Changing output selection requires restarting the compositor.
   Supported keybinding actions are `close`, `cycle_focus`, `snap_left`, `snap_right`, `maximize`, `restore`, and `terminate`; bindings use strings such as `"Super+Q"` or `"Ctrl+Alt+Backspace"`.
 - **Hardware cursor:** use KMS cursor planes when supported. The compositor loads the system Xcursor theme for its default/cursor-shape cursors and uploads themed or client-provided cursor pixels to the KMS cursor plane when they fit without compositor-side scaling. If the cursor plane cannot be used, the same themed cursor image is drawn in software; there is no built-in fallback cursor artwork.
@@ -712,7 +712,7 @@ These are explicitly out of v1:
 - **Form factors beyond desktop** (tablet shell, phone shell, etc.).
 - **Screencast / screen sharing.**
 - **Session save/restore (freeze/thaw).** This is the "device as computer" vision piece — explicitly deferred until v1 ships.
-- **Window snapping beyond halves** (quarters, custom positions).
+- **Window snapping custom positions** beyond the implemented halves and quarters.
 - **Tiling layouts.**
 - **HDR.**
 - **Variable refresh rate beyond basic FreeSync.**
@@ -766,7 +766,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_subcompositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, basic subsurface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM checkpoint active | 2026-05-16 | - | Raw KMS input callbacks, `wl_pointer`/`wl_keyboard`, focus, click-to-raise, key forwarding, client cursor surfaces, server-side chrome, titlebar drag, corner resize, snapping, drag-unsnap, double-click maximize/restore, shortcuts, title text, close-on-click-release, and non-grabbing xdg-popup rendering/dismissal are implemented with a popup smoke demo. Popup input grabs remain deferred. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed with smoke demos where useful. Current Wayland globals, including core surfaces and xdg-shell/decoration, live in `src/Compositor/Wayland/Globals/`; window/input-management lives in `src/Compositor/Window/WindowManager.cpp`; server lifecycle, snapshots, frame scheduling, and destroy cleanup live in dedicated `src/Compositor/Wayland/` files. |
-| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge shows a snap preview, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, cursor theme/size, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme with no built-in cursor artwork, compatible cursor images use a KMS cursor plane, the compositor default presentation path uses GBM/atomic KMS with page-flip completion events, and user/testing docs exist; adaptive sync/triple buffering and install/session docs remain pending. |
+| Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge/corner shows an animated snap preview after a short dwell, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, cursor theme/size, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme with no built-in cursor artwork, compatible cursor images use a KMS cursor plane, the compositor default presentation path uses GBM/atomic KMS with page-flip completion events, and user/testing docs exist; adaptive sync/triple buffering and install/session docs remain pending. |
 
 ### 12.1 Framework changes log
 

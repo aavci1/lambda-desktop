@@ -107,6 +107,10 @@ struct SnapPreviewSnapshot {
   std::int32_t y = 0;
   std::int32_t width = 0;
   std::int32_t height = 0;
+  std::int32_t targetX = 0;
+  std::int32_t targetY = 0;
+  std::int32_t targetWidth = 0;
+  std::int32_t targetHeight = 0;
 };
 
 struct CommandLauncherSnapshot {

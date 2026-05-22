@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Compositor/WaylandServer.hpp"
+#include "Compositor/Window/WindowGeometry.hpp"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
@@ -76,6 +77,7 @@ struct WaylandServer::Impl {
   [[nodiscard]] std::vector<CommittedSurfaceSnapshot> committedSurfaces() const;
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
   [[nodiscard]] std::optional<SnapPreviewSnapshot> snapPreview() const;
+  [[nodiscard]] std::optional<int> snapPreviewWakeDelayMs() const;
   [[nodiscard]] CommandLauncherSnapshot commandLauncher() const;
   [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
   [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
@@ -219,6 +221,14 @@ struct WaylandServer::Impl {
   Surface* lastPointerButtonSurface_ = nullptr;
   float dragOffsetX_ = 0.f;
   float dragOffsetY_ = 0.f;
+  std::optional<SnapTarget> dragSnapTarget_;
+  std::uint32_t dragSnapTargetStartedAtMs_ = 0;
+  bool snapPreviewVisible_ = false;
+  bool snapPreviewDropPending_ = false;
+  std::uint64_t snapPreviewSurfaceId_ = 0;
+  std::uint32_t snapPreviewStartedAtMs_ = 0;
+  WindowGeometry snapPreviewStartWindow_{};
+  WindowGeometry snapPreviewTargetWindow_{};
   std::uint32_t lastTitleClickTimeMs_ = 0;
   float resizeStartX_ = 0.f;
   float resizeStartY_ = 0.f;
