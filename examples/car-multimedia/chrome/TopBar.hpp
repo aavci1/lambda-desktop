@@ -3,7 +3,6 @@
 #include "../AppState.hpp"
 #include "../Common.hpp"
 #include "../components/Avatar.hpp"
-#include "../components/Pill.hpp"
 
 namespace car {
 
@@ -37,7 +36,6 @@ struct TopBar : ViewModifiers<TopBar> {
                         Text {.text = [s = state] { return s().profile.name; }, .font = Font {.size = 13.f, .weight = 500.f}, .color = Color::primary()}
                     ),
                 },
-                Pill {.icon = IconName::Place, .label = [s = state] { return s().locationText; }},
                 Spacer {}.flex(1.f, 1.f),
                 HStack {
                     .spacing = theme().space3,

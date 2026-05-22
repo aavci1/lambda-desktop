@@ -30,15 +30,24 @@ struct ShellTopBarView {
       }
     });
 
-    flux::Rect const bounds = flux::useBounds();
-    float const width = std::max(1.f, bounds.width);
     auto const activeTitle = model.activeTitleSignal();
+    flux::Reactive::Bindable<float> barWidth{[] {
+      flux::LayoutConstraints const* constraints = flux::useLayoutConstraints();
+      if (constraints && std::isfinite(constraints->maxWidth) && constraints->maxWidth > 0.f) {
+        return constraints->maxWidth;
+      }
+      return 1.f;
+    }};
     return flux::Element{LambdaTopBar{TopBarProps{
         .title = flux::Reactive::Bindable<std::string>{[activeTitle] { return activeTitle(); }},
         .timeText = timeText,
+        .width = barWidth,
         .system = model.systemStatus(),
         .onOpenLauncher = onOpenLauncher,
-    }}}.size(width, static_cast<float>(kTopBarHeight));
+    }}}
+        .width(barWidth)
+        .height(static_cast<float>(kTopBarHeight))
+        .fill(flux::Colors::transparent);
   }
 };
 

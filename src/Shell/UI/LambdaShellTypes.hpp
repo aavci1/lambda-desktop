@@ -15,8 +15,17 @@ namespace lambda_shell {
 inline constexpr int kTopBarHeight = 36;
 inline constexpr int kDockBottom = 12;
 inline constexpr int kDockCell = 48;
-inline constexpr float kDockPaddingX = 12;
-inline constexpr float kDockPaddingY = 12.f;
+inline constexpr int kDockIconSize = 40;
+inline constexpr int kDockDotSize = 6;
+inline constexpr int kDockIconDotGap = 4;
+inline constexpr int kDockDotBelowPad = 2;
+/// Space above the icon; equals gap + dot + padding below the dot.
+inline constexpr int kDockSlotMargin = kDockIconDotGap + kDockDotSize + kDockDotBelowPad;
+inline constexpr int kDockSlotHeight =
+    kDockSlotMargin + kDockIconSize + kDockIconDotGap + kDockDotSize + kDockDotBelowPad;
+inline constexpr float kDockPaddingX = 12.f;
+inline constexpr float kDockPaddingTop = 8.f;
+inline constexpr float kDockPaddingBottom = 8.f;
 inline constexpr int kDockGap = 6;
 inline constexpr int kDockSeparatorWidth = 1;
 
@@ -75,6 +84,7 @@ struct SystemStatus {
 struct TopBarProps {
   flux::Reactive::Bindable<std::string> title;
   flux::Reactive::Bindable<std::string> timeText;
+  flux::Reactive::Bindable<float> width{1.f};
   SystemStatus system{};
   std::function<void()> onOpenLauncher;
 };

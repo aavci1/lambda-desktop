@@ -84,46 +84,65 @@ Element dockIconAt(std::size_t index,
     return index < dockItems.size() && dockItems[index].focused;
   }};
 
-  std::vector<Element> layers;
-  layers.push_back(Rectangle{}
-      .size(40.f, 40.f)
-      .position(4.f, 4.f + lift)
+  float const slotWidth = static_cast<float>(kDockCell);
+  float const slotHeight = static_cast<float>(kDockSlotHeight);
+  float const iconSize = static_cast<float>(kDockIconSize);
+  float const iconDotGap = static_cast<float>(kDockIconDotGap);
+  float const slotMargin = static_cast<float>(kDockSlotMargin);
+  float const dotBelowPad = static_cast<float>(kDockDotBelowPad);
+  float const iconInsetX = (slotWidth - iconSize) * 0.5f;
+
+  std::vector<Element> iconLayers;
+  iconLayers.push_back(Rectangle{}
+      .size(iconSize, iconSize)
+      .position(iconInsetX, lift)
       .fill(FillStyle::linearGradient(palette.from, palette.to, {0.f, 0.f}, {1.f, 1.f}))
       .stroke(StrokeStyle::solid(Color(1.f, 1.f, 1.f, 0.68f), 0.9f))
       .cornerRadius(11.f));
-  layers.push_back(Text{
+  iconLayers.push_back(Text{
       .text = icon(dockIconName(item)),
       .font = Font{.family = "Material Symbols Rounded", .size = 31.f, .weight = 780.f},
       .color = palette.ink,
       .horizontalAlignment = HorizontalAlignment::Center,
       .verticalAlignment = VerticalAlignment::Center,
-  }.size(40.f, 40.f).position(4.f, 4.f + lift));
+  }.size(iconSize, iconSize).position(iconInsetX, lift));
 
-  float const dotY = 48.f + lift;
-  layers.push_back(Show(
-      [running] { return running.evaluate(); },
-      [focused, dotY] {
-        return ZStack{
-            .children = children(Rectangle{}
-                .size(Reactive::Bindable<float>{[focused] { return focused.evaluate() ? 6.f : 5.f; }},
-                      Reactive::Bindable<float>{[focused] { return focused.evaluate() ? 6.f : 5.f; }})
-                .position(21.f, dotY)
-                .fill(Reactive::Bindable<FillStyle>{[focused] {
-                  return focused.evaluate() ? FillStyle::solid(Color(0.35f, 0.72f, 1.f, 1.f))
-                                          : FillStyle::solid(Color(1.f, 1.f, 1.f, 0.72f));
-                }})
-                .cornerRadius(3.f)),
-        };
-      },
-      [] {
-        return Rectangle{}.size(0.f, 0.f);
-      }));
+  float const dotSize = static_cast<float>(kDockDotSize);
+  Reactive::Bindable<float> dotOpacity{[running] { return running.evaluate() ? 1.f : 0.f; }};
+  Element dotLayer = Element{Rectangle{}}
+      .width(dotSize)
+      .height(dotSize)
+      .fill(Reactive::Bindable<FillStyle>{[focused] {
+        return focused.evaluate() ? FillStyle::solid(Color(0.35f, 0.72f, 1.f, 1.f))
+                                  : FillStyle::solid(Color(1.f, 1.f, 1.f, 0.72f));
+      }})
+      .cornerRadius(3.f)
+      .opacity(dotOpacity);
 
-  auto element = ZStack{
-      .children = std::move(layers),
-  }.size(static_cast<float>(kDockCell), static_cast<float>(dockHeight()));
+  auto element = VStack{
+      .spacing = iconDotGap,
+      .alignment = Alignment::Center,
+      .children = children(
+          ZStack{.children = std::move(iconLayers)}.size(slotWidth, iconSize),
+          HStack{
+              .alignment = Alignment::Center,
+              .justifyContent = JustifyContent::Center,
+              .children = children(std::move(dotLayer)),
+          }
+              .size(slotWidth, dotSize)),
+  }
+      .padding(slotMargin, 0.f, dotBelowPad, 0.f)
+      .size(slotWidth, slotHeight);
   if (onTap) element = std::move(element).onTap(std::move(onTap));
   return element;
+}
+
+Element dockSeparator() {
+  float const thickness = static_cast<float>(kDockSeparatorWidth);
+  float const height = static_cast<float>(kDockIconSize);
+  return Rectangle{}
+      .size(thickness, height)
+      .fill(FillStyle::solid(Color{1.f, 1.f, 1.f, 0.30f}));
 }
 
 } // namespace
@@ -141,20 +160,17 @@ Element LambdaDock::body() const {
   for (std::size_t i = 0; i < snapshot.size(); ++i) {
     DockItem const& item = snapshot[i];
     if (item.kind == "separator") {
-      children.push_back(Rectangle{}
-          .size(static_cast<float>(kDockSeparatorWidth), 30.f)
-          .fill(Color(1.f, 1.f, 1.f, 0.30f)));
+      children.push_back(dockSeparator());
+      continue;
     }
-    else {
-        std::function<void()> onTap;
+    std::function<void()> onTap;
         if (item.kind == "launcher") {
             onTap = onOpenLauncher;
         } else if (onActivateItem) {
             onTap = [callback = onActivateItem, item] { callback(item); };
         }
         bool const hover = hoverIndex >= 0 && static_cast<int>(i) == hoverIndex;
-        children.push_back(dockIconAt(i, item, items, hover, std::move(onTap)));
-    }
+    children.push_back(dockIconAt(i, item, items, hover, std::move(onTap)));
   }
 
   return HStack{
@@ -162,7 +178,7 @@ Element LambdaDock::body() const {
       .alignment = Alignment::Center,
       .children = std::move(children),
   }
-      .padding(kDockPaddingY, kDockPaddingX, kDockPaddingY, kDockPaddingX)
+      .padding(kDockPaddingTop, kDockPaddingX, kDockPaddingBottom, kDockPaddingX)
       .size(Reactive::Bindable<float>{[width] { return static_cast<float>(width.evaluate()); }},
             static_cast<float>(dockHeight()));
 }

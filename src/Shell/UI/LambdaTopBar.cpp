@@ -83,6 +83,18 @@ flux::Element LambdaTopBar::body() const {
         return flux::Rectangle{}.size(0.f, 0.f);
       }));
 
+  std::vector<flux::Element> trailing;
+  trailing.reserve(statusItems.size() + 1);
+  for (auto& item : statusItems) {
+    trailing.push_back(std::move(item));
+  }
+  trailing.push_back(flux::Text{
+      .text = props.timeText,
+      .font = flux::Font{.size = 16.f, .weight = 900.f},
+      .color = text,
+      .verticalAlignment = flux::VerticalAlignment::Center,
+  });
+
   return flux::HStack{
       .spacing = 10.f,
       .alignment = flux::Alignment::Center,
@@ -92,21 +104,17 @@ flux::Element LambdaTopBar::body() const {
               .alignment = flux::Alignment::Center,
               .children = std::move(leading),
           },
-          flux::Spacer{},
+          flux::Spacer{}.flex(1.f, 1.f),
           flux::HStack{
               .spacing = 6.f,
               .alignment = flux::Alignment::Center,
-              .children = std::move(statusItems),
-          },
-          flux::Text{
-              .text = props.timeText,
-              .font = flux::Font{.size = 16.f, .weight = 900.f},
-              .color = text,
-              .verticalAlignment = flux::VerticalAlignment::Center,
+              .children = std::move(trailing),
           }),
-  }.padding(0.f, 12.f, 0.f, 14.f)
-   .height(static_cast<float>(kTopBarHeight))
-   .fill(flux::Colors::transparent);
+  }
+      .padding(0.f, 12.f, 0.f, 14.f)
+      .width(props.width)
+      .height(static_cast<float>(kTopBarHeight))
+      .fill(flux::Colors::transparent);
 }
 
 } // namespace lambda_shell

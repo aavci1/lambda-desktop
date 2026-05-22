@@ -10,7 +10,7 @@ int dockItemWidth(DockItem const& item) {
 }
 
 int dockWidth(std::vector<DockItem> const& items) {
-  int width = kDockPaddingX * 2;
+  int width = static_cast<int>(kDockPaddingX * 2.f);
   for (std::size_t i = 0; i < items.size(); ++i) {
     width += dockItemWidth(items[i]);
     if (i + 1 < items.size()) width += kDockGap;
@@ -19,16 +19,16 @@ int dockWidth(std::vector<DockItem> const& items) {
 }
 
 int dockHeight() {
-  return kDockPaddingY * 2 + kDockCell + 8;
+  return static_cast<int>(kDockPaddingTop + static_cast<float>(kDockSlotHeight) + kDockPaddingBottom);
 }
 
 std::optional<std::size_t> dockItemIndexAt(std::vector<DockItem> const& items, double x, double y) {
-  int cursor = kDockPaddingX;
+  int cursor = static_cast<int>(kDockPaddingX);
   for (std::size_t i = 0; i < items.size(); ++i) {
     int const width = dockItemWidth(items[i]);
     if (items[i].kind != "separator" &&
         x >= cursor && x < cursor + width &&
-        y >= kDockPaddingY && y < kDockPaddingY + kDockCell) {
+        y >= kDockPaddingTop && y < kDockPaddingTop + static_cast<float>(kDockIconSize)) {
       return i;
     }
     cursor += width + kDockGap;

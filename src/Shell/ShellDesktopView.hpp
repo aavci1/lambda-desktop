@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Shell/ShellModel.hpp"
+#include "Shell/ShellPreviewChrome.hpp"
 #include "Shell/ShellViews.hpp"
 
 #include <Flux/UI/Views/Views.hpp>
@@ -23,8 +24,9 @@ struct ShellDesktopView {
   flux::Element body() const {
     auto const open = model.launcherOpenSignal();
     int const dockW = dockWidth(model.dockItems());
+    float const dockH = static_cast<float>(dockHeight());
     float const dockX = (width - static_cast<float>(dockW)) * 0.5f;
-    float const dockY = height - static_cast<float>(dockHeight()) - static_cast<float>(kDockBottom);
+    float const dockY = height - dockH - static_cast<float>(kDockBottom);
 
     std::vector<flux::Element> layers;
     layers.push_back(flux::Rectangle{}
@@ -34,10 +36,16 @@ struct ShellDesktopView {
                              flux::Color{0.14f, 0.20f, 0.33f, 1.f},
                              {0.f, 0.f},
                              {1.f, 1.f})));
-    layers.push_back(flux::Element{ShellTopBarView{model, onOpenLauncher}}
-                         .size(width, static_cast<float>(kTopBarHeight))
-                         .position(0.f, 0.f));
-    layers.push_back(flux::Element{ShellDockView{model, onOpenLauncher, onActivateItem}}.position(dockX, dockY));
+
+    layers.push_back(shell_preview::wrapTopBar(
+        flux::Element{ShellTopBarView{model, onOpenLauncher}},
+        width));
+
+    layers.push_back(shell_preview::wrapDock(
+            flux::Element{ShellDockView{model, onOpenLauncher, onActivateItem}},
+            static_cast<float>(dockW),
+            dockH)
+            .position(dockX, dockY));
 
     layers.push_back(flux::Show(
         open,
