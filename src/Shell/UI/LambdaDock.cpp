@@ -97,7 +97,7 @@ Element dockIconAt(std::size_t index,
       .size(iconSize, iconSize)
       .position(iconInsetX, lift)
       .fill(FillStyle::linearGradient(palette.from, palette.to, {0.f, 0.f}, {1.f, 1.f}))
-      .stroke(StrokeStyle::solid(Color(1.f, 1.f, 1.f, 0.68f), 0.9f))
+      .stroke(StrokeStyle::solid(Color(1.f, 1.f, 1.f, 0.4f), 0.5f))
       .cornerRadius(11.f));
   iconLayers.push_back(Text{
       .text = icon(dockIconName(item)),
