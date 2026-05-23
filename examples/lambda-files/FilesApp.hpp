@@ -437,23 +437,7 @@ struct FilesAppRoot {
                                       },
                                   };
                                 })},
-                            Spacer{}.flex(1.f, 1.f),
-                            VStack{
-                                .spacing = 6.f,
-                                .alignment = Alignment::Stretch,
-                                .children = children(
-                                    Rectangle{}
-                                        .height(4.f)
-                                        .fill(FilesTheme::storageTrack)
-                                        .cornerRadius(2.f),
-                                    Text{
-                                        .text = "128 GB / 256 GB",
-                                        .font = Font{.size = 11.f},
-                                        .color = FilesTheme::text3,
-                                        .horizontalAlignment = HorizontalAlignment::Leading,
-                                    })}
-                                .padding(FilesTheme::kSidePad, FilesTheme::kSidePad, FilesTheme::kSidePad,
-                                         FilesTheme::kSidePad))}
+                            Spacer{}.flex(1.f, 1.f))}
                         .width(FilesTheme::kSidebarWidth)
                         .padding(FilesTheme::kSidePad, FilesTheme::kSidePad, FilesTheme::kSidePad,
                                  FilesTheme::kSidePad)
