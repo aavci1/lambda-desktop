@@ -6,6 +6,8 @@
 
 **Out of scope, deliberately:** display-manager functionality (greeter, PAM, login). Session lifecycle (the compositor *is* a session, it doesn't manage sessions). Lock screen. Logout. Full multi-monitor desktop layout. Tab grouping. Window gluing. Accessibility. Input methods. Touch-specific shell behaviors. Form factors beyond desktop. These are all real concerns and all explicitly outside this spec.
 
+**Next work:** see [compositor-implementation-plan.md](compositor-implementation-plan.md) for the active prioritized roadmap (framework-first shell chrome, protocol honesty, structural splits).
+
 ---
 
 ## How to read this document

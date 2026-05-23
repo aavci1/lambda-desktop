@@ -13,6 +13,7 @@
 | [compositor-user-guide.md](compositor-user-guide.md) | Running, configuring, and using the Linux KMS compositor |
 | [compositor-testing.md](compositor-testing.md) | TTY test checklist and expected results for compositor demos |
 | [compositor-cleanup-spec.md](compositor-cleanup-spec.md) | Completed compositor cleanup plan and rationale |
+| [compositor-implementation-plan.md](compositor-implementation-plan.md) | Active compositor/shell roadmap (framework-first, backend parity) |
 | [v5-progress.md](v5-progress.md) | Completed stage-gate record |
 | [v5-final-perf.md](v5-final-perf.md) | Final v5 validation and performance measurements |
 
