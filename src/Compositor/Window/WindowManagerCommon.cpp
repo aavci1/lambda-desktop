@@ -66,20 +66,31 @@ bool layerSurfaceAboveWindows(WaylandServer::Impl::Surface const* surface) {
 
 WaylandServer::Impl::Surface* aboveWindowLayerAt(WaylandServer::Impl* server, float x, float y) {
   if (!server) return nullptr;
+
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
-    std::int32_t const width = displayWidth(surface);
-    std::int32_t const height = displayHeight(surface);
-    if (!layerSurfaceAboveWindows(surface) || surface->minimized || width <= 0 || height <= 0) continue;
+    if (!layerSurfaceAboveWindows(surface) || surface->minimized) continue;
     if (surface->layerSurface &&
         surface->layerSurface->keyboardInteractivity ==
-            ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE) {
+            ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE &&
+        surface->layerSurface->nameSpace == "lambda.command-launcher") {
       return surface;
     }
-    float const left = static_cast<float>(surface->windowX);
-    float const top = static_cast<float>(surface->windowY);
-    if (containsPoint(x, y, left, top, left + static_cast<float>(width), top + static_cast<float>(height))) {
-      return surface;
+  }
+
+  for (std::uint32_t layer = ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY; layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+       --layer) {
+    for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
+      WaylandServer::Impl::Surface* surface = it->get();
+      std::int32_t const width = displayWidth(surface);
+      std::int32_t const height = displayHeight(surface);
+      if (!layerSurfaceAboveWindows(surface) || surface->minimized || width <= 0 || height <= 0) continue;
+      if (!surface->layerSurface || surface->layerSurface->layer != layer) continue;
+      float const left = static_cast<float>(surface->windowX);
+      float const top = static_cast<float>(surface->windowY);
+      if (containsPoint(x, y, left, top, left + static_cast<float>(width), top + static_cast<float>(height))) {
+        return surface;
+      }
     }
   }
   return nullptr;

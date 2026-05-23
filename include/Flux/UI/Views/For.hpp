@@ -23,6 +23,11 @@
 
 namespace flux {
 
+enum class ForLayout {
+  VerticalStack,
+  Overlay,
+};
+
 template<typename T, typename KeyFn, typename Factory>
 class ForView {
 public:
@@ -38,9 +43,10 @@ private:
 
 public:
   ForView(Reactive::Signal<Items> items, KeyFn keyFn, Factory factory,
-          float spacing = 0.f, Alignment alignment = Alignment::Start)
+          float spacing = 0.f, Alignment alignment = Alignment::Start,
+          ForLayout layout = ForLayout::VerticalStack)
       : state_(std::make_shared<State>(
-            std::move(items), std::move(keyFn), std::move(factory), spacing, alignment)) {}
+            std::move(items), std::move(keyFn), std::move(factory), spacing, alignment, layout)) {}
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                LayoutHints const&, TextSystem& textSystem) const {
@@ -52,7 +58,8 @@ public:
     auto group = std::make_unique<scenegraph::SceneNode>(
         Rect{0.f, 0.f, detail::controlFiniteOrZero(frameSize.width),
              detail::controlFiniteOrZero(frameSize.height)});
-    group->setLayoutFlow(scenegraph::LayoutFlow::VerticalStack);
+    group->setLayoutFlow(state_->layout == ForLayout::Overlay ? scenegraph::LayoutFlow::None
+                                                              : scenegraph::LayoutFlow::VerticalStack);
     group->setLayoutSpacing(state_->spacing);
 
     auto controlScope = std::make_shared<Reactive::Scope>();
@@ -113,6 +120,7 @@ private:
     Factory factory;
     float spacing = 0.f;
     Alignment alignment = Alignment::Start;
+    ForLayout layout = ForLayout::VerticalStack;
     EnvironmentBinding environment;
     TextSystem* textSystem = nullptr;
     LayoutConstraints constraints;
@@ -121,12 +129,13 @@ private:
     bool disposed = false;
 
     State(Reactive::Signal<Items> itemsIn, KeyFn keyFnIn, Factory factoryIn,
-          float spacingIn, Alignment alignmentIn)
+          float spacingIn, Alignment alignmentIn, ForLayout layoutIn)
         : items(std::move(itemsIn))
         , keyFn(std::move(keyFnIn))
         , factory(std::move(factoryIn))
         , spacing(spacingIn)
-        , alignment(alignmentIn) {}
+        , alignment(alignmentIn)
+        , layout(layoutIn) {}
 
     ~State() {
       dispose();
@@ -229,7 +238,7 @@ private:
 
       rows = std::move(nextRows);
       group.replaceChildren(std::move(nextNodes));
-      detail::controlLayoutVertical(group, Size{}, spacing);
+      applyGroupLayout(group, Size{});
       detail::controlPropagateLayoutChange(group, oldSize);
       if (requestRedraw) {
         requestRedraw();
@@ -295,7 +304,15 @@ private:
           relayoutMountedRow(row, *child, childConstraints, childHints);
         }
       }
-      detail::controlLayoutVertical(group, Size{}, spacing);
+      applyGroupLayout(group, Size{});
+    }
+
+    void applyGroupLayout(scenegraph::SceneNode& group, Size frameSize) const {
+      if (layout == ForLayout::Overlay) {
+        detail::controlLayoutOverlay(group, frameSize);
+      } else {
+        detail::controlLayoutVertical(group, frameSize, spacing);
+      }
     }
 
     static void disposeRows(std::vector<Row>& rowsToDispose) {
@@ -381,6 +398,14 @@ private:
     }
 
     Size measuredStackSize(LayoutConstraints const& outerConstraints) const {
+      if (layout == ForLayout::Overlay) {
+        Size size{};
+        for (Row const& row : rows) {
+          size.width = std::max(size.width, row.cachedSize.width);
+          size.height = std::max(size.height, row.cachedSize.height);
+        }
+        return clampSize(size, outerConstraints);
+      }
       Size size{};
       for (std::size_t i = 0; i < rows.size(); ++i) {
         size.width = std::max(size.width, rows[i].cachedSize.width);
@@ -439,10 +464,11 @@ private:
 template<typename T, typename KeyFn, typename Factory>
 ForView<T, std::decay_t<KeyFn>, std::decay_t<Factory>>
 For(Reactive::Signal<std::vector<T>> items, KeyFn&& keyFn, Factory&& factory,
-    float spacing = 0.f, Alignment alignment = Alignment::Start) {
+    float spacing = 0.f, Alignment alignment = Alignment::Start,
+    ForLayout layout = ForLayout::VerticalStack) {
   return ForView<T, std::decay_t<KeyFn>, std::decay_t<Factory>>{
       std::move(items), std::forward<KeyFn>(keyFn), std::forward<Factory>(factory),
-      spacing, alignment};
+      spacing, alignment, layout};
 }
 
 } // namespace flux

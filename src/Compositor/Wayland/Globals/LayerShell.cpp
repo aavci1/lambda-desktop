@@ -25,6 +25,9 @@ void layerSurfaceSetSize(wl_client*, wl_resource* resource, std::uint32_t width,
   layerSurface->width = width;
   layerSurface->height = height;
   refreshShellReservedZones(layerSurface->server);
+  applyLayerGeometry(layerSurface);
+  sendLayerConfigure(layerSurface);
+  layerSurface->server->flushClients();
 }
 
 void layerSurfaceSetAnchor(wl_client*, wl_resource* resource, std::uint32_t anchor) {

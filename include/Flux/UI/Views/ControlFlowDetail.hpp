@@ -152,6 +152,12 @@ inline Size controlChildExtents(scenegraph::SceneNode const& parent) {
   return extents;
 }
 
+inline void controlLayoutOverlay(scenegraph::SceneNode& group, Size frameSize) {
+  Size const extents = controlChildExtents(group);
+  group.setSize(Size{controlFiniteOrZero(std::max(frameSize.width, extents.width)),
+                       controlFiniteOrZero(std::max(frameSize.height, extents.height))});
+}
+
 inline Size controlStackExtents(scenegraph::SceneNode const& parent,
                                 scenegraph::LayoutFlow flow) {
   constexpr float epsilon = 0.01f;

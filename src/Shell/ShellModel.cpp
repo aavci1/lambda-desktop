@@ -130,6 +130,7 @@ void ShellModel::applySnapshot(std::string_view json) {
 void ShellModel::openLauncher() {
   if (launcherOpen_.peek()) return;
   launcherOpen_.set(true);
+  launcherUiVisible_.set(false);
   query_.set(std::string{});
   highlighted_.set(0);
   refreshLauncherResults();
@@ -138,9 +139,27 @@ void ShellModel::openLauncher() {
 void ShellModel::closeLauncher() {
   if (!launcherOpen_.peek()) return;
   launcherOpen_.set(false);
+  launcherUiVisible_.set(false);
+  launcherWidth_.set(1.f);
+  launcherHeight_.set(1.f);
   query_.set(std::string{});
   highlighted_.set(0);
   refreshLauncherResults();
+}
+
+void ShellModel::setLauncherUiVisible(bool visible) {
+  if (launcherUiVisible_.peek() == visible) return;
+  launcherUiVisible_.set(visible);
+}
+
+void ShellModel::setLauncherSize(float width, float height) {
+  float const nextWidth = std::max(1.f, width);
+  float const nextHeight = std::max(1.f, height);
+  if (launcherWidth_.peek() == nextWidth && launcherHeight_.peek() == nextHeight) {
+    return;
+  }
+  launcherWidth_.set(nextWidth);
+  launcherHeight_.set(nextHeight);
 }
 
 void ShellModel::setQuery(std::string query) {

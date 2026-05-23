@@ -81,6 +81,17 @@ ShellController::ShellController(flux::Application& app, ShellModel& model) : ap
   model_.resetDockItems();
   lastDockWidth_ = dockWidth(model_.dockItems());
 
+  app_.eventQueue().on<flux::WindowEvent>([this](flux::WindowEvent const& event) {
+    if (event.kind != flux::WindowEvent::Kind::Resize) return;
+    if (!launcherHandle_ || event.handle != *launcherHandle_) return;
+    if (!model_.launcherOpen()) return;
+    model_.setLauncherSize(event.size.width, event.size.height);
+    if (event.size.width > 64.f && event.size.height > 64.f) {
+      model_.setLauncherUiVisible(true);
+    }
+    requestLauncherRedraw();
+  });
+
   app_.eventQueue().on<flux::InputEvent>([this](flux::InputEvent const& event) {
     bool const forLauncher =
         (launcherHandle_ && event.handle == *launcherHandle_) || (previewHandle_ && event.handle == *previewHandle_);
@@ -151,6 +162,7 @@ void ShellController::setupPreviewWindow(flux::Window& window, float width, floa
   previewWidth_ = width;
   previewHeight_ = height;
   previewHandle_ = window.handle();
+  model_.setLauncherSize(width, height);
   mountPreviewView();
 }
 

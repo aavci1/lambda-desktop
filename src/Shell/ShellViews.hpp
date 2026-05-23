@@ -76,17 +76,23 @@ struct ShellLauncherView {
   std::function<void(flux::KeyCode, flux::Modifiers)> onKeyDown;
 
   flux::Element body() const {
-    auto const open = model.launcherOpenSignal();
     auto const results = model.launcherResultsSignal();
     auto const query = model.querySignal();
     auto const highlighted = model.highlightedSignal();
 
-    auto buildLauncher = [this, results, query, highlighted] {
-      flux::Rect const bounds = flux::useBounds();
-      flux::Reactive::Bindable<int> widthBinding{
-          [bounds] { return static_cast<int>(std::max(1.f, bounds.width)); }};
-      flux::Reactive::Bindable<int> heightBinding{
-          [bounds] { return static_cast<int>(std::max(1.f, bounds.height)); }};
+    auto const uiVisible = model.launcherUiVisibleSignal();
+    auto const launcherWidth = model.launcherWidthSignal();
+    auto const launcherHeight = model.launcherHeightSignal();
+
+    auto buildLauncher = [this, results, query, highlighted, launcherWidth, launcherHeight] {
+      flux::Reactive::Bindable<float> widthBinding{
+          [launcherWidth] { return std::max(1.f, launcherWidth()); }};
+      flux::Reactive::Bindable<float> heightBinding{
+          [launcherHeight] { return std::max(1.f, launcherHeight()); }};
+      flux::Reactive::Bindable<int> widthIntBinding{
+          [widthBinding] { return static_cast<int>(std::max(1.f, widthBinding.evaluate())); }};
+      flux::Reactive::Bindable<int> heightIntBinding{
+          [heightBinding] { return static_cast<int>(std::max(1.f, heightBinding.evaluate())); }};
       flux::Reactive::Bindable<int> clampedHighlight{[results, highlighted] {
         auto const items = results();
         if (items.empty()) return 0;
@@ -97,11 +103,13 @@ struct ShellLauncherView {
           .results = results,
           .query = query,
           .highlighted = clampedHighlight,
-          .width = widthBinding,
-          .height = heightBinding,
+          .width = widthIntBinding,
+          .height = heightIntBinding,
           .onActivateResult = onActivateResult,
           .onDismiss = onDismiss,
-      }}}.size(bounds.width, bounds.height);
+      }}}
+                        .width(widthBinding)
+                        .height(heightBinding);
       if (onKeyDown) {
         root = std::move(root).onKeyDown(std::move(onKeyDown));
       }
@@ -109,7 +117,7 @@ struct ShellLauncherView {
     };
 
     return flux::Show(
-        open,
+        uiVisible,
         buildLauncher,
         [] {
           return flux::Rectangle{}.size(1.f, 1.f).fill(flux::Colors::transparent);

@@ -55,12 +55,13 @@ std::vector<DockItem> launcherResults(std::vector<DockItem> const& items, std::s
 }
 
 LauncherLayout launcherLayout(int width) {
+  width = std::max(1, width);
   LauncherLayout layout;
-  layout.fieldW = std::min(420.f, static_cast<float>(width) - 48.f);
+  layout.fieldW = std::max(120.f, std::min(420.f, static_cast<float>(width) - 48.f));
   layout.fieldX = (static_cast<float>(width) - layout.fieldW) * 0.5f;
   layout.columns = std::max(1, std::min(4, (width - 80) / (layout.tileW + layout.gap)));
   layout.gridW = layout.columns * layout.tileW + (layout.columns - 1) * layout.gap;
-  layout.startX = (width - layout.gridW) / 2;
+  layout.startX = std::max(0, (width - layout.gridW) / 2);
   return layout;
 }
 

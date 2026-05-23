@@ -123,28 +123,46 @@ flux::Element LambdaCommandLauncher::body() const {
     return query().empty() ? rgba(0.32f, 0.34f, 0.40f, 1.f) : rgba(0.05f, 0.08f, 0.14f, 1.f);
   }};
 
-  int const width = widthBinding.evaluate();
-  LauncherLayout const layout = launcherLayout(width);
+  flux::Reactive::Bindable<float> widthFloatBinding{
+      [widthBinding] { return static_cast<float>(std::max(1, widthBinding.evaluate())); }};
+  flux::Reactive::Bindable<float> heightFloatBinding{
+      [heightBinding] { return static_cast<float>(std::max(1, heightBinding.evaluate())); }};
+  flux::Reactive::Bindable<float> fieldWBinding{[widthBinding] {
+    return launcherLayout(std::max(1, widthBinding.evaluate())).fieldW;
+  }};
+  flux::Reactive::Bindable<float> fieldXBinding{[widthBinding] {
+    return launcherLayout(std::max(1, widthBinding.evaluate())).fieldX;
+  }};
+  float const fieldY = 80.f;
 
   std::vector<flux::Element> layers;
   layers.push_back(flux::Rectangle{}
-      .size(layout.fieldW, 48.f)
-      .position(layout.fieldX, layout.fieldY)
-      .fill(rgba(1.f, 1.f, 1.f, 0.72f))
-      .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.72f), 1.f))
-      .cornerRadius(14.f));
+                       .size(fieldWBinding, 48.f)
+                       .position(fieldXBinding, fieldY)
+                       .fill(rgba(1.f, 1.f, 1.f, 0.72f))
+                       .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.72f), 1.f))
+                       .cornerRadius(14.f));
+  flux::Reactive::Bindable<float> queryTextWBinding{[fieldWBinding] {
+    return fieldWBinding.evaluate() - 36.f;
+  }};
+  flux::Reactive::Bindable<float> queryTextXBinding{[fieldXBinding] {
+    return fieldXBinding.evaluate() + 18.f;
+  }};
   layers.push_back(flux::Text{
-      .text = queryText,
-      .font = flux::Font{.size = 18.f, .weight = 540.f},
-      .color = queryColor,
-      .verticalAlignment = flux::VerticalAlignment::Center,
-  }.size(layout.fieldW - 36.f, 24.f).position(layout.fieldX + 18.f, layout.fieldY + 12.f));
+                       .text = queryText,
+                       .font = flux::Font{.size = 18.f, .weight = 540.f},
+                       .color = queryColor,
+                       .verticalAlignment = flux::VerticalAlignment::Center,
+                   }
+                       .size(queryTextWBinding, 24.f)
+                       .position(queryTextXBinding, fieldY + 12.f));
 
   layers.push_back(flux::Element{flux::For(
       results,
       [](DockItem const& item) { return item.id; },
-      [layout, highlighted, onActivateResult](
+      [widthBinding, highlighted, onActivateResult](
           DockItem const& item, flux::Reactive::Signal<std::size_t> const& indexSignal) {
+        LauncherLayout const layout = launcherLayout(std::max(1, widthBinding.evaluate()));
         flux::Reactive::Bindable<bool> active{[highlighted, indexSignal] {
           return static_cast<int>(indexSignal()) == highlighted.evaluate();
         }};
@@ -154,11 +172,14 @@ flux::Element LambdaCommandLauncher::body() const {
         float const x = static_cast<float>(layout.startX + col * (layout.tileW + layout.gap));
         float const y = layout.fieldY + 76.f + static_cast<float>(row * (layout.tileH + layout.gap));
         return resultTile(item, active, x, y, onActivateResult);
-      })});
+      },
+      0.f,
+      flux::Alignment::Start,
+      flux::ForLayout::Overlay)});
 
   std::vector<flux::Element> stackChildren;
   auto backdrop = flux::Rectangle{}
-                      .size(static_cast<float>(width), static_cast<float>(heightBinding.evaluate()))
+                      .size(widthFloatBinding, heightFloatBinding)
                       .fill(rgba(0.03f, 0.05f, 0.10f, 0.26f));
   if (onDismiss) {
     backdrop = std::move(backdrop).onTap(onDismiss);
@@ -170,7 +191,7 @@ flux::Element LambdaCommandLauncher::body() const {
 
   return flux::ZStack{
       .children = std::move(stackChildren),
-  }.size(static_cast<float>(width), static_cast<float>(heightBinding.evaluate()));
+  }.size(widthFloatBinding, heightFloatBinding);
 }
 
 } // namespace lambda_shell

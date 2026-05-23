@@ -1,5 +1,8 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
+#include <algorithm>
+#include <vector>
+
 #include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Wayland/Globals/LinuxDmabuf.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
@@ -211,9 +214,23 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() c
   std::vector<CommittedSurfaceSnapshot> snapshots;
   snapshots.reserve(surfaces_.size());
   for (bool aboveWindowLayers : {false, true}) {
+    std::vector<WaylandServer::Impl::Surface const*> passSurfaces;
+    passSurfaces.reserve(surfaces_.size());
     for (auto const& surface : surfaces_) {
-      if (!renderInPass(surface.get(), aboveWindowLayers)) continue;
-      appendRenderableSurface(this, snapshots, surface.get());
+      if (renderInPass(surface.get(), aboveWindowLayers)) passSurfaces.push_back(surface.get());
+    }
+    if (aboveWindowLayers) {
+      std::stable_sort(passSurfaces.begin(), passSurfaces.end(),
+                       [](WaylandServer::Impl::Surface const* a, WaylandServer::Impl::Surface const* b) {
+                         std::uint32_t const layerA =
+                             a->layerSurface ? a->layerSurface->layer : ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+                         std::uint32_t const layerB =
+                             b->layerSurface ? b->layerSurface->layer : ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+                         return layerA < layerB;
+                       });
+    }
+    for (WaylandServer::Impl::Surface const* surface : passSurfaces) {
+      appendRenderableSurface(this, snapshots, surface);
     }
   }
   return snapshots;
