@@ -6,6 +6,7 @@
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 
 #include <algorithm>
+#include <memory>
 
 namespace flux {
 
@@ -110,11 +111,44 @@ Element Popover::body() const {
 }
 
 std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover() {
-  auto [showOverlay, hideOverlay, isPresented] = useOverlay();
   Runtime* runtime = Runtime::current();
   Window* window = runtime ? &runtime->window() : nullptr;
+  auto id = std::make_shared<PopoverSurfaceId>(kInvalidPopoverSurfaceId);
+  auto overlayId = std::make_shared<OverlayId>(kInvalidOverlayId);
 
-  auto show = [showOverlay = std::move(showOverlay), runtime, window](Popover popover) mutable {
+  Reactive::onCleanup([id, overlayId, window] {
+    if (window && id->isValid()) {
+      PopoverSurfaceId const dismissId = *id;
+      *id = kInvalidPopoverSurfaceId;
+      window->dismissPopover(dismissId);
+    }
+    if (window && overlayId->isValid()) {
+      OverlayId const removeId = *overlayId;
+      *overlayId = kInvalidOverlayId;
+      window->removeOverlay(removeId);
+    }
+  });
+
+  auto hide = [id, overlayId, window] {
+    if (!window) {
+      return;
+    }
+    if (id->isValid()) {
+      PopoverSurfaceId const dismissId = *id;
+      *id = kInvalidPopoverSurfaceId;
+      window->dismissPopover(dismissId);
+    }
+    if (overlayId->isValid()) {
+      OverlayId const removeId = *overlayId;
+      *overlayId = kInvalidOverlayId;
+      window->removeOverlay(removeId);
+    }
+  };
+
+  auto show = [id, overlayId, runtime, window](Popover popover) mutable {
+    if (!runtime || !window) {
+      return;
+    }
     Theme const theme = window ? window->theme() : Theme::light();
     PopoverPlacement const preferred = popover.placement;
     std::optional<Rect> const anchor = resolvePopoverAnchor(popover, runtime);
@@ -125,21 +159,40 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
         anchor ? resolvePopoverPlacement(preferred, anchor, estimatedOuterSize, gap, windowSize)
                : preferred;
     popover.resolvedPlacement = resolved;
-    std::optional<ComponentKey> anchorTrackKey;
-    if (!popover.anchorRectOverride && runtime) {
+    if (id->isValid()) {
+      PopoverSurfaceId const dismissId = *id;
+      *id = kInvalidPopoverSurfaceId;
+      window->dismissPopover(dismissId);
+    }
+    if (overlayId->isValid()) {
+      OverlayId const removeId = *overlayId;
+      *overlayId = kInvalidOverlayId;
+      window->removeOverlay(removeId);
+    }
+
+    std::optional<ComponentKey> anchorTrackComponentKey;
+    std::optional<ComponentKey> anchorTrackLeafKey;
+    if (!popover.anchorRectOverride) {
       if (popover.useHoverLeafAnchor) {
-        // Hover tooltips should stay anchored to the exact leaf hit that opened them. The tracked
-        // component key can resolve to an ancestor wrapper with a different layout size.
+        anchorTrackLeafKey = runtime->hoverTargetKey();
       } else if (popover.useFocusAnchor) {
-        anchorTrackKey = runtime->focusTargetKey();
+        anchorTrackComponentKey = runtime->focusTargetKey();
       } else {
-        anchorTrackKey = runtime->lastTapTargetKey();
+        anchorTrackComponentKey = runtime->lastTapTargetKey();
       }
+    }
+
+    Popover platformPopover = popover;
+    *id = window->showPopover(std::move(platformPopover), anchor.value_or(Rect{0.f, 0.f, 1.f, 1.f}),
+                              runtime->lastTapSerial(), anchorTrackComponentKey, anchorTrackLeafKey);
+    if (id->isValid()) {
+      return;
     }
 
     OverlayConfig config{
         .anchor = anchor,
-        .anchorTrackComponentKey = anchorTrackKey,
+        .anchorTrackLeafKey = anchorTrackLeafKey,
+        .anchorTrackComponentKey = anchorTrackComponentKey,
         .placement = overlayPlacementFromPopover(resolved),
         .autoFlipPreferredPlacement = overlayPlacementFromPopover(preferred),
         .autoFlipGap = gap,
@@ -153,11 +206,10 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
         .onDismiss = popover.onDismiss,
         .debugName = popover.debugName,
     };
-
-    showOverlay(Element{std::move(popover)}, std::move(config));
+    *overlayId = window->pushOverlay(Element{std::move(popover)}, std::move(config));
   };
 
-  return {std::move(show), std::move(hideOverlay), isPresented};
+  return {std::move(show), std::move(hide), id->isValid() || overlayId->isValid()};
 }
 
 PopoverPlacement resolvePopoverPlacement(PopoverPlacement preferred, std::optional<Rect> const& anchor,

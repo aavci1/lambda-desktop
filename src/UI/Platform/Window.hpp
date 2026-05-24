@@ -7,6 +7,8 @@
 
 #include <Flux/UI/Cursor.hpp>
 #include <Flux/Core/Geometry.hpp>
+#include <Flux/UI/MenuItem.hpp>
+#include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/WindowChrome.hpp>
 #include <Flux/UI/Window.hpp>
 
@@ -14,6 +16,8 @@ namespace flux {
 
 class Window;
 class Canvas;
+struct PopupMenu;
+struct Popover;
 
 namespace platform {
 
@@ -41,6 +45,15 @@ public:
   virtual WindowChromeMetrics chromeMetrics() const { return {}; }
   virtual void beginWindowDrag(std::uint32_t /*platformSerial*/ = 0) {}
   virtual void beginWindowResize(WindowResizeEdge /*edge*/, std::uint32_t /*platformSerial*/ = 0) {}
+  virtual bool showPopupMenu(PopupMenu /*menu*/, Rect /*anchor*/, std::uint32_t /*platformSerial*/ = 0) {
+    return false;
+  }
+  virtual PopoverSurfaceId showPopover(Popover /*popover*/, Rect /*anchor*/,
+                                       std::uint32_t /*platformSerial*/ = 0) {
+    return kInvalidPopoverSurfaceId;
+  }
+  virtual void repositionPopover(PopoverSurfaceId /*id*/, Popover const& /*popover*/, Rect /*anchor*/) {}
+  virtual void dismissPopover(PopoverSurfaceId /*id*/) {}
 
   virtual Size currentSize() const = 0;
   virtual std::optional<Rect> currentFrame() const { return std::nullopt; }

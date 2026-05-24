@@ -11,6 +11,7 @@
 #include <Flux/UI/EventQueue.hpp>
 #include <Flux/UI/Events.hpp>
 #include <Flux/UI/KeyCodes.hpp>
+#include <Flux/UI/PopupMenu.hpp>
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Core/Color.hpp>
 #include <Flux/UI/Window.hpp>

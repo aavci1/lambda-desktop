@@ -9,7 +9,9 @@
 #include <Flux/UI/EventQueue.hpp>
 #include <Flux/UI/Events.hpp>
 #include <Flux/UI/Application.hpp>
+#include <Flux/UI/MenuItem.hpp>
 #include <Flux/UI/Window.hpp>
+#include <Flux/UI/Views/Popover.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Profile.hpp>
 
@@ -17,6 +19,7 @@
 #include "UI/Platform/WindowFactory.hpp"
 #include "Graphics/Metal/MetalCanvas.hpp"
 #include "UI/DebugFlags.hpp"
+#include "UI/TransientPopoverHost.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -24,11 +27,14 @@
 #include <cmath>
 #include <cstdio>
 #include <dispatch/dispatch.h>
+#include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace flux {
 class MacMetalWindow;
+class MacPopoverSurface;
 class Window;
 ::flux::Window* fluxWindowForPlatform(MacMetalWindow* platform);
 CVReturn fluxHandleDisplayLinkTick(MacMetalWindow* platform);
@@ -46,6 +52,26 @@ CVReturn fluxHandleDisplayLinkTick(MacMetalWindow* platform);
 - (void)updateDrawableSize;
 - (BOOL)fluxWantsTextInput;
 - (void)fluxHandleDisplayLink:(id)displayLink;
+@end
+
+@interface FluxPopupMenuTarget : NSObject {
+@public
+  flux::Window* fluxWindow;
+  std::vector<std::function<void()>> handlers;
+  std::vector<std::string> actionNames;
+}
+- (void)fluxPopupMenuAction:(id)sender;
+@end
+
+@interface FluxPopoverView : NSView <NSTextInputClient>
+@property(nonatomic, assign) flux::MacPopoverSurface* surface;
+- (CAMetalLayer*)fluxMetalLayer;
+- (void)updateDrawableSize;
+@end
+
+@interface FluxPopoverDelegate : NSObject <NSPopoverDelegate>
+@property(nonatomic, assign) flux::MacMetalWindow* platform;
+@property(nonatomic, assign) std::uint64_t popoverId;
 @end
 
 namespace flux {
@@ -271,6 +297,29 @@ void postTextInput(FluxMetalView* view, std::string text);
 
 @end
 
+@implementation FluxPopupMenuTarget
+
+- (void)fluxPopupMenuAction:(id)sender {
+  NSMenuItem* item = [sender isKindOfClass:[NSMenuItem class]] ? sender : nil;
+  if (!item) {
+    return;
+  }
+  NSInteger const tag = item.tag;
+  if (tag < 0 || static_cast<std::size_t>(tag) >= handlers.size()) {
+    return;
+  }
+  std::function<void()> const& handler = handlers[static_cast<std::size_t>(tag)];
+  if (handler) {
+    handler();
+    return;
+  }
+  if (static_cast<std::size_t>(tag) < actionNames.size() && fluxWindow && !actionNames[static_cast<std::size_t>(tag)].empty()) {
+    fluxWindow->dispatchAction(actionNames[static_cast<std::size_t>(tag)]);
+  }
+}
+
+@end
+
 @interface FluxWindowDelegate : NSObject <NSWindowDelegate>
 @property (nonatomic, assign) flux::MacMetalWindow* platform;
 @end
@@ -280,6 +329,57 @@ namespace flux {
 namespace {
 
 std::atomic<unsigned int> gNextHandle{1};
+
+NSString* ns(std::string const& text) {
+  NSString* out = [NSString stringWithUTF8String:text.c_str()];
+  return out ? out : @"";
+}
+
+bool popupItemEnabled(flux::MenuItem const& item, flux::Window* window) {
+  if (item.isEnabled && !item.isEnabled()) {
+    return false;
+  }
+  if (!item.actionName.empty() && window) {
+    return window->isActionEnabled(item.actionName);
+  }
+  return true;
+}
+
+void addPopupMenuItem(NSMenu* menu, flux::MenuItem const& item, FluxPopupMenuTarget* target) {
+  if (item.role == flux::MenuRole::Separator) {
+    [menu addItem:[NSMenuItem separatorItem]];
+    return;
+  }
+
+  if (item.role == flux::MenuRole::Submenu) {
+    NSMenuItem* submenuItem = [[NSMenuItem alloc] initWithTitle:ns(item.label)
+                                                        action:nil
+                                                 keyEquivalent:@""];
+    NSMenu* submenu = [[NSMenu alloc] initWithTitle:ns(item.label)];
+    for (flux::MenuItem const& child : item.children) {
+      addPopupMenuItem(submenu, child, target);
+    }
+    submenuItem.submenu = submenu;
+    submenuItem.enabled = popupItemEnabled(item, target ? target->fluxWindow : nullptr);
+    [menu addItem:submenuItem];
+    return;
+  }
+
+  NSInteger const tag = static_cast<NSInteger>(target ? target->handlers.size() : 0u);
+  if (target) {
+    target->handlers.push_back(item.handler);
+    target->actionNames.push_back(item.actionName);
+  }
+  NSMenuItem* nsItem = [[NSMenuItem alloc] initWithTitle:ns(item.label)
+                                                  action:@selector(fluxPopupMenuAction:)
+                                           keyEquivalent:@""];
+  nsItem.target = target;
+  nsItem.tag = tag;
+  nsItem.state = item.checked ? NSControlStateValueOn : NSControlStateValueOff;
+  nsItem.enabled = popupItemEnabled(item, target ? target->fluxWindow : nullptr) &&
+                   (static_cast<bool>(item.handler) || !item.actionName.empty());
+  [menu addItem:nsItem];
+}
 
 std::int64_t nowSteadyClockNanos() {
   using namespace std::chrono;
@@ -305,6 +405,10 @@ public:
   WindowChromeMetrics chromeMetrics() const override;
   void beginWindowDrag(std::uint32_t platformSerial = 0) override;
   void beginWindowResize(WindowResizeEdge edge, std::uint32_t platformSerial = 0) override;
+  bool showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t platformSerial = 0) override;
+  PopoverSurfaceId showPopover(Popover popover, Rect anchor, std::uint32_t platformSerial = 0) override;
+  void repositionPopover(PopoverSurfaceId id, Popover const& popover, Rect anchor) override;
+  void dismissPopover(PopoverSurfaceId id) override;
   Size currentSize() const override;
   std::optional<Rect> currentFrame() const override;
   void setFrame(Rect frame) override;
@@ -327,6 +431,7 @@ public:
 
   ::flux::Window* fluxWindow() const;
   CVReturn onDisplayLinkTick();
+  void handlePopoverClosed(PopoverSurfaceId id);
 
   /// Enables CAMetalLayer transaction presentation only for resize flushes (paired with MetalCanvas sync present).
   void setMetalLayerPresentsWithTransaction(bool enable);
@@ -337,6 +442,64 @@ private:
 
   struct Impl;
   std::unique_ptr<Impl> d;
+};
+
+class MacPopoverSurface {
+public:
+  MacPopoverSurface(MacMetalWindow* owner, PopoverSurfaceId id, Popover popover);
+  ~MacPopoverSurface();
+
+  MacPopoverSurface(MacPopoverSurface const&) = delete;
+  MacPopoverSurface& operator=(MacPopoverSurface const&) = delete;
+
+  PopoverSurfaceId id() const noexcept { return id_; }
+  bool show(FluxMetalView* parentView, Rect anchor);
+  void reposition(Popover const& popover, Rect anchor);
+  void close();
+  void notifyNativeClosed();
+
+  bool dispatchingEvent() const noexcept { return dispatchDepth_ > 0; }
+  void requestCloseAfterEvent() noexcept { closeAfterEvent_ = true; }
+
+  void render();
+  void handlePointerDown(NSEvent* event);
+  void handlePointerUp(NSEvent* event);
+  void handlePointerMove(NSEvent* event);
+  void handleScroll(NSEvent* event);
+  void handleKeyDown(NSEvent* event);
+  void handleKeyUp(NSEvent* event);
+  void handleTextInput(std::string text);
+
+private:
+  struct EventScope {
+    explicit EventScope(MacPopoverSurface& surface) : surface(surface) { ++surface.dispatchDepth_; }
+    ~EventScope() {
+      if (--surface.dispatchDepth_ == 0 && surface.closeAfterEvent_ && surface.owner_) {
+        MacMetalWindow* owner = surface.owner_;
+        PopoverSurfaceId const id = surface.id_;
+        owner->dismissPopover(id);
+      }
+    }
+    MacPopoverSurface& surface;
+  };
+
+  Point pointForEvent(NSEvent* event) const;
+  NSRectEdge preferredEdge() const;
+
+  MacMetalWindow* owner_ = nullptr;
+  PopoverSurfaceId id_{};
+  Popover popover_{};
+  FluxMetalView* parentView_ = nil;
+  NSPopover* nativePopover_ = nil;
+  NSViewController* controller_ = nil;
+  FluxPopoverView* view_ = nil;
+  FluxPopoverDelegate* delegate_ = nil;
+  std::unique_ptr<Canvas> canvas_;
+  std::unique_ptr<TransientPopoverHost> host_;
+  Size size_{};
+  int dispatchDepth_ = 0;
+  bool closeAfterEvent_ = false;
+  bool closing_ = false;
 };
 
 CVReturn displayLinkOutputCallback(CVDisplayLinkRef /*displayLink*/, CVTimeStamp const* /*now*/,
@@ -363,6 +526,8 @@ struct MacMetalWindow::Impl {
   Cursor currentCursor_{Cursor::Inherit};
   WindowDecorationMode decorationMode_{WindowDecorationMode::System};
   NSEvent* lastPointerDownEvent_{nil};
+  std::vector<std::unique_ptr<MacPopoverSurface>> popovers_;
+  std::uint64_t nextPopoverId_{1};
 };
 
 namespace detail {
@@ -494,7 +659,488 @@ void postTextInput(FluxMetalView* view, std::string text) {
 
 } // namespace detail
 
+namespace {
+
+NSRect nsRect(Rect rect) {
+  return NSMakeRect(static_cast<CGFloat>(rect.x),
+                    static_cast<CGFloat>(rect.y),
+                    static_cast<CGFloat>(std::max(1.f, rect.width)),
+                    static_cast<CGFloat>(std::max(1.f, rect.height)));
+}
+
+Size popoverMaxSize(MacMetalWindow* owner, Popover const& popover) {
+  if (popover.maxSize) {
+    return Size{std::max(1.f, popover.maxSize->width), std::max(1.f, popover.maxSize->height)};
+  }
+  Size const parent = owner ? owner->currentSize() : Size{480.f, 360.f};
+  return Size{std::max(1.f, parent.width - 24.f), std::max(1.f, parent.height - 24.f)};
+}
+
+} // namespace
+
+MacPopoverSurface::MacPopoverSurface(MacMetalWindow* owner, PopoverSurfaceId id, Popover popover)
+    : owner_(owner), id_(id), popover_(std::move(popover)) {
+  ::flux::Window* window = owner_ ? owner_->fluxWindow() : nullptr;
+  EnvironmentBinding environment = window ? window->environmentBinding() : EnvironmentBinding{};
+  Size const maxSize = popoverMaxSize(owner_, popover_);
+  host_ = std::make_unique<TransientPopoverHost>(TransientPopoverHost::Config{
+      .popover = popover_,
+      .environment = std::move(environment),
+      .maxSize = maxSize,
+      .useNativeShell = true,
+      .requestRedraw = [this] {
+        render();
+      },
+      .requestDismiss = [this] {
+        if (owner_) {
+          owner_->dismissPopover(id_);
+        }
+      },
+  });
+  size_ = host_->measuredSize();
+}
+
+MacPopoverSurface::~MacPopoverSurface() {
+  close();
+  if (view_) {
+    view_.surface = nullptr;
+  }
+  if (delegate_) {
+    delegate_.platform = nullptr;
+  }
+  canvas_.reset();
+  host_.reset();
+}
+
+bool MacPopoverSurface::show(FluxMetalView* parentView, Rect anchor) {
+  if (!owner_ || !owner_->fluxWindow() || !parentView || !host_) {
+    return false;
+  }
+  parentView_ = parentView;
+
+  nativePopover_ = [[NSPopover alloc] init];
+  nativePopover_.behavior = popover_.dismissOnOutsideTap ? NSPopoverBehaviorTransient
+                                                         : NSPopoverBehaviorApplicationDefined;
+  nativePopover_.animates = YES;
+
+  delegate_ = [[FluxPopoverDelegate alloc] init];
+  delegate_.platform = owner_;
+  delegate_.popoverId = id_.value;
+  nativePopover_.delegate = delegate_;
+
+  controller_ = [[NSViewController alloc] init];
+  controller_.preferredContentSize = NSMakeSize(static_cast<CGFloat>(size_.width),
+                                                static_cast<CGFloat>(size_.height));
+  view_ = [[FluxPopoverView alloc] initWithFrame:NSMakeRect(0, 0,
+                                                            static_cast<CGFloat>(size_.width),
+                                                            static_cast<CGFloat>(size_.height))];
+  view_.surface = this;
+  controller_.view = view_;
+  nativePopover_.contentViewController = controller_;
+
+  CAMetalLayer* layer = [view_ fluxMetalLayer];
+  if (!layer) {
+    return false;
+  }
+  canvas_ = createMetalCanvas(owner_->fluxWindow(), (__bridge void*)layer, owner_->handle(),
+                              Application::instance().textSystem(), [this] {
+                                render();
+                              });
+  if (!canvas_) {
+    return false;
+  }
+  canvas_->updateDpiScale(static_cast<float>([parentView window].backingScaleFactor),
+                          static_cast<float>([parentView window].backingScaleFactor));
+  canvas_->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));
+  host_->mount(size_);
+
+  [nativePopover_ showRelativeToRect:nsRect(anchor) ofView:parentView preferredEdge:preferredEdge()];
+  if (view_.window) {
+    [view_.window makeFirstResponder:view_];
+  }
+  render();
+  return true;
+}
+
+void MacPopoverSurface::reposition(Popover const& popover, Rect anchor) {
+  if (closing_ || !nativePopover_ || !parentView_) {
+    return;
+  }
+  popover_.resolvedPlacement = popover.resolvedPlacement;
+  [nativePopover_ showRelativeToRect:nsRect(anchor) ofView:parentView_ preferredEdge:preferredEdge()];
+}
+
+void MacPopoverSurface::close() {
+  if (closing_) {
+    return;
+  }
+  closing_ = true;
+  if (nativePopover_) {
+    nativePopover_.delegate = nil;
+    [nativePopover_ close];
+  }
+  if (host_) {
+    host_->notifyDismissed();
+  }
+}
+
+void MacPopoverSurface::notifyNativeClosed() {
+  if (closing_) {
+    return;
+  }
+  closing_ = true;
+  if (nativePopover_) {
+    nativePopover_.delegate = nil;
+  }
+  if (host_) {
+    host_->notifyDismissed();
+  }
+}
+
+void MacPopoverSurface::render() {
+  if (closing_ || !view_ || !canvas_ || !host_) {
+    return;
+  }
+  [view_ updateDrawableSize];
+  canvas_->resize(static_cast<int>(std::lround(std::max(1.f, size_.width))),
+                  static_cast<int>(std::lround(std::max(1.f, size_.height))));
+  canvas_->beginFrame();
+  host_->render(*canvas_);
+  canvas_->present();
+}
+
+Point MacPopoverSurface::pointForEvent(NSEvent* event) const {
+  if (!view_ || !event) {
+    return {};
+  }
+  NSPoint const point = [view_ convertPoint:[event locationInWindow] fromView:nil];
+  return Point{static_cast<float>(point.x), static_cast<float>(point.y)};
+}
+
+void MacPopoverSurface::handlePointerDown(NSEvent* event) {
+  if (!host_) {
+    return;
+  }
+  EventScope scope(*this);
+  host_->pointerDown(pointForEvent(event), detail::buttonFromNSEvent(event));
+  if (!closeAfterEvent_) {
+    render();
+  }
+}
+
+void MacPopoverSurface::handlePointerUp(NSEvent* event) {
+  if (!host_) {
+    return;
+  }
+  EventScope scope(*this);
+  host_->pointerUp(pointForEvent(event), detail::buttonFromNSEvent(event));
+  if (!closeAfterEvent_) {
+    render();
+  }
+}
+
+void MacPopoverSurface::handlePointerMove(NSEvent* event) {
+  if (!host_) {
+    return;
+  }
+  EventScope scope(*this);
+  host_->pointerMove(pointForEvent(event));
+  if (!closeAfterEvent_) {
+    render();
+  }
+}
+
+void MacPopoverSurface::handleScroll(NSEvent* event) {
+  if (!host_ || !event) {
+    return;
+  }
+  EventScope scope(*this);
+  host_->scroll(pointForEvent(event), Vec2{static_cast<float>(event.scrollingDeltaX),
+                                           static_cast<float>(event.scrollingDeltaY)});
+  if (!closeAfterEvent_) {
+    render();
+  }
+}
+
+void MacPopoverSurface::handleKeyDown(NSEvent* event) {
+  if (!host_ || !event) {
+    return;
+  }
+  EventScope scope(*this);
+  host_->keyDown(static_cast<KeyCode>(event.keyCode), detail::modifiersFromNSEvent(event));
+  if (!closeAfterEvent_) {
+    render();
+  }
+}
+
+void MacPopoverSurface::handleKeyUp(NSEvent* event) {
+  if (!host_ || !event) {
+    return;
+  }
+  EventScope scope(*this);
+  host_->keyUp(static_cast<KeyCode>(event.keyCode), detail::modifiersFromNSEvent(event));
+  if (!closeAfterEvent_) {
+    render();
+  }
+}
+
+void MacPopoverSurface::handleTextInput(std::string text) {
+  if (!host_ || text.empty()) {
+    return;
+  }
+  EventScope scope(*this);
+  host_->textInput(text);
+  if (!closeAfterEvent_) {
+    render();
+  }
+}
+
+NSRectEdge MacPopoverSurface::preferredEdge() const {
+  switch (popover_.resolvedPlacement) {
+  case PopoverPlacement::Above:
+    return NSMinYEdge;
+  case PopoverPlacement::Below:
+    return NSMaxYEdge;
+  case PopoverPlacement::Start:
+    return NSMinXEdge;
+  case PopoverPlacement::End:
+    return NSMaxXEdge;
+  }
+  return NSMaxYEdge;
+}
+
 } // namespace flux
+
+@implementation FluxPopoverView
+
+- (CALayer*)makeBackingLayer {
+  CAMetalLayer* metalLayer = [CAMetalLayer layer];
+  id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+  if (device) {
+    metalLayer.device = device;
+  }
+  metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+  metalLayer.framebufferOnly = NO;
+  metalLayer.opaque = NO;
+  metalLayer.backgroundColor = [[NSColor clearColor] CGColor];
+  metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
+  metalLayer.maximumDrawableCount = 3;
+  metalLayer.allowsNextDrawableTimeout = YES;
+  metalLayer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
+  metalLayer.needsDisplayOnBoundsChange = YES;
+  return metalLayer;
+}
+
+- (instancetype)initWithFrame:(NSRect)frameRect {
+  self = [super initWithFrame:frameRect];
+  if (self) {
+    self.wantsLayer = YES;
+    self.layer.opaque = NO;
+    self.layer.backgroundColor = [[NSColor clearColor] CGColor];
+    self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
+    [self updateDrawableSize];
+  }
+  return self;
+}
+
+- (CAMetalLayer*)fluxMetalLayer {
+  CALayer* layer = self.layer;
+  if ([layer isKindOfClass:[CAMetalLayer class]]) {
+    return static_cast<CAMetalLayer*>(layer);
+  }
+  return nil;
+}
+
+- (CGFloat)fluxBackingScale {
+  NSWindow* w = self.window;
+  return w ? w.backingScaleFactor : [NSScreen mainScreen].backingScaleFactor;
+}
+
+- (void)layout {
+  [super layout];
+  [self updateDrawableSize];
+}
+
+- (void)viewDidMoveToWindow {
+  [super viewDidMoveToWindow];
+  CAMetalLayer* metalLayer = [self fluxMetalLayer];
+  if (metalLayer && self.window) {
+    metalLayer.contentsScale = self.window.backingScaleFactor;
+  }
+  [self updateDrawableSize];
+  [self updateTrackingAreas];
+}
+
+- (void)viewDidChangeBackingProperties {
+  [super viewDidChangeBackingProperties];
+  CAMetalLayer* metalLayer = [self fluxMetalLayer];
+  if (metalLayer && self.window) {
+    metalLayer.contentsScale = self.window.backingScaleFactor;
+  }
+  [self updateDrawableSize];
+}
+
+- (void)updateDrawableSize {
+  CAMetalLayer* metalLayer = [self fluxMetalLayer];
+  if (!metalLayer) {
+    return;
+  }
+  CGFloat const scale = [self fluxBackingScale];
+  CGSize const bounds = self.bounds.size;
+  metalLayer.drawableSize = CGSizeMake((std::max)(bounds.width * scale, static_cast<CGFloat>(1.0)),
+                                       (std::max)(bounds.height * scale, static_cast<CGFloat>(1.0)));
+}
+
+- (BOOL)acceptsFirstResponder {
+  return YES;
+}
+
+- (BOOL)isOpaque {
+  return NO;
+}
+
+- (BOOL)isFlipped {
+  return YES;
+}
+
+- (void)updateTrackingAreas {
+  [super updateTrackingAreas];
+  for (NSTrackingArea* area in self.trackingAreas) {
+    [self removeTrackingArea:area];
+  }
+  NSTrackingAreaOptions opts =
+      NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved | NSTrackingActiveAlways |
+      NSTrackingInVisibleRect | NSTrackingEnabledDuringMouseDrag;
+  NSTrackingArea* ta = [[NSTrackingArea alloc] initWithRect:self.bounds options:opts owner:self userInfo:nil];
+  [self addTrackingArea:ta];
+}
+
+- (void)setFrameSize:(NSSize)newSize {
+  [super setFrameSize:newSize];
+  [self updateTrackingAreas];
+}
+
+- (void)mouseDown:(NSEvent*)event {
+  if (self.surface) self.surface->handlePointerDown(event);
+}
+
+- (void)mouseUp:(NSEvent*)event {
+  if (self.surface) self.surface->handlePointerUp(event);
+}
+
+- (void)mouseMoved:(NSEvent*)event {
+  if (self.surface) self.surface->handlePointerMove(event);
+}
+
+- (void)mouseDragged:(NSEvent*)event {
+  if (self.surface) self.surface->handlePointerMove(event);
+}
+
+- (void)rightMouseDown:(NSEvent*)event {
+  if (self.surface) self.surface->handlePointerDown(event);
+}
+
+- (void)rightMouseUp:(NSEvent*)event {
+  if (self.surface) self.surface->handlePointerUp(event);
+}
+
+- (void)otherMouseDown:(NSEvent*)event {
+  if (self.surface) self.surface->handlePointerDown(event);
+}
+
+- (void)otherMouseUp:(NSEvent*)event {
+  if (self.surface) self.surface->handlePointerUp(event);
+}
+
+- (void)scrollWheel:(NSEvent*)event {
+  if (self.surface) self.surface->handleScroll(event);
+}
+
+- (void)keyDown:(NSEvent*)event {
+  if (self.surface) self.surface->handleKeyDown(event);
+  [self interpretKeyEvents:@[event]];
+}
+
+- (void)keyUp:(NSEvent*)event {
+  if (self.surface) self.surface->handleKeyUp(event);
+}
+
+- (void)doCommandBySelector:(SEL)selector {
+  (void)selector;
+}
+
+- (BOOL)hasMarkedText {
+  return NO;
+}
+
+- (NSRange)markedRange {
+  return NSMakeRange(NSNotFound, 0);
+}
+
+- (NSRange)selectedRange {
+  return NSMakeRange(NSNotFound, 0);
+}
+
+- (void)setMarkedText:(id)string
+        selectedRange:(NSRange)selectedRange
+     replacementRange:(NSRange)replacementRange {
+  (void)string;
+  (void)selectedRange;
+  (void)replacementRange;
+}
+
+- (void)unmarkText {
+}
+
+- (NSArray<NSAttributedStringKey>*)validAttributesForMarkedText {
+  return @[];
+}
+
+- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range
+                                                actualRange:(NSRangePointer)actualRange {
+  (void)range;
+  (void)actualRange;
+  return nil;
+}
+
+- (void)insertText:(id)string replacementRange:(NSRange)replacementRange {
+  (void)replacementRange;
+  NSString* s = nil;
+  if ([string isKindOfClass:[NSAttributedString class]]) {
+    s = [(NSAttributedString*)string string];
+  } else if ([string isKindOfClass:[NSString class]]) {
+    s = (NSString*)string;
+  }
+  if (self.surface) {
+    self.surface->handleTextInput(s ? std::string([s UTF8String]) : std::string{});
+  }
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point {
+  (void)point;
+  return NSNotFound;
+}
+
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange {
+  (void)range;
+  (void)actualRange;
+  NSWindow* w = self.window;
+  return w ? [w convertRectToScreen:w.frame] : NSZeroRect;
+}
+
+@end
+
+@implementation FluxPopoverDelegate
+
+- (void)popoverDidClose:(NSNotification*)notification {
+  (void)notification;
+  flux::MacMetalWindow* platform = self.platform;
+  if (platform) {
+    platform->handlePopoverClosed(flux::PopoverSurfaceId{self.popoverId});
+  }
+}
+
+@end
 
 @implementation FluxWindowDelegate
 
@@ -933,6 +1579,93 @@ void MacMetalWindow::beginWindowDrag(std::uint32_t platformSerial) {
 void MacMetalWindow::beginWindowResize(WindowResizeEdge edge, std::uint32_t platformSerial) {
   (void)edge;
   (void)platformSerial;
+}
+
+bool MacMetalWindow::showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t platformSerial) {
+  (void)platformSerial;
+  if (!d || !d->metalView_ || menu.items.empty()) {
+    return false;
+  }
+
+  FluxPopupMenuTarget* target = [[FluxPopupMenuTarget alloc] init];
+  target->fluxWindow = d->fluxWindow_;
+  NSMenu* nsMenu = [[NSMenu alloc] initWithTitle:@""];
+  for (MenuItem const& item : menu.items) {
+    addPopupMenuItem(nsMenu, item, target);
+  }
+  if (nsMenu.numberOfItems == 0) {
+    return false;
+  }
+
+  CGFloat const x = static_cast<CGFloat>(std::max(0.f, anchor.x));
+  CGFloat const y = static_cast<CGFloat>(std::max(0.f, anchor.y + anchor.height + 4.f));
+  [nsMenu popUpMenuPositioningItem:nil atLocation:NSMakePoint(x, y) inView:d->metalView_];
+  return true;
+}
+
+PopoverSurfaceId MacMetalWindow::showPopover(Popover popover, Rect anchor, std::uint32_t platformSerial) {
+  (void)platformSerial;
+  if (!d || !d->metalView_ || !d->fluxWindow_ || !d->window_ || ![d->window_ isVisible]) {
+    return kInvalidPopoverSurfaceId;
+  }
+  PopoverSurfaceId const id{d->nextPopoverId_++};
+  auto surface = std::make_unique<MacPopoverSurface>(this, id, std::move(popover));
+  if (!surface->show(d->metalView_, anchor)) {
+    return kInvalidPopoverSurfaceId;
+  }
+  d->popovers_.push_back(std::move(surface));
+  return id;
+}
+
+void MacMetalWindow::repositionPopover(PopoverSurfaceId id, Popover const& popover, Rect anchor) {
+  if (!d || !id.isValid()) {
+    return;
+  }
+  auto it = std::find_if(d->popovers_.begin(), d->popovers_.end(),
+                         [&](std::unique_ptr<MacPopoverSurface> const& surface) {
+                           return surface && surface->id() == id;
+                         });
+  if (it != d->popovers_.end()) {
+    (*it)->reposition(popover, anchor);
+  }
+}
+
+void MacMetalWindow::dismissPopover(PopoverSurfaceId id) {
+  if (!d || !id.isValid()) {
+    return;
+  }
+  auto it = std::find_if(d->popovers_.begin(), d->popovers_.end(),
+                         [&](std::unique_ptr<MacPopoverSurface> const& surface) {
+                           return surface && surface->id() == id;
+                         });
+  if (it == d->popovers_.end()) {
+    return;
+  }
+  if ((*it)->dispatchingEvent()) {
+    (*it)->requestCloseAfterEvent();
+    return;
+  }
+  (*it)->close();
+  d->popovers_.erase(it);
+}
+
+void MacMetalWindow::handlePopoverClosed(PopoverSurfaceId id) {
+  if (!d || !id.isValid()) {
+    return;
+  }
+  auto it = std::find_if(d->popovers_.begin(), d->popovers_.end(),
+                         [&](std::unique_ptr<MacPopoverSurface> const& surface) {
+                           return surface && surface->id() == id;
+                         });
+  if (it == d->popovers_.end()) {
+    return;
+  }
+  if ((*it)->dispatchingEvent()) {
+    (*it)->requestCloseAfterEvent();
+    return;
+  }
+  (*it)->notifyNativeClosed();
+  d->popovers_.erase(it);
 }
 
 Size MacMetalWindow::currentSize() const {

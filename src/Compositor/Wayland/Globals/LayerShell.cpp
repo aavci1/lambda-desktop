@@ -67,7 +67,29 @@ void layerSurfaceSetKeyboardInteractivity(wl_client*, wl_resource* resource, std
   layerSurface->keyboardInteractivity = interactivity;
 }
 
-void layerSurfaceGetPopup(wl_client*, wl_resource*, wl_resource*) {}
+void layerSurfaceGetPopup(wl_client*, wl_resource* resource, wl_resource* popupResource) {
+  auto* layerSurface = resourceData<WaylandServer::Impl::LayerSurface>(resource);
+  auto* popup = resourceData<WaylandServer::Impl::XdgPopup>(popupResource);
+  if (!layerSurface || !layerSurface->surface || !popup || !popup->xdgSurface ||
+      !popup->xdgSurface->surface) {
+    return;
+  }
+
+  WaylandServer::Impl::Surface* popupSurface = popup->xdgSurface->surface;
+  WaylandServer::Impl::Surface* oldParent = popup->parentSurface;
+  WaylandServer::Impl::Surface* newParent = layerSurface->surface;
+  if (oldParent == newParent) {
+    return;
+  }
+
+  std::int32_t const oldParentX = oldParent ? oldParent->windowX : 0;
+  std::int32_t const oldParentY = oldParent ? oldParent->windowY : 0;
+  popupSurface->windowX += newParent->windowX - oldParentX;
+  popupSurface->windowY += newParent->windowY - oldParentY;
+  popup->parentSurface = newParent;
+  popup->configuredX = popupSurface->windowX - newParent->windowX;
+  popup->configuredY = popupSurface->windowY - newParent->windowY;
+}
 
 void layerSurfaceAckConfigure(wl_client*, wl_resource*, std::uint32_t) {}
 

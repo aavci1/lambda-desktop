@@ -38,6 +38,7 @@ public:
   ActionRegistry& actionRegistry() noexcept;
   ActionRegistry const& actionRegistry() const noexcept;
   std::optional<Rect> lastTapAnchor() const noexcept;
+  std::uint32_t lastTapSerial() const noexcept;
   std::optional<Rect> hoverAnchor() const noexcept;
   std::optional<Rect> focusAnchor() const noexcept;
   std::optional<ComponentKey> lastTapTargetKey() const noexcept;

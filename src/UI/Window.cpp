@@ -5,11 +5,15 @@
 #include <Flux/Core/Color.hpp>
 #include <Flux/UI/Cursor.hpp>
 #include <Flux/UI/Window.hpp>
+#include <Flux/UI/MenuItem.hpp>
+#include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Detail/RootHolder.hpp>
 #include <Flux/UI/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/SceneGraph/SceneInteraction.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/SceneRenderer.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/EnvironmentBinding.hpp>
@@ -21,6 +25,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 #include "UI/Platform/Window.hpp"
 #include "UI/Platform/WindowFactory.hpp"
@@ -67,9 +72,43 @@ void validateWindowConfig(WindowConfig const& config, PlatformWindowCapabilities
   }
 }
 
+Rect windowRectForNode(scenegraph::SceneNode const& node) {
+  Point origin{};
+  scenegraph::SceneNode const* current = &node;
+  while (current) {
+    origin.x += current->position().x;
+    origin.y += current->position().y;
+    current = current->parent();
+  }
+  Size const size = node.size();
+  return Rect{origin.x, origin.y, std::max(0.f, size.width), std::max(0.f, size.height)};
+}
+
+Rect adjustedPopoverAnchor(Popover const& popover, Rect anchor) {
+  if (popover.anchorMaxHeight && anchor.height > *popover.anchorMaxHeight) {
+    anchor.height = *popover.anchorMaxHeight;
+  }
+  EdgeInsets const outsets = popover.anchorOutsets;
+  anchor.x -= outsets.left;
+  anchor.y -= outsets.top;
+  anchor.width += outsets.left + outsets.right;
+  anchor.height += outsets.top + outsets.bottom;
+  anchor.width = std::max(0.f, anchor.width);
+  anchor.height = std::max(0.f, anchor.height);
+  return anchor;
+}
+
 } // namespace
 
 struct Window::Impl {
+  struct NativePopoverEntry {
+    PopoverSurfaceId id{};
+    Popover popover;
+    Rect anchor{};
+    std::optional<ComponentKey> anchorTrackComponentKey;
+    std::optional<ComponentKey> anchorTrackLeafKey;
+  };
+
   std::unique_ptr<platform::Window> platform_;
   std::unique_ptr<Canvas> canvas_;
   std::unique_ptr<scenegraph::SceneRenderer> sceneRenderer_;
@@ -87,6 +126,7 @@ struct Window::Impl {
   Reactive::Signal<Theme> themeSignal_{Theme::light()};
   Reactive::Signal<WindowChromeMetrics> chromeMetricsSignal_{WindowChromeMetrics{}};
   EnvironmentBinding windowEnvironmentBinding_{};
+  std::vector<NativePopoverEntry> nativePopovers_;
   std::string restoreId_;
   bool shutdown_ = false;
 
@@ -101,6 +141,8 @@ struct Window::Impl {
   platform::Window* platformWindow() const { return platform_.get(); }
   void refreshChromeMetrics();
   void setViewRoot(Window& window, std::unique_ptr<RootHolder> holder);
+  std::optional<Rect> trackedPopoverAnchor(Window& window, NativePopoverEntry const& entry) const;
+  void updateNativePopoverAnchors(Window& window);
   void shutdown();
 };
 
@@ -115,6 +157,51 @@ void Window::Impl::setViewRoot(Window& window, std::unique_ptr<RootHolder> holde
   runtime_->setRoot(std::move(holder));
 }
 
+std::optional<Rect> Window::Impl::trackedPopoverAnchor(Window& window,
+                                                       NativePopoverEntry const& entry) const {
+  if (!window.hasSceneGraph()) {
+    return std::nullopt;
+  }
+  if (entry.anchorTrackComponentKey && !entry.anchorTrackComponentKey->empty()) {
+    auto const [node, interaction] =
+        scenegraph::findInteractionByKey(window.sceneGraph(), *entry.anchorTrackComponentKey);
+    (void)interaction;
+    if (node) {
+      return windowRectForNode(*node);
+    }
+  }
+  if (entry.anchorTrackLeafKey && !entry.anchorTrackLeafKey->empty()) {
+    auto const [node, interaction] =
+        scenegraph::findInteractionByKey(window.sceneGraph(), *entry.anchorTrackLeafKey);
+    (void)interaction;
+    if (node) {
+      return windowRectForNode(*node);
+    }
+    if (std::optional<Rect> rect = window.sceneGraph().rectForLeafKeyPrefix(*entry.anchorTrackLeafKey)) {
+      return rect;
+    }
+  }
+  return std::nullopt;
+}
+
+void Window::Impl::updateNativePopoverAnchors(Window& window) {
+  if (!platform_ || nativePopovers_.empty()) {
+    return;
+  }
+  for (NativePopoverEntry& entry : nativePopovers_) {
+    std::optional<Rect> tracked = trackedPopoverAnchor(window, entry);
+    if (!tracked) {
+      continue;
+    }
+    Rect const adjusted = adjustedPopoverAnchor(entry.popover, *tracked);
+    if (adjusted == entry.anchor) {
+      continue;
+    }
+    entry.anchor = adjusted;
+    platform_->repositionPopover(entry.id, entry.popover, adjusted);
+  }
+}
+
 Window::Impl::~Impl() {
   shutdown();
 }
@@ -124,6 +211,7 @@ void Window::Impl::shutdown() {
     return;
   }
   shutdown_ = true;
+  nativePopovers_.clear();
   if (runtime_) {
     runtime_->beginShutdown(sceneGraph_ ? &*sceneGraph_ : nullptr);
     overlayMgr_.clear(nullptr, false);
@@ -214,6 +302,34 @@ void Window::requestClose() {
 
 void Window::setFullscreen(bool fullscreen) {
   d->platform_->setFullscreen(fullscreen);
+}
+
+bool Window::showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t platformSerial) {
+  return d->platform_->showPopupMenu(std::move(menu), anchor, platformSerial);
+}
+
+PopoverSurfaceId Window::showPopover(Popover popover, Rect anchor, std::uint32_t platformSerial,
+                                     std::optional<ComponentKey> anchorTrackComponentKey,
+                                     std::optional<ComponentKey> anchorTrackLeafKey) {
+  Rect const adjustedAnchor = adjustedPopoverAnchor(popover, anchor);
+  PopoverSurfaceId const id = d->platform_->showPopover(popover, adjustedAnchor, platformSerial);
+  if (id.isValid() && (anchorTrackComponentKey.has_value() || anchorTrackLeafKey.has_value())) {
+    d->nativePopovers_.push_back(Window::Impl::NativePopoverEntry{
+        .id = id,
+        .popover = std::move(popover),
+        .anchor = adjustedAnchor,
+        .anchorTrackComponentKey = std::move(anchorTrackComponentKey),
+        .anchorTrackLeafKey = std::move(anchorTrackLeafKey),
+    });
+  }
+  return id;
+}
+
+void Window::dismissPopover(PopoverSurfaceId id) {
+  std::erase_if(d->nativePopovers_, [&](Window::Impl::NativePopoverEntry const& entry) {
+    return entry.id == id;
+  });
+  d->platform_->dismissPopover(id);
 }
 
 void Window::setLayerShellKeyboardInteractive(bool enabled) {
@@ -394,6 +510,9 @@ void Window::render(Canvas& canvas) {
     d->sceneRenderer_ = std::make_unique<scenegraph::SceneRenderer>(canvas);
   }
   Size const windowSize = getSize();
+  if (d->runtime_) {
+    d->updateNativePopoverAnchors(*this);
+  }
   if (d->runtime_ && d->overlayMgr_.hasTrackedAnchors()) {
     d->overlayMgr_.rebuild(windowSize, *d->runtime_);
   }

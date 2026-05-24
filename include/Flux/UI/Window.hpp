@@ -7,6 +7,7 @@
 
 #include <Flux/UI/Action.hpp>
 #include <Flux/UI/EnvironmentBinding.hpp>
+#include <Flux/Core/Identity.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -26,6 +27,16 @@ class Element;
 struct OverlayConfig;
 struct OverlayId;
 struct InputEvent;
+struct PopupMenu;
+struct Popover;
+
+struct PopoverSurfaceId {
+  std::uint64_t value = 0;
+  bool isValid() const noexcept { return value != 0; }
+  bool operator==(PopoverSurfaceId const&) const = default;
+};
+
+inline constexpr PopoverSurfaceId kInvalidPopoverSurfaceId{};
 
 class Application;
 class Canvas;
@@ -144,6 +155,11 @@ public:
   void beginWindowResize(WindowResizeEdge edge);
   void requestClose();
   void setFullscreen(bool fullscreen);
+  bool showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t platformSerial = 0);
+  PopoverSurfaceId showPopover(Popover popover, Rect anchor, std::uint32_t platformSerial = 0,
+                               std::optional<ComponentKey> anchorTrackComponentKey = std::nullopt,
+                               std::optional<ComponentKey> anchorTrackLeafKey = std::nullopt);
+  void dismissPopover(PopoverSurfaceId id);
   /// Layer-shell windows only. Updates keyboard focus routing on the compositor.
   void setLayerShellKeyboardInteractive(bool enabled);
   unsigned int handle() const;

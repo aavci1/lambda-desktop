@@ -46,6 +46,7 @@ struct MenuItem {
   Shortcut shortcut;
   std::vector<MenuItem> children;
   std::function<bool()> isEnabled;
+  bool checked = false;
 
   static MenuItem separator() { return MenuItem{.role = MenuRole::Separator}; }
 
@@ -70,6 +71,10 @@ struct MenuItem {
 
 struct MenuBar {
   std::vector<MenuItem> menus;
+};
+
+struct PopupMenu {
+  std::vector<MenuItem> items;
 };
 
 } // namespace flux

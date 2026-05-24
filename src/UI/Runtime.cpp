@@ -58,6 +58,7 @@ struct RuntimeInputState {
   std::optional<RuntimeTargetSnapshot> pressTarget;
   std::optional<RuntimeTargetSnapshot> focusTarget;
   std::optional<Rect> lastTapAnchor;
+  std::uint32_t lastTapSerial = 0;
   std::optional<Rect> hoverAnchor;
   std::optional<ComponentKey> lastTapTargetKey;
   std::optional<ComponentKey> hoverTargetKey;
@@ -157,6 +158,10 @@ ActionRegistry const& Runtime::actionRegistry() const noexcept {
 
 std::optional<Rect> Runtime::lastTapAnchor() const noexcept {
   return d->input.lastTapAnchor;
+}
+
+std::uint32_t Runtime::lastTapSerial() const noexcept {
+  return d->input.lastTapSerial;
 }
 
 std::optional<Rect> Runtime::hoverAnchor() const noexcept {
@@ -612,6 +617,7 @@ void resetTransientTargets(RuntimeInputState& input, Window& window) {
   input.hoverAnchor.reset();
   input.hoverTargetKey.reset();
   input.lastTapAnchor.reset();
+  input.lastTapSerial = 0;
   input.lastTapTargetKey.reset();
   setFocus(input, std::nullopt, false);
   input.pressCancelled = false;
@@ -733,6 +739,7 @@ void Runtime::handleInput(InputEvent const& event) {
     d->input.pressPoint = point;
     if (auto hit = hitWindow(d->window, point)) {
       d->input.lastTapAnchor = windowRectForHit(*hit, point);
+      d->input.lastTapSerial = event.platformSerial;
       if (hit->interaction && !hit->interaction->stableTargetKey_.empty()) {
         d->input.lastTapTargetKey = hit->interaction->stableTargetKey_;
       } else {
@@ -765,6 +772,7 @@ void Runtime::handleInput(InputEvent const& event) {
       }
     } else {
       d->input.lastTapAnchor.reset();
+      d->input.lastTapSerial = 0;
       d->input.lastTapTargetKey.reset();
       setFocus(d->input, std::nullopt);
     }

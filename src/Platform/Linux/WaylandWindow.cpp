@@ -5,15 +5,20 @@
 #include "Platform/Linux/WaylandOutputs.hpp"
 
 #include <Flux/Debug/DebugFlags.hpp>
+#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/Application.hpp>
 #include <Flux/UI/EventQueue.hpp>
 #include <Flux/UI/Events.hpp>
 #include <Flux/UI/KeyCodes.hpp>
+#include <Flux/UI/MenuItem.hpp>
 #include <Flux/UI/Window.hpp>
+#include <Flux/UI/Views/Popover.hpp>
 
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
 #include "Detail/ResizeTrace.hpp"
+#include "UI/TransientPopoverHost.hpp"
 #include "ext-background-effect-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
@@ -26,12 +31,14 @@
 #include <linux/input-event-codes.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <wayland-client.h>
 #include <wayland-cursor.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -40,8 +47,10 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace flux {
@@ -49,6 +58,63 @@ namespace flux {
 class WaylandWindow;
 
 namespace {
+
+struct SharedWaylandConnection;
+
+struct WaylandMenuBuffer {
+  wl_buffer* buffer = nullptr;
+  void* pixels = nullptr;
+  int fd = -1;
+  int width = 0;
+  int height = 0;
+  int stride = 0;
+  int size = 0;
+};
+
+struct WaylandPopupMenuState {
+  ~WaylandPopupMenuState();
+
+  PopupMenu menu;
+  wl_surface* surface = nullptr;
+  xdg_surface* xdgSurface = nullptr;
+  xdg_popup* popup = nullptr;
+  WaylandMenuBuffer buffer;
+  WaylandWindow* owner = nullptr;
+  SharedWaylandConnection* shared = nullptr;
+  std::uint32_t grabSerial = 0;
+  int width = 1;
+  int height = 1;
+  int rowHeight = 30;
+  int hoverRow = -1;
+  int pressedRow = -1;
+  bool committed = false;
+  bool grabbed = false;
+};
+
+struct WaylandPopoverSurfaceState {
+  ~WaylandPopoverSurfaceState();
+
+  PopoverSurfaceId id{};
+  Popover popover;
+  wl_surface* surface = nullptr;
+  xdg_surface* xdgSurface = nullptr;
+  xdg_popup* popup = nullptr;
+  WaylandNativeSurface nativeSurface{};
+  std::unique_ptr<Canvas> canvas;
+  std::unique_ptr<TransientPopoverHost> host;
+  WaylandWindow* owner = nullptr;
+  SharedWaylandConnection* shared = nullptr;
+  std::uint32_t grabSerial = 0;
+  std::uint32_t repositionToken = 1;
+  int width = 1;
+  int height = 1;
+  Point pointerPos{};
+  int dispatchDepth = 0;
+  bool committed = false;
+  bool grabbed = false;
+  bool closeAfterEvent = false;
+  bool closing = false;
+};
 
 std::atomic<unsigned int> gNextHandle{1};
 std::int64_t nowNanos() {
@@ -134,7 +200,10 @@ struct SharedWaylandConnection {
   std::vector<std::unique_ptr<Output>> outputs;
   std::vector<WaylandWindow*> windows;
   WaylandWindow* pointerFocus = nullptr;
+  WaylandWindow* popupPointerFocus = nullptr;
+  wl_surface* popupPointerSurface = nullptr;
   WaylandWindow* keyboardFocus = nullptr;
+  wl_surface* keyboardSurface = nullptr;
   unsigned int refs = 0;
 };
 
@@ -225,6 +294,231 @@ std::uint32_t layerChromeStyleProtocol(LayerShellChromeStyle style) {
   default:
     return XX_LAYER_CHROME_V1_STYLE_NONE;
   }
+}
+
+int createPopupSharedMemoryFile(char const* name, std::size_t size) {
+  int fd = memfd_create(name, MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  if (fd < 0) {
+    throw std::runtime_error(std::string("memfd_create failed: ") + std::strerror(errno));
+  }
+  if (ftruncate(fd, static_cast<off_t>(size)) != 0) {
+    close(fd);
+    throw std::runtime_error(std::string("ftruncate failed: ") + std::strerror(errno));
+  }
+  return fd;
+}
+
+void destroyWaylandMenuBuffer(WaylandMenuBuffer& buffer) {
+  if (buffer.buffer) wl_buffer_destroy(buffer.buffer);
+  if (buffer.pixels) munmap(buffer.pixels, static_cast<std::size_t>(buffer.size));
+  if (buffer.fd >= 0) close(buffer.fd);
+  buffer = {};
+  buffer.fd = -1;
+}
+
+WaylandMenuBuffer createWaylandMenuBuffer(wl_shm* shm, int width, int height) {
+  WaylandMenuBuffer buffer;
+  buffer.width = std::max(1, width);
+  buffer.height = std::max(1, height);
+  buffer.stride = buffer.width * 4;
+  buffer.size = buffer.stride * buffer.height;
+  buffer.fd = createPopupSharedMemoryFile("flux-popup-menu", static_cast<std::size_t>(buffer.size));
+  buffer.pixels = mmap(nullptr, static_cast<std::size_t>(buffer.size), PROT_READ | PROT_WRITE, MAP_SHARED,
+                       buffer.fd, 0);
+  if (buffer.pixels == MAP_FAILED) {
+    buffer.pixels = nullptr;
+    destroyWaylandMenuBuffer(buffer);
+    throw std::runtime_error(std::string("mmap failed: ") + std::strerror(errno));
+  }
+  wl_shm_pool* pool = wl_shm_create_pool(shm, buffer.fd, buffer.size);
+  buffer.buffer = wl_shm_pool_create_buffer(pool, 0, buffer.width, buffer.height, buffer.stride,
+                                            WL_SHM_FORMAT_XRGB8888);
+  wl_shm_pool_destroy(pool);
+  return buffer;
+}
+
+std::uint8_t colorByte(float value) {
+  return static_cast<std::uint8_t>(std::clamp(value, 0.f, 1.f) * 255.f + 0.5f);
+}
+
+void putPixel(WaylandMenuBuffer& buffer, int x, int y, Color color) {
+  if (!buffer.pixels || x < 0 || y < 0 || x >= buffer.width || y >= buffer.height) {
+    return;
+  }
+  auto* bytes = static_cast<std::uint8_t*>(buffer.pixels);
+  std::size_t const offset = static_cast<std::size_t>(y) * static_cast<std::size_t>(buffer.stride) +
+                             static_cast<std::size_t>(x) * 4u;
+  bytes[offset + 0u] = colorByte(color.b);
+  bytes[offset + 1u] = colorByte(color.g);
+  bytes[offset + 2u] = colorByte(color.r);
+  bytes[offset + 3u] = 0xff;
+}
+
+void blendPixel(WaylandMenuBuffer& buffer, int x, int y, Color color, float alpha) {
+  if (!buffer.pixels || x < 0 || y < 0 || x >= buffer.width || y >= buffer.height) {
+    return;
+  }
+  alpha = std::clamp(alpha * color.a, 0.f, 1.f);
+  if (alpha <= 0.f) {
+    return;
+  }
+  auto* bytes = static_cast<std::uint8_t*>(buffer.pixels);
+  std::size_t const offset = static_cast<std::size_t>(y) * static_cast<std::size_t>(buffer.stride) +
+                             static_cast<std::size_t>(x) * 4u;
+  float const srcR = std::clamp(color.r, 0.f, 1.f);
+  float const srcG = std::clamp(color.g, 0.f, 1.f);
+  float const srcB = std::clamp(color.b, 0.f, 1.f);
+  float const dstB = static_cast<float>(bytes[offset + 0u]) / 255.f;
+  float const dstG = static_cast<float>(bytes[offset + 1u]) / 255.f;
+  float const dstR = static_cast<float>(bytes[offset + 2u]) / 255.f;
+  bytes[offset + 0u] = colorByte(srcB * alpha + dstB * (1.f - alpha));
+  bytes[offset + 1u] = colorByte(srcG * alpha + dstG * (1.f - alpha));
+  bytes[offset + 2u] = colorByte(srcR * alpha + dstR * (1.f - alpha));
+  bytes[offset + 3u] = 0xff;
+}
+
+void fillRect(WaylandMenuBuffer& buffer, int x, int y, int width, int height, Color color) {
+  int const x0 = std::clamp(x, 0, buffer.width);
+  int const y0 = std::clamp(y, 0, buffer.height);
+  int const x1 = std::clamp(x + width, 0, buffer.width);
+  int const y1 = std::clamp(y + height, 0, buffer.height);
+  for (int py = y0; py < y1; ++py) {
+    for (int px = x0; px < x1; ++px) {
+      putPixel(buffer, px, py, color);
+    }
+  }
+}
+
+bool popupMenuItemEnabled(MenuItem const& item) {
+  return !item.isEnabled || item.isEnabled();
+}
+
+bool popupMenuItemActivatable(MenuItem const& item) {
+  return item.role != MenuRole::Separator && item.role != MenuRole::Submenu &&
+         (static_cast<bool>(item.handler) || !item.actionName.empty()) &&
+         popupMenuItemEnabled(item);
+}
+
+int popupMenuRowForY(WaylandPopupMenuState const& state, wl_fixed_t surfaceY) {
+  if (state.menu.items.empty()) {
+    return -1;
+  }
+  int const row = static_cast<int>(wl_fixed_to_double(surfaceY)) / std::max(1, state.rowHeight);
+  return std::clamp(row, 0, static_cast<int>(state.menu.items.size()) - 1);
+}
+
+void drawCheckMark(WaylandMenuBuffer& buffer, int originX, int originY, Color color) {
+  for (int i = 0; i < 5; ++i) {
+    putPixel(buffer, originX + i, originY + 5 + i, color);
+    putPixel(buffer, originX + i, originY + 6 + i, color);
+  }
+  for (int i = 0; i < 9; ++i) {
+    putPixel(buffer, originX + 4 + i, originY + 9 - i, color);
+    putPixel(buffer, originX + 4 + i, originY + 10 - i, color);
+  }
+}
+
+void drawPopupText(WaylandMenuBuffer& buffer, std::string const& text, int x, int y, int maxWidth,
+                   Color color) {
+  if (text.empty() || maxWidth <= 0) {
+    return;
+  }
+  TextLayoutOptions options;
+  options.wrapping = TextWrapping::NoWrap;
+  options.maxLines = 1;
+  Font font{.size = 13.f, .weight = 450.f};
+  auto layout = Application::instance().textSystem().layout(text, font, color, static_cast<float>(maxWidth),
+                                                            options);
+  if (!layout) {
+    return;
+  }
+  TextSystem& textSystem = Application::instance().textSystem();
+  float const textTop = static_cast<float>(y) + std::max(0.f, (30.f - layout->measuredSize.height) * 0.5f);
+  Point const origin{static_cast<float>(x), textTop};
+  for (TextLayout::PlacedRun const& placed : layout->runs) {
+    std::size_t const glyphCount = std::min(placed.run.glyphIds.size(), placed.run.positions.size());
+    for (std::size_t i = 0; i < glyphCount; ++i) {
+      std::uint32_t gw = 0;
+      std::uint32_t gh = 0;
+      Point bearing{};
+      std::vector<std::uint8_t> alpha =
+          textSystem.rasterizeGlyph(placed.run.fontId, placed.run.glyphIds[i], placed.run.fontSize,
+                                    gw, gh, bearing);
+      if (gw == 0 || gh == 0 || alpha.empty()) {
+        continue;
+      }
+      Point const pos = origin + placed.origin + placed.run.positions[i];
+      int const glyphX = static_cast<int>(std::lround(pos.x + bearing.x));
+      int const glyphY = static_cast<int>(std::lround(pos.y - bearing.y));
+      for (std::uint32_t py = 0; py < gh; ++py) {
+        for (std::uint32_t px = 0; px < gw; ++px) {
+          std::size_t const alphaOffset = static_cast<std::size_t>(py) * gw + px;
+          blendPixel(buffer, glyphX + static_cast<int>(px), glyphY + static_cast<int>(py),
+                     color, static_cast<float>(alpha[alphaOffset]) / 255.f);
+        }
+      }
+    }
+  }
+}
+
+void renderPopupMenu(WaylandPopupMenuState& state) {
+  if (!state.buffer.pixels) {
+    return;
+  }
+  Color const background{0.98f, 0.985f, 0.995f, 1.f};
+  Color const border{0.78f, 0.81f, 0.87f, 1.f};
+  Color const hover{0.84f, 0.90f, 1.f, 1.f};
+  Color const text{0.12f, 0.16f, 0.24f, 1.f};
+  Color const disabled{0.54f, 0.58f, 0.67f, 1.f};
+  Color const accent{0.16f, 0.48f, 1.f, 1.f};
+
+  fillRect(state.buffer, 0, 0, state.width, state.height, background);
+  for (int row = 0; row < static_cast<int>(state.menu.items.size()); ++row) {
+    MenuItem const& item = state.menu.items[static_cast<std::size_t>(row)];
+    int const y = row * state.rowHeight;
+    if (item.role == MenuRole::Separator) {
+      fillRect(state.buffer, 10, y + state.rowHeight / 2, state.width - 20, 1, border);
+      continue;
+    }
+    if (row == state.hoverRow && popupMenuItemEnabled(item)) {
+      fillRect(state.buffer, 4, y + 3, state.width - 8, state.rowHeight - 6, hover);
+    }
+    if (item.checked) {
+      drawCheckMark(state.buffer, 12, y + 8, accent);
+    }
+    Color const labelColor = popupMenuItemEnabled(item) ? text : disabled;
+    drawPopupText(state.buffer, item.label, 34, y, state.width - 46, labelColor);
+  }
+  fillRect(state.buffer, 0, 0, state.width, 1, border);
+  fillRect(state.buffer, 0, state.height - 1, state.width, 1, border);
+  fillRect(state.buffer, 0, 0, 1, state.height, border);
+  fillRect(state.buffer, state.width - 1, 0, 1, state.height, border);
+}
+
+void commitPopupMenuBuffer(WaylandPopupMenuState& state) {
+  if (!state.surface || !state.buffer.buffer) {
+    return;
+  }
+  wl_surface_attach(state.surface, state.buffer.buffer, 0, 0);
+  wl_surface_damage_buffer(state.surface, 0, 0, state.buffer.width, state.buffer.height);
+  wl_surface_commit(state.surface);
+}
+
+WaylandPopupMenuState::~WaylandPopupMenuState() {
+  if (popup) xdg_popup_destroy(popup);
+  if (xdgSurface) xdg_surface_destroy(xdgSurface);
+  if (surface) wl_surface_destroy(surface);
+  destroyWaylandMenuBuffer(buffer);
+}
+
+WaylandPopoverSurfaceState::~WaylandPopoverSurfaceState() {
+  if (host) {
+    host->notifyDismissed();
+  }
+  canvas.reset();
+  if (popup) xdg_popup_destroy(popup);
+  if (xdgSurface) xdg_surface_destroy(xdgSurface);
+  if (surface) wl_surface_destroy(surface);
 }
 
 SharedWaylandConnection* acquireWaylandConnection() {
@@ -381,11 +675,20 @@ public:
   }
 
   ~WaylandWindow() override {
+    popupMenu_.reset();
+    popovers_.clear();
     if (shared_) {
       shared_->windows.erase(std::remove(shared_->windows.begin(), shared_->windows.end(), this),
                              shared_->windows.end());
       if (shared_->pointerFocus == this) shared_->pointerFocus = nullptr;
-      if (shared_->keyboardFocus == this) shared_->keyboardFocus = nullptr;
+      if (shared_->popupPointerFocus == this) {
+        shared_->popupPointerFocus = nullptr;
+        shared_->popupPointerSurface = nullptr;
+      }
+      if (shared_->keyboardFocus == this) {
+        shared_->keyboardFocus = nullptr;
+        shared_->keyboardSurface = nullptr;
+      }
     }
     if (frameCallback_) wl_callback_destroy(frameCallback_);
     if (backgroundEffect_) ext_background_effect_surface_v1_destroy(backgroundEffect_);
@@ -553,6 +856,164 @@ public:
     wl_display_flush(display_);
   }
 
+  bool showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t platformSerial = 0) override {
+    if (!shared_ || !shared_->compositor || !shared_->shm || !shared_->wmBase || !surface_ ||
+        menu.items.empty()) {
+      return false;
+    }
+    if (!xdgSurface_ && !layerSurface_) {
+      return false;
+    }
+
+    popupMenu_.reset();
+
+    auto state = std::make_unique<WaylandPopupMenuState>();
+    state->menu = std::move(menu);
+    state->owner = this;
+    state->shared = shared_;
+    state->grabSerial = platformSerial != 0 ? platformSerial : lastPointerButtonSerial_;
+    state->rowHeight = 30;
+    state->height = std::max(1, static_cast<int>(state->menu.items.size()) * state->rowHeight);
+
+    int measuredWidth = 180;
+    Font font{.size = 13.f, .weight = 450.f};
+    TextLayoutOptions options;
+    options.wrapping = TextWrapping::NoWrap;
+    options.maxLines = 1;
+    for (MenuItem const& item : state->menu.items) {
+      if (item.role == MenuRole::Separator) {
+        continue;
+      }
+      Size const measured = Application::instance().textSystem().measure(item.label, font, Colors::black, 0.f,
+                                                                         options);
+      measuredWidth = std::max(measuredWidth, static_cast<int>(std::ceil(measured.width)) + 68);
+    }
+    state->width = std::clamp(measuredWidth, 140, 320);
+
+    state->surface = wl_compositor_create_surface(shared_->compositor);
+    state->xdgSurface = xdg_wm_base_get_xdg_surface(shared_->wmBase, state->surface);
+    xdg_surface_add_listener(state->xdgSurface, &popupXdgSurfaceListener_, state.get());
+
+    xdg_positioner* positioner = xdg_wm_base_create_positioner(shared_->wmBase);
+    xdg_positioner_set_size(positioner, state->width, state->height);
+    xdg_positioner_set_anchor_rect(positioner,
+                                   static_cast<std::int32_t>(std::lround(anchor.x)),
+                                   static_cast<std::int32_t>(std::lround(anchor.y)),
+                                   std::max(1, static_cast<int>(std::lround(anchor.width))),
+                                   std::max(1, static_cast<int>(std::lround(anchor.height))));
+    xdg_positioner_set_anchor(positioner, XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT);
+    xdg_positioner_set_gravity(positioner, XDG_POSITIONER_GRAVITY_BOTTOM_LEFT);
+    xdg_positioner_set_offset(positioner, 0, 4);
+    state->popup = xdg_surface_get_popup(state->xdgSurface, xdgSurface_, positioner);
+    xdg_popup_add_listener(state->popup, &popupListener_, state.get());
+    if (layerSurface_) {
+      zwlr_layer_surface_v1_get_popup(layerSurface_, state->popup);
+    }
+    xdg_positioner_destroy(positioner);
+
+    state->buffer = createWaylandMenuBuffer(shared_->shm, state->width, state->height);
+    wl_surface_commit(state->surface);
+    wl_display_flush(display_);
+    popupMenu_ = std::move(state);
+    return true;
+  }
+
+  PopoverSurfaceId showPopover(Popover popover, Rect anchor, std::uint32_t platformSerial = 0) override {
+    if (!shared_ || !shared_->compositor || !shared_->wmBase || !surface_ || !fluxWindow_) {
+      return kInvalidPopoverSurfaceId;
+    }
+    if (!xdgSurface_ && !layerSurface_) {
+      return kInvalidPopoverSurfaceId;
+    }
+
+    Theme const theme = fluxWindow_->theme();
+    popover.gap = resolveFloat(popover.gap, theme.space2);
+    Size const maxSize = popover.maxSize.value_or(Size{std::max(1.f, size_.width - 24.f),
+                                                       std::max(1.f, size_.height - 24.f)});
+    PopoverSurfaceId const id{nextPopoverId_++};
+    auto state = std::make_unique<WaylandPopoverSurfaceState>();
+    state->id = id;
+    state->popover = popover;
+    state->owner = this;
+    state->shared = shared_;
+    state->grabSerial = popover.dismissOnOutsideTap
+                             ? (platformSerial != 0 ? platformSerial : lastPointerButtonSerial_)
+                             : 0;
+    state->host = std::make_unique<TransientPopoverHost>(TransientPopoverHost::Config{
+        .popover = popover,
+        .environment = fluxWindow_->environmentBinding(),
+        .maxSize = maxSize,
+        .useNativeShell = false,
+        .requestRedraw = [this, id] {
+          if (WaylandPopoverSurfaceState* popoverState = popoverForId(id)) {
+            renderPopover(*popoverState);
+          }
+        },
+        .requestDismiss = [this, id] {
+          dismissPopover(id);
+        },
+    });
+    Size const measured = state->host->measuredSize();
+    state->width = std::max(1, static_cast<int>(std::lround(measured.width)));
+    state->height = std::max(1, static_cast<int>(std::lround(measured.height)));
+
+    state->surface = wl_compositor_create_surface(shared_->compositor);
+    state->xdgSurface = xdg_wm_base_get_xdg_surface(shared_->wmBase, state->surface);
+    xdg_surface_add_listener(state->xdgSurface, &popoverXdgSurfaceListener_, state.get());
+
+    xdg_positioner* positioner = xdg_wm_base_create_positioner(shared_->wmBase);
+    xdg_positioner_set_size(positioner, state->width, state->height);
+    xdg_positioner_set_anchor_rect(positioner,
+                                   static_cast<std::int32_t>(std::lround(anchor.x)),
+                                   static_cast<std::int32_t>(std::lround(anchor.y)),
+                                   std::max(1, static_cast<int>(std::lround(anchor.width))),
+                                   std::max(1, static_cast<int>(std::lround(anchor.height))));
+    configurePopoverPositioner(positioner, popover, anchor);
+    state->popup = xdg_surface_get_popup(state->xdgSurface, xdgSurface_, positioner);
+    xdg_popup_add_listener(state->popup, &popoverListener_, state.get());
+    if (layerSurface_) {
+      zwlr_layer_surface_v1_get_popup(layerSurface_, state->popup);
+    }
+    xdg_positioner_destroy(positioner);
+
+    wl_surface_commit(state->surface);
+    wl_display_flush(display_);
+    popovers_.push_back(std::move(state));
+    return id;
+  }
+
+  void dismissPopover(PopoverSurfaceId id) override {
+    if (!id.isValid()) {
+      return;
+    }
+    if (WaylandPopoverSurfaceState* state = popoverForId(id)) {
+      dismissPopoverState(state);
+    }
+  }
+
+  void repositionPopover(PopoverSurfaceId id, Popover const& popover, Rect anchor) override {
+    WaylandPopoverSurfaceState* state = popoverForId(id);
+    if (!state || !state->popup || !state->committed || !shared_ || !shared_->wmBase) {
+      return;
+    }
+    state->popover.resolvedPlacement = popover.resolvedPlacement;
+    xdg_positioner* positioner = xdg_wm_base_create_positioner(shared_->wmBase);
+    xdg_positioner_set_size(positioner, state->width, state->height);
+    xdg_positioner_set_anchor_rect(positioner,
+                                   static_cast<std::int32_t>(std::lround(anchor.x)),
+                                   static_cast<std::int32_t>(std::lround(anchor.y)),
+                                   std::max(1, static_cast<int>(std::lround(anchor.width))),
+                                   std::max(1, static_cast<int>(std::lround(anchor.height))));
+    configurePopoverPositioner(positioner, state->popover, anchor);
+    if (xdg_popup_get_version(state->popup) >= XDG_POPUP_REPOSITION_SINCE_VERSION) {
+      xdg_popup_reposition(state->popup, positioner, state->repositionToken++);
+    }
+    xdg_positioner_destroy(positioner);
+    if (display_) {
+      wl_display_flush(display_);
+    }
+  }
+
   Size currentSize() const override { return size_; }
   bool isFullscreen() const override { return fullscreen_; }
   unsigned int handle() const override { return handle_; }
@@ -604,6 +1065,81 @@ public:
   }
 
   wl_surface* waylandSurface() const noexcept { return surface_; }
+  bool ownsPopupSurface(wl_surface* surface) const noexcept {
+    if (popupMenu_ && popupMenu_->surface == surface) {
+      return true;
+    }
+    return popoverForSurface(surface) != nullptr;
+  }
+
+  void handlePopupPointerEnter(std::uint32_t, wl_fixed_t x, wl_fixed_t y) {
+    wl_surface* surface = shared_ ? shared_->popupPointerSurface : nullptr;
+    if (popupMenu_ && popupMenu_->surface == surface) {
+      updatePopupHover(popupMenuRowForY(*popupMenu_, y));
+      return;
+    }
+    if (WaylandPopoverSurfaceState* popover = popoverForSurface(surface)) {
+      popover->pointerPos = logicalPointFromFixed(x, y, 1.f, 1.f);
+      dispatchPopoverPointerMove(*popover, popover->pointerPos);
+      return;
+    }
+  }
+
+  void handlePopupPointerLeave() {
+    wl_surface* surface = shared_ ? shared_->popupPointerSurface : nullptr;
+    if (popupMenu_ && popupMenu_->surface == surface) {
+      popupMenu_->pressedRow = -1;
+      updatePopupHover(-1);
+      return;
+    }
+  }
+
+  void handlePopupPointerMotion(wl_fixed_t x, wl_fixed_t y) {
+    wl_surface* surface = shared_ ? shared_->popupPointerSurface : nullptr;
+    if (popupMenu_ && popupMenu_->surface == surface) {
+      updatePopupHover(popupMenuRowForY(*popupMenu_, y));
+      return;
+    }
+    if (WaylandPopoverSurfaceState* popover = popoverForSurface(surface)) {
+      popover->pointerPos = logicalPointFromFixed(x, y, 1.f, 1.f);
+      dispatchPopoverPointerMove(*popover, popover->pointerPos);
+    }
+  }
+
+  void handlePopupPointerButton(std::uint32_t, std::uint32_t button, std::uint32_t state) {
+    wl_surface* surface = shared_ ? shared_->popupPointerSurface : nullptr;
+    if (WaylandPopoverSurfaceState* popover = popoverForSurface(surface)) {
+      dispatchPopoverPointerButton(*popover, button, state);
+      return;
+    }
+    if (!popupMenu_ || popupMenu_->surface != surface || button != BTN_LEFT) {
+      return;
+    }
+    int const row = popupMenu_->hoverRow;
+    if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
+      popupMenu_->pressedRow = row;
+      return;
+    }
+    int const pressedRow = popupMenu_->pressedRow;
+    popupMenu_->pressedRow = -1;
+    if (row >= 0 && row == pressedRow) {
+      activatePopupMenuRow(row);
+    }
+  }
+
+  void handlePopupPointerAxis(std::uint32_t axis, wl_fixed_t value) {
+    wl_surface* surface = shared_ ? shared_->popupPointerSurface : nullptr;
+    WaylandPopoverSurfaceState* popover = popoverForSurface(surface);
+    if (!popover || !popover->host) {
+      return;
+    }
+    float dx = 0.f;
+    float dy = 0.f;
+    float const v = static_cast<float>(wl_fixed_to_double(value));
+    if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) dx = v;
+    else dy = v;
+    dispatchPopoverScroll(*popover, Vec2{dx, dy});
+  }
 
   void handlePointerEnter(std::uint32_t serial, wl_fixed_t x, wl_fixed_t y) {
     pointerEnterSerial_ = serial;
@@ -656,10 +1192,15 @@ public:
 
   void handleKeyboardKey(linux_platform::XkbState* xkb, std::uint32_t key, std::uint32_t state) {
     bool const pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+    KeyCode const keyCode = xkb ? xkb->keyCodeForEvdevKey(key) : KeyCode{0};
+    if (pressed && keyCode == keys::Escape && popupMenu_) {
+      dismissPopupMenu();
+      return;
+    }
     Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
                                                                           : InputEvent::Kind::KeyUp,
                                                          .handle = handle_,
-                                                         .key = xkb ? xkb->keyCodeForEvdevKey(key) : KeyCode{0},
+                                                         .key = keyCode,
                                                          .modifiers = currentModifiers_});
     if (pressed) {
       std::string text = xkb ? xkb->utf8ForEvdevKey(key) : std::string{};
@@ -669,6 +1210,23 @@ public:
                                                              .text = std::move(text)});
       }
     }
+  }
+
+  void handleKeyboardKeyForSurface(wl_surface* surface, linux_platform::XkbState* xkb,
+                                   std::uint32_t key, std::uint32_t state) {
+    if (WaylandPopoverSurfaceState* popover = popoverForSurface(surface)) {
+      bool const pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+      KeyCode const keyCode = xkb ? xkb->keyCodeForEvdevKey(key) : KeyCode{0};
+      dispatchPopoverKey(*popover, keyCode, pressed);
+      if (pressed) {
+        std::string text = xkb ? xkb->utf8ForEvdevKey(key) : std::string{};
+        if (!text.empty()) {
+          dispatchPopoverText(*popover, std::move(text));
+        }
+      }
+      return;
+    }
+    handleKeyboardKey(xkb, key, state);
   }
 
   void handleKeyboardModifiers(linux_platform::XkbState* xkb, std::uint32_t depressed,
@@ -691,6 +1249,335 @@ public:
   }
 
 private:
+  void dismissPopupMenu(WaylandPopupMenuState* state = nullptr) {
+    if (state && popupMenu_.get() != state) {
+      return;
+    }
+    if (shared_ && shared_->popupPointerFocus == this) {
+      shared_->popupPointerFocus = nullptr;
+      if (popupMenu_ && shared_->popupPointerSurface == popupMenu_->surface) {
+        shared_->popupPointerSurface = nullptr;
+      }
+    }
+    popupMenu_.reset();
+    if (display_) {
+      wl_display_flush(display_);
+    }
+  }
+
+  WaylandPopoverSurfaceState* popoverForId(PopoverSurfaceId id) noexcept {
+    auto it = std::find_if(popovers_.begin(), popovers_.end(),
+                           [&](std::unique_ptr<WaylandPopoverSurfaceState> const& state) {
+                             return state && state->id == id;
+                           });
+    return it == popovers_.end() ? nullptr : it->get();
+  }
+
+  WaylandPopoverSurfaceState* popoverForSurface(wl_surface* surface) noexcept {
+    auto it = std::find_if(popovers_.begin(), popovers_.end(),
+                           [&](std::unique_ptr<WaylandPopoverSurfaceState> const& state) {
+                             return state && state->surface == surface;
+                           });
+    return it == popovers_.end() ? nullptr : it->get();
+  }
+
+  WaylandPopoverSurfaceState const* popoverForSurface(wl_surface* surface) const noexcept {
+    auto it = std::find_if(popovers_.begin(), popovers_.end(),
+                           [&](std::unique_ptr<WaylandPopoverSurfaceState> const& state) {
+                             return state && state->surface == surface;
+                           });
+    return it == popovers_.end() ? nullptr : it->get();
+  }
+
+  void dismissPopoverState(WaylandPopoverSurfaceState* state) {
+    if (!state) {
+      return;
+    }
+    if (state->dispatchDepth > 0) {
+      state->closeAfterEvent = true;
+      return;
+    }
+    if (shared_ && shared_->popupPointerSurface == state->surface) {
+      shared_->popupPointerSurface = nullptr;
+      if (shared_->popupPointerFocus == this) {
+        shared_->popupPointerFocus = nullptr;
+      }
+    }
+    if (shared_ && shared_->keyboardSurface == state->surface) {
+      shared_->keyboardSurface = nullptr;
+      if (shared_->keyboardFocus == this) {
+        shared_->keyboardFocus = nullptr;
+      }
+    }
+    auto it = std::find_if(popovers_.begin(), popovers_.end(),
+                           [&](std::unique_ptr<WaylandPopoverSurfaceState> const& candidate) {
+                             return candidate.get() == state;
+                           });
+    if (it != popovers_.end()) {
+      popovers_.erase(it);
+    }
+    if (display_) {
+      wl_display_flush(display_);
+    }
+  }
+
+  void finishPopoverEvent(WaylandPopoverSurfaceState& state) {
+    if (state.dispatchDepth > 0) {
+      --state.dispatchDepth;
+    }
+    if (state.dispatchDepth == 0 && state.closeAfterEvent) {
+      dismissPopoverState(&state);
+    }
+  }
+
+  bool ensurePopoverCanvas(WaylandPopoverSurfaceState& state) {
+    if (state.canvas) {
+      return true;
+    }
+    if (!state.surface || !state.shared || !state.shared->display) {
+      return false;
+    }
+    try {
+      configureVulkanCanvasRuntime(Application::instance().platformApp().requiredVulkanInstanceExtensions(),
+                                   Application::instance().cacheDir());
+      state.nativeSurface = WaylandNativeSurface{state.shared->display, state.surface};
+      VkInstance instance = ensureSharedVulkanInstance();
+      VkSurfaceKHR vkSurface = Application::instance().platformApp().createVulkanSurface(instance,
+                                                                                        &state.nativeSurface);
+      state.canvas = createVulkanCanvas(vkSurface, handle_, Application::instance().textSystem());
+      state.canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
+      state.canvas->resize(state.width, state.height);
+      return true;
+    } catch (std::exception const& e) {
+      std::fprintf(stderr, "Flux Wayland popover render error: %s\n", e.what());
+      return false;
+    }
+  }
+
+  void renderPopover(WaylandPopoverSurfaceState& state) {
+    if (state.closing || !state.host || !ensurePopoverCanvas(state)) {
+      return;
+    }
+    state.canvas->resize(state.width, state.height);
+    state.canvas->beginFrame();
+    state.host->render(*state.canvas);
+    state.canvas->present();
+    if (display_) {
+      wl_display_flush(display_);
+    }
+  }
+
+  void dispatchPopoverPointerMove(WaylandPopoverSurfaceState& state, Point point) {
+    if (!state.host) {
+      return;
+    }
+    ++state.dispatchDepth;
+    state.host->pointerMove(point);
+    bool const shouldRender = !state.closeAfterEvent;
+    if (shouldRender) {
+      renderPopover(state);
+    }
+    finishPopoverEvent(state);
+  }
+
+  void dispatchPopoverPointerButton(WaylandPopoverSurfaceState& state, std::uint32_t button,
+                                    std::uint32_t buttonState) {
+    if (!state.host) {
+      return;
+    }
+    ++state.dispatchDepth;
+    MouseButton const mouseButton = mouseButtonFromLinux(button);
+    if (buttonState == WL_POINTER_BUTTON_STATE_PRESSED) {
+      state.host->pointerDown(state.pointerPos, mouseButton);
+    } else {
+      state.host->pointerUp(state.pointerPos, mouseButton);
+    }
+    bool const shouldRender = !state.closeAfterEvent;
+    if (shouldRender) {
+      renderPopover(state);
+    }
+    finishPopoverEvent(state);
+  }
+
+  void dispatchPopoverScroll(WaylandPopoverSurfaceState& state, Vec2 delta) {
+    if (!state.host) {
+      return;
+    }
+    ++state.dispatchDepth;
+    state.host->scroll(state.pointerPos, delta);
+    bool const shouldRender = !state.closeAfterEvent;
+    if (shouldRender) {
+      renderPopover(state);
+    }
+    finishPopoverEvent(state);
+  }
+
+  void dispatchPopoverKey(WaylandPopoverSurfaceState& state, KeyCode key, bool pressed) {
+    if (!state.host) {
+      return;
+    }
+    ++state.dispatchDepth;
+    if (pressed) {
+      state.host->keyDown(key, currentModifiers_);
+    } else {
+      state.host->keyUp(key, currentModifiers_);
+    }
+    bool const shouldRender = !state.closeAfterEvent;
+    if (shouldRender) {
+      renderPopover(state);
+    }
+    finishPopoverEvent(state);
+  }
+
+  void dispatchPopoverText(WaylandPopoverSurfaceState& state, std::string text) {
+    if (!state.host || text.empty()) {
+      return;
+    }
+    ++state.dispatchDepth;
+    state.host->textInput(text);
+    bool const shouldRender = !state.closeAfterEvent;
+    if (shouldRender) {
+      renderPopover(state);
+    }
+    finishPopoverEvent(state);
+  }
+
+  static void configurePopoverPositioner(xdg_positioner* positioner, Popover const& popover, Rect const& anchor) {
+    (void)anchor;
+    int offsetX = 0;
+    int offsetY = 0;
+    int const gap = std::max(0, static_cast<int>(std::lround(popover.gap)));
+    switch (popover.resolvedPlacement) {
+    case PopoverPlacement::Above:
+      xdg_positioner_set_anchor(positioner, XDG_POSITIONER_ANCHOR_TOP);
+      xdg_positioner_set_gravity(positioner, XDG_POSITIONER_GRAVITY_TOP);
+      offsetY = -gap;
+      break;
+    case PopoverPlacement::Below:
+      xdg_positioner_set_anchor(positioner, XDG_POSITIONER_ANCHOR_BOTTOM);
+      xdg_positioner_set_gravity(positioner, XDG_POSITIONER_GRAVITY_BOTTOM);
+      offsetY = gap;
+      break;
+    case PopoverPlacement::Start:
+      xdg_positioner_set_anchor(positioner, XDG_POSITIONER_ANCHOR_LEFT);
+      xdg_positioner_set_gravity(positioner, XDG_POSITIONER_GRAVITY_LEFT);
+      offsetX = -gap;
+      break;
+    case PopoverPlacement::End:
+      xdg_positioner_set_anchor(positioner, XDG_POSITIONER_ANCHOR_RIGHT);
+      xdg_positioner_set_gravity(positioner, XDG_POSITIONER_GRAVITY_RIGHT);
+      offsetX = gap;
+      break;
+    }
+    xdg_positioner_set_offset(positioner, offsetX, offsetY);
+    xdg_positioner_set_constraint_adjustment(positioner,
+                                             XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X |
+                                                 XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_Y |
+                                                 XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_X |
+                                                 XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_Y);
+  }
+
+  void updatePopupHover(int row) {
+    if (!popupMenu_) {
+      return;
+    }
+    if (row >= 0) {
+      MenuItem const& item = popupMenu_->menu.items[static_cast<std::size_t>(row)];
+      if (!popupMenuItemActivatable(item)) {
+        row = -1;
+      }
+    }
+    if (popupMenu_->hoverRow == row) {
+      return;
+    }
+    popupMenu_->hoverRow = row;
+    renderPopupMenu(*popupMenu_);
+    commitPopupMenuBuffer(*popupMenu_);
+    if (display_) {
+      wl_display_flush(display_);
+    }
+  }
+
+  void activatePopupMenuRow(int row) {
+    if (!popupMenu_ || row < 0 || row >= static_cast<int>(popupMenu_->menu.items.size())) {
+      return;
+    }
+    MenuItem item = popupMenu_->menu.items[static_cast<std::size_t>(row)];
+    if (!popupMenuItemActivatable(item)) {
+      return;
+    }
+    dismissPopupMenu();
+    if (item.handler) {
+      item.handler();
+    } else if (fluxWindow_ && !item.actionName.empty()) {
+      fluxWindow_->dispatchAction(item.actionName);
+    }
+  }
+
+  static void popupXdgSurfaceConfigure(void* data, xdg_surface* surface, std::uint32_t serial) {
+    auto* state = static_cast<WaylandPopupMenuState*>(data);
+    if (!state) {
+      return;
+    }
+    xdg_surface_ack_configure(surface, serial);
+    if (!state->committed) {
+      renderPopupMenu(*state);
+      commitPopupMenuBuffer(*state);
+      state->committed = true;
+      if (!state->grabbed && state->popup && state->shared && state->shared->seat && state->grabSerial != 0) {
+        xdg_popup_grab(state->popup, state->shared->seat, state->grabSerial);
+        state->grabbed = true;
+      }
+      if (state->shared && state->shared->display) {
+        wl_display_flush(state->shared->display);
+      }
+    }
+  }
+
+  static void popupConfigure(void*, xdg_popup*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {}
+
+  static void popupDone(void* data, xdg_popup*) {
+    auto* state = static_cast<WaylandPopupMenuState*>(data);
+    if (state && state->owner) {
+      state->owner->dismissPopupMenu(state);
+    }
+  }
+
+  static void popupRepositioned(void*, xdg_popup*, std::uint32_t) {}
+
+  static void popoverXdgSurfaceConfigure(void* data, xdg_surface* surface, std::uint32_t serial) {
+    auto* state = static_cast<WaylandPopoverSurfaceState*>(data);
+    if (!state) {
+      return;
+    }
+    xdg_surface_ack_configure(surface, serial);
+    if (!state->committed && state->host && state->owner) {
+      state->host->mount(Size{static_cast<float>(state->width), static_cast<float>(state->height)});
+      state->owner->renderPopover(*state);
+      state->committed = true;
+      if (!state->grabbed && state->popup && state->shared && state->shared->seat &&
+          state->grabSerial != 0) {
+        xdg_popup_grab(state->popup, state->shared->seat, state->grabSerial);
+        state->grabbed = true;
+      }
+      if (state->shared && state->shared->display) {
+        wl_display_flush(state->shared->display);
+      }
+    }
+  }
+
+  static void popoverConfigure(void*, xdg_popup*, std::int32_t, std::int32_t,
+                               std::int32_t, std::int32_t) {}
+
+  static void popoverDone(void* data, xdg_popup*) {
+    auto* state = static_cast<WaylandPopoverSurfaceState*>(data);
+    if (state && state->owner) {
+      state->owner->dismissPopoverState(state);
+    }
+  }
+
+  static void popoverRepositioned(void*, xdg_popup*, std::uint32_t) {}
+
   static void frameDone(void* data, wl_callback* callback, std::uint32_t) {
     auto* self = static_cast<WaylandWindow*>(data);
     if (callback == self->frameCallback_) {
@@ -1196,10 +2083,14 @@ private:
   }
 
   static inline wl_callback_listener frameCallbackListener_{frameDone};
-	  static inline wl_surface_listener surfaceListener_{surfaceEnter, surfaceLeave, surfacePreferredBufferScale,
+  static inline wl_surface_listener surfaceListener_{surfaceEnter, surfaceLeave, surfacePreferredBufferScale,
 	                                                    surfacePreferredBufferTransform};
 	  static inline wp_fractional_scale_v1_listener fractionalScaleListener_{fractionalPreferredScale};
 	  static inline xdg_surface_listener xdgSurfaceListener_{xdgConfigure};
+  static inline xdg_surface_listener popupXdgSurfaceListener_{popupXdgSurfaceConfigure};
+  static inline xdg_popup_listener popupListener_{popupConfigure, popupDone, popupRepositioned};
+  static inline xdg_surface_listener popoverXdgSurfaceListener_{popoverXdgSurfaceConfigure};
+  static inline xdg_popup_listener popoverListener_{popoverConfigure, popoverDone, popoverRepositioned};
 	  static inline xdg_toplevel_listener toplevelListener_{topConfigure, topClose, topConfigureBounds,
 	                                                       topCapabilities};
 	  static inline zwlr_layer_surface_v1_listener layerSurfaceListener_{layerConfigure, layerClosed};
@@ -1239,6 +2130,9 @@ private:
   wp_fractional_scale_v1* fractionalScale_ = nullptr;
   Canvas* canvas_ = nullptr;
   SharedWaylandConnection* shared_ = nullptr;
+  std::unique_ptr<WaylandPopupMenuState> popupMenu_;
+  std::vector<std::unique_ptr<WaylandPopoverSurfaceState>> popovers_;
+  std::uint64_t nextPopoverId_ = 1;
 
   ::flux::Window* fluxWindow_ = nullptr;
   unsigned int handle_ = 0;
@@ -1291,6 +2185,14 @@ WaylandWindow* windowForSurface(SharedWaylandConnection* shared, wl_surface* sur
   if (!shared || !surface) return nullptr;
   for (WaylandWindow* window : shared->windows) {
     if (window && window->waylandSurface() == surface) return window;
+  }
+  return nullptr;
+}
+
+WaylandWindow* windowForPopupSurface(SharedWaylandConnection* shared, wl_surface* surface) {
+  if (!shared || !surface) return nullptr;
+  for (WaylandWindow* window : shared->windows) {
+    if (window && window->ownsPopupSurface(surface)) return window;
   }
   return nullptr;
 }
@@ -1397,26 +2299,53 @@ void sharedOutputDescription(void*, wl_output*, char const*) {}
 
 void sharedPointerEnter(void* data, wl_pointer*, std::uint32_t serial, wl_surface* surface, wl_fixed_t x, wl_fixed_t y) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
+  shared->popupPointerFocus = windowForPopupSurface(shared, surface);
+  if (shared->popupPointerFocus) {
+    shared->pointerFocus = nullptr;
+    shared->popupPointerSurface = surface;
+    shared->popupPointerFocus->handlePopupPointerEnter(serial, x, y);
+    return;
+  }
+  shared->popupPointerSurface = nullptr;
   shared->pointerFocus = windowForSurface(shared, surface);
   if (shared->pointerFocus) shared->pointerFocus->handlePointerEnter(serial, x, y);
 }
 void sharedPointerLeave(void* data, wl_pointer*, std::uint32_t, wl_surface* surface) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
+  WaylandWindow* popupWindow = windowForPopupSurface(shared, surface);
+  if (popupWindow) popupWindow->handlePopupPointerLeave();
+  if (!surface || shared->popupPointerFocus == popupWindow) {
+    shared->popupPointerFocus = nullptr;
+    shared->popupPointerSurface = nullptr;
+  }
+  if (popupWindow) return;
   WaylandWindow* window = windowForSurface(shared, surface);
   if (window) window->handlePointerLeave();
   if (!surface || shared->pointerFocus == window) shared->pointerFocus = nullptr;
 }
 void sharedPointerMotion(void* data, wl_pointer*, std::uint32_t, wl_fixed_t x, wl_fixed_t y) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (shared->popupPointerFocus) {
+    shared->popupPointerFocus->handlePopupPointerMotion(x, y);
+    return;
+  }
   if (shared->pointerFocus) shared->pointerFocus->handlePointerMotion(x, y);
 }
 void sharedPointerButton(void* data, wl_pointer*, std::uint32_t serial, std::uint32_t, std::uint32_t button,
                          std::uint32_t state) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (shared->popupPointerFocus) {
+    shared->popupPointerFocus->handlePopupPointerButton(serial, button, state);
+    return;
+  }
   if (shared->pointerFocus) shared->pointerFocus->handlePointerButton(serial, button, state);
 }
 void sharedPointerAxis(void* data, wl_pointer*, std::uint32_t, std::uint32_t axis, wl_fixed_t value) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (shared->popupPointerFocus) {
+    shared->popupPointerFocus->handlePopupPointerAxis(axis, value);
+    return;
+  }
   if (shared->pointerFocus) shared->pointerFocus->handlePointerAxis(axis, value);
 }
 void sharedPointerFrame(void*, wl_pointer*) {}
@@ -1439,16 +2368,28 @@ void sharedKeymap(void* data, wl_keyboard*, std::uint32_t format, int fd, std::u
 void sharedKeyboardEnter(void* data, wl_keyboard*, std::uint32_t, wl_surface* surface, wl_array*) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
   shared->keyboardFocus = windowForSurface(shared, surface);
+  if (!shared->keyboardFocus) {
+    shared->keyboardFocus = windowForPopupSurface(shared, surface);
+  }
+  shared->keyboardSurface = shared->keyboardFocus ? surface : nullptr;
 }
 void sharedKeyboardLeave(void* data, wl_keyboard*, std::uint32_t, wl_surface* surface) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
   WaylandWindow* window = windowForSurface(shared, surface);
-  if (!surface || shared->keyboardFocus == window) shared->keyboardFocus = nullptr;
+  if (!window) {
+    window = windowForPopupSurface(shared, surface);
+  }
+  if (!surface || shared->keyboardFocus == window) {
+    shared->keyboardFocus = nullptr;
+    shared->keyboardSurface = nullptr;
+  }
 }
 void sharedKeyboardKey(void* data, wl_keyboard*, std::uint32_t, std::uint32_t, std::uint32_t key,
                        std::uint32_t state) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
-  if (shared->keyboardFocus) shared->keyboardFocus->handleKeyboardKey(shared->xkb.get(), key, state);
+  if (shared->keyboardFocus) {
+    shared->keyboardFocus->handleKeyboardKeyForSurface(shared->keyboardSurface, shared->xkb.get(), key, state);
+  }
 }
 void sharedKeyboardModifiers(void* data, wl_keyboard*, std::uint32_t, std::uint32_t depressed,
                              std::uint32_t latched, std::uint32_t locked, std::uint32_t group) {

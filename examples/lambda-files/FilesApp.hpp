@@ -6,14 +6,12 @@
 #include "FilesTheme.hpp"
 
 #include <Flux.hpp>
-#include <Flux/UI/Detail/Runtime.hpp>
 #include <Flux/UI/EnvironmentKeys.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/KeyCodes.hpp>
 #include <Flux/UI/Views/For.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Icon.hpp>
-#include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Show.hpp>
@@ -27,6 +25,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace lambda_files {
@@ -261,128 +260,30 @@ struct BreadcrumbBar {
   }
 };
 
-struct FilesOptionsMenuRow {
-  Reactive::Signal<bool> showHiddenFiles;
-  std::function<void()> onTap;
-
-  Element body() const {
-    auto hover = useHover();
-    auto press = usePress();
-    Reactive::Signal<bool> const hiddenSignal = showHiddenFiles;
-    Reactive::Bindable<FillStyle> const fill{[hover, press] {
-      if (press()) {
-        return FillStyle::solid(Color{0.f, 0.f, 0.f, 0.07f});
-      }
-      if (hover()) {
-        return FillStyle::solid(FilesTheme::hoverFill);
-      }
-      return FillStyle::solid(Colors::transparent);
-    }};
-    Reactive::Bindable<Color> const checkColor{[hiddenSignal] {
-      return hiddenSignal() ? FilesTheme::accent : Colors::transparent;
-    }};
-
-    auto activate = [handler = onTap] {
-      if (handler) {
-        handler();
-      }
-    };
-    auto keyHandler = [activate](KeyCode key, Modifiers) {
-      if (key == keys::Return || key == keys::Space) {
-        activate();
-      }
-    };
-
-    return HStack{
-               .spacing = 9.f,
-               .alignment = Alignment::Center,
-               .children = children(
-                   Icon{.name = IconName::Check, .size = 16.f, .color = checkColor},
-                   Text{
-                       .text = "Show Hidden Files",
-                       .font = Font{.size = 12.f, .weight = 500.f},
-                       .color = FilesTheme::text,
-                       .horizontalAlignment = HorizontalAlignment::Leading,
-                       .verticalAlignment = VerticalAlignment::Center,
-                   }.flex(1.f, 1.f, 0.f))}
-        .padding(8.f, 10.f, 8.f, 8.f)
-        .fill(fill)
-        .cornerRadius(6.f)
-        .cursor(Cursor::Hand)
-        .focusable(true)
-        .onKeyDown(std::function<void(KeyCode, Modifiers)>{keyHandler})
-        .onTap(std::function<void()>{activate});
-  }
-};
-
-struct FilesOptionsMenuContent {
-  Reactive::Signal<bool> showHiddenFiles;
-  std::function<void()> onToggleHiddenFiles;
-
-  Element body() const {
-    return VStack{
-               .spacing = 0.f,
-               .alignment = Alignment::Stretch,
-               .children = children(FilesOptionsMenuRow{
-                   .showHiddenFiles = showHiddenFiles,
-                   .onTap = onToggleHiddenFiles,
-               })}
-        .width(190.f)
-        .padding(4.f);
-  }
-};
-
 struct FilesOptionsMenu {
   Reactive::Signal<bool> showHiddenFiles;
   std::function<void()> onToggleHiddenFiles;
 
   Element body() const {
-    if (Runtime::current() == nullptr) {
-      return IconToolButton{
-          .icon = IconName::MoreHoriz,
-          .iconSize = 20.f,
-          .enabledState = false,
-      };
-    }
-
-    auto [showPopover, hidePopover, popoverOpen] = usePopover();
+    auto showMenu = usePopupMenu();
     Reactive::Signal<bool> const hiddenSignal = showHiddenFiles;
     auto const toggle = onToggleHiddenFiles;
 
-    auto openMenu = [showPopover, hidePopover, hiddenSignal, toggle] {
-      showPopover(Popover{
-          .content = Element{FilesOptionsMenuContent{
-              .showHiddenFiles = hiddenSignal,
-              .onToggleHiddenFiles = [toggle, hidePopover] {
-                if (toggle) {
-                  toggle();
-                }
-                hidePopover();
-              },
-          }},
-          .placement = PopoverPlacement::Below,
-          .crossAlignment = OverlayConfig::CrossAlignment::PreferEnd,
-          .gap = 4.f,
-          .arrow = false,
-          .backgroundColor = Color::elevatedBackground(),
-          .borderColor = Color::separator(),
-          .borderWidth = 1.f,
-          .cornerRadius = 8.f,
-          .contentPadding = 0.f,
-          .maxSize = Size{220.f, 160.f},
-          .backdropColor = Colors::transparent,
-          .anchorMaxHeight = FilesTheme::kToolbarBtn,
-          .dismissOnEscape = true,
-          .dismissOnOutsideTap = true,
-          .useTapAnchor = true,
-          .debugName = "FilesOptionsMenu",
-      });
+    auto openMenu = [showMenu, hiddenSignal, toggle] {
+      MenuItem showHidden;
+      showHidden.label = "Show Hidden Files";
+      showHidden.checked = hiddenSignal();
+      showHidden.handler = [toggle] {
+        if (toggle) {
+          toggle();
+        }
+      };
+      showMenu(PopupMenu{.items = {std::move(showHidden)}});
     };
 
     return IconToolButton{
         .icon = IconName::MoreHoriz,
         .iconSize = 20.f,
-        .activeState = popoverOpen,
         .onTap = openMenu,
     };
   }

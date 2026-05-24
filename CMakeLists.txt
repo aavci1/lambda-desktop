@@ -198,7 +198,9 @@ set(FLUX_UI_SOURCES
   src/UI/MountContext.cpp
   src/UI/MountRoot.cpp
   src/UI/Runtime.cpp
+  src/UI/TransientPopoverHost.cpp
   src/UI/Overlay.cpp
+  src/UI/PopupMenu.cpp
   src/UI/OverlaySurfaceHelpers.cpp
   src/UI/Views/Alert.cpp
   src/UI/Views/BackdropBlur.cpp

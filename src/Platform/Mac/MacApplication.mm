@@ -440,6 +440,7 @@ private:
     if (!actionName.empty()) {
       nsItem.representedObject = ns(actionName);
     }
+    nsItem.state = item.checked ? NSControlStateValueOn : NSControlStateValueOff;
     if (shortcut.matches(shortcut.key, shortcut.modifiers)) {
       nsItem.keyEquivalentModifierMask = modifierMask(shortcut.modifiers);
       claimedShortcuts_.insert(platform::ShortcutKey{.key = shortcut.key, .modifiers = shortcut.modifiers});
