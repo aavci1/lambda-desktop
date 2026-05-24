@@ -13,10 +13,10 @@ namespace flux::compositor {
 
 struct LayerShellChromeSnapshot {
   LayerShellChromeStyle style = LayerShellChromeStyle::None;
-  float blurRadius = 32.f;
-  Color tint{238.f / 255.f, 244.f / 255.f, 1.f, 0.60f};
-  Color borderColor{1.f, 1.f, 1.f, 0.34f};
-  float tintOpacity = 0.48f;
+  float blurRadius = 46.f;
+  Color tint{0.86f, 0.96f, 1.f, 0.56f};
+  Color borderColor{1.f, 1.f, 1.f, 0.62f};
+  float tintOpacity = 1.f;
   bool squareBottomCorners = false;
 };
 

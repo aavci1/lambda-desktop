@@ -22,6 +22,7 @@
 
 #include <memory>
 #include <utility>
+#include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -119,6 +120,7 @@ struct Window::Impl {
   std::unique_ptr<scenegraph::SceneRenderer> sceneRenderer_;
   std::optional<scenegraph::SceneGraph> sceneGraph_;
   Color clearColor_ {Theme::light().windowBackgroundColor};
+  WindowGlassOptions glassConfig_{};
   bool hasCustomClearColor_ = false;
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
   /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
@@ -136,7 +138,8 @@ struct Window::Impl {
   bool shutdown_ = false;
 
   explicit Impl(Window&, WindowConfig const& config)
-      : restoreId_(config.restoreId) {
+      : glassConfig_(config.glass)
+      , restoreId_(config.restoreId) {
     windowEnvironmentBinding_ = EnvironmentBinding{}
                                     .withSignal<ThemeKey>(themeSignal_)
                                     .withSignal<WindowChromeMetricsKey>(chromeMetricsSignal_);
@@ -521,8 +524,16 @@ void Window::render(Canvas& canvas) {
   if (d->runtime_ && d->overlayMgr_.hasTrackedAnchors()) {
     d->overlayMgr_.rebuild(windowSize, *d->runtime_);
   }
+  std::optional<Color> glassTint;
+  if (d->glassConfig_.enabled) {
+    Color tint = d->glassConfig_.tint;
+    tint.a *= std::clamp(d->glassConfig_.tintOpacity, 0.f, 1.f);
+    if (tint.a > 0.f) {
+      glassTint = tint;
+    }
+  }
   renderWindowFrame(*d->sceneRenderer_, canvas, d->sceneGraph_, windowSize, d->overlayMgr_, d->runtime_.get(),
-                    d->clearColor_, d->textCacheRing_);
+                    d->clearColor_, glassTint, d->textCacheRing_);
   if (traceResize) {
     auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - renderStart).count();

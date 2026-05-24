@@ -85,10 +85,10 @@ enum class LayerShellChromeStyle : std::uint8_t {
 
 struct LayerShellChromeOptions {
   LayerShellChromeStyle style = LayerShellChromeStyle::None;
-  float blurRadius = 42.f;
-  Color tint{1.f, 1.f, 1.f, 0.40f};
-  Color borderColor{1.f, 1.f, 1.f, 0.58f};
-  float tintOpacity = 0.30f;
+  float blurRadius = 46.f;
+  Color tint{0.86f, 0.96f, 1.f, 0.56f};
+  Color borderColor{1.f, 1.f, 1.f, 0.62f};
+  float tintOpacity = 1.f;
   bool squareBottomCorners = false;
 };
 
@@ -115,12 +115,12 @@ struct WindowGlassOptions {
   bool enabled = false;
   /// Preferred blur radius for platforms that expose a tunable backdrop blur.
   /// Some backends map this to the nearest native material instead.
-  float blurRadius = 42.f;
+  float blurRadius = 46.f;
   /// Preferred tint for app chrome drawn over the material or compositor chrome
   /// that supports explicit tint metadata.
-  Color tint{1.f, 1.f, 1.f, 0.40f};
-  Color borderColor{1.f, 1.f, 1.f, 0.58f};
-  float tintOpacity = 0.30f;
+  Color tint{0.86f, 0.96f, 1.f, 0.56f};
+  Color borderColor{1.f, 1.f, 1.f, 0.62f};
+  float tintOpacity = 1.f;
 };
 
 struct WindowConfig {

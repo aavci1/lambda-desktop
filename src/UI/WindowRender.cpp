@@ -1,6 +1,7 @@
 #include "UI/WindowRender.hpp"
 
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneRenderer.hpp>
@@ -18,11 +19,19 @@ namespace flux {
 void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
                        std::optional<scenegraph::SceneGraph> const& sceneGraph,
                        Size windowSize, OverlayManager const& overlays, Runtime const* runtime, Color clearColor,
+                       std::optional<Color> glassTint,
                        TextCacheRingBuffer& textCacheRing) {
   bool const traceResize = detail::resizeTraceEnabled();
   auto phaseStart = traceResize ? std::chrono::steady_clock::now()
                                 : std::chrono::steady_clock::time_point{};
   canvas.clear(clearColor);
+  if (glassTint && glassTint->a > 0.f && windowSize.width > 0.f && windowSize.height > 0.f) {
+    canvas.drawRect(Rect::sharp(0.f, 0.f, windowSize.width, windowSize.height),
+                    CornerRadius{},
+                    FillStyle::solid(*glassTint),
+                    StrokeStyle::none(),
+                    ShadowStyle::none());
+  }
   std::int64_t clearElapsed = 0;
   std::int64_t sceneElapsed = 0;
   std::int64_t overlaysElapsed = 0;

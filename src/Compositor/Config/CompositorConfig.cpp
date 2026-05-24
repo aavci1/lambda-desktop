@@ -472,7 +472,7 @@ animations = true
 hardware_cursor = true
 idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 window_glass = true
-window_glass_opacity = 0.84
+window_glass_opacity = 1.0
 
 [chrome]
 title_bar_height = 28
@@ -499,11 +499,11 @@ window_corner_radius = 14
 # bottom_right = 14
 # bottom_left = 14
 resize_grip_size = 4
-glass_tint = "#eef4ff99"
-glass_blur_radius = 40
-window_border_color = "#f8fbffb8"
+glass_tint = "#dbf5ff8f"
+glass_blur_radius = 46
+window_border_color = "#ffffff9e"
 window_border_width = 1
-border_line_color = "#ffffff4d"
+border_line_color = "#ffffff9e"
 
 [keybindings]
 close = "super+q"

@@ -29,10 +29,6 @@ LayerShellOptions layerBase(LayerShellLayer layer, char const* nameSpace) {
   options.layer = layer;
   options.nameSpace = nameSpace;
   options.backgroundBlur = true;
-  options.chrome.blurRadius = 44.f;
-  options.chrome.tint = Color{1.f, 1.f, 1.f, 0.42f};
-  options.chrome.tintOpacity = 0.28f;
-  options.chrome.borderColor = Color{1.f, 1.f, 1.f, 0.62f};
   return options;
 }
 
