@@ -13,13 +13,13 @@ struct FilesTheme {
   static constexpr flux::Color text3 = flux::Color::hex(0x8893AD);
   static constexpr flux::Color line = flux::Color{0.08f, 0.12f, 0.24f, 0.08f};
   static constexpr flux::Color line2 = flux::Color{0.08f, 0.12f, 0.24f, 0.05f};
-  static constexpr flux::Color glassSoft = flux::Color{1.f, 1.f, 1.f, 0.55f};
-  static constexpr flux::Color glassPanel = flux::Color{1.f, 1.f, 1.f, 0.35f};
+  static constexpr flux::Color glassSoft = flux::Color{1.f, 1.f, 1.f, 0.34f};
+  static constexpr flux::Color glassPanel = flux::Color{1.f, 1.f, 1.f, 0.24f};
   static constexpr flux::Color selectFill = flux::Color{0.16f, 0.50f, 1.f, 0.14f};
   static constexpr flux::Color selectBorder = flux::Color{0.16f, 0.50f, 1.f, 0.35f};
   static constexpr flux::Color hoverFill = flux::Color{0.f, 0.f, 0.f, 0.04f};
-  static constexpr flux::Color windowBg = flux::Color{0.90f, 0.96f, 0.99f, 0.72f};
-  static constexpr flux::Color chromeBg = flux::Color{1.f, 1.f, 1.f, 0.44f};
+  static constexpr flux::Color windowBg = flux::Color{0.88f, 0.96f, 1.f, 0.10f};
+  static constexpr flux::Color chromeBg = flux::Color{1.f, 1.f, 1.f, 0.f};
   static constexpr flux::Color sideBg = flux::Color{1.f, 1.f, 1.f, 0.28f};
   static constexpr flux::Color folderA = flux::Color::hex(0x4D94FF);
   static constexpr flux::Color folderB = flux::Color::hex(0x2A7FFF);

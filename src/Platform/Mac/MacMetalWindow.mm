@@ -112,6 +112,8 @@ void postTextInput(FluxMetalView* view, std::string text);
   self = [super initWithFrame:frameRect];
   if (self) {
     self.wantsLayer = YES;
+    self.layer.opaque = NO;
+    self.layer.backgroundColor = [[NSColor clearColor] CGColor];
     self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
     [self updateDrawableSize];
   }
@@ -441,6 +443,7 @@ public:
 
   /// Enables CAMetalLayer transaction presentation only for resize flushes (paired with MetalCanvas sync present).
   void setMetalLayerPresentsWithTransaction(bool enable);
+  void positionNativeWindowControls();
 
 private:
   void setModernDisplayLinkPaused(bool paused);
@@ -1183,6 +1186,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
     return;
   }
   flux::Size const currentSize = platform->currentSize();
+  platform->positionNativeWindowControls();
   flux::Application::instance().eventQueue().post(
       flux::WindowEvent{flux::WindowEvent::Kind::Resize, fw->handle(), currentSize, 1.0f});
   // Live resize runs in NSEventTrackingRunLoopMode; our main loop waits in NSDefaultRunLoopMode, so it does not
@@ -1340,6 +1344,34 @@ void MacMetalWindow::applyDecorationMode() {
     [d->window_ setTitlebarSeparatorStyle:NSTitlebarSeparatorStyleNone];
   }
   setStandardWindowButtonsHidden(d->window_, d->decorationMode_ == WindowDecorationMode::ClientSide);
+  positionNativeWindowControls();
+}
+
+void MacMetalWindow::positionNativeWindowControls() {
+  if (!d || !d->window_ || !d->metalView_ ||
+      d->decorationMode_ != WindowDecorationMode::IntegratedTitlebar) {
+    return;
+  }
+
+  NSView* contentView = d->metalView_;
+  NSWindowButton const buttons[] = {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
+  for (NSWindowButton buttonType : buttons) {
+    NSButton* button = [d->window_ standardWindowButton:buttonType];
+    NSView* buttonSuperview = button ? [button superview] : nil;
+    if (!button || !buttonSuperview || [button isHidden]) {
+      continue;
+    }
+
+    NSRect const contentRect = [contentView convertRect:[button frame] fromView:buttonSuperview];
+    NSPoint const desiredCenterInContent =
+        NSMakePoint(NSMidX(contentRect), kFluxTitlebarHeight * 0.5);
+    NSPoint const desiredCenterInSuperview =
+        [buttonSuperview convertPoint:desiredCenterInContent fromView:contentView];
+
+    NSRect frame = [button frame];
+    frame.origin.y = desiredCenterInSuperview.y - frame.size.height * 0.5;
+    [button setFrame:frame];
+  }
 }
 
 MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<Impl>()) {
@@ -1375,6 +1407,7 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
     [d->window_ setOpaque:NO];
     [d->window_ setBackgroundColor:[NSColor clearColor]];
     [d->window_ setHasShadow:YES];
+    [d->window_ setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameVibrantLight]];
   }
   applyDecorationMode();
   [d->window_ setReleasedWhenClosed:NO];
@@ -1401,13 +1434,15 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
     d->materialView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     d->materialView_.blendingMode = NSVisualEffectBlendingModeBehindWindow;
     d->materialView_.state = NSVisualEffectStateActive;
-    d->materialView_.material = NSVisualEffectMaterialUnderWindowBackground;
+    d->materialView_.material = NSVisualEffectMaterialPopover;
+    d->materialView_.emphasized = NO;
     [d->window_ setContentView:d->materialView_];
     d->metalView_.frame = d->materialView_.bounds;
     [d->materialView_ addSubview:d->metalView_];
   } else {
     [d->window_ setContentView:d->metalView_];
   }
+  positionNativeWindowControls();
 
   NSString* title = [NSString stringWithUTF8String:config.title.c_str()];
   if (!title) {
@@ -1484,6 +1519,7 @@ void MacMetalWindow::show() {
   if (!d->window_ || !d->metalView_) {
     return;
   }
+  positionNativeWindowControls();
   [d->window_ makeKeyAndOrderFront:nil];
   [d->window_ makeFirstResponder:d->metalView_];
 }
@@ -1494,6 +1530,7 @@ void MacMetalWindow::resize(const Size& newSize) {
   }
   NSSize sz = NSMakeSize(static_cast<CGFloat>(newSize.width), static_cast<CGFloat>(newSize.height));
   [d->window_ setContentSize:sz];
+  positionNativeWindowControls();
 }
 
 void MacMetalWindow::setMinSize(Size size) {
@@ -1774,6 +1811,10 @@ std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::flux::Window& owner) {
   void* layerPtr = nativeGraphicsSurface();
   if (!layerPtr) {
     return nullptr;
+  }
+  if (CAMetalLayer* layer = (__bridge CAMetalLayer*)layerPtr) {
+    layer.opaque = NO;
+    layer.backgroundColor = [[NSColor clearColor] CGColor];
   }
   return createMetalCanvas(&owner, layerPtr, handle(), Application::instance().textSystem(), [] {
     Application::instance().requestRedraw();

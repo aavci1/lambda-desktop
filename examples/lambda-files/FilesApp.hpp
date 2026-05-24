@@ -51,11 +51,24 @@ ChromeInsets chromeInsets(WindowChromeMetrics const& chrome) {
   return insets;
 }
 
+ShadowStyle softControlShadow() {
+  return ShadowStyle{
+      .radius = 24.f,
+      .offset = {0.f, 2.f},
+      .color = Color{0.05f, 0.10f, 0.18f, 0.045f},
+  };
+}
+
+StrokeStyle softSurfaceStroke() {
+  return StrokeStyle::solid(Color{1.f, 1.f, 1.f, 0.34f}, 1.f);
+}
+
 struct IconToolButton {
   IconName icon = IconName::Apps;
   float iconSize = 18.f;
   Reactive::Bindable<bool> enabledState{true};
   Reactive::Bindable<bool> activeState{false};
+  bool raised = false;
   std::function<void()> onTap;
 
   Element body() const {
@@ -71,14 +84,20 @@ struct IconToolButton {
       }
       return hover() ? FilesTheme::text : FilesTheme::text2;
     }};
-    Reactive::Bindable<FillStyle> const fill{[hover, enabled, active] {
+    bool const raisedSurface = raised;
+    Reactive::Bindable<FillStyle> const fill{[hover, enabled, active, raisedSurface] {
       if (active.evaluate()) {
         return FillStyle::solid(FilesTheme::viewToggleFill);
       }
-      if (!enabled.evaluate() || !hover()) {
-        return FillStyle::solid(Colors::transparent);
+      if (raisedSurface) {
+        if (enabled.evaluate() && hover()) {
+          return FillStyle::solid(Color{1.f, 1.f, 1.f, 0.46f});
+        }
+        return FillStyle::solid(FilesTheme::glassSoft);
       }
-      return FillStyle::solid(FilesTheme::hoverFill);
+      return !enabled.evaluate() || !hover()
+                 ? FillStyle::solid(Colors::transparent)
+                 : FillStyle::solid(FilesTheme::hoverFill);
     }};
 
     auto button = ZStack{
@@ -87,7 +106,9 @@ struct IconToolButton {
                       .children = children(Icon{.name = icon, .size = iconSize, .color = iconColor})}
                       .size(FilesTheme::kToolbarBtn, FilesTheme::kToolbarBtn)
                       .fill(fill)
-                      .cornerRadius(7.f);
+                      .cornerRadius(8.f)
+                      .stroke(raised ? softSurfaceStroke() : StrokeStyle::none())
+                      .shadow(raised ? softControlShadow() : ShadowStyle::none());
     if (onTap) {
       auto handler = onTap;
       button = std::move(button).onTap([enabled, handler] {
@@ -97,6 +118,78 @@ struct IconToolButton {
       });
     }
     return button;
+  }
+};
+
+struct NavSegmentButton {
+  IconName icon = IconName::ChevronLeft;
+  Reactive::Bindable<bool> enabledState{true};
+  CornerRadius radius{};
+  std::function<void()> onTap;
+
+  Element body() const {
+    auto hover = useHover();
+    Reactive::Bindable<bool> const enabled = enabledState;
+    Reactive::Bindable<Color> const iconColor{[hover, enabled] {
+      if (!enabled.evaluate()) {
+        return FilesTheme::text3;
+      }
+      return hover() ? FilesTheme::text : FilesTheme::text2;
+    }};
+    Reactive::Bindable<FillStyle> const fill{[hover, enabled] {
+      return enabled.evaluate() && hover()
+                 ? FillStyle::solid(Color{1.f, 1.f, 1.f, 0.38f})
+                 : FillStyle::solid(Colors::transparent);
+    }};
+
+    auto button = ZStack{
+                      .horizontalAlignment = Alignment::Center,
+                      .verticalAlignment = Alignment::Center,
+                      .children = children(Icon{.name = icon, .size = 20.f, .color = iconColor})}
+                      .size(30.f, FilesTheme::kToolbarBtn)
+                      .fill(fill)
+                      .cornerRadius(radius);
+    if (onTap) {
+      auto handler = onTap;
+      button = std::move(button).onTap([enabled, handler] {
+        if (enabled.evaluate()) {
+          handler();
+        }
+      });
+    }
+    return button;
+  }
+};
+
+struct NavSegmentedControl {
+  Reactive::Bindable<bool> canGoBack{false};
+  Reactive::Bindable<bool> canGoForward{false};
+  std::function<void()> goBack;
+  std::function<void()> goForward;
+
+  Element body() const {
+    return HStack{
+               .spacing = 0.f,
+               .alignment = Alignment::Center,
+               .children = children(
+                   NavSegmentButton{
+                       .icon = IconName::ChevronLeft,
+                       .enabledState = canGoBack,
+                       .radius = CornerRadius{8.f, 0.f, 0.f, 8.f},
+                       .onTap = goBack,
+                   },
+                   Rectangle{}.width(1.f).height(16.f).fill(FilesTheme::line),
+                   NavSegmentButton{
+                       .icon = IconName::ChevronRight,
+                       .enabledState = canGoForward,
+                       .radius = CornerRadius{0.f, 8.f, 8.f, 0.f},
+                       .onTap = goForward,
+                   })}
+        .height(FilesTheme::kToolbarBtn)
+        .fill(FilesTheme::glassSoft)
+        .stroke(softSurfaceStroke())
+        .shadow(softControlShadow())
+        .cornerRadius(9.f);
   }
 };
 
@@ -124,20 +217,22 @@ struct SideItemRow {
       return activeBinding.evaluate() ? FilesTheme::accent : FilesTheme::text3;
     }};
 
-    auto row = HStack{
-                   .spacing = 8.f,
-                   .alignment = Alignment::Center,
-                   .children = children(
-                       Icon{.name = place.icon, .size = 16.f, .color = iconColor},
-                       Text{
-                           .text = place.label,
-                           .font = Font{.size = 12.5f, .weight = 500.f},
-                           .color = labelColor,
-                           .horizontalAlignment = HorizontalAlignment::Leading,
-                       })}
-               .padding(6.f, 10.f, 6.f, 10.f)
-               .fill(fill)
-               .cornerRadius(FilesTheme::kSideItemRadius);
+    auto row = HStack {
+        .spacing = 8.f,
+        .alignment = Alignment::Center,
+        .children = children(
+            Icon {.name = place.icon, .size = 18.f, .weight = 400.f, .color = iconColor},
+            Text {
+                .text = place.label,
+                .font = Font {.size = 14.f, .weight = 400.f},
+                .color = labelColor,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            }
+        )
+    }
+                   .padding(6.f, 10.f, 6.f, 10.f)
+                   .fill(fill)
+                   .cornerRadius(FilesTheme::kSideItemRadius);
     if (onTap) {
       auto handler = onTap;
       row = std::move(row).onTap([handler] { handler(); });
@@ -169,14 +264,14 @@ struct BreadcrumbCrumbView {
         [labelColor, crumbText] {
           return Text{
               .text = crumbText,
-              .font = Font{.size = 12.f, .weight = 600.f},
+              .font = Font{.size = 12.f, .weight = 400.f},
               .color = labelColor,
           };
         },
         [labelColor, crumbText] {
           return Text{
               .text = crumbText,
-              .font = Font{.size = 12.f, .weight = 500.f},
+              .font = Font{.size = 12.f, .weight = 400.f},
               .color = labelColor,
           };
         })});
@@ -255,6 +350,8 @@ struct BreadcrumbBar {
                .height(FilesTheme::kBreadcrumbHeight)
                .padding(0.f, FilesTheme::kBreadcrumbPadH, 0.f, FilesTheme::kBreadcrumbPadH)
                .fill(FilesTheme::glassSoft)
+               .stroke(softSurfaceStroke())
+               .shadow(softControlShadow())
                .cornerRadius(FilesTheme::kBreadcrumbRadius)
                .clipContent(true);
   }
@@ -284,6 +381,7 @@ struct FilesOptionsMenu {
     return IconToolButton{
         .icon = IconName::MoreHoriz,
         .iconSize = 20.f,
+        .raised = true,
         .onTap = openMenu,
     };
   }
@@ -315,20 +413,14 @@ Element filesTitlebar(Window* window,
   }
 
   row.push_back(HStack{
-      .spacing = 6.f,
+      .spacing = 8.f,
       .alignment = Alignment::Center,
       .children = children(
-          Element{IconToolButton{
-              .icon = IconName::ChevronLeft,
-              .iconSize = 20.f,
-              .enabledState = canGoBack,
-              .onTap = goBackNav,
-          }},
-          Element{IconToolButton{
-              .icon = IconName::ChevronRight,
-              .iconSize = 20.f,
-              .enabledState = canGoForward,
-              .onTap = goForwardNav,
+          Element{NavSegmentedControl{
+              .canGoBack = canGoBack,
+              .canGoForward = canGoForward,
+              .goBack = goBackNav,
+              .goForward = goForwardNav,
           }},
           Element{BreadcrumbBar{.crumbs = crumbs, .navigateToPath = navigateToPath}}
               .flex(1.f, 1.f, 0.f),
@@ -363,7 +455,6 @@ Element filesTitlebar(Window* window,
       .height(FilesTheme::kTitlebarHeight)
       .padding(FilesTheme::kTitlebarPadV, FilesTheme::kTitlebarPadH, FilesTheme::kTitlebarPadV,
                FilesTheme::kTitlebarPadH)
-      .fill(FilesTheme::chromeBg)
       .windowDragRegion();
 }
 
@@ -465,6 +556,7 @@ struct FilesAppRoot {
         .children = children(
             filesTitlebar(window, metrics, canGoBack, canGoForward, goBackNav, goForwardNav, crumbs,
                           navigateToPath, showHiddenFiles, toggleHiddenFiles),
+            Rectangle{}.height(1.f).fill(FilesTheme::line),
             HStack{
                 .spacing = 0.f,
                 .alignment = Alignment::Stretch,
@@ -492,11 +584,8 @@ struct FilesAppRoot {
                             Spacer{}.flex(1.f, 1.f))}
                         .width(FilesTheme::kSidebarWidth)
                         .padding(FilesTheme::kSidePad, FilesTheme::kSidePad, FilesTheme::kSidePad,
-                                 FilesTheme::kSidePad)
-                        .fill(FilesTheme::sideBg),
-                    Rectangle{}
-                        .width(1.f)
-                        .fill(FilesTheme::line),
+                                 FilesTheme::kSidePad),
+                    Rectangle{}.width(1.f).fill(FilesTheme::line),
                     ScrollView{
                         .axis = ScrollAxis::Vertical,
                         .scrollOffset = scrollOffset,
@@ -519,8 +608,7 @@ struct FilesAppRoot {
                                       .padding(FilesTheme::kContentPadV, FilesTheme::kContentPadH,
                                                FilesTheme::kContentPadV, FilesTheme::kContentPadH);
                                 }))}
-                        .flex(1.f, 1.f, 0.f)
-                        .fill(FilesTheme::windowBg))}
+                        .flex(1.f, 1.f, 0.f))}
                 .flex(1.f, 1.f, 0.f)),
     }
         .fill(FilesTheme::windowBg);
