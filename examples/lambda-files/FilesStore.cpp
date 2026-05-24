@@ -218,7 +218,7 @@ std::string normalizeDirectoryPath(std::filesystem::path path) {
   return path.string();
 }
 
-ListDirectoryResult listDirectory(std::filesystem::path const& directory) {
+ListDirectoryResult listDirectory(std::filesystem::path const& directory, bool includeHidden) {
   ListDirectoryResult result;
   std::error_code ec;
   if (!std::filesystem::exists(directory, ec) || ec) {
@@ -238,6 +238,9 @@ ListDirectoryResult listDirectory(std::filesystem::path const& directory) {
     }
     std::string const name = entry.path().filename().string();
     if (name == "." || name == "..") {
+      continue;
+    }
+    if (!includeHidden && !name.empty() && name.front() == '.') {
       continue;
     }
     std::error_code typeEc;

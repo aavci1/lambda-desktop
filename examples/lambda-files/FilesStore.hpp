@@ -59,7 +59,7 @@ struct NavigationHistory {
 
 std::filesystem::path homeDirectory();
 std::vector<SidebarPlace> const& sidebarPlaces();
-ListDirectoryResult listDirectory(std::filesystem::path const& directory);
+ListDirectoryResult listDirectory(std::filesystem::path const& directory, bool includeHidden = false);
 std::vector<BreadcrumbCrumb> breadcrumbCrumbs(std::filesystem::path const& path);
 std::optional<std::filesystem::path> parentDirectory(std::filesystem::path const& path);
 FileVisualKind visualKindForEntry(std::filesystem::path const& path, bool isDirectory);

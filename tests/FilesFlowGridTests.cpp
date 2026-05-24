@@ -24,6 +24,7 @@
 #include "FilesStore.hpp"
 #include "FilesTheme.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -173,6 +174,30 @@ TEST_CASE("FilesStore display names truncate on UTF-8 scalar boundaries") {
   invalid.push_back(static_cast<char>(0xC3));
   invalid += "name";
   CHECK(gridDisplayName(invalid) == std::string("bad\xEF\xBF\xBDname"));
+}
+
+TEST_CASE("FilesStore hides dotfiles unless requested") {
+  std::filesystem::path const sandbox =
+      std::filesystem::temp_directory_path() / "lambda-files-hidden-filter-test";
+  std::filesystem::remove_all(sandbox);
+  std::filesystem::create_directories(sandbox / "visible");
+  std::filesystem::create_directories(sandbox / ".hidden");
+
+  auto hasName = [](ListDirectoryResult const& result, std::string const& name) {
+    return std::any_of(result.entries.begin(), result.entries.end(), [&](FileEntry const& entry) {
+      return entry.name == name;
+    });
+  };
+
+  ListDirectoryResult const defaultListing = listDirectory(sandbox);
+  CHECK(hasName(defaultListing, "visible"));
+  CHECK_FALSE(hasName(defaultListing, ".hidden"));
+
+  ListDirectoryResult const hiddenListing = listDirectory(sandbox, true);
+  CHECK(hasName(hiddenListing, "visible"));
+  CHECK(hasName(hiddenListing, ".hidden"));
+
+  std::filesystem::remove_all(sandbox);
 }
 
 TEST_CASE("FilesFlowGrid measure matches layout formula") {
