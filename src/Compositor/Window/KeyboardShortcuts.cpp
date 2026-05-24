@@ -91,6 +91,9 @@ bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bo
     case WaylandServer::ShortcutAction::LaunchCommand:
       server->requestShellOpenCommandLauncher();
       return true;
+    case WaylandServer::ShortcutAction::Screenshot:
+      server->requestScreenshot();
+      return true;
     case WaylandServer::ShortcutAction::Terminate:
       std::raise(SIGTERM);
       return true;
@@ -100,4 +103,3 @@ bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bo
 }
 
 } // namespace flux::compositor::wm
-

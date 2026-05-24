@@ -18,6 +18,7 @@
 #include "Compositor/Presenter.hpp"
 #include "Compositor/PresentationLoop.hpp"
 #include "Compositor/Surface/SurfaceRenderer.hpp"
+#include "Compositor/Screenshot.hpp"
 #include "Compositor/WaylandServer.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
@@ -188,6 +189,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     }
 
     bool forceRender = true;
+    bool screenshotPending = false;
     bool skipNextVblank = true;
     bool wasVtForeground = device->isVtForeground();
     bool vtAcquireFramePending = false;
@@ -532,12 +534,46 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                      LoopInstrumentation::Clock::time_point renderStart,
                                      PresentationTiming presentationTiming,
                                      bool renderAheadFrame) {
+      if (screenshotPending && !flux::requestNextFrameCaptureForCanvas(canvas)) {
+        screenshotPending = false;
+        std::fprintf(stderr, "lambda-window-manager: screenshots are not supported by this presenter\n");
+      }
       renderFrameCtx.idleBlanked = idleBlanked;
       renderFrameCtx.vulkanDisplayTimingSupportLogged = displayTimingSupportLogged;
       renderFrameCtx.useVulkanPresentationCompletion = useVulkanPresentationCompletion;
       flux::compositor::renderCompositorFrame(renderFrameCtx, frameTime, renderStart, presentationTiming, renderAheadFrame);
       displayTimingSupportLogged = renderFrameCtx.vulkanDisplayTimingSupportLogged;
       useVulkanPresentationCompletion = renderFrameCtx.useVulkanPresentationCompletion;
+      if (screenshotPending) {
+        std::vector<std::uint8_t> pixels;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        if (flux::takeCapturedFrameForCanvas(canvas, pixels, width, height)) {
+          auto saved = saveScreenshotPng(pixels, width, height);
+          if (saved.error.empty()) {
+            std::fprintf(stderr, "lambda-window-manager: saved screenshot to %s\n",
+                         saved.path.string().c_str());
+          } else {
+            std::fprintf(stderr, "lambda-window-manager: failed to save screenshot to %s: %s\n",
+                         saved.path.string().c_str(),
+                         saved.error.c_str());
+          }
+        } else {
+          std::fprintf(stderr, "lambda-window-manager: screenshot capture did not produce a frame\n");
+        }
+        screenshotPending = false;
+      }
+    };
+    auto queueScreenshotIfRequested = [&] {
+      if (!wayland.consumeScreenshotRequest()) {
+        return;
+      }
+      screenshotPending = true;
+      forceRender = true;
+      skipNextVblank = true;
+      if (idleBlanked) {
+        idleBlanked = false;
+      }
     };
     auto noteContentSerialChange = [&] {
       std::uint64_t const contentSerial = wayland.contentSerial();
@@ -640,6 +676,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         diagnostics::recordWaylandDispatch(contentChanged);
       }
       wayland.dispatchShellIpc();
+      queueScreenshotIfRequested();
       maybeCrashHeartbeat("main-loop");
       bool const hadInputActivity = inputActivityThisLoop;
       if (hadInputActivity) {

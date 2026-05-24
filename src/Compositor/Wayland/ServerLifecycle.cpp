@@ -97,6 +97,9 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
       {.action = ShortcutAction::Maximize, .key = KEY_UP, .meta = true},
       {.action = ShortcutAction::Restore, .key = KEY_DOWN, .meta = true},
       {.action = ShortcutAction::LaunchCommand, .key = KEY_SPACE, .meta = true},
+      {.action = ShortcutAction::Screenshot, .key = KEY_3, .meta = true, .shift = true},
+      {.action = ShortcutAction::Screenshot, .key = KEY_SYSRQ},
+      {.action = ShortcutAction::Screenshot, .key = KEY_PRINT},
       {.action = ShortcutAction::Terminate, .key = KEY_BACKSPACE, .ctrl = true, .alt = true},
   };
 
@@ -206,6 +209,16 @@ void WaylandServer::Impl::dispatch() {
 
 void WaylandServer::Impl::flushClients() {
   if (display_) wl_display_flush_clients(display_);
+}
+
+void WaylandServer::Impl::requestScreenshot() {
+  screenshotRequested_ = true;
+}
+
+bool WaylandServer::Impl::consumeScreenshotRequest() {
+  bool const requested = screenshotRequested_;
+  screenshotRequested_ = false;
+  return requested;
 }
 
 void WaylandServer::Impl::setShortcutBindings(std::vector<ShortcutBinding> bindings) {

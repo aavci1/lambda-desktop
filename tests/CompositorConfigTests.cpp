@@ -383,6 +383,7 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
   file << "close_focused = \"shift+super+q\"\n";
   file << "cycle = \"alt+tab\"\n";
   file << "run = \"ctrl+space\"\n";
+  file << "screenshot = \"super+shift+3\"\n";
   file << "quit = \"ctrl+alt+delete\"\n";
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
@@ -417,6 +418,12 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
   CHECK(terminate->ctrl);
   CHECK(terminate->alt);
   CHECK(terminate->key == KEY_DELETE);
+
+  auto screenshot = findAction(flux::compositor::WaylandServer::ShortcutAction::Screenshot);
+  REQUIRE(screenshot != config.shortcutBindings.end());
+  CHECK(screenshot->meta);
+  CHECK(screenshot->shift);
+  CHECK(screenshot->key == KEY_3);
 
   std::filesystem::remove(path);
 }

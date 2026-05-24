@@ -139,6 +139,7 @@ enum class ShortcutAction : std::uint8_t {
   Maximize,
   Restore,
   LaunchCommand,
+  Screenshot,
   Terminate,
 };
 

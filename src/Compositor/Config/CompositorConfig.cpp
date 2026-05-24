@@ -186,6 +186,9 @@ std::vector<WaylandServer::ShortcutBinding> defaultShortcutBindings() {
       {.action = Action::Maximize, .key = KEY_UP, .meta = true},
       {.action = Action::Restore, .key = KEY_DOWN, .meta = true},
       {.action = Action::LaunchCommand, .key = KEY_SPACE, .meta = true},
+      {.action = Action::Screenshot, .key = KEY_3, .meta = true, .shift = true},
+      {.action = Action::Screenshot, .key = KEY_SYSRQ},
+      {.action = Action::Screenshot, .key = KEY_PRINT},
       {.action = Action::Terminate, .key = KEY_BACKSPACE, .ctrl = true, .alt = true},
   };
 }
@@ -193,6 +196,7 @@ std::vector<WaylandServer::ShortcutBinding> defaultShortcutBindings() {
 std::optional<std::uint32_t> keyCodeForName(std::string const& token) {
   static std::unordered_map<std::string, std::uint32_t> const keyCodes{
       {"a", KEY_A},
+      {"3", KEY_3},
       {"backspace", KEY_BACKSPACE},
       {"b", KEY_B},
       {"c", KEY_C},
@@ -215,10 +219,15 @@ std::optional<std::uint32_t> keyCodeForName(std::string const& token) {
       {"n", KEY_N},
       {"o", KEY_O},
       {"p", KEY_P},
+      {"print", KEY_PRINT},
+      {"printscreen", KEY_PRINT},
+      {"print_screen", KEY_PRINT},
+      {"prtsc", KEY_SYSRQ},
       {"q", KEY_Q},
       {"r", KEY_R},
       {"right", KEY_RIGHT},
       {"s", KEY_S},
+      {"screenshot", KEY_SYSRQ},
       {"space", KEY_SPACE},
       {"t", KEY_T},
       {"tab", KEY_TAB},
@@ -278,6 +287,7 @@ std::optional<WaylandServer::ShortcutAction> shortcutActionForKey(std::string co
       {"launch", Action::LaunchCommand},
       {"launch_command", Action::LaunchCommand},
       {"run", Action::LaunchCommand},
+      {"screenshot", Action::Screenshot},
       {"snap_left", Action::SnapLeft},
       {"snap_right", Action::SnapRight},
       {"terminate", Action::Terminate},
@@ -289,14 +299,10 @@ std::optional<WaylandServer::ShortcutAction> shortcutActionForKey(std::string co
 
 void replaceShortcutBinding(std::vector<WaylandServer::ShortcutBinding>& bindings,
                             WaylandServer::ShortcutBinding binding) {
-  auto found = std::find_if(bindings.begin(), bindings.end(), [&](auto const& existing) {
+  bindings.erase(std::remove_if(bindings.begin(), bindings.end(), [&](auto const& existing) {
     return existing.action == binding.action;
-  });
-  if (found == bindings.end()) {
-    bindings.push_back(binding);
-  } else {
-    *found = binding;
-  }
+  }), bindings.end());
+  bindings.push_back(binding);
 }
 
 void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char const* path) {

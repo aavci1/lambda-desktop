@@ -88,6 +88,8 @@ struct WaylandServer::Impl {
   void dispatchShellIpc();
   void flushClients();
   void requestShellOpenCommandLauncher();
+  void requestScreenshot();
+  [[nodiscard]] bool consumeScreenshotRequest();
   void notifyShellStateChanged();
   void launchShellApp(std::string const& appId);
   bool focusShellApp(std::string const& appId, std::uint32_t timeMs);
@@ -266,6 +268,7 @@ struct WaylandServer::Impl {
   bool ctrlDown_ = false;
   bool altDown_ = false;
   bool shiftDown_ = false;
+  bool screenshotRequested_ = false;
   std::vector<ShortcutBinding> shortcutBindings_;
   ChromeConfig chromeConfig_;
   ChromeConfig chromeBaseConfig_;

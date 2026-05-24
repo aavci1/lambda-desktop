@@ -1077,6 +1077,26 @@ public:
     return true;
   }
 
+  bool requestNextFrameCapture() {
+    frameCaptureRequested_ = true;
+    return true;
+  }
+
+  bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width, std::uint32_t& height) {
+    flushFrameCapture();
+    if (!capturedFrameAvailable_ || capturedFrameWidth_ == 0 || capturedFrameHeight_ == 0) {
+      return false;
+    }
+    out = std::move(capturedFrameBytes_);
+    width = capturedFrameWidth_;
+    height = capturedFrameHeight_;
+    capturedFrameBytes_.clear();
+    capturedFrameWidth_ = 0;
+    capturedFrameHeight_ = 0;
+    capturedFrameAvailable_ = false;
+    return true;
+  }
+
   std::uint32_t lastPresentId() const noexcept {
     return lastSubmittedPresentId_;
   }
@@ -1127,6 +1147,8 @@ public:
     }
     destroyDeferredTextures(true);
     destroyDeferredBuffers(true);
+    destroyBuffer(pendingScreenshotBuffer_);
+    destroyBuffer(pendingFrameCaptureBuffer_);
     destroyBuffer(pathBuffer_);
     destroyBuffer(rectBuffer_);
     destroyBuffer(quadBuffer_);
@@ -1440,6 +1462,7 @@ public:
     transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     writeDebugScreenshotIfRequested(commandBuffer, swapchainImages_[imageIndex]);
+    captureFrameIfRequested(commandBuffer, swapchainImages_[imageIndex]);
     transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
     vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
@@ -1471,6 +1494,7 @@ public:
     }
     resetFrameFenceIndex_ = kNoResetFrameFence;
     start = phaseStart();
+    flushFrameCapture();
     flushScreenshot();
     double const screenshotMs = phaseMs(start);
 
@@ -1644,6 +1668,7 @@ public:
           !externalCommandBuffer &&
           !targetSpec_.waitSemaphore &&
           !targetSpec_.signalSemaphore &&
+          !frameCaptureRequested_ &&
           !renderTargetFrameCacheDisabled() &&
           !resources().atlasDirty;
       std::uint64_t const requestedFrameSignature =
@@ -1699,6 +1724,11 @@ public:
       recordRenderTargetCommands(commandBuffer, targetSpec_.image, targetSpec_.view,
                                  targetSpec_.initialLayout, targetSpec_.finalLayout,
                                  traceResize ? &recordStats : nullptr);
+      if (frameCaptureRequested_) {
+        transition(commandBuffer, targetSpec_.image, targetSpec_.finalLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        captureFrameIfRequested(commandBuffer, targetSpec_.image);
+        transition(commandBuffer, targetSpec_.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, targetSpec_.finalLayout);
+      }
 
       if (externalCommandBuffer) {
         return;
@@ -1736,6 +1766,7 @@ public:
       if (!targetSpec_.signalSemaphore) {
         vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
       }
+      flushFrameCapture();
       if (canReuseCompletedFrame) {
         renderTargetFrameSignature_ = renderTargetFrameSignature();
         renderTargetFrameCacheValid_ = true;
@@ -4538,6 +4569,67 @@ private:
     debugScreenshotWritten_ = true;
   }
 
+  void captureFrameIfRequested(VkCommandBuffer commandBuffer, VkImage source) {
+    if (!frameCaptureRequested_) {
+      return;
+    }
+    frameCaptureRequested_ = false;
+    if (pendingFrameCaptureBuffer_.buffer) {
+      destroyBuffer(pendingFrameCaptureBuffer_);
+    }
+    Buffer staging{};
+    VkDeviceSize size = static_cast<VkDeviceSize>(framebufferWidth_) * framebufferHeight_ * 4u;
+    ensureBuffer(staging, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    VkBufferImageCopy copy{};
+    copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.imageSubresource.layerCount = 1;
+    copy.imageExtent = {static_cast<std::uint32_t>(framebufferWidth_),
+                        static_cast<std::uint32_t>(framebufferHeight_), 1};
+    vkCmdCopyImageToBuffer(commandBuffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.buffer, 1, &copy);
+    pendingFrameCaptureBuffer_ = staging;
+    pendingFrameCaptureSize_ = size;
+    pendingFrameCaptureWidth_ = static_cast<std::uint32_t>(framebufferWidth_);
+    pendingFrameCaptureHeight_ = static_cast<std::uint32_t>(framebufferHeight_);
+    pendingFrameCaptureBgra_ = surfaceFormat_.format == VK_FORMAT_B8G8R8A8_UNORM ||
+                               surfaceFormat_.format == VK_FORMAT_B8G8R8A8_SRGB;
+  }
+
+  void flushFrameCapture() {
+    if (!pendingFrameCaptureBuffer_.buffer || pendingFrameCaptureWidth_ == 0 || pendingFrameCaptureHeight_ == 0) {
+      return;
+    }
+    vkDeviceWaitIdle(device_);
+    void* mapped = nullptr;
+    vkCheck(vmaInvalidateAllocation(allocator_,
+                                    pendingFrameCaptureBuffer_.allocation,
+                                    0,
+                                    pendingFrameCaptureSize_),
+            "vmaInvalidateAllocation");
+    vkCheck(vmaMapMemory(allocator_, pendingFrameCaptureBuffer_.allocation, &mapped), "vmaMapMemory");
+    auto const* source = static_cast<std::uint8_t const*>(mapped);
+    capturedFrameBytes_.resize(static_cast<std::size_t>(pendingFrameCaptureWidth_) *
+                               pendingFrameCaptureHeight_ * 4u);
+    if (pendingFrameCaptureBgra_) {
+      std::memcpy(capturedFrameBytes_.data(), source, capturedFrameBytes_.size());
+    } else {
+      for (std::size_t i = 0; i < capturedFrameBytes_.size(); i += 4u) {
+        capturedFrameBytes_[i + 0u] = source[i + 2u];
+        capturedFrameBytes_[i + 1u] = source[i + 1u];
+        capturedFrameBytes_[i + 2u] = source[i + 0u];
+        capturedFrameBytes_[i + 3u] = source[i + 3u];
+      }
+    }
+    vmaUnmapMemory(allocator_, pendingFrameCaptureBuffer_.allocation);
+    destroyBuffer(pendingFrameCaptureBuffer_);
+    capturedFrameWidth_ = pendingFrameCaptureWidth_;
+    capturedFrameHeight_ = pendingFrameCaptureHeight_;
+    capturedFrameAvailable_ = true;
+    pendingFrameCaptureSize_ = 0;
+    pendingFrameCaptureWidth_ = 0;
+    pendingFrameCaptureHeight_ = 0;
+    pendingFrameCaptureBgra_ = true;
+  }
+
   void flushScreenshot() {
     if (!pendingScreenshotBuffer_.buffer || pendingScreenshotPath_.empty())
       return;
@@ -4655,6 +4747,16 @@ private:
   VkDeviceSize pendingScreenshotSize_ = 0;
   std::string pendingScreenshotPath_;
   bool debugScreenshotWritten_ = false;
+  Buffer pendingFrameCaptureBuffer_;
+  VkDeviceSize pendingFrameCaptureSize_ = 0;
+  std::uint32_t pendingFrameCaptureWidth_ = 0;
+  std::uint32_t pendingFrameCaptureHeight_ = 0;
+  bool pendingFrameCaptureBgra_ = true;
+  bool frameCaptureRequested_ = false;
+  bool capturedFrameAvailable_ = false;
+  std::vector<std::uint8_t> capturedFrameBytes_;
+  std::uint32_t capturedFrameWidth_ = 0;
+  std::uint32_t capturedFrameHeight_ = 0;
   bool swapchainDirty_ = true;
   bool presentFenceRuntimeDisabled_ = false;
   bool transparentSurface_ = false;
@@ -4727,6 +4829,19 @@ std::unique_ptr<Canvas> createVulkanRenderTargetCanvas(VulkanRenderTargetSpec co
 bool setVulkanRenderTargetSpecForCanvas(Canvas* canvas, VulkanRenderTargetSpec const& spec) {
   auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
   return vulkan && vulkan->setRenderTargetSpec(spec);
+}
+
+bool requestNextFrameCaptureForCanvas(Canvas* canvas) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan && vulkan->requestNextFrameCapture();
+}
+
+bool takeCapturedFrameForCanvas(Canvas* canvas,
+                                std::vector<std::uint8_t>& out,
+                                std::uint32_t& width,
+                                std::uint32_t& height) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan && vulkan->takeCapturedFrame(out, width, height);
 }
 
 bool beginRecordedOpsCaptureForCanvas(Canvas *canvas, VulkanFrameRecorder *target) {

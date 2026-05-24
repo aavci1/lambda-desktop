@@ -74,6 +74,10 @@ void WaylandServer::dispatchShellIpc() {
   impl_->dispatchShellIpc();
 }
 
+bool WaylandServer::consumeScreenshotRequest() {
+  return impl_->consumeScreenshotRequest();
+}
+
 void WaylandServer::notifyShellStateChanged() {
   impl_->notifyShellStateChanged();
 }

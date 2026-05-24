@@ -42,6 +42,7 @@ public:
 
   void dispatch();
   void dispatchShellIpc();
+  [[nodiscard]] bool consumeScreenshotRequest();
   void notifyShellStateChanged();
   void flushClients();
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);

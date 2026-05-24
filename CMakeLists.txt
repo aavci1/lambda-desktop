@@ -671,6 +671,7 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/PresentationLoop.cpp
     src/Compositor/Presenter.cpp
     src/Compositor/PresenterEnv.cpp
+    src/Compositor/Screenshot.cpp
     src/Compositor/Config/AppliedCompositorConfig.cpp
     src/Compositor/Config/WallpaperLoader.cpp
     src/Compositor/Config/WallpaperCache.cpp
