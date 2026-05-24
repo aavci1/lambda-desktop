@@ -525,9 +525,7 @@ void Window::render(Canvas& canvas) {
     d->overlayMgr_.rebuild(windowSize, *d->runtime_);
   }
   std::optional<Color> glassTint;
-  PlatformWindowCapabilities const capabilities = d->platform_->capabilities();
-  bool const compositorBackedGlass = capabilities.supportsBackgroundBlur;
-  if (d->glassConfig_.enabled && !compositorBackedGlass) {
+  if (d->glassConfig_.enabled) {
     Color tint = d->glassConfig_.tint;
     tint.a *= std::clamp(d->glassConfig_.tintOpacity, 0.f, 1.f);
     if (tint.a > 0.f) {
