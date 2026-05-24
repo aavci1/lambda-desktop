@@ -2,7 +2,10 @@
 
 #include "Compositor/Chrome/WindowChromeRenderer.hpp"
 #include "Detail/ResizeTrace.hpp"
+
+#if FLUX_VULKAN
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -86,15 +89,24 @@ void drawContentPiece(Canvas& canvas,
                    cornerRadiusForPiece(fullDestination, destination, outerCorners));
 }
 
+bool setCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
+#if FLUX_VULKAN
+  return setVulkanCanvasImagePremultipliedAlpha(canvas, enabled);
+#else
+  (void)canvas;
+  return enabled;
+#endif
+}
+
 void drawClientSurfacePiece(Canvas& canvas,
                             Image& image,
                             Rect const& source,
                             Rect const& destination,
                             Rect const& fullDestination,
                             CornerRadius const& outerCorners) {
-  bool const previousPremultiplied = setVulkanCanvasImagePremultipliedAlpha(&canvas, true);
+  bool const previousPremultiplied = setCanvasImagePremultipliedAlpha(&canvas, true);
   drawContentPiece(canvas, image, source, destination, fullDestination, outerCorners);
-  setVulkanCanvasImagePremultipliedAlpha(&canvas, previousPremultiplied);
+  setCanvasImagePremultipliedAlpha(&canvas, previousPremultiplied);
 }
 
 void drawSurfaceBackgroundBlur(Canvas& canvas,

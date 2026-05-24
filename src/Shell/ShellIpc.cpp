@@ -140,6 +140,9 @@ std::optional<ShellMessage> parseLine(std::string_view line) {
 
   ShellMessage message{};
   message.kind = kindForTypeField(type);
+  if (message.kind == ShellMessageKind::Unknown) {
+    return std::nullopt;
+  }
   switch (message.kind) {
   case ShellMessageKind::ShellHello:
     message.hello.protocolVersion = static_cast<int>(jsonUintField(line, "protocolVersion"));
