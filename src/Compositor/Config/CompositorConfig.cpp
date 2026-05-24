@@ -538,7 +538,7 @@ border_line_color = "#ffffff9e"
 
 [chrome.glass]
 blur_radius = 46
-base_color = "#ffffff2e"
+base_color = "#ffffff80"
 tint_color = "#dbf5ff8f"
 border_color = "#ffffff9e"
 opacity = 1.0

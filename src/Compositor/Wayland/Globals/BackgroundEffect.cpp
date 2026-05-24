@@ -45,6 +45,8 @@ void backgroundEffectSurfaceSetBlurRegion(wl_client*, wl_resource* resource, wl_
 
   effect->surface->pendingBackgroundBlurRects = copyRegionRects(regionResource);
   effect->surface->backgroundBlurPending = true;
+  effect->surface->pendingBackgroundEffectState = {};
+  effect->surface->backgroundEffectStatePending = true;
 }
 
 Color colorFromRgba(std::uint32_t rgba) {
@@ -68,6 +70,7 @@ void backgroundEffectSurfaceSetBlurRadius(wl_client*, wl_resource* resource, std
   }
   effect->surface->pendingBackgroundEffectState.blurRadius =
       std::max(0.f, static_cast<float>(wl_fixed_to_double(radius)));
+  effect->surface->pendingBackgroundEffectState.usesDefaultMaterial = false;
   effect->surface->backgroundEffectStatePending = true;
 }
 
@@ -84,6 +87,7 @@ void backgroundEffectSurfaceSetTint(wl_client*, wl_resource* resource, std::uint
     effect->surface->pendingBackgroundEffectState = effect->surface->backgroundEffectState;
   }
   effect->surface->pendingBackgroundEffectState.tint = colorFromRgba(tint);
+  effect->surface->pendingBackgroundEffectState.usesDefaultMaterial = false;
   effect->surface->backgroundEffectStatePending = true;
 }
 
@@ -100,6 +104,7 @@ void backgroundEffectSurfaceSetBaseColor(wl_client*, wl_resource* resource, std:
     effect->surface->pendingBackgroundEffectState = effect->surface->backgroundEffectState;
   }
   effect->surface->pendingBackgroundEffectState.baseColor = colorFromRgba(baseColor);
+  effect->surface->pendingBackgroundEffectState.usesDefaultMaterial = false;
   effect->surface->backgroundEffectStatePending = true;
 }
 
@@ -116,6 +121,7 @@ void backgroundEffectSurfaceSetBorder(wl_client*, wl_resource* resource, std::ui
     effect->surface->pendingBackgroundEffectState = effect->surface->backgroundEffectState;
   }
   effect->surface->pendingBackgroundEffectState.borderColor = colorFromRgba(border);
+  effect->surface->pendingBackgroundEffectState.usesDefaultMaterial = false;
   effect->surface->backgroundEffectStatePending = true;
 }
 
@@ -137,6 +143,7 @@ void backgroundEffectSurfaceSetCornerRadii(wl_client*,
     effect->surface->pendingBackgroundEffectState = effect->surface->backgroundEffectState;
   }
   effect->surface->pendingBackgroundEffectState.cornerRadiusSet = true;
+  effect->surface->pendingBackgroundEffectState.usesDefaultMaterial = false;
   effect->surface->pendingBackgroundEffectState.cornerRadius = CornerRadius{
       std::max(0.f, static_cast<float>(wl_fixed_to_double(topLeft))),
       std::max(0.f, static_cast<float>(wl_fixed_to_double(topRight))),

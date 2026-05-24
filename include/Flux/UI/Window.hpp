@@ -131,11 +131,13 @@ struct WindowBackground {
   WindowBackgroundKind kind = WindowBackgroundKind::Fill;
   FillStyle fill = FillStyle::solid(Color::windowBackground());
   GlassEffectOptions glass{};
+  bool glassUsesDefaultMaterial = false;
 
   static WindowBackground transparent();
   static WindowBackground solid(Color color);
   static WindowBackground gradient(FillStyle fill);
-  static WindowBackground glassEffect(GlassEffectOptions options = {});
+  static WindowBackground glassEffect();
+  static WindowBackground glassEffect(GlassEffectOptions options);
 };
 
 struct WindowConfig {

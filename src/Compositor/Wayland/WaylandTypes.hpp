@@ -16,6 +16,7 @@ struct SurfaceBackgroundEffectSnapshot {
   Color baseColor{0.f, 0.f, 0.f, 0.f};
   Color tint{0.f, 0.f, 0.f, 0.f};
   Color borderColor{0.f, 0.f, 0.f, 0.f};
+  bool usesDefaultMaterial = true;
   bool cornerRadiusSet = false;
   CornerRadius cornerRadius{};
 };

@@ -95,6 +95,7 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashColor(hash, surface.backgroundEffect.baseColor);
   hashColor(hash, surface.backgroundEffect.tint);
   hashColor(hash, surface.backgroundEffect.borderColor);
+  hashValue(hash, surface.backgroundEffect.usesDefaultMaterial);
   hashValue(hash, surface.backgroundEffect.cornerRadiusSet);
   hashCornerRadius(hash, surface.backgroundEffect.cornerRadius);
   hashValue(hash, surface.title.size());

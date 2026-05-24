@@ -3,6 +3,7 @@
 #include "Compositor/Chrome/ChromeMetrics.hpp"
 
 #include <Flux/Graphics/Font.hpp>
+#include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 
 #include <algorithm>
@@ -36,6 +37,11 @@ bool backgroundEffectCoversContent(CommittedSurfaceSnapshot const& surface) {
   return std::ranges::any_of(surface.backgroundBlurRects, [&](CommittedSurfaceSnapshot::RegionRect const& rect) {
     return rect.x == 0 && rect.y == 0 && rect.width >= surface.width && rect.height >= surface.height;
   });
+}
+
+bool materialCoversTitlebar(CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
+  return backgroundEffectCoversContent(surface) ||
+         (chrome.windowGlassEnabled && surface.defaultGlassEligible);
 }
 
 void drawControls(Canvas& canvas,
@@ -128,14 +134,14 @@ void drawDefaultChrome(Canvas& canvas,
   Rect const titleRect = Rect::sharp(windowX, titleTop, windowWidth, titleBarHeight);
   CornerRadius const frameRadius = chrome.windowCornerRadius;
   CornerRadius const titleRadius{frameRadius.topLeft, frameRadius.topRight, 0.f, 0.f};
-  bool const titlebarCoveredBySurfaceMaterial = backgroundEffectCoversContent(surface);
+  bool const titlebarCoveredBySurfaceMaterial = materialCoversTitlebar(surface, chrome);
   if (!titlebarCoveredBySurfaceMaterial) {
-    bool const explicitEffect = !surface.backgroundBlurRects.empty();
-    float const blurRadius = explicitEffect ? surface.backgroundEffect.blurRadius : chrome.glass.blurRadius;
+    bool const customEffect = !surface.backgroundBlurRects.empty() && !surface.backgroundEffect.usesDefaultMaterial;
+    float const blurRadius = customEffect ? surface.backgroundEffect.blurRadius : chrome.glass.blurRadius;
     Color const baseColor =
-        explicitEffect ? surface.backgroundEffect.baseColor : withOpacity(chrome.glass.baseColor, chrome.glass.opacity);
+        customEffect ? surface.backgroundEffect.baseColor : withOpacity(chrome.glass.baseColor, chrome.glass.opacity);
     Color const titleTint =
-        explicitEffect && surface.backgroundEffect.tint.a > 0.f
+        customEffect && surface.backgroundEffect.tint.a > 0.f
             ? surface.backgroundEffect.tint
             : (chrome.windowGlassEnabled
                    ? withOpacity(chrome.glass.tintColor, chrome.glass.opacity)
@@ -221,11 +227,33 @@ void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
   float const windowHeight = static_cast<float>(surface.height);
   float const titleBarHeight = cutoutChrome ? 0.f : static_cast<float>(surface.titleBarHeight);
   Rect const frameRect = Rect::sharp(windowX, windowY - titleBarHeight, windowWidth, windowHeight + titleBarHeight);
-  canvas.drawRect(frameRect,
-                  chrome.windowCornerRadius,
-                  FillStyle::solid(Colors::transparent),
-                  StrokeStyle::none(),
-                  windowShadow(chrome, surface.focused));
+  ShadowStyle const shadow = windowShadow(chrome, surface.focused);
+  if (shadow.isNone()) return;
+
+  int const steps = std::clamp(static_cast<int>(std::ceil(shadow.radius / 3.f)), 3, 8);
+  for (int i = steps; i >= 1; --i) {
+    float const t = static_cast<float>(i) / static_cast<float>(steps);
+    float const spread = shadow.radius * t;
+    float const alpha = shadow.color.a * (1.f - t * 0.72f) / static_cast<float>(steps);
+    Color color = shadow.color;
+    color.a = alpha;
+    if (color.a <= 0.f) continue;
+
+    Rect const layerRect = Rect::sharp(frameRect.x + shadow.offset.x - spread,
+                                      frameRect.y + shadow.offset.y - spread,
+                                      frameRect.width + spread * 2.f,
+                                      frameRect.height + spread * 2.f);
+    CornerRadius const layerRadius{chrome.windowCornerRadius.topLeft + spread,
+                                   chrome.windowCornerRadius.topRight + spread,
+                                   chrome.windowCornerRadius.bottomRight + spread,
+                                   chrome.windowCornerRadius.bottomLeft + spread};
+    Path ring;
+    ring.rect(layerRect, layerRadius);
+    ring.rect(frameRect, chrome.windowCornerRadius);
+    FillStyle fill = FillStyle::solid(color);
+    fill.fillRule = FillRule::EvenOdd;
+    canvas.drawPath(ring, fill, StrokeStyle::none(), ShadowStyle::none());
+  }
 }
 
 void drawWindowFrameBorder(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {

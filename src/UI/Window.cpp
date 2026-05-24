@@ -137,11 +137,20 @@ WindowBackground WindowBackground::gradient(FillStyle fill) {
   return background;
 }
 
+WindowBackground WindowBackground::glassEffect() {
+  WindowBackground background;
+  background.kind = WindowBackgroundKind::Glass;
+  background.fill = FillStyle::none();
+  background.glassUsesDefaultMaterial = true;
+  return background;
+}
+
 WindowBackground WindowBackground::glassEffect(GlassEffectOptions options) {
   WindowBackground background;
   background.kind = WindowBackgroundKind::Glass;
   background.fill = FillStyle::none();
   background.glass = options;
+  background.glassUsesDefaultMaterial = false;
   return background;
 }
 

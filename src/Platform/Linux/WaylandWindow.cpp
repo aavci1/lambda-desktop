@@ -1958,16 +1958,22 @@ private:
       backgroundEffect_ = ext_background_effect_manager_v1_get_background_effect(shared_->backgroundEffectManager,
                                                                                  surface_);
     }
+    wl_region* region = wl_compositor_create_region(shared_->compositor);
+    wl_region_add(region, 0, 0, width, height);
+    ext_background_effect_surface_v1_set_blur_region(backgroundEffect_, region);
+    wl_region_destroy(region);
     if (wantsGlass) {
-      float const opacity = std::clamp(background_.glass.opacity, 0.f, 1.f);
-      Color baseColor = background_.glass.baseColor;
-      baseColor.a *= opacity;
-      Color tint = background_.glass.tintColor;
-      tint.a *= opacity;
-      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(background_.glass.blurRadius));
-      ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(baseColor));
-      ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
-      ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(background_.glass.borderColor));
+      if (!background_.glassUsesDefaultMaterial) {
+        float const opacity = std::clamp(background_.glass.opacity, 0.f, 1.f);
+        Color baseColor = background_.glass.baseColor;
+        baseColor.a *= opacity;
+        Color tint = background_.glass.tintColor;
+        tint.a *= opacity;
+        ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(background_.glass.blurRadius));
+        ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(baseColor));
+        ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
+        ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(background_.glass.borderColor));
+      }
     } else if (chrome.style != LayerShellChromeStyle::None) {
       float const opacity = std::clamp(chrome.glass.opacity, 0.f, 1.f);
       Color baseColor = chrome.glass.baseColor;
@@ -1993,10 +1999,6 @@ private:
       ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
       ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
     }
-    wl_region* region = wl_compositor_create_region(shared_->compositor);
-    wl_region_add(region, 0, 0, width, height);
-    ext_background_effect_surface_v1_set_blur_region(backgroundEffect_, region);
-    wl_region_destroy(region);
   }
 
   bool wantsTransparentSurface() const {

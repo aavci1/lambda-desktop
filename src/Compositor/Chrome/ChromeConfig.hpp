@@ -9,7 +9,7 @@ namespace flux::compositor {
 
 struct GlassEffectConfig {
   float blurRadius = 46.f;
-  Color baseColor = Color{1.f, 1.f, 1.f, 0.18f};
+  Color baseColor = Color{1.f, 1.f, 1.f, 0.5f};
   Color tintColor = Color{0.86f, 0.96f, 1.f, 0.56f};
   Color borderColor = Color{1.f, 1.f, 1.f, 0.62f};
   float opacity = 1.f;
