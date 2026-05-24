@@ -852,8 +852,7 @@ struct SettingsAppRoot {
                                    })}.padding(SettingsTheme::kMainPadV, SettingsTheme::kMainPadH,
                                                SettingsTheme::kMainPadV, SettingsTheme::kMainPadH))}
                                .flex(1.f, 1.f, 0.f))}
-                       .flex(1.f, 1.f, 0.f))}
-      .fill(SettingsTheme::windowBg);
+                       .flex(1.f, 1.f, 0.f))};
   }
 };
 

@@ -18,7 +18,6 @@ struct SettingsTheme {
   static constexpr flux::Color selectFill = flux::Color{0.16f, 0.50f, 1.f, 0.14f};
   static constexpr flux::Color selectBorder = flux::Color{0.16f, 0.50f, 1.f, 0.35f};
   static constexpr flux::Color hoverFill = flux::Color{0.f, 0.f, 0.f, 0.04f};
-  static constexpr flux::Color windowBg = flux::Color{0.88f, 0.96f, 1.f, 0.10f};
   static constexpr flux::Color swatchLightTop = flux::Color::hex(0xFFFFFF);
   static constexpr flux::Color swatchLightBottom = flux::Color::hex(0xDEE5F2);
   static constexpr flux::Color swatchDarkTop = flux::Color::hex(0x1D2440);

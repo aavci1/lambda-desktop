@@ -113,7 +113,8 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
                                CommittedSurfaceSnapshot const& surface,
                                ChromeConfig const& chrome,
                                Rect const& fullContentRect,
-                               CornerRadius const& contentCorners) {
+                               CornerRadius const& contentCorners,
+                               CornerRadius const& windowCorners) {
   bool const explicitEffect = !surface.backgroundBlurRects.empty();
   float const blurRadius = explicitEffect ? surface.backgroundEffect.blurRadius : chrome.glassBlurRadius;
   if (blurRadius <= 0.f) return;
@@ -147,6 +148,24 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
     CornerRadius const corners = sameRect(rect, fullContentRect)
                                      ? effectCorners
                                      : cornerRadiusForPiece(fullContentRect, rect, effectCorners);
+    if (explicitEffect && surface.serverSideDecorated && surface.titleBarHeight > 0 && sameRect(rect, fullContentRect)) {
+      Rect const frameRect = Rect::sharp(static_cast<float>(surface.x),
+                                        static_cast<float>(surface.y - surface.titleBarHeight),
+                                        static_cast<float>(surface.width),
+                                        static_cast<float>(surface.height + surface.titleBarHeight));
+      CornerRadius const frameCorners = surface.backgroundEffect.cornerRadiusSet
+                                            ? surface.backgroundEffect.cornerRadius
+                                            : windowCorners;
+      canvas.drawBackdropBlur(frameRect, blurRadius, Colors::transparent, frameCorners);
+      if (surface.backgroundEffect.tint.a > 0.f) {
+        canvas.drawRect(frameRect,
+                        frameCorners,
+                        FillStyle::solid(surface.backgroundEffect.tint),
+                        StrokeStyle::none(),
+                        ShadowStyle::none());
+      }
+      continue;
+    }
     canvas.drawBackdropBlur(rect, blurRadius, Colors::transparent, corners);
     if (explicitEffect && surface.backgroundEffect.tint.a > 0.f) {
       canvas.drawRect(rect,
@@ -157,7 +176,7 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
     } else if (!explicitEffect && chrome.windowGlassEnabled && surface.defaultGlassEligible) {
       canvas.drawRect(rect,
                       corners,
-                      FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity * 0.48f)),
+                      FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity)),
                       StrokeStyle::none(),
                       ShadowStyle::none());
     }
@@ -167,8 +186,25 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
 void drawSurfaceMaterialBorder(Canvas& canvas,
                                CommittedSurfaceSnapshot const& surface,
                                Rect const& fullContentRect,
-                               CornerRadius const& contentCorners) {
+                               CornerRadius const& contentCorners,
+                               CornerRadius const& windowCorners) {
   if (surface.backgroundBlurRects.empty() || surface.backgroundEffect.borderColor.a <= 0.f) return;
+
+  if (surface.serverSideDecorated && surface.titleBarHeight > 0) {
+    Rect const frameRect = Rect::sharp(static_cast<float>(surface.x),
+                                      static_cast<float>(surface.y - surface.titleBarHeight),
+                                      static_cast<float>(surface.width),
+                                      static_cast<float>(surface.height + surface.titleBarHeight));
+    CornerRadius const frameCorners = surface.backgroundEffect.cornerRadiusSet
+                                          ? surface.backgroundEffect.cornerRadius
+                                          : windowCorners;
+    canvas.drawRect(frameRect,
+                    frameCorners,
+                    FillStyle::none(),
+                    StrokeStyle::solid(surface.backgroundEffect.borderColor, 1.f),
+                    ShadowStyle::none());
+    return;
+  }
 
   std::span<CommittedSurfaceSnapshot::RegionRect const> regions;
   regions = std::span<CommittedSurfaceSnapshot::RegionRect const>(surface.backgroundBlurRects);
@@ -284,7 +320,8 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                   ? static_cast<float>(surface.destinationHeight)
                                   : windowHeight;
   Rect const fullContentRect = Rect::sharp(windowX, windowY, windowWidth, windowHeight);
-  drawSurfaceBackgroundBlur(canvas, surface, chrome, fullContentRect, contentCorners);
+  drawWindowFrameShadow(canvas, surface, chrome);
+  drawSurfaceBackgroundBlur(canvas, surface, chrome, fullContentRect, contentCorners, windowCorners);
   if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   canvas.save();
   canvas.clipRect(fullContentRect);
@@ -349,7 +386,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
     }
   }
   canvas.restore();
-  drawSurfaceMaterialBorder(canvas, surface, fullContentRect, contentCorners);
+  drawSurfaceMaterialBorder(canvas, surface, fullContentRect, contentCorners, windowCorners);
   if (cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   drawWindowFrameBorder(canvas, surface, chrome);
   canvas.restore();

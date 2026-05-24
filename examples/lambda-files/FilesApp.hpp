@@ -549,7 +549,7 @@ struct FilesAppRoot {
         .selectedPath = selectedPath,
         .activateEntry = activateEntry,
     };
-    auto root = VStack{
+    Element root = VStack{
         .spacing = 0.f,
         .alignment = Alignment::Stretch,
         .children = children(
@@ -609,8 +609,7 @@ struct FilesAppRoot {
                                 }))}
                         .flex(1.f, 1.f, 0.f))}
                 .flex(1.f, 1.f, 0.f)),
-    }
-        .fill(FilesTheme::windowBg);
+    };
 
     root = std::move(root).onKeyDown(
         [goBackNav, goForwardNav, goUpNav, selectedPath, entries, activateEntry](

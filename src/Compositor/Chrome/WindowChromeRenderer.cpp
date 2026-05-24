@@ -36,6 +36,12 @@ bool usesCutoutChrome(CommittedSurfaceSnapshot const& surface) {
   return surface.serverSideDecorated && surface.cutoutsBound && !surface.cutoutsRejected;
 }
 
+bool backgroundEffectCoversContent(CommittedSurfaceSnapshot const& surface) {
+  return std::ranges::any_of(surface.backgroundBlurRects, [&](CommittedSurfaceSnapshot::RegionRect const& rect) {
+    return rect.x == 0 && rect.y == 0 && rect.width >= surface.width && rect.height >= surface.height;
+  });
+}
+
 void drawControls(Canvas& canvas,
                   CommittedSurfaceSnapshot const& surface,
                   ChromeConfig const& chrome,
@@ -119,28 +125,31 @@ void drawDefaultChrome(Canvas& canvas,
   float const windowX = static_cast<float>(surface.x);
   float const windowY = static_cast<float>(surface.y);
   float const windowWidth = static_cast<float>(surface.width);
-  float const windowHeight = static_cast<float>(surface.height);
   float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
   if (titleBarHeight <= 0.f) return;
 
   float const titleTop = windowY - titleBarHeight;
-  Rect const frameRect = Rect::sharp(windowX, titleTop, windowWidth, windowHeight + titleBarHeight);
+  Rect const titleRect = Rect::sharp(windowX, titleTop, windowWidth, titleBarHeight);
   CornerRadius const frameRadius = chrome.windowCornerRadius;
-  Color const frameTint = chrome.windowGlassEnabled
-                              ? withOpacity(chrome.glassTint, chrome.windowGlassOpacity)
-                              : Color{chrome.glassTint.r, chrome.glassTint.g, chrome.glassTint.b, 1.f};
-  if (chrome.windowGlassEnabled && chrome.glassBlurRadius > 0.f) {
-    Rect const titleRect = Rect::sharp(windowX, titleTop, windowWidth, titleBarHeight);
-    CornerRadius const titleRadius{frameRadius.topLeft, frameRadius.topRight, 0.f, 0.f};
-    canvas.drawBackdropBlur(titleRect, chrome.glassBlurRadius, Colors::transparent, titleRadius);
+  CornerRadius const titleRadius{frameRadius.topLeft, frameRadius.topRight, 0.f, 0.f};
+  bool const titlebarCoveredBySurfaceMaterial = backgroundEffectCoversContent(surface);
+  if (!titlebarCoveredBySurfaceMaterial) {
+    bool const explicitEffect = !surface.backgroundBlurRects.empty();
+    float const blurRadius = explicitEffect ? surface.backgroundEffect.blurRadius : chrome.glassBlurRadius;
+    Color const titleTint =
+        explicitEffect && surface.backgroundEffect.tint.a > 0.f
+            ? surface.backgroundEffect.tint
+            : (chrome.windowGlassEnabled
+                   ? withOpacity(chrome.glassTint, chrome.windowGlassOpacity)
+                   : Color{chrome.glassTint.r, chrome.glassTint.g, chrome.glassTint.b, 1.f});
+    if (chrome.windowGlassEnabled && blurRadius > 0.f) {
+      canvas.drawBackdropBlur(titleRect, blurRadius, Colors::transparent, titleRadius);
+    }
+    canvas.drawRect(titleRect, titleRadius, FillStyle::solid(titleTint), StrokeStyle::none(), ShadowStyle::none());
   }
-  canvas.drawRect(frameRect,
-                  frameRadius,
-                  FillStyle::solid(frameTint),
-                  StrokeStyle::none(),
-                  windowShadow(chrome, surface.focused));
 
-  canvas.drawLine({windowX, windowY}, {windowX + windowWidth, windowY},
+  float const separatorY = windowY - 0.5f;
+  canvas.drawLine({windowX, separatorY}, {windowX + windowWidth, separatorY},
                   StrokeStyle::solid(chrome.borderLineColor, 0.5f));
   float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
   float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
@@ -201,6 +210,23 @@ void drawWindowChrome(Canvas& canvas,
   drawDefaultChrome(canvas, textSystem, surface, chrome);
 }
 
+void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
+  if (!surface.serverSideDecorated) return;
+
+  bool const cutoutChrome = usesCutoutChrome(surface);
+  float const windowX = static_cast<float>(surface.x);
+  float const windowY = static_cast<float>(surface.y);
+  float const windowWidth = static_cast<float>(surface.width);
+  float const windowHeight = static_cast<float>(surface.height);
+  float const titleBarHeight = cutoutChrome ? 0.f : static_cast<float>(surface.titleBarHeight);
+  Rect const frameRect = Rect::sharp(windowX, windowY - titleBarHeight, windowWidth, windowHeight + titleBarHeight);
+  canvas.drawRect(frameRect,
+                  chrome.windowCornerRadius,
+                  FillStyle::solid(Colors::transparent),
+                  StrokeStyle::none(),
+                  windowShadow(chrome, surface.focused));
+}
+
 void drawWindowFrameBorder(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
   if (!surface.serverSideDecorated) return;
   StrokeStyle const border = visibleStroke(chrome.windowBorderColor, chrome.windowBorderWidth);
@@ -237,7 +263,7 @@ void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview, ChromeC
   }
   canvas.drawRect(previewRect,
                   radius,
-                  FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity * 0.48f)),
+                  FillStyle::solid(withOpacity(chrome.glassTint, chrome.windowGlassOpacity)),
                   StrokeStyle::solid(glassBorderColor(), 1.f),
                   ShadowStyle::none());
 }
