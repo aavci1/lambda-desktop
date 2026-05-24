@@ -11,6 +11,7 @@ namespace flux {
 class Canvas;
 class OverlayManager;
 class Runtime;
+struct WindowBackground;
 namespace scenegraph {
 class SceneGraph;
 class SceneRenderer;
@@ -18,8 +19,8 @@ class SceneRenderer;
 
 void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
                        std::optional<scenegraph::SceneGraph> const& sceneGraph,
-                       Size windowSize, OverlayManager const& overlays, Runtime const* runtime, Color clearColor,
-                       std::optional<Color> glassTint,
+                       Size windowSize, OverlayManager const& overlays, Runtime const* runtime,
+                       WindowBackground const& background,
                        TextCacheRingBuffer& textCacheRing);
 
 } // namespace flux

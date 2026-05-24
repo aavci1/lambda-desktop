@@ -615,8 +615,8 @@ class WaylandWindow final : public platform::Window {
 public:
   explicit WaylandWindow(WindowConfig const& config)
       : handle_(gNextHandle.fetch_add(1)), size_(config.size), title_(config.title),
-        fullscreen_(config.fullscreen), decorationMode_(config.decorationMode),
-        glassConfig_(config.glass), layerShellConfig_(config.layerShell) {
+        fullscreen_(config.fullscreen), titlebarMode_(config.titlebar),
+        layerShellConfig_(config.layerShell) {
     if (pipe(wakePipe_) != 0) {
       throw std::runtime_error("Failed to create Wayland wake pipe");
     }
@@ -711,7 +711,7 @@ public:
     auto canvas = createVulkanCanvas(surface,
                                      handle_,
                                      Application::instance().textSystem(),
-                                     {.transparentSurface = glassConfig_.enabled});
+                                     {.transparentSurface = wantsTransparentSurface()});
     setVulkanCanvasResizeBoundsHint(canvas.get(), configureBoundsWidth_, configureBoundsHeight_);
     canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
     canvas->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));
@@ -791,29 +791,38 @@ public:
     if (toplevel_) xdg_toplevel_set_title(toplevel_, title_.c_str());
   }
 
-  void setDecorationMode(WindowDecorationMode mode) override {
-    if (decorationMode_ == mode) {
+  void setTitlebarMode(WindowTitlebarMode mode) override {
+    if (titlebarMode_ == mode) {
       return;
     }
-    decorationMode_ = mode;
+    titlebarMode_ = mode;
     configureDecorationProtocol();
     if (surface_) wl_surface_commit(surface_);
     if (display_) wl_display_flush(display_);
   }
 
-  WindowDecorationMode decorationMode() const override { return decorationMode_; }
+  WindowTitlebarMode titlebarMode() const override { return titlebarMode_; }
+
+  void setBackground(WindowBackground const& background) override {
+    background_ = background;
+    if (canvas_) {
+      setVulkanCanvasTransparentSurface(canvas_, wantsTransparentSurface());
+    }
+    updateBackgroundEffectRegion();
+    commitSurface();
+  }
 
   WindowChromeMetrics chromeMetrics() const override {
     WindowChromeMetrics metrics{};
-    metrics.decorationMode = decorationMode_;
+    metrics.titlebarMode = titlebarMode_;
     metrics.active = true;
-    if (decorationMode_ == WindowDecorationMode::System) {
+    if (titlebarMode_ == WindowTitlebarMode::System) {
       return metrics;
     }
 
     metrics.titlebarHeight = kClientTitlebarHeight;
-    if (decorationMode_ == WindowDecorationMode::IntegratedTitlebar && serverSideDecorationsActive_) {
-      metrics.nativeControlsVisible = true;
+    if (titlebarMode_ == WindowTitlebarMode::Integrated && serverSideDecorationsActive_) {
+      metrics.systemControlsVisible = true;
       if (receivedCutout_ && lastCutoutWidth_ > 0 && lastCutoutHeight_ > 0) {
         metrics.reservedRegions.push_back(Rect::sharp(static_cast<float>(lastCutoutX_),
                                                        static_cast<float>(lastCutoutY_),
@@ -1894,12 +1903,12 @@ private:
   void configureDecorationProtocol() {
     serverSideDecorationsActive_ = false;
     receivedCutout_ = false;
-    if (cutouts_ && decorationMode_ != WindowDecorationMode::IntegratedTitlebar) {
+    if (cutouts_ && titlebarMode_ != WindowTitlebarMode::Integrated) {
       xx_cutouts_v1_destroy(cutouts_);
       cutouts_ = nullptr;
     }
 
-    if (decorationMode_ == WindowDecorationMode::ClientSide) {
+    if (titlebarMode_ == WindowTitlebarMode::Client || titlebarMode_ == WindowTitlebarMode::None) {
       if (decoration_) {
         zxdg_toplevel_decoration_v1_set_mode(decoration_, ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
       }
@@ -1907,7 +1916,7 @@ private:
     }
 
     requestServerSideDecorations();
-    if (decorationMode_ == WindowDecorationMode::IntegratedTitlebar) {
+    if (titlebarMode_ == WindowTitlebarMode::Integrated) {
       requestCutouts();
     }
   }
@@ -1923,11 +1932,23 @@ private:
 
   void updateBackgroundEffectRegion() {
     LayerShellChromeOptions const& chrome = layerShellConfig_.chrome;
-    bool const wantsBlur = glassConfig_.enabled ||
+    bool const wantsGlass = background_.kind == WindowBackgroundKind::Glass;
+    bool const wantsBlur = wantsGlass ||
                            layerShellConfig_.backgroundBlur ||
                            chrome.style != LayerShellChromeStyle::None;
-    if (!wantsBlur || !shared_ || !shared_->backgroundEffectManager || !shared_->compositor ||
-        !surface_) {
+    if (!shared_ || !shared_->backgroundEffectManager || !shared_->compositor || !surface_) {
+      return;
+    }
+    if (!wantsBlur) {
+      if (!backgroundEffect_) {
+        return;
+      }
+      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(0.f));
+      ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
+      ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
+      wl_region* region = wl_compositor_create_region(shared_->compositor);
+      ext_background_effect_surface_v1_set_blur_region(backgroundEffect_, region);
+      wl_region_destroy(region);
       return;
     }
     int const width = std::max(1, static_cast<int>(std::lround(size_.width)));
@@ -1936,12 +1957,12 @@ private:
       backgroundEffect_ = ext_background_effect_manager_v1_get_background_effect(shared_->backgroundEffectManager,
                                                                                  surface_);
     }
-    if (glassConfig_.enabled) {
-      Color tint = glassConfig_.tint;
-      tint.a *= std::clamp(glassConfig_.tintOpacity, 0.f, 1.f);
-      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(glassConfig_.blurRadius));
+    if (wantsGlass) {
+      Color tint = background_.glass.tint;
+      tint.a *= std::clamp(background_.glass.tintOpacity, 0.f, 1.f);
+      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(background_.glass.blurRadius));
       ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
-      ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(glassConfig_.borderColor));
+      ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(background_.glass.borderColor));
     } else if (chrome.style != LayerShellChromeStyle::None) {
       Color tint = chrome.tint;
       tint.a *= std::clamp(chrome.tintOpacity, 0.f, 1.f);
@@ -1966,6 +1987,11 @@ private:
     wl_region_add(region, 0, 0, width, height);
     ext_background_effect_surface_v1_set_blur_region(backgroundEffect_, region);
     wl_region_destroy(region);
+  }
+
+  bool wantsTransparentSurface() const {
+    return background_.kind == WindowBackgroundKind::Glass ||
+           background_.kind == WindowBackgroundKind::Transparent;
   }
 
   void configureLayerShellSurface() {
@@ -2147,10 +2173,10 @@ private:
   std::string appId_;
   float dpiScaleX_ = 1.f;
   float dpiScaleY_ = 1.f;
-	  bool fullscreen_ = false;
-	  WindowDecorationMode decorationMode_ = WindowDecorationMode::System;
-  WindowGlassOptions glassConfig_{};
-	  LayerShellOptions layerShellConfig_{};
+  bool fullscreen_ = false;
+  WindowTitlebarMode titlebarMode_ = WindowTitlebarMode::System;
+  WindowBackground background_{};
+  LayerShellOptions layerShellConfig_{};
   bool surfaceCommitted_ = false;
   bool configured_ = false;
   bool serverSideDecorationsActive_ = false;

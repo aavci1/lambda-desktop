@@ -24,8 +24,7 @@ struct SettingsTheme {
   static constexpr flux::Color swatchDarkTop = flux::Color::hex(0x1D2440);
   static constexpr flux::Color swatchDarkBottom = flux::Color::hex(0x0C1024);
 
-  static constexpr float kTitlebarHeight = 48.f;
-  static constexpr float kTitlebarPadH = 16.f;
+  static constexpr float kSidebarHeaderHeight = 48.f;
   static constexpr float kSidebarWidth = 220.f;
   static constexpr float kSidePad = 10.f;
   static constexpr float kSideItemRadius = 7.f;

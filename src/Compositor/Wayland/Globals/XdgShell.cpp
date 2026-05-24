@@ -325,9 +325,9 @@ void xdgToplevelDecorationSetMode(wl_client*, wl_resource* resource, std::uint32
                            "invalid xdg-decoration mode %u", mode);
     return;
   }
-  decoration->mode = decorationModeForClientRequest(mode,
-                                                    ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE,
-                                                    ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+  decoration->mode = xdgTitlebarModeForClientRequest(mode,
+                                                     ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE,
+                                                     ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
   sendDecorationConfigure(decoration);
   if (decoration->toplevel && decoration->toplevel->cutouts) {
     sendToplevelStateConfigure(decoration->server, decoration->toplevel);

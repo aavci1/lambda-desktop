@@ -408,8 +408,9 @@ public:
   void setMaxSize(Size size) override;
   void setFullscreen(bool fullscreen) override;
   void setTitle(const std::string& title) override;
-  void setDecorationMode(WindowDecorationMode mode) override;
-  WindowDecorationMode decorationMode() const override;
+  void setTitlebarMode(WindowTitlebarMode mode) override;
+  WindowTitlebarMode titlebarMode() const override;
+  void setBackground(WindowBackground const& background) override;
   WindowChromeMetrics chromeMetrics() const override;
   void beginWindowDrag(std::uint32_t platformSerial = 0) override;
   void beginWindowResize(WindowResizeEdge edge, std::uint32_t platformSerial = 0) override;
@@ -447,7 +448,8 @@ public:
 
 private:
   void setModernDisplayLinkPaused(bool paused);
-  void applyDecorationMode();
+  void applyTitlebarMode();
+  void applyBackground();
 
   struct Impl;
   std::unique_ptr<Impl> d;
@@ -524,6 +526,7 @@ CVReturn displayLinkOutputCallback(CVDisplayLinkRef /*displayLink*/, CVTimeStamp
 struct MacMetalWindow::Impl {
   NSWindow* window_{nil};
   NSVisualEffectView* materialView_{nil};
+  NSView* tintView_{nil};
   FluxMetalView* metalView_{nil};
   FluxWindowDelegate* delegate_{nil};
   ::flux::Window* fluxWindow_{nullptr};
@@ -534,8 +537,8 @@ struct MacMetalWindow::Impl {
   std::atomic<bool> frameEventQueued_{false};
   std::atomic<bool> legacyDisplayLinkRunning_{false};
   Cursor currentCursor_{Cursor::Inherit};
-  WindowDecorationMode decorationMode_{WindowDecorationMode::System};
-  WindowGlassOptions glassConfig_{};
+  WindowTitlebarMode titlebarMode_{WindowTitlebarMode::System};
+  WindowBackground background_{};
   NSEvent* lastPointerDownEvent_{nil};
   std::vector<std::unique_ptr<MacPopoverSurface>> popovers_;
   std::uint64_t nextPopoverId_{1};
@@ -1323,12 +1326,12 @@ void setStandardWindowButtonsHidden(NSWindow* window, BOOL hidden) {
 
 } // namespace
 
-void MacMetalWindow::applyDecorationMode() {
+void MacMetalWindow::applyTitlebarMode() {
   if (!d || !d->window_) {
     return;
   }
 
-  if (d->decorationMode_ == WindowDecorationMode::System) {
+  if (d->titlebarMode_ == WindowTitlebarMode::System) {
     [d->window_ setTitleVisibility:NSWindowTitleVisible];
     [d->window_ setTitlebarAppearsTransparent:NO];
     [d->window_ setMovableByWindowBackground:NO];
@@ -1343,13 +1346,15 @@ void MacMetalWindow::applyDecorationMode() {
   if (@available(macOS 11.0, *)) {
     [d->window_ setTitlebarSeparatorStyle:NSTitlebarSeparatorStyleNone];
   }
-  setStandardWindowButtonsHidden(d->window_, d->decorationMode_ == WindowDecorationMode::ClientSide);
+  setStandardWindowButtonsHidden(d->window_,
+                                 d->titlebarMode_ == WindowTitlebarMode::Client ||
+                                     d->titlebarMode_ == WindowTitlebarMode::None);
   positionNativeWindowControls();
 }
 
 void MacMetalWindow::positionNativeWindowControls() {
   if (!d || !d->window_ || !d->metalView_ ||
-      d->decorationMode_ != WindowDecorationMode::IntegratedTitlebar) {
+      d->titlebarMode_ != WindowTitlebarMode::Integrated) {
     return;
   }
 
@@ -1374,6 +1379,73 @@ void MacMetalWindow::positionNativeWindowControls() {
   }
 }
 
+void MacMetalWindow::applyBackground() {
+  if (!d || !d->window_ || !d->metalView_) {
+    return;
+  }
+
+  bool const wantsGlass = d->background_.kind == WindowBackgroundKind::Glass;
+  if (wantsGlass) {
+    [d->window_ setOpaque:NO];
+    [d->window_ setBackgroundColor:[NSColor clearColor]];
+    [d->window_ setHasShadow:YES];
+    [d->window_ setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameVibrantLight]];
+
+    if (!d->materialView_) {
+      NSView* currentContent = [d->window_ contentView];
+      NSRect bounds = currentContent ? [currentContent bounds] : [d->metalView_ bounds];
+      d->materialView_ = [[NSVisualEffectView alloc] initWithFrame:bounds];
+      d->materialView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+      [d->metalView_ removeFromSuperview];
+      [d->window_ setContentView:d->materialView_];
+      d->metalView_.frame = d->materialView_.bounds;
+    }
+
+    d->materialView_.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+    d->materialView_.state = NSVisualEffectStateActive;
+    d->materialView_.material = NSVisualEffectMaterialPopover;
+    d->materialView_.emphasized = NO;
+
+    if (!d->tintView_) {
+      d->tintView_ = [[NSView alloc] initWithFrame:d->materialView_.bounds];
+      d->tintView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+      d->tintView_.wantsLayer = YES;
+      d->tintView_.layer.opaque = NO;
+      [d->materialView_ addSubview:d->tintView_];
+    }
+    d->tintView_.frame = d->materialView_.bounds;
+    Color tint = d->background_.glass.tint;
+    tint.a *= std::clamp(d->background_.glass.tintOpacity, 0.f, 1.f);
+    d->tintView_.layer.backgroundColor =
+        [[NSColor colorWithCalibratedRed:std::clamp(tint.r, 0.f, 1.f)
+                                   green:std::clamp(tint.g, 0.f, 1.f)
+                                    blue:std::clamp(tint.b, 0.f, 1.f)
+                                   alpha:std::clamp(tint.a, 0.f, 1.f)] CGColor];
+    [d->metalView_ removeFromSuperview];
+    d->metalView_.frame = d->materialView_.bounds;
+    [d->materialView_ addSubview:d->metalView_
+                       positioned:NSWindowAbove
+                       relativeTo:d->tintView_];
+  } else {
+    if (d->tintView_) {
+      [d->tintView_ removeFromSuperview];
+      d->tintView_ = nil;
+    }
+    if (d->materialView_) {
+      [d->metalView_ removeFromSuperview];
+      NSRect bounds = d->materialView_.bounds;
+      d->metalView_.frame = bounds;
+      [d->window_ setContentView:d->metalView_];
+      d->materialView_ = nil;
+    }
+    [d->window_ setOpaque:d->background_.kind != WindowBackgroundKind::Transparent];
+    [d->window_ setBackgroundColor:d->background_.kind == WindowBackgroundKind::Transparent
+                                      ? [NSColor clearColor]
+                                      : [NSColor windowBackgroundColor]];
+  }
+  positionNativeWindowControls();
+}
+
 MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<Impl>()) {
   d->handle_ = gNextHandle.fetch_add(1, std::memory_order_relaxed);
   d->fluxWindow_ = nullptr;
@@ -1381,14 +1453,13 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
   d->metalView_ = nil;
   d->materialView_ = nil;
   d->delegate_ = nil;
-  d->decorationMode_ = config.decorationMode;
-  d->glassConfig_ = config.glass;
+  d->titlebarMode_ = config.titlebar;
 
   NSWindowStyleMask styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
   if (config.resizable) {
     styleMask |= NSWindowStyleMaskResizable;
   }
-  if (config.decorationMode != WindowDecorationMode::System) {
+  if (config.titlebar != WindowTitlebarMode::System) {
     styleMask |= NSWindowStyleMaskFullSizeContentView;
   }
 
@@ -1403,13 +1474,7 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
                                           styleMask:styleMask
                                             backing:NSBackingStoreBuffered
                                               defer:NO];
-  if (d->glassConfig_.enabled) {
-    [d->window_ setOpaque:NO];
-    [d->window_ setBackgroundColor:[NSColor clearColor]];
-    [d->window_ setHasShadow:YES];
-    [d->window_ setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameVibrantLight]];
-  }
-  applyDecorationMode();
+  applyTitlebarMode();
   [d->window_ setReleasedWhenClosed:NO];
   // Flux owns cursor state. Stops _NSTrackingAreaAKManager from running its
   // cursor logic on this window and clobbering our setCursor decisions.
@@ -1429,19 +1494,8 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
   d->metalView_ = [[FluxMetalView alloc] initWithFrame:[[d->window_ contentView] bounds]];
   d->metalView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   d->metalView_.fluxPlatform = this;
-  if (d->glassConfig_.enabled) {
-    d->materialView_ = [[NSVisualEffectView alloc] initWithFrame:[[d->window_ contentView] bounds]];
-    d->materialView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    d->materialView_.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-    d->materialView_.state = NSVisualEffectStateActive;
-    d->materialView_.material = NSVisualEffectMaterialPopover;
-    d->materialView_.emphasized = NO;
-    [d->window_ setContentView:d->materialView_];
-    d->metalView_.frame = d->materialView_.bounds;
-    [d->materialView_ addSubview:d->metalView_];
-  } else {
-    [d->window_ setContentView:d->metalView_];
-  }
+  [d->window_ setContentView:d->metalView_];
+  applyBackground();
   positionNativeWindowControls();
 
   NSString* title = [NSString stringWithUTF8String:config.title.c_str()];
@@ -1505,6 +1559,7 @@ MacMetalWindow::~MacMetalWindow() {
     }
     d->delegate_ = nil;
     d->metalView_ = nil;
+    d->tintView_ = nil;
     d->materialView_ = nil;
     d->window_ = nil;
   }
@@ -1572,16 +1627,22 @@ void MacMetalWindow::setTitle(const std::string& title) {
   [d->window_ setTitle:nsTitle];
 }
 
-void MacMetalWindow::setDecorationMode(WindowDecorationMode mode) {
-  if (d->decorationMode_ == mode) {
+void MacMetalWindow::setTitlebarMode(WindowTitlebarMode mode) {
+  if (d->titlebarMode_ == mode) {
     return;
   }
-  d->decorationMode_ = mode;
-  applyDecorationMode();
+  d->titlebarMode_ = mode;
+  applyTitlebarMode();
 }
 
-WindowDecorationMode MacMetalWindow::decorationMode() const {
-  return d ? d->decorationMode_ : WindowDecorationMode::System;
+WindowTitlebarMode MacMetalWindow::titlebarMode() const {
+  return d ? d->titlebarMode_ : WindowTitlebarMode::System;
+}
+
+void MacMetalWindow::setBackground(WindowBackground const& background) {
+  if (!d) return;
+  d->background_ = background;
+  applyBackground();
 }
 
 WindowChromeMetrics MacMetalWindow::chromeMetrics() const {
@@ -1589,15 +1650,15 @@ WindowChromeMetrics MacMetalWindow::chromeMetrics() const {
   if (!d || !d->window_) {
     return metrics;
   }
-  metrics.decorationMode = d->decorationMode_;
+  metrics.titlebarMode = d->titlebarMode_;
   metrics.active = [d->window_ isKeyWindow];
-  if (d->decorationMode_ == WindowDecorationMode::System) {
+  if (d->titlebarMode_ == WindowTitlebarMode::System) {
     return metrics;
   }
 
   metrics.titlebarHeight = static_cast<float>(kFluxTitlebarHeight);
-  metrics.nativeControlsVisible = d->decorationMode_ == WindowDecorationMode::IntegratedTitlebar;
-  if (!metrics.nativeControlsVisible || !d->metalView_) {
+  metrics.systemControlsVisible = d->titlebarMode_ == WindowTitlebarMode::Integrated;
+  if (!metrics.systemControlsVisible || !d->metalView_) {
     return metrics;
   }
 

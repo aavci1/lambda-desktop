@@ -18,6 +18,7 @@
 #include <Flux/UI/Cursor.hpp>
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Core/Color.hpp>
+#include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/WindowChrome.hpp>
 
 namespace flux {
@@ -59,7 +60,7 @@ struct DisplayMode {
 /// Per-backend window feature support. Query with `Window::platformCapabilities()`.
 ///
 /// Backend matrix (config field → capability):
-/// - `glass` → native/compositor-backed window material where available
+/// - `background.kind == Glass` → native/compositor-backed window material where available
 /// - `layerShell` / `backgroundBlur` → Wayland compositor client only
 /// - `outputName` / `displayMode` → KMS only
 struct PlatformWindowCapabilities {
@@ -111,22 +112,37 @@ struct LayerShellOptions {
   LayerShellChromeOptions chrome{};
 };
 
-struct WindowGlassOptions {
-  bool enabled = false;
+struct WindowGlassBackgroundOptions {
   /// Preferred blur radius for platforms that expose a tunable backdrop blur.
   /// Some backends map this to the nearest native material instead.
   float blurRadius = 46.f;
-  /// Preferred tint for app chrome drawn over the material or compositor chrome
-  /// that supports explicit tint metadata.
+  /// Preferred tint for app chrome drawn over the material or compositor chrome that supports explicit tint metadata.
   Color tint{0.86f, 0.96f, 1.f, 0.56f};
   Color borderColor{1.f, 1.f, 1.f, 0.62f};
   float tintOpacity = 1.f;
 };
 
+enum class WindowBackgroundKind : std::uint8_t {
+  Transparent,
+  Fill,
+  Glass,
+};
+
+struct WindowBackground {
+  WindowBackgroundKind kind = WindowBackgroundKind::Fill;
+  FillStyle fill = FillStyle::solid(Color::windowBackground());
+  WindowGlassBackgroundOptions glass{};
+
+  static WindowBackground transparent();
+  static WindowBackground solid(Color color);
+  static WindowBackground gradient(FillStyle fill);
+  static WindowBackground glassEffect(WindowGlassBackgroundOptions options = {});
+};
+
 struct WindowConfig {
   Size size = {1280, 720};
   std::string title = "Flux Application";
-  WindowDecorationMode decorationMode = WindowDecorationMode::System;
+  WindowTitlebarMode titlebar = WindowTitlebarMode::System;
   bool fullscreen = false;
   bool resizable = true;
   Size minSize{};
@@ -138,9 +154,6 @@ struct WindowConfig {
   /// On KMS, request a specific connector mode. Zero values use the output's preferred mode.
   /// Other backends currently ignore this value.
   DisplayMode displayMode{};
-  /// Request native/compositor-backed background glass for this window.
-  /// Unsupported backends ignore this; apps should still draw a readable fallback background.
-  WindowGlassOptions glass{};
   /// On Wayland, create this window as a layer-shell surface instead of an xdg_toplevel.
   /// Other backends currently ignore this value.
   LayerShellOptions layerShell{};
@@ -164,8 +177,8 @@ public:
   Size getSize() const;
   void resize(Size const& size);
   void setTitle(std::string title);
-  void setDecorationMode(WindowDecorationMode mode);
-  WindowDecorationMode decorationMode() const;
+  void setTitlebarMode(WindowTitlebarMode mode);
+  WindowTitlebarMode titlebarMode() const;
   WindowChromeMetrics chromeMetrics() const;
   void beginWindowDrag();
   void beginWindowResize(WindowResizeEdge edge);
@@ -202,13 +215,11 @@ public:
   static void postRedraw(unsigned int handle);
 
   /// Drawing only; `Application` wraps each call with `beginFrame` and `present` when handling redraw.
-  /// Default implementation clears with `clearColor()` then draws the retained scene tree (if any).
+  /// Default implementation draws the configured window background then the retained scene tree (if any).
   virtual void render(Canvas& canvas);
 
-  /// Color passed to the retained scene-tree render for the initial canvas clear. Default is transparent;
-  /// use an opaque color if the scene has no full-window background rect.
-  void setClearColor(Color color);
-  Color clearColor() const;
+  void setBackground(WindowBackground background);
+  WindowBackground const& background() const;
   void setTheme(Theme theme);
   Theme const& theme() const;
   bool wantsTextInput() const;

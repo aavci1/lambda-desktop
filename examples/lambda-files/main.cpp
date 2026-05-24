@@ -11,15 +11,10 @@ int main(int argc, char* argv[]) {
   auto& window = app.createWindow<flux::Window>({
       .size = {1040.f, 680.f},
       .title = "Files",
-      .decorationMode = flux::WindowDecorationMode::IntegratedTitlebar,
+      .titlebar = flux::WindowTitlebarMode::Integrated,
       .resizable = true,
-      .glass = {
-          .enabled = true,
-      },
   });
-  if (window.platformCapabilities().supportsWindowGlass) {
-    window.setClearColor(flux::Colors::transparent);
-  }
+  window.setBackground(flux::WindowBackground::glassEffect());
   window.setView<lambda_files::FilesAppRoot>({.window = &window});
 
   return app.exec();

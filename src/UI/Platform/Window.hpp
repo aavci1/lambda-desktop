@@ -40,8 +40,9 @@ public:
   virtual void setMaxSize(Size /*size*/) {}
   virtual void setFullscreen(bool fullscreen) = 0;
   virtual void setTitle(const std::string& title) = 0;
-  virtual void setDecorationMode(WindowDecorationMode /*mode*/) {}
-  virtual WindowDecorationMode decorationMode() const { return WindowDecorationMode::System; }
+  virtual void setTitlebarMode(WindowTitlebarMode /*mode*/) {}
+  virtual WindowTitlebarMode titlebarMode() const { return WindowTitlebarMode::System; }
+  virtual void setBackground(WindowBackground const& /*background*/) {}
   virtual WindowChromeMetrics chromeMetrics() const { return {}; }
   virtual void beginWindowDrag(std::uint32_t /*platformSerial*/ = 0) {}
   virtual void beginWindowResize(WindowResizeEdge /*edge*/, std::uint32_t /*platformSerial*/ = 0) {}

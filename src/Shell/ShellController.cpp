@@ -137,19 +137,19 @@ bool ShellController::connectIpc() {
 
 void ShellController::createProductionWindows() {
   auto& topBar = app_.createWindow<flux::Window>(topBarWindowConfig());
-  topBar.setClearColor(flux::Colors::transparent);
+  topBar.setBackground(flux::WindowBackground::transparent());
   topBarWindow_ = &topBar;
   topBarHandle_ = topBar.handle();
 
   int const dockWidthPx = dockWidth(model_.dockItems());
   auto& dock = app_.createWindow<flux::Window>(dockWindowConfig(dockWidthPx));
-  dock.setClearColor(flux::Colors::transparent);
+  dock.setBackground(flux::WindowBackground::transparent());
   dockWindow_ = &dock;
   dockHandle_ = dock.handle();
   lastDockWidth_ = dockWidthPx;
 
   auto& launcher = app_.createWindow<flux::Window>(launcherWindowConfig());
-  launcher.setClearColor(flux::Colors::transparent);
+  launcher.setBackground(flux::WindowBackground::transparent());
   launcherWindow_ = &launcher;
   launcherHandle_ = launcher.handle();
 

@@ -393,6 +393,13 @@ void checkSameColor(flux::Color actual, flux::Color expected) {
   CHECK(actual.a == doctest::Approx(expected.a));
 }
 
+flux::Color solidWindowBackground(flux::Window const& window) {
+  flux::Color color{};
+  REQUIRE(window.background().kind == flux::WindowBackgroundKind::Fill);
+  REQUIRE(window.background().fill.solidColor(&color));
+  return color;
+}
+
 void registerSaveAction(flux::Window& window) {
   window.registerAction("demo.save", flux::ActionDescriptor{
       .label = "Save",
@@ -1006,15 +1013,15 @@ TEST_CASE("overlay rebuild relayouts mounted content without remounting state") 
   CHECK(state.get() == 9);
 }
 
-TEST_CASE("window clear color follows theme unless overridden") {
+TEST_CASE("window background follows theme unless overridden") {
   RuntimeHarness harness;
-  checkSameColor(harness.window.clearColor(), flux::Theme::light().windowBackgroundColor);
+  checkSameColor(solidWindowBackground(harness.window), flux::Theme::light().windowBackgroundColor);
 
   harness.window.setTheme(flux::Theme::dark());
-  checkSameColor(harness.window.clearColor(), flux::Theme::dark().windowBackgroundColor);
+  checkSameColor(solidWindowBackground(harness.window), flux::Theme::dark().windowBackgroundColor);
 
   flux::Color const custom = flux::Color::hex(0x123456);
-  harness.window.setClearColor(custom);
+  harness.window.setBackground(flux::WindowBackground::solid(custom));
   harness.window.setTheme(flux::Theme::light());
-  checkSameColor(harness.window.clearColor(), custom);
+  checkSameColor(solidWindowBackground(harness.window), custom);
 }

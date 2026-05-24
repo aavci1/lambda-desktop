@@ -11,16 +11,11 @@ int main(int argc, char* argv[]) {
   auto& window = app.createWindow<flux::Window>({
       .size = {780.f, 520.f},
       .title = "Settings",
-      .decorationMode = flux::WindowDecorationMode::IntegratedTitlebar,
+      .titlebar = flux::WindowTitlebarMode::System,
       .resizable = true,
-      .glass = {
-          .enabled = true,
-      },
   });
-  if (window.platformCapabilities().supportsWindowGlass) {
-    window.setClearColor(flux::Colors::transparent);
-  }
-  window.setView<lambda_settings::SettingsAppRoot>({.window = &window});
+  window.setBackground(flux::WindowBackground::glassEffect());
+  window.setView<lambda_settings::SettingsAppRoot>();
 
   return app.exec();
 }

@@ -17,7 +17,6 @@
 #include <Flux/UI/Views/Toggle.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
-#include <Flux/UI/Window.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -134,53 +133,6 @@ ShadowStyle subtleShadow() {
   };
 }
 
-Element tinyWindowButtons(std::function<void()> closeHandler) {
-  return HStack{
-      .spacing = 8.f,
-      .alignment = Alignment::Center,
-      .children = children(
-          Rectangle{}.size(12.f, 12.f).fill(Color::hex(0xEB5757)).cornerRadius(6.f).onTap(closeHandler),
-          Rectangle{}.size(12.f, 12.f).fill(Color::hex(0xF2C94C)).cornerRadius(6.f),
-          Rectangle{}.size(12.f, 12.f).fill(Color::hex(0x36C275)).cornerRadius(6.f))};
-}
-
-Element settingsTitlebar(Window* window, WindowChromeMetrics const& chrome) {
-  ChromeInsets const reserved = chromeInsets(chrome);
-  std::vector<Element> row;
-
-  if (reserved.leading > 0.f) {
-    row.push_back(Rectangle{}.width(reserved.leading));
-  }
-
-  row.push_back(Text{
-      .text = "Settings",
-      .font = Font{.size = 13.f, .weight = 600.f},
-      .color = SettingsTheme::text,
-      .verticalAlignment = VerticalAlignment::Center,
-  });
-  row.push_back(Spacer{}.flex(1.f, 1.f));
-
-  if (!chrome.nativeControlsVisible) {
-    row.push_back(tinyWindowButtons([window] {
-      if (window) {
-        window->requestClose();
-      }
-    }));
-  }
-
-  if (reserved.trailing > 0.f) {
-    row.push_back(Rectangle{}.width(reserved.trailing));
-  }
-
-  return HStack{
-             .spacing = 8.f,
-             .alignment = Alignment::Center,
-             .children = std::move(row)}
-      .height(SettingsTheme::kTitlebarHeight)
-      .padding(0.f, SettingsTheme::kTitlebarPadH, 0.f, SettingsTheme::kTitlebarPadH)
-      .windowDragRegion();
-}
-
 struct SidebarItemRow {
   SidebarItem item;
   Reactive::Signal<SettingsSection> activeSection;
@@ -225,8 +177,31 @@ struct SidebarItemRow {
   }
 };
 
-Element sidebar(Reactive::Signal<SettingsSection> activeSection) {
+Element sidebarHeader(WindowChromeMetrics const& chrome) {
+  ChromeInsets const reserved = chromeInsets(chrome);
+  std::vector<Element> row;
+  if (reserved.leading > 0.f) {
+    row.push_back(Rectangle{}.width(reserved.leading));
+  }
+  row.push_back(Text{
+      .text = "Settings",
+      .font = Font{.size = 13.f, .weight = 600.f},
+      .color = SettingsTheme::text,
+      .verticalAlignment = VerticalAlignment::Center,
+  });
+  row.push_back(Spacer{}.flex(1.f, 1.f));
+  return HStack{
+             .spacing = 8.f,
+             .alignment = Alignment::Center,
+             .children = std::move(row)}
+      .height(SettingsTheme::kSidebarHeaderHeight)
+      .padding(0.f, SettingsTheme::kSidePad, 0.f, SettingsTheme::kSidePad)
+      .windowDragRegion();
+}
+
+Element sidebar(Reactive::Signal<SettingsSection> activeSection, WindowChromeMetrics const& chrome) {
   std::vector<Element> rows;
+  rows.push_back(sidebarHeader(chrome));
   for (SidebarItem item : sidebarItems()) {
     if (hasGroupGapBefore(item.section)) {
       rows.push_back(Rectangle{}.height(8.f).fill(Colors::transparent));
@@ -805,8 +780,6 @@ Element contentForSection(SettingsSection section,
 } // namespace
 
 struct SettingsAppRoot {
-  Window* window = nullptr;
-
   Element body() const {
     auto activeSection = useState(SettingsSection::Appearance);
     auto themeMode = useState(1);
@@ -823,13 +796,11 @@ struct SettingsAppRoot {
                .spacing = 0.f,
                .alignment = Alignment::Stretch,
                .children = children(
-                   settingsTitlebar(window, metrics),
-                   Rectangle{}.height(1.f).fill(SettingsTheme::line),
                    HStack{
                        .spacing = 0.f,
                        .alignment = Alignment::Stretch,
                        .children = children(
-                           sidebar(activeSection),
+                           sidebar(activeSection, metrics),
                            Rectangle{}.width(1.f).fill(SettingsTheme::line),
                            ScrollView{
                                .axis = ScrollAxis::Vertical,

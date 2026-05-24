@@ -45,6 +45,7 @@ bool replayRecordedOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recor
 bool replayRecordedLocalOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
 void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logicalHeight);
 bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled);
+bool setVulkanCanvasTransparentSurface(Canvas* canvas, bool enabled);
 bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas);
 std::uint32_t lastVulkanCanvasPresentId(Canvas* canvas);
 std::vector<VulkanPastPresentationTiming> pollVulkanCanvasPastPresentationTimings(Canvas* canvas);

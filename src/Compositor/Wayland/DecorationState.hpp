@@ -23,9 +23,9 @@ struct CutoutSendState {
 
 inline constexpr std::uint32_t kCompositorControlsCutoutId = 1;
 
-inline std::uint32_t decorationModeForClientRequest(std::uint32_t requestedMode,
-                                                    std::uint32_t clientSideMode,
-                                                    std::uint32_t serverSideMode) {
+inline std::uint32_t xdgTitlebarModeForClientRequest(std::uint32_t requestedMode,
+                                                     std::uint32_t clientSideMode,
+                                                     std::uint32_t serverSideMode) {
   return requestedMode == clientSideMode ? clientSideMode : serverSideMode;
 }
 

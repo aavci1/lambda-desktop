@@ -20,11 +20,12 @@ namespace {
 
 constexpr float kTitlebarHeight = 48.f;
 
-std::string modeLabel(WindowDecorationMode mode) {
+std::string modeLabel(WindowTitlebarMode mode) {
   switch (mode) {
-  case WindowDecorationMode::System: return "System";
-  case WindowDecorationMode::ClientSide: return "Client-side";
-  case WindowDecorationMode::IntegratedTitlebar: return "Integrated";
+  case WindowTitlebarMode::System: return "System";
+  case WindowTitlebarMode::Client: return "Client-side";
+  case WindowTitlebarMode::Integrated: return "Integrated";
+  case WindowTitlebarMode::None: return "None";
   }
   return "Unknown";
 }
@@ -76,7 +77,7 @@ Element titlebar(Window* window,
               Text{.text = std::move(subtitle), .font = Font::caption(), .color = Color::secondary()})}
           .flex(0.f, 1.f));
   titlebarChildren.push_back(Spacer{}.flex(1.f, 1.f));
-  if (!chrome.nativeControlsVisible) {
+  if (!chrome.systemControlsVisible) {
     titlebarChildren.push_back(HStack{
         .spacing = 9.f,
         .alignment = Alignment::Center,
@@ -131,10 +132,10 @@ struct WindowChromeDemoRoot {
                        .spacing = theme().space4,
                        .alignment = Alignment::Stretch,
                        .children = children(
-                           Text{.text = "Decoration mode: " + modeLabel(metrics.decorationMode),
+                           Text{.text = "Titlebar mode: " + modeLabel(metrics.titlebarMode),
                                 .font = Font::title3(),
                                 .color = Color::primary()},
-                           Text{.text = metrics.nativeControlsVisible
+                           Text{.text = metrics.systemControlsVisible
                                              ? "The platform/compositor owns the window controls; Flux titlebar content avoids the reserved region."
                                              : "The app owns the titlebar controls and requests native window operations through Flux.",
                                 .font = Font::body(),
@@ -163,7 +164,7 @@ int main(int argc, char* argv[]) {
   auto& clientSide = app.createWindow<Window>({
       .size = {720.f, 420.f},
       .title = "Flux CSD Demo",
-      .decorationMode = WindowDecorationMode::ClientSide,
+      .titlebar = WindowTitlebarMode::Client,
       .resizable = true,
   });
   clientSide.setView(WindowChromeDemoRoot{
@@ -175,7 +176,7 @@ int main(int argc, char* argv[]) {
   auto& integrated = app.createWindow<Window>({
       .size = {720.f, 420.f},
       .title = "Flux Integrated Titlebar Demo",
-      .decorationMode = WindowDecorationMode::IntegratedTitlebar,
+      .titlebar = WindowTitlebarMode::Integrated,
       .resizable = true,
   });
   integrated.setView(WindowChromeDemoRoot{

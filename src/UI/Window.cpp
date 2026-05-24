@@ -40,29 +40,30 @@ namespace flux {
 namespace {
 
 void logUnsupportedWindowConfigOnce(char const* feature) {
-  static bool loggedGlass = false;
+  static bool loggedBackground = false;
   static bool loggedLayerShell = false;
   static bool loggedBackgroundBlur = false;
   static bool loggedOutputName = false;
   static bool loggedDisplayMode = false;
   bool* slot = nullptr;
-  if (std::strcmp(feature, "glass") == 0) slot = &loggedGlass;
+  if (std::strcmp(feature, "background") == 0) slot = &loggedBackground;
   else if (std::strcmp(feature, "layerShell") == 0) slot = &loggedLayerShell;
   else if (std::strcmp(feature, "backgroundBlur") == 0) slot = &loggedBackgroundBlur;
   else if (std::strcmp(feature, "outputName") == 0) slot = &loggedOutputName;
   else if (std::strcmp(feature, "displayMode") == 0) slot = &loggedDisplayMode;
   if (!slot || *slot) return;
   *slot = true;
-  std::fprintf(stderr, "flux: WindowConfig.%s is not supported on this platform backend\n", feature);
+  if (std::strcmp(feature, "background") == 0) {
+    std::fprintf(stderr, "flux: Window.background is not supported on this platform backend\n");
+  } else {
+    std::fprintf(stderr, "flux: WindowConfig.%s is not supported on this platform backend\n", feature);
+  }
 }
 
 void validateWindowConfig(WindowConfig const& config, PlatformWindowCapabilities const& capabilities) {
   char const* env = std::getenv("FLUX_LOG_WINDOW_CONFIG");
   if (!env || !*env || *env == '0') return;
 
-  if (config.glass.enabled && !capabilities.supportsWindowGlass) {
-    logUnsupportedWindowConfigOnce("glass");
-  }
   if (config.layerShell.enabled && !capabilities.supportsLayerShell) {
     logUnsupportedWindowConfigOnce("layerShell");
   }
@@ -75,6 +76,15 @@ void validateWindowConfig(WindowConfig const& config, PlatformWindowCapabilities
   if ((config.displayMode.width > 0 || config.displayMode.height > 0 || config.displayMode.refreshHz > 0) &&
       !capabilities.supportsDisplayMode) {
     logUnsupportedWindowConfigOnce("displayMode");
+  }
+}
+
+void validateWindowBackground(WindowBackground const& background, PlatformWindowCapabilities const& capabilities) {
+  char const* env = std::getenv("FLUX_LOG_WINDOW_CONFIG");
+  if (!env || !*env || *env == '0') return;
+
+  if (background.kind == WindowBackgroundKind::Glass && !capabilities.supportsWindowGlass) {
+    logUnsupportedWindowConfigOnce("background");
   }
 }
 
@@ -106,6 +116,35 @@ Rect adjustedPopoverAnchor(Popover const& popover, Rect anchor) {
 
 } // namespace
 
+WindowBackground WindowBackground::transparent() {
+  WindowBackground background;
+  background.kind = WindowBackgroundKind::Transparent;
+  background.fill = FillStyle::none();
+  return background;
+}
+
+WindowBackground WindowBackground::solid(Color color) {
+  WindowBackground background;
+  background.kind = WindowBackgroundKind::Fill;
+  background.fill = FillStyle::solid(color);
+  return background;
+}
+
+WindowBackground WindowBackground::gradient(FillStyle fill) {
+  WindowBackground background;
+  background.kind = WindowBackgroundKind::Fill;
+  background.fill = std::move(fill);
+  return background;
+}
+
+WindowBackground WindowBackground::glassEffect(WindowGlassBackgroundOptions options) {
+  WindowBackground background;
+  background.kind = WindowBackgroundKind::Glass;
+  background.fill = FillStyle::none();
+  background.glass = options;
+  return background;
+}
+
 struct Window::Impl {
   struct NativePopoverEntry {
     PopoverSurfaceId id{};
@@ -119,9 +158,8 @@ struct Window::Impl {
   std::unique_ptr<Canvas> canvas_;
   std::unique_ptr<scenegraph::SceneRenderer> sceneRenderer_;
   std::optional<scenegraph::SceneGraph> sceneGraph_;
-  Color clearColor_ {Theme::light().windowBackgroundColor};
-  WindowGlassOptions glassConfig_{};
-  bool hasCustomClearColor_ = false;
+  WindowBackground background_{WindowBackground::solid(Theme::light().windowBackgroundColor)};
+  bool hasCustomBackground_ = false;
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
   /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
   /// `overlayMgr_` first and use-after-free on window close with an open overlay.
@@ -138,8 +176,7 @@ struct Window::Impl {
   bool shutdown_ = false;
 
   explicit Impl(Window&, WindowConfig const& config)
-      : glassConfig_(config.glass)
-      , restoreId_(config.restoreId) {
+      : restoreId_(config.restoreId) {
     windowEnvironmentBinding_ = EnvironmentBinding{}
                                     .withSignal<ThemeKey>(themeSignal_)
                                     .withSignal<WindowChromeMetricsKey>(chromeMetricsSignal_);
@@ -272,14 +309,14 @@ void Window::setTitle(std::string title) {
   d->platform_->setTitle(std::move(title));
 }
 
-void Window::setDecorationMode(WindowDecorationMode mode) {
-  d->platform_->setDecorationMode(mode);
+void Window::setTitlebarMode(WindowTitlebarMode mode) {
+  d->platform_->setTitlebarMode(mode);
   refreshChromeMetrics();
   requestRedraw();
 }
 
-WindowDecorationMode Window::decorationMode() const {
-  return d->platform_->decorationMode();
+WindowTitlebarMode Window::titlebarMode() const {
+  return d->platform_->titlebarMode();
 }
 
 WindowChromeMetrics Window::chromeMetrics() const {
@@ -395,19 +432,29 @@ void Window::postRedraw(unsigned int handle) {
   Application::instance().requestWindowRedraw(handle);
 }
 
-void Window::setClearColor(Color color) {
-  d->clearColor_ = color;
-  d->hasCustomClearColor_ = true;
+void Window::setBackground(WindowBackground background) {
+  d->background_ = std::move(background);
+  d->hasCustomBackground_ = true;
+  if (d->platform_) {
+    validateWindowBackground(d->background_, d->platform_->capabilities());
+    d->platform_->setBackground(d->background_);
+  }
+  requestRedraw();
 }
 
-Color Window::clearColor() const { return d->clearColor_; }
+WindowBackground const& Window::background() const { return d->background_; }
 
 void Window::setTheme(Theme theme) {
-  Color const clearColor = theme.windowBackgroundColor;
+  Color const backgroundColor = theme.windowBackgroundColor;
   d->themeSignal_.set(std::move(theme));
-  d->windowEnvironmentBinding_ = EnvironmentBinding{}.withSignal<ThemeKey>(d->themeSignal_);
-  if (!d->hasCustomClearColor_) {
-    d->clearColor_ = clearColor;
+  d->windowEnvironmentBinding_ = EnvironmentBinding{}
+                                     .withSignal<ThemeKey>(d->themeSignal_)
+                                     .withSignal<WindowChromeMetricsKey>(d->chromeMetricsSignal_);
+  if (!d->hasCustomBackground_) {
+    d->background_ = WindowBackground::solid(backgroundColor);
+    if (d->platform_) {
+      d->platform_->setBackground(d->background_);
+    }
   }
   requestRedraw();
 }
@@ -524,16 +571,8 @@ void Window::render(Canvas& canvas) {
   if (d->runtime_ && d->overlayMgr_.hasTrackedAnchors()) {
     d->overlayMgr_.rebuild(windowSize, *d->runtime_);
   }
-  std::optional<Color> glassTint;
-  if (d->glassConfig_.enabled) {
-    Color tint = d->glassConfig_.tint;
-    tint.a *= std::clamp(d->glassConfig_.tintOpacity, 0.f, 1.f);
-    if (tint.a > 0.f) {
-      glassTint = tint;
-    }
-  }
   renderWindowFrame(*d->sceneRenderer_, canvas, d->sceneGraph_, windowSize, d->overlayMgr_, d->runtime_.get(),
-                    d->clearColor_, glassTint, d->textCacheRing_);
+                    d->background_, d->textCacheRing_);
   if (traceResize) {
     auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - renderStart).count();

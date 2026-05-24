@@ -2,7 +2,7 @@
 
 /// \file Flux/UI/WindowChrome.hpp
 ///
-/// Public window decoration and titlebar geometry primitives.
+/// Public window titlebar geometry primitives.
 
 #include <Flux/Core/Geometry.hpp>
 
@@ -11,13 +11,15 @@
 
 namespace flux {
 
-enum class WindowDecorationMode : std::uint8_t {
-  /// Use the platform default titlebar/decorations.
+enum class WindowTitlebarMode : std::uint8_t {
+  /// Use the platform/compositor default titlebar and controls.
   System,
-  /// The app draws all titlebar/chrome content and window controls.
-  ClientSide,
-  /// The app draws titlebar content while the platform/compositor owns window controls when available.
-  IntegratedTitlebar,
+  /// The app draws titlebar content while the platform/compositor owns controls when available.
+  Integrated,
+  /// The app draws all titlebar content and controls.
+  Client,
+  /// No titlebar or titlebar controls.
+  None,
 };
 
 enum class WindowResizeEdge : std::uint8_t {
@@ -33,10 +35,10 @@ enum class WindowResizeEdge : std::uint8_t {
 };
 
 struct WindowChromeMetrics {
-  WindowDecorationMode decorationMode = WindowDecorationMode::System;
+  WindowTitlebarMode titlebarMode = WindowTitlebarMode::System;
   float titlebarHeight = 0.f;
   std::vector<Rect> reservedRegions;
-  bool nativeControlsVisible = false;
+  bool systemControlsVisible = false;
   bool active = true;
 
   bool operator==(WindowChromeMetrics const& other) const = default;

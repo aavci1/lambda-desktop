@@ -430,7 +430,7 @@ Element filesTitlebar(Window* window,
           }})}
       .flex(1.f, 1.f, 0.f));
 
-  if (!chrome.nativeControlsVisible) {
+  if (!chrome.systemControlsVisible) {
     row.push_back(HStack{
         .spacing = 8.f,
         .alignment = Alignment::Center,

@@ -1053,6 +1053,18 @@ public:
     return previous;
   }
 
+  bool setTransparentSurface(bool enabled) {
+    if (targetMode_) {
+      return false;
+    }
+    bool const changed = transparentSurface_ != enabled;
+    transparentSurface_ = enabled;
+    if (changed) {
+      swapchainDirty_ = true;
+    }
+    return changed;
+  }
+
   bool setRenderTargetSpec(VulkanRenderTargetSpec const& spec) {
     if (!targetMode_ || !spec.image || !spec.view || spec.width == 0 || spec.height == 0) {
       return false;
@@ -4562,11 +4574,11 @@ private:
         return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
       }
     } else {
-      if (supports(VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)) {
-        return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
-      }
       if (supports(VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)) {
         return VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+      }
+      if (supports(VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)) {
+        return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
       }
       if (supports(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)) {
         return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
@@ -4769,6 +4781,11 @@ void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logic
 bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
   auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
   return vulkan ? vulkan->setImagePremultipliedAlpha(enabled) : false;
+}
+
+bool setVulkanCanvasTransparentSurface(Canvas* canvas, bool enabled) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan ? vulkan->setTransparentSurface(enabled) : false;
 }
 
 bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas) {

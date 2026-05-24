@@ -5,13 +5,13 @@
 #include <doctest/doctest.h>
 
 TEST_CASE("compositor decoration mode honors explicit client-side requests") {
-  CHECK(flux::compositor::decorationModeForClientRequest(
+  CHECK(flux::compositor::xdgTitlebarModeForClientRequest(
             ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE,
             ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE,
             ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE) ==
         ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
 
-  CHECK(flux::compositor::decorationModeForClientRequest(
+  CHECK(flux::compositor::xdgTitlebarModeForClientRequest(
             ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE,
             ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE,
             ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE) ==
