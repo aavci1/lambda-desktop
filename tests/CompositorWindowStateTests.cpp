@@ -2,6 +2,22 @@
 
 #include <doctest/doctest.h>
 
+#include <memory>
+#include <vector>
+
+namespace {
+
+std::unique_ptr<flux::compositor::WaylandServer::Impl::Surface> testSurface(std::uint64_t id,
+                                                                            bool minimized = false) {
+  auto surface = std::make_unique<flux::compositor::WaylandServer::Impl::Surface>();
+  surface->id = id;
+  surface->role = flux::compositor::SurfaceRole::XdgToplevel;
+  surface->minimized = minimized;
+  return surface;
+}
+
+} // namespace
+
 TEST_CASE("markToplevelMinimized only transitions visible toplevels") {
   flux::compositor::WaylandServer::Impl::Surface surface{};
   surface.role = flux::compositor::SurfaceRole::XdgToplevel;
@@ -40,6 +56,51 @@ TEST_CASE("restoreSurfaceForShellFocus rejects non-toplevel surfaces") {
   CHECK(popup.minimized);
 
   CHECK_FALSE(flux::compositor::wm::restoreSurfaceForShellFocus(nullptr));
+}
+
+TEST_CASE("focus order helpers skip minimized windows and fall back to stacking order") {
+  auto first = testSurface(1);
+  auto second = testSurface(2, true);
+  auto third = testSurface(3);
+  std::vector<std::unique_ptr<flux::compositor::WaylandServer::Impl::Surface>> surfaces;
+  surfaces.push_back(std::move(first));
+  surfaces.push_back(std::move(second));
+  surfaces.push_back(std::move(third));
+
+  std::vector<flux::compositor::WaylandServer::Impl::Surface*> focusOrder{
+      surfaces[0].get(),
+      surfaces[1].get(),
+      surfaces[2].get(),
+  };
+
+  CHECK(flux::compositor::wm::mostRecentToplevelFromOrders(focusOrder, surfaces) == surfaces[2].get());
+  CHECK(flux::compositor::wm::previousFocusedToplevelFromOrders(focusOrder, surfaces, surfaces[2].get()) ==
+        surfaces[0].get());
+
+  surfaces[2]->minimized = true;
+  CHECK(flux::compositor::wm::mostRecentToplevelFromOrders(focusOrder, surfaces) == surfaces[0].get());
+  CHECK(flux::compositor::wm::previousFocusedToplevelFromOrders(focusOrder, surfaces, surfaces[0].get()) == nullptr);
+
+  focusOrder.clear();
+  surfaces[2]->minimized = false;
+  CHECK(flux::compositor::wm::mostRecentToplevelFromOrders(focusOrder, surfaces) == surfaces[2].get());
+}
+
+TEST_CASE("presentation eligibility excludes minimized toplevels and dismissed popups") {
+  flux::compositor::WaylandServer::Impl::Surface visible{};
+  visible.role = flux::compositor::SurfaceRole::XdgToplevel;
+  CHECK(flux::compositor::wm::surfaceEligibleForPresentation(&visible));
+
+  visible.minimized = true;
+  CHECK_FALSE(flux::compositor::wm::surfaceEligibleForPresentation(&visible));
+
+  flux::compositor::WaylandServer::Impl::XdgPopup popupRole{};
+  flux::compositor::WaylandServer::Impl::Surface popup{};
+  popup.role = flux::compositor::SurfaceRole::XdgPopup;
+  popup.xdgPopup = &popupRole;
+  CHECK(flux::compositor::wm::surfaceEligibleForPresentation(&popup));
+  popupRole.dismissed = true;
+  CHECK_FALSE(flux::compositor::wm::surfaceEligibleForPresentation(&popup));
 }
 
 TEST_CASE("shell app id matching accepts built-in app aliases") {

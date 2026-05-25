@@ -111,6 +111,44 @@ inline bool restoreSurfaceForShellFocus(WaylandServer::Impl::Surface* surface) {
   surface->minimized = false;
   return true;
 }
+inline bool surfaceEligibleForPresentation(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return false;
+  if (surface->minimized) return false;
+  if (surface->xdgPopup && surface->xdgPopup->dismissed) return false;
+  return true;
+}
+inline bool surfaceFocusableInOrder(WaylandServer::Impl::Surface const* surface) {
+  return surfaceIsXdgToplevel(surface) && !surface->minimized;
+}
+inline WaylandServer::Impl::Surface* mostRecentToplevelFromOrders(
+    std::vector<WaylandServer::Impl::Surface*> const& focusOrder,
+    std::vector<std::unique_ptr<WaylandServer::Impl::Surface>> const& surfaces) {
+  for (auto it = focusOrder.rbegin(); it != focusOrder.rend(); ++it) {
+    if (surfaceFocusableInOrder(*it)) return *it;
+  }
+  for (auto it = surfaces.rbegin(); it != surfaces.rend(); ++it) {
+    if (surfaceFocusableInOrder(it->get())) return it->get();
+  }
+  return nullptr;
+}
+inline WaylandServer::Impl::Surface* previousFocusedToplevelFromOrders(
+    std::vector<WaylandServer::Impl::Surface*> const& focusOrder,
+    std::vector<std::unique_ptr<WaylandServer::Impl::Surface>> const& surfaces,
+    WaylandServer::Impl::Surface* current) {
+  auto currentIt = std::find(focusOrder.begin(), focusOrder.end(), current);
+  if (currentIt != focusOrder.end()) {
+    for (auto it = std::make_reverse_iterator(currentIt); it != focusOrder.rend(); ++it) {
+      if (surfaceFocusableInOrder(*it)) return *it;
+    }
+  }
+  for (auto it = focusOrder.rbegin(); it != focusOrder.rend(); ++it) {
+    if (*it != current && surfaceFocusableInOrder(*it)) return *it;
+  }
+  for (auto it = surfaces.rbegin(); it != surfaces.rend(); ++it) {
+    if (it->get() != current && surfaceFocusableInOrder(it->get())) return it->get();
+  }
+  return nullptr;
+}
 inline bool shellAppIdMatches(std::string const& requested, std::string const& actual) {
   if (requested == actual) return true;
   if (requested == "terminal" && (actual == "lambda-terminal" || actual == "foot")) return true;

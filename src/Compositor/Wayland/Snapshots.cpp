@@ -5,6 +5,7 @@
 
 #include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Wayland/Globals/LinuxDmabuf.hpp"
+#include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 
 #include <drm_fourcc.h>
@@ -322,8 +323,7 @@ bool renderInPass(WaylandServer::Impl::Surface const* surface, bool aboveWindowL
 void appendRenderableSurface(WaylandServer::Impl const* server,
                              std::vector<CommittedSurfaceSnapshot>& snapshots,
                              WaylandServer::Impl::Surface const* surface) {
-  if (surface->minimized) return;
-  if (surface->xdgPopup && surface->xdgPopup->dismissed) return;
+  if (!wm::surfaceEligibleForPresentation(surface)) return;
   if (surfaceIsRenderable(surface)) {
     snapshots.push_back(snapshotForSurface(server, surface, surface->windowX, surface->windowY, true));
   }

@@ -63,13 +63,7 @@ void noteFocusedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surfa
 
 WaylandServer::Impl::Surface* mostRecentToplevel(WaylandServer::Impl* server) {
   if (!server) return nullptr;
-  for (auto it = server->focusOrder_.rbegin(); it != server->focusOrder_.rend(); ++it) {
-    if (isManagedToplevel(*it) && !(*it)->minimized) return *it;
-  }
-  for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
-    if (isManagedToplevel(it->get()) && !it->get()->minimized) return it->get();
-  }
-  return nullptr;
+  return mostRecentToplevelFromOrders(server->focusOrder_, server->surfaces_);
 }
 
 void sendKeyboardModifiers(WaylandServer::Impl* server) {
@@ -84,19 +78,7 @@ void sendKeyboardModifiers(WaylandServer::Impl* server) {
 WaylandServer::Impl::Surface* previousFocusedToplevel(WaylandServer::Impl* server,
                                                       WaylandServer::Impl::Surface* current) {
   if (!server) return nullptr;
-  auto currentIt = std::find(server->focusOrder_.begin(), server->focusOrder_.end(), current);
-  if (currentIt != server->focusOrder_.end()) {
-    for (auto it = std::make_reverse_iterator(currentIt); it != server->focusOrder_.rend(); ++it) {
-      if (isManagedToplevel(*it) && !(*it)->minimized) return *it;
-    }
-  }
-  for (auto it = server->focusOrder_.rbegin(); it != server->focusOrder_.rend(); ++it) {
-    if (*it != current && isManagedToplevel(*it) && !(*it)->minimized) return *it;
-  }
-  for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
-    if (it->get() != current && isManagedToplevel(it->get()) && !it->get()->minimized) return it->get();
-  }
-  return nullptr;
+  return previousFocusedToplevelFromOrders(server->focusOrder_, server->surfaces_, current);
 }
 
 WaylandServer::Impl::XdgToplevel* focusedToplevel(WaylandServer::Impl* server) {

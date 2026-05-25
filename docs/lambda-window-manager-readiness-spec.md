@@ -143,7 +143,7 @@ These are the concrete findings to resolve or validate before broad refactors.
 
    `CompositorWindowGeometryTests` covers snap, popup, restore-drag, and resize geometry helpers. There are no focused tests for `minimizeToplevel`, Shell IPC focus/restore, focus order after close/minimize, or minimized-window snapshot behavior.
 
-   Status: partially implemented with focused state tests on 2026-05-26. Minimized toplevel state transitions and shell focus restoration are now covered by deterministic tests. Shell-facing focus requests now restore minimized windows before focusing them, and app-id matching includes the in-tree Lambda app aliases used by the shell launcher. Broader focus-order coverage after close/minimize and minimized-window snapshot coverage still need integration-level tests.
+   Status: partially implemented with focused state tests on 2026-05-26. Minimized toplevel state transitions, shell focus restoration, focus-order fallback after minimized/current windows are skipped, and minimized/dismissed presentation eligibility are now covered by deterministic tests. Shell-facing focus requests restore minimized windows before focusing them, and app-id matching includes the in-tree Lambda app aliases used by the shell launcher. Full close/destroy integration coverage still needs a live Wayland-level test or a broader state-machine harness.
 
 10. Real-app validation docs are incomplete.
 
