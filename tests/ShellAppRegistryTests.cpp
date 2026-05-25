@@ -119,6 +119,61 @@ TEST_CASE("Shell app registry prefers local example executables") {
   std::filesystem::remove_all(root);
 }
 
+TEST_CASE("Shell app registry discovers installed desktop files from fixture dirs") {
+  auto root = tempRoot("lambda-shell-installed-apps-test");
+  auto first = root / "first";
+  auto second = root / "second";
+  std::filesystem::create_directories(first / "nested");
+  std::filesystem::create_directories(second);
+  {
+    std::ofstream(first / "org.example.Editor.desktop") << R"(
+[Desktop Entry]
+Name=Editor
+Icon=editor
+Exec=editor %f
+TryExec=editor-bin
+MimeType=text/plain;
+)";
+    std::ofstream(first / "nested" / "org.example.Viewer.desktop") << R"(
+[Desktop Entry]
+Name=Viewer
+Icon=viewer
+Exec=viewer %f
+TryExec=viewer-bin
+MimeType=image/png;
+)";
+    std::ofstream(first / "org.example.Hidden.desktop") << R"(
+[Desktop Entry]
+Name=Hidden
+Exec=hidden
+Hidden=true
+)";
+    std::ofstream(second / "org.example.Editor.desktop") << R"(
+[Desktop Entry]
+Name=Duplicate Editor
+Exec=duplicate
+)";
+    std::ofstream(second / "org.example.Missing.desktop") << R"(
+[Desktop Entry]
+Name=Missing
+Exec=missing
+TryExec=missing-bin
+)";
+  }
+
+  auto apps = lambda_shell::discoverInstalledDesktopApps({first, second}, [](std::string const& executable) {
+    return executable == "editor-bin" || executable == "viewer-bin";
+  });
+  REQUIRE(apps.size() == 2);
+  CHECK(apps[0].appId == "org.example.Editor");
+  CHECK(apps[0].name == "Editor");
+  CHECK(apps[0].mimeTypes == std::vector<std::string>{"text/plain"});
+  CHECK(apps[1].appId == "nested-org.example.Viewer");
+  CHECK(apps[1].name == "Viewer");
+
+  std::filesystem::remove_all(root);
+}
+
 TEST_CASE("Shell app registry finds icon theme paths with fallback") {
   auto root = tempRoot("lambda-shell-icon-test");
   std::filesystem::create_directories(root / "48x48" / "apps");

@@ -48,6 +48,9 @@ using TryExecResolver = std::function<bool(std::string const& executable)>;
 [[nodiscard]] std::vector<std::string> parseDesktopExec(std::string_view exec,
                                                         std::optional<std::filesystem::path> file = std::nullopt);
 [[nodiscard]] bool shellAppIdMatches(std::string_view requested, std::string_view actual);
+[[nodiscard]] std::vector<AppRegistryEntry> discoverInstalledDesktopApps(
+    std::vector<std::filesystem::path> const& applicationDirs,
+    TryExecResolver const& tryExecResolver = {});
 [[nodiscard]] std::vector<AppRegistryEntry> discoverLocalExampleApps(std::filesystem::path const& examplesDir,
                                                                      std::vector<std::string> const& appNames);
 [[nodiscard]] std::vector<AppRegistryEntry> mergeAppRegistryEntries(std::vector<AppRegistryEntry> installed,

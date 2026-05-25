@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <fstream>
 #include <map>
 #include <set>
 #include <sstream>
@@ -98,6 +99,18 @@ std::filesystem::path iconCandidate(std::filesystem::path const& dir, std::strin
     if (std::filesystem::exists(candidate)) return candidate;
   }
   return {};
+}
+
+std::string desktopIdForPath(std::filesystem::path const& root, std::filesystem::path const& path) {
+  std::error_code ec;
+  std::filesystem::path relative = std::filesystem::relative(path, root, ec);
+  if (ec || relative.empty()) relative = path.filename();
+  std::string id;
+  for (auto const& part : relative) {
+    if (!id.empty()) id.push_back('-');
+    id += part.string();
+  }
+  return id;
 }
 
 } // namespace
@@ -233,6 +246,33 @@ bool shellAppIdMatches(std::string_view requested, std::string_view actual) {
   }
   if (req == "settings" && app == "lambda-settings") return true;
   return false;
+}
+
+std::vector<AppRegistryEntry> discoverInstalledDesktopApps(std::vector<std::filesystem::path> const& applicationDirs,
+                                                           TryExecResolver const& tryExecResolver) {
+  std::vector<AppRegistryEntry> apps;
+  std::set<std::string> seen;
+  for (auto const& dir : applicationDirs) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dir, ec) || ec) continue;
+    for (auto const& entry : std::filesystem::recursive_directory_iterator(dir, ec)) {
+      if (ec) break;
+      if (!entry.is_regular_file(ec) || ec || entry.path().extension() != ".desktop") continue;
+      std::ifstream file(entry.path());
+      if (!file) continue;
+      std::ostringstream contents;
+      contents << file.rdbuf();
+      auto desktopEntry = parseDesktopEntry(contents.str(), desktopIdForPath(dir, entry.path()));
+      if (!desktopEntry || !desktopEntryVisible(*desktopEntry, tryExecResolver)) continue;
+      AppRegistryEntry app = appEntryFromDesktopEntry(*desktopEntry);
+      if (!seen.insert(app.appId).second) continue;
+      apps.push_back(std::move(app));
+    }
+  }
+  std::stable_sort(apps.begin(), apps.end(), [](auto const& a, auto const& b) {
+    return lowerAscii(a.name) < lowerAscii(b.name);
+  });
+  return apps;
 }
 
 std::vector<AppRegistryEntry> discoverLocalExampleApps(std::filesystem::path const& examplesDir,
