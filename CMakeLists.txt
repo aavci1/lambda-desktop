@@ -915,9 +915,12 @@ if(FLUX_BUILD_TESTS)
     examples/lambda-settings/SettingsBackend.cpp
     tests/SettingsBackendTests.cpp
     src/Shell/ShellAppRegistry.cpp
+    src/Shell/ShellModel.cpp
     src/Shell/ShellModels.cpp
+    src/Shell/UI/LambdaShellTypes.cpp
     tests/ShellAppRegistryTests.cpp
     tests/ShellIpcTests.cpp
+    tests/ShellModelTests.cpp
     tests/ShellModelsTests.cpp
     tests/SvgPathTests.cpp
     examples/lambda-terminal/TerminalCore.cpp
