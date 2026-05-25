@@ -79,7 +79,16 @@ struct FileSelectionState {
   [[nodiscard]] bool contains(std::filesystem::path const& path) const;
 };
 
+struct TrashInfo {
+  std::filesystem::path originalPath;
+  std::string deletionDate;
+
+  bool operator==(TrashInfo const&) const = default;
+};
+
 std::filesystem::path homeDirectory();
+std::filesystem::path trashFilesDirectory();
+std::filesystem::path trashInfoDirectory();
 std::map<std::string, std::filesystem::path> parseXdgUserDirs(std::string_view configText,
                                                               std::filesystem::path const& home);
 std::vector<SidebarPlace> const& sidebarPlaces();
@@ -117,6 +126,9 @@ FileOperationResult renamePath(std::filesystem::path const& source, std::string 
 FileOperationResult copyPath(std::filesystem::path const& source, std::filesystem::path const& destinationDirectory);
 FileOperationResult movePath(std::filesystem::path const& source, std::filesystem::path const& destinationDirectory);
 FileOperationResult duplicatePath(std::filesystem::path const& source);
+FileOperationResult trashPath(std::filesystem::path const& source);
+FileOperationResult restoreTrashedPath(std::filesystem::path const& trashedPath);
+std::optional<TrashInfo> parseTrashInfo(std::filesystem::path const& infoPath);
 
 std::string serializeUriList(std::vector<std::filesystem::path> const& paths);
 std::vector<std::filesystem::path> parseUriList(std::string_view text);

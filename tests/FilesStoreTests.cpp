@@ -264,3 +264,64 @@ TEST_CASE("FilesStore serializes and parses URI lists") {
   auto parsed = lambda_files::parseUriList("# comment\r\nfile:///tmp/alpha.txt\r\nfile:///tmp/space%20name.txt\r\n");
   CHECK(parsed == paths);
 }
+
+TEST_CASE("FilesStore trashes and restores files with metadata") {
+  ScopedEnv dataHome("XDG_DATA_HOME");
+  auto root = tempRoot("lambda-files-trash-test");
+  auto data = root / "data";
+  auto source = root / "Documents" / "notes.txt";
+  std::filesystem::create_directories(source.parent_path());
+  setenv("XDG_DATA_HOME", data.c_str(), 1);
+  {
+    std::ofstream(source) << "notes";
+  }
+
+  auto trashed = lambda_files::trashPath(source);
+  CHECK(trashed.ok);
+  CHECK_FALSE(std::filesystem::exists(source));
+  CHECK(std::filesystem::exists(trashed.path));
+  CHECK(trashed.path.parent_path() == lambda_files::trashFilesDirectory());
+
+  auto info = lambda_files::parseTrashInfo(lambda_files::trashInfoDirectory() / "notes.txt.trashinfo");
+  REQUIRE(info);
+  CHECK(info->originalPath == std::filesystem::absolute(source).lexically_normal());
+  CHECK_FALSE(info->deletionDate.empty());
+
+  auto restored = lambda_files::restoreTrashedPath(trashed.path);
+  CHECK(restored.ok);
+  CHECK(restored.path == std::filesystem::absolute(source).lexically_normal());
+  CHECK(std::filesystem::exists(restored.path));
+  CHECK_FALSE(std::filesystem::exists(lambda_files::trashInfoDirectory() / "notes.txt.trashinfo"));
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("FilesStore trash and restore avoid collisions") {
+  ScopedEnv dataHome("XDG_DATA_HOME");
+  auto root = tempRoot("lambda-files-trash-collision-test");
+  auto data = root / "data";
+  setenv("XDG_DATA_HOME", data.c_str(), 1);
+  auto first = root / "one.txt";
+  auto second = root / "two.txt";
+  {
+    std::ofstream(first) << "one";
+    std::ofstream(second) << "two";
+  }
+
+  auto trashedFirst = lambda_files::trashPath(first);
+  REQUIRE(trashedFirst.ok);
+  auto trashedSecond = lambda_files::trashPath(second);
+  REQUIRE(trashedSecond.ok);
+  CHECK(trashedSecond.path.filename() == "two.txt");
+
+  {
+    std::ofstream(first) << "replacement";
+  }
+  auto restoredFirst = lambda_files::restoreTrashedPath(trashedFirst.path);
+  CHECK(restoredFirst.ok);
+  CHECK(restoredFirst.path.filename() == "one 2.txt");
+  CHECK(std::filesystem::exists(root / "one.txt"));
+  CHECK(std::filesystem::exists(root / "one 2.txt"));
+
+  std::filesystem::remove_all(root);
+}

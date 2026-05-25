@@ -1,8 +1,10 @@
 #include "FilesStore.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -28,6 +30,11 @@ std::filesystem::path pathFromEnv(char const* name) {
     return std::filesystem::path(value);
   }
   return {};
+}
+
+std::filesystem::path dataHomeDirectory() {
+  if (auto env = pathFromEnv("XDG_DATA_HOME"); !env.empty()) return env;
+  return homeDirectory() / ".local" / "share";
 }
 
 bool ciLess(std::string const& a, std::string const& b) {
@@ -137,6 +144,22 @@ std::string percentDecode(std::string_view text) {
     output.push_back(text[i]);
   }
   return output;
+}
+
+std::string trashDeletionDate() {
+  auto const now = std::chrono::system_clock::now();
+  std::time_t const time = std::chrono::system_clock::to_time_t(now);
+  std::tm local{};
+  localtime_r(&time, &local);
+  char buffer[32]{};
+  if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &local) == 0) {
+    return "1970-01-01T00:00:00";
+  }
+  return buffer;
+}
+
+std::filesystem::path trashInfoPathFor(std::filesystem::path const& trashedPath) {
+  return trashInfoDirectory() / (trashedPath.filename().string() + ".trashinfo");
 }
 
 std::filesystem::path copyTargetPath(std::filesystem::path const& source,
@@ -278,6 +301,14 @@ std::filesystem::path homeDirectory() {
     return *home;
   }
   return std::filesystem::current_path();
+}
+
+std::filesystem::path trashFilesDirectory() {
+  return dataHomeDirectory() / "Trash" / "files";
+}
+
+std::filesystem::path trashInfoDirectory() {
+  return dataHomeDirectory() / "Trash" / "info";
 }
 
 bool FileSelectionState::contains(std::filesystem::path const& path) const {
@@ -767,6 +798,72 @@ FileOperationResult duplicatePath(std::filesystem::path const& source) {
   if (!copyRecursive(source, target, ec)) {
     return {.ok = false, .path = target, .error = ec.message()};
   }
+  return {.ok = true, .path = target};
+}
+
+FileOperationResult trashPath(std::filesystem::path const& source) {
+  std::error_code ec;
+  if (!std::filesystem::exists(source, ec) || ec) return {.ok = false, .path = source, .error = "Source does not exist."};
+  std::filesystem::create_directories(trashFilesDirectory(), ec);
+  if (ec) return {.ok = false, .path = trashFilesDirectory(), .error = ec.message()};
+  std::filesystem::create_directories(trashInfoDirectory(), ec);
+  if (ec) return {.ok = false, .path = trashInfoDirectory(), .error = ec.message()};
+
+  std::filesystem::path target = collisionFreePath(trashFilesDirectory(), source.filename().string());
+  std::filesystem::path infoPath = trashInfoPathFor(target);
+  std::filesystem::rename(source, target, ec);
+  if (ec) {
+    if (!copyRecursive(source, target, ec)) return {.ok = false, .path = target, .error = ec.message()};
+    std::filesystem::remove_all(source, ec);
+    if (ec) return {.ok = false, .path = target, .error = ec.message()};
+  }
+
+  std::ofstream info(infoPath);
+  info << "[Trash Info]\n";
+  info << "Path=" << percentEncodePath(std::filesystem::absolute(source).lexically_normal().string()) << "\n";
+  info << "DeletionDate=" << trashDeletionDate() << "\n";
+  if (!info) return {.ok = false, .path = infoPath, .error = "Could not write trash metadata."};
+  return {.ok = true, .path = target};
+}
+
+std::optional<TrashInfo> parseTrashInfo(std::filesystem::path const& infoPath) {
+  std::ifstream file(infoPath);
+  if (!file) return std::nullopt;
+  TrashInfo info;
+  std::string line;
+  while (std::getline(file, line)) {
+    if (auto equals = line.find('='); equals != std::string::npos) {
+      std::string key = line.substr(0, equals);
+      std::string value = line.substr(equals + 1u);
+      if (key == "Path") info.originalPath = percentDecode(value);
+      if (key == "DeletionDate") info.deletionDate = value;
+    }
+  }
+  if (info.originalPath.empty()) return std::nullopt;
+  return info;
+}
+
+FileOperationResult restoreTrashedPath(std::filesystem::path const& trashedPath) {
+  std::error_code ec;
+  if (!std::filesystem::exists(trashedPath, ec) || ec) {
+    return {.ok = false, .path = trashedPath, .error = "Trashed item does not exist."};
+  }
+  std::filesystem::path infoPath = trashInfoPathFor(trashedPath);
+  auto info = parseTrashInfo(infoPath);
+  if (!info) return {.ok = false, .path = infoPath, .error = "Trash metadata is missing."};
+  std::filesystem::create_directories(info->originalPath.parent_path(), ec);
+  if (ec) return {.ok = false, .path = info->originalPath.parent_path(), .error = ec.message()};
+  std::filesystem::path target = info->originalPath;
+  if (std::filesystem::exists(target, ec) && !ec) {
+    target = collisionFreePath(target.parent_path(), target.filename().string());
+  }
+  std::filesystem::rename(trashedPath, target, ec);
+  if (ec) {
+    if (!copyRecursive(trashedPath, target, ec)) return {.ok = false, .path = target, .error = ec.message()};
+    std::filesystem::remove_all(trashedPath, ec);
+    if (ec) return {.ok = false, .path = target, .error = ec.message()};
+  }
+  std::filesystem::remove(infoPath, ec);
   return {.ok = true, .path = target};
 }
 
