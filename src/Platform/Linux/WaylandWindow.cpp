@@ -203,6 +203,10 @@ struct SharedWaylandConnection {
   WaylandWindow* keyboardFocus = nullptr;
   wl_surface* keyboardSurface = nullptr;
   unsigned int refs = 0;
+  bool fatalError = false;
+  bool shutdownRequested = false;
+  int fatalErrno = 0;
+  std::string fatalContext;
 };
 
 std::mutex gWaylandConnectionMutex;
@@ -256,6 +260,102 @@ wl_keyboard_listener const sharedKeyboardListener{sharedKeymap, sharedKeyboardEn
                                                  sharedKeyboardKey, sharedKeyboardModifiers,
                                                  sharedKeyboardRepeatInfo};
 
+bool canSendWaylandRequests(SharedWaylandConnection const* shared) {
+  return shared && shared->display && !shared->fatalError && wl_display_get_error(shared->display) == 0;
+}
+
+void requestWaylandShutdown(SharedWaylandConnection* shared) {
+  if (!shared || shared->shutdownRequested) {
+    return;
+  }
+  shared->shutdownRequested = true;
+  if (Application::hasInstance()) {
+    try {
+      Application::instance().quit();
+    } catch (...) {
+    }
+  }
+}
+
+void markWaylandConnectionDead(SharedWaylandConnection* shared, char const* context, int error = 0) {
+  if (!shared) {
+    return;
+  }
+  if (error == 0 && shared->display) {
+    error = wl_display_get_error(shared->display);
+  }
+  if (error == 0) {
+    error = EPIPE;
+  }
+  if (!shared->fatalError) {
+    shared->fatalError = true;
+    shared->fatalErrno = error;
+    shared->fatalContext = context ? context : "Wayland display";
+    std::fprintf(stderr, "flux-wayland: compositor connection lost during %s: %s\n",
+                 shared->fatalContext.c_str(), std::strerror(error));
+  }
+  requestWaylandShutdown(shared);
+}
+
+bool checkWaylandConnection(SharedWaylandConnection* shared, char const* context) {
+  if (!shared || !shared->display) {
+    return false;
+  }
+  if (shared->fatalError) {
+    requestWaylandShutdown(shared);
+    return false;
+  }
+  int const error = wl_display_get_error(shared->display);
+  if (error != 0) {
+    markWaylandConnectionDead(shared, context, error);
+    return false;
+  }
+  return true;
+}
+
+bool flushWaylandDisplay(SharedWaylandConnection* shared, char const* context) {
+  if (!checkWaylandConnection(shared, context)) {
+    return false;
+  }
+  for (;;) {
+    if (wl_display_flush(shared->display) >= 0) {
+      return true;
+    }
+    if (errno == EINTR) {
+      continue;
+    }
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      return true;
+    }
+    markWaylandConnectionDead(shared, context, errno);
+    return false;
+  }
+}
+
+void clearDisconnectedWaylandGlobals(SharedWaylandConnection& shared) {
+  shared.registry = nullptr;
+  shared.compositor = nullptr;
+  shared.shm = nullptr;
+  shared.viewporter = nullptr;
+  shared.fractionalScaleManager = nullptr;
+  shared.wmBase = nullptr;
+  shared.decorationManager = nullptr;
+  shared.decorationManagerVersion = 0;
+  shared.cutoutsManager = nullptr;
+  shared.layerShell = nullptr;
+  shared.backgroundEffectManager = nullptr;
+  shared.seat = nullptr;
+  shared.pointer = nullptr;
+  shared.cursorSurface = nullptr;
+  shared.keyboard = nullptr;
+  shared.outputs.clear();
+  shared.pointerFocus = nullptr;
+  shared.popupPointerFocus = nullptr;
+  shared.popupPointerSurface = nullptr;
+  shared.keyboardFocus = nullptr;
+  shared.keyboardSurface = nullptr;
+}
+
 std::uint32_t layerShellLayer(LayerShellLayer layer) {
   switch (layer) {
   case LayerShellLayer::Background: return ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND;
@@ -295,8 +395,8 @@ int createPopupSharedMemoryFile(char const* name, std::size_t size) {
   return fd;
 }
 
-void destroyWaylandMenuBuffer(WaylandMenuBuffer& buffer) {
-  if (buffer.buffer) wl_buffer_destroy(buffer.buffer);
+void destroyWaylandMenuBuffer(WaylandMenuBuffer& buffer, bool destroyProxy = true) {
+  if (buffer.buffer && destroyProxy) wl_buffer_destroy(buffer.buffer);
   if (buffer.pixels) munmap(buffer.pixels, static_cast<std::size_t>(buffer.size));
   if (buffer.fd >= 0) close(buffer.fd);
   buffer = {};
@@ -492,10 +592,13 @@ void commitPopupMenuBuffer(WaylandPopupMenuState& state) {
 }
 
 WaylandPopupMenuState::~WaylandPopupMenuState() {
-  if (popup) xdg_popup_destroy(popup);
-  if (xdgSurface) xdg_surface_destroy(xdgSurface);
-  if (surface) wl_surface_destroy(surface);
-  destroyWaylandMenuBuffer(buffer);
+  bool const destroyProxies = canSendWaylandRequests(shared);
+  if (destroyProxies) {
+    if (popup) xdg_popup_destroy(popup);
+    if (xdgSurface) xdg_surface_destroy(xdgSurface);
+    if (surface) wl_surface_destroy(surface);
+  }
+  destroyWaylandMenuBuffer(buffer, destroyProxies);
 }
 
 WaylandPopoverSurfaceState::~WaylandPopoverSurfaceState() {
@@ -503,14 +606,20 @@ WaylandPopoverSurfaceState::~WaylandPopoverSurfaceState() {
     host->notifyDismissed();
   }
   canvas.reset();
-  if (popup) xdg_popup_destroy(popup);
-  if (xdgSurface) xdg_surface_destroy(xdgSurface);
-  if (surface) wl_surface_destroy(surface);
+  if (canSendWaylandRequests(shared)) {
+    if (popup) xdg_popup_destroy(popup);
+    if (xdgSurface) xdg_surface_destroy(xdgSurface);
+    if (surface) wl_surface_destroy(surface);
+  }
 }
 
 SharedWaylandConnection* acquireWaylandConnection() {
   std::lock_guard lock(gWaylandConnectionMutex);
   if (!gWaylandConnection.display) {
+    gWaylandConnection.fatalError = false;
+    gWaylandConnection.shutdownRequested = false;
+    gWaylandConnection.fatalErrno = 0;
+    gWaylandConnection.fatalContext.clear();
     gWaylandConnection.display = wl_display_connect(nullptr);
     if (!gWaylandConnection.display) {
       throw std::runtime_error("Failed to connect to Wayland display");
@@ -523,10 +632,24 @@ SharedWaylandConnection* acquireWaylandConnection() {
     }
     gWaylandConnection.registry = wl_display_get_registry(gWaylandConnection.display);
     wl_registry_add_listener(gWaylandConnection.registry, &sharedRegistryListener, &gWaylandConnection);
-    wl_display_roundtrip(gWaylandConnection.display);
+    if (wl_display_roundtrip(gWaylandConnection.display) < 0) {
+      int const error = wl_display_get_error(gWaylandConnection.display);
+      gWaylandConnection.xkb.reset();
+      wl_display_disconnect(gWaylandConnection.display);
+      gWaylandConnection.display = nullptr;
+      clearDisconnectedWaylandGlobals(gWaylandConnection);
+      throw std::runtime_error(std::string("Wayland registry roundtrip failed: ") +
+                               std::strerror(error == 0 ? EPIPE : error));
+    }
     if (!gWaylandConnection.compositor || !gWaylandConnection.wmBase) {
+      gWaylandConnection.xkb.reset();
+      wl_display_disconnect(gWaylandConnection.display);
+      gWaylandConnection.display = nullptr;
+      clearDisconnectedWaylandGlobals(gWaylandConnection);
       throw std::runtime_error("Wayland compositor does not expose required xdg-shell globals");
     }
+  } else if (gWaylandConnection.fatalError) {
+    throw std::runtime_error("Wayland display connection is shutting down");
   }
   ++gWaylandConnection.refs;
   return &gWaylandConnection;
@@ -537,16 +660,17 @@ void releaseWaylandConnection() {
   if (gWaylandConnection.refs == 0) return;
   --gWaylandConnection.refs;
   if (gWaylandConnection.refs != 0) return;
+  bool const destroyProxies = canSendWaylandRequests(&gWaylandConnection);
   if (gWaylandConnection.keyboard) {
-    wl_keyboard_destroy(gWaylandConnection.keyboard);
+    if (destroyProxies) wl_keyboard_destroy(gWaylandConnection.keyboard);
     gWaylandConnection.keyboard = nullptr;
   }
   if (gWaylandConnection.pointer) {
-    wl_pointer_destroy(gWaylandConnection.pointer);
+    if (destroyProxies) wl_pointer_destroy(gWaylandConnection.pointer);
     gWaylandConnection.pointer = nullptr;
   }
   if (gWaylandConnection.cursorSurface) {
-    wl_surface_destroy(gWaylandConnection.cursorSurface);
+    if (destroyProxies) wl_surface_destroy(gWaylandConnection.cursorSurface);
     gWaylandConnection.cursorSurface = nullptr;
   }
   if (gWaylandConnection.cursorTheme) {
@@ -554,52 +678,52 @@ void releaseWaylandConnection() {
     gWaylandConnection.cursorTheme = nullptr;
   }
   if (gWaylandConnection.seat) {
-    wl_seat_destroy(gWaylandConnection.seat);
+    if (destroyProxies) wl_seat_destroy(gWaylandConnection.seat);
     gWaylandConnection.seat = nullptr;
   }
   for (auto& output : gWaylandConnection.outputs) {
-    if (output->output) wl_output_destroy(output->output);
+    if (output->output && destroyProxies) wl_output_destroy(output->output);
   }
   gWaylandConnection.outputs.clear();
   if (gWaylandConnection.decorationManager) {
-    zxdg_decoration_manager_v1_destroy(gWaylandConnection.decorationManager);
+    if (destroyProxies) zxdg_decoration_manager_v1_destroy(gWaylandConnection.decorationManager);
     gWaylandConnection.decorationManager = nullptr;
     gWaylandConnection.decorationManagerVersion = 0;
   }
   if (gWaylandConnection.cutoutsManager) {
-    xx_cutouts_manager_v1_destroy(gWaylandConnection.cutoutsManager);
+    if (destroyProxies) xx_cutouts_manager_v1_destroy(gWaylandConnection.cutoutsManager);
     gWaylandConnection.cutoutsManager = nullptr;
   }
   if (gWaylandConnection.viewporter) {
-    wp_viewporter_destroy(gWaylandConnection.viewporter);
+    if (destroyProxies) wp_viewporter_destroy(gWaylandConnection.viewporter);
     gWaylandConnection.viewporter = nullptr;
   }
   if (gWaylandConnection.fractionalScaleManager) {
-    wp_fractional_scale_manager_v1_destroy(gWaylandConnection.fractionalScaleManager);
+    if (destroyProxies) wp_fractional_scale_manager_v1_destroy(gWaylandConnection.fractionalScaleManager);
     gWaylandConnection.fractionalScaleManager = nullptr;
   }
   if (gWaylandConnection.wmBase) {
-    xdg_wm_base_destroy(gWaylandConnection.wmBase);
+    if (destroyProxies) xdg_wm_base_destroy(gWaylandConnection.wmBase);
     gWaylandConnection.wmBase = nullptr;
   }
   if (gWaylandConnection.compositor) {
-    wl_compositor_destroy(gWaylandConnection.compositor);
+    if (destroyProxies) wl_compositor_destroy(gWaylandConnection.compositor);
     gWaylandConnection.compositor = nullptr;
   }
   if (gWaylandConnection.layerShell) {
-    zwlr_layer_shell_v1_destroy(gWaylandConnection.layerShell);
+    if (destroyProxies) zwlr_layer_shell_v1_destroy(gWaylandConnection.layerShell);
     gWaylandConnection.layerShell = nullptr;
   }
   if (gWaylandConnection.backgroundEffectManager) {
-    ext_background_effect_manager_v1_destroy(gWaylandConnection.backgroundEffectManager);
+    if (destroyProxies) ext_background_effect_manager_v1_destroy(gWaylandConnection.backgroundEffectManager);
     gWaylandConnection.backgroundEffectManager = nullptr;
   }
   if (gWaylandConnection.shm) {
-    wl_shm_destroy(gWaylandConnection.shm);
+    if (destroyProxies) wl_shm_destroy(gWaylandConnection.shm);
     gWaylandConnection.shm = nullptr;
   }
   if (gWaylandConnection.registry) {
-    wl_registry_destroy(gWaylandConnection.registry);
+    if (destroyProxies) wl_registry_destroy(gWaylandConnection.registry);
     gWaylandConnection.registry = nullptr;
   }
   gWaylandConnection.xkb.reset();
@@ -607,6 +731,10 @@ void releaseWaylandConnection() {
     wl_display_disconnect(gWaylandConnection.display);
     gWaylandConnection.display = nullptr;
   }
+  gWaylandConnection.fatalError = false;
+  gWaylandConnection.shutdownRequested = false;
+  gWaylandConnection.fatalErrno = 0;
+  gWaylandConnection.fatalContext.clear();
 }
 
 } // namespace
@@ -657,7 +785,15 @@ public:
     wl_surface_commit(surface_);
     surfaceCommitted_ = true;
     while (!configured_) {
-      if (wl_display_dispatch(display_) < 0) {
+      dispatchingWaylandEvents_ = true;
+      int const rc = wl_display_dispatch(display_);
+      dispatchingWaylandEvents_ = false;
+      if (rc < 0) {
+        int const error = wl_display_get_error(display_);
+        markWaylandConnectionDead(shared_, "initial configure dispatch", error == 0 ? errno : error);
+        throw std::runtime_error("Wayland initial configure failed");
+      }
+      if (!checkWaylandConnection(shared_, "initial configure dispatch")) {
         throw std::runtime_error("Wayland initial configure failed");
       }
     }
@@ -679,16 +815,19 @@ public:
         shared_->keyboardSurface = nullptr;
       }
     }
-    if (frameCallback_) wl_callback_destroy(frameCallback_);
-    if (backgroundEffect_) ext_background_effect_surface_v1_destroy(backgroundEffect_);
-    if (layerSurface_) zwlr_layer_surface_v1_destroy(layerSurface_);
-    if (cutouts_) xx_cutouts_v1_destroy(cutouts_);
-    if (decoration_) zxdg_toplevel_decoration_v1_destroy(decoration_);
-    if (toplevel_) xdg_toplevel_destroy(toplevel_);
-    if (xdgSurface_) xdg_surface_destroy(xdgSurface_);
-    if (fractionalScale_) wp_fractional_scale_v1_destroy(fractionalScale_);
-    if (viewport_) wp_viewport_destroy(viewport_);
-    if (surface_) wl_surface_destroy(surface_);
+    bool const destroyProxies = canSendWaylandRequests(shared_);
+    if (destroyProxies) {
+      if (frameCallback_) wl_callback_destroy(frameCallback_);
+      if (backgroundEffect_) ext_background_effect_surface_v1_destroy(backgroundEffect_);
+      if (layerSurface_) zwlr_layer_surface_v1_destroy(layerSurface_);
+      if (cutouts_) xx_cutouts_v1_destroy(cutouts_);
+      if (decoration_) zxdg_toplevel_decoration_v1_destroy(decoration_);
+      if (toplevel_) xdg_toplevel_destroy(toplevel_);
+      if (xdgSurface_) xdg_surface_destroy(xdgSurface_);
+      if (fractionalScale_) wp_fractional_scale_v1_destroy(fractionalScale_);
+      if (viewport_) wp_viewport_destroy(viewport_);
+      if (surface_) wl_surface_destroy(surface_);
+    }
     if (shared_) releaseWaylandConnection();
     if (wakePipe_[0] >= 0) close(wakePipe_[0]);
     if (wakePipe_[1] >= 0) close(wakePipe_[1]);
@@ -798,7 +937,7 @@ public:
     titlebarMode_ = mode;
     configureDecorationProtocol();
     if (surface_) wl_surface_commit(surface_);
-    if (display_) wl_display_flush(display_);
+    flushWaylandDisplay(shared_, "titlebar mode update");
   }
 
   WindowTitlebarMode titlebarMode() const override { return titlebarMode_; }
@@ -844,7 +983,7 @@ public:
       return;
     }
     xdg_toplevel_move(toplevel_, shared_->seat, serial);
-    wl_display_flush(display_);
+    flushWaylandDisplay(shared_, "window move request");
   }
 
   void beginWindowResize(WindowResizeEdge edge, std::uint32_t platformSerial = 0) override {
@@ -855,12 +994,12 @@ public:
       return;
     }
     xdg_toplevel_resize(toplevel_, shared_->seat, serial, xdgEdge);
-    wl_display_flush(display_);
+    flushWaylandDisplay(shared_, "window resize request");
   }
 
   bool showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t platformSerial = 0) override {
     if (!shared_ || !shared_->compositor || !shared_->shm || !shared_->wmBase || !surface_ ||
-        menu.items.empty()) {
+        menu.items.empty() || !canSendWaylandRequests(shared_)) {
       return false;
     }
     if (!xdgSurface_ && !layerSurface_) {
@@ -915,13 +1054,14 @@ public:
 
     state->buffer = createWaylandMenuBuffer(shared_->shm, state->width, state->height);
     wl_surface_commit(state->surface);
-    wl_display_flush(display_);
+    flushWaylandDisplay(shared_, "popup menu show");
     popupMenu_ = std::move(state);
     return true;
   }
 
   PopoverSurfaceId showPopover(Popover popover, Rect anchor, std::uint32_t platformSerial = 0) override {
-    if (!shared_ || !shared_->compositor || !shared_->wmBase || !surface_ || !fluxWindow_) {
+    if (!shared_ || !shared_->compositor || !shared_->wmBase || !surface_ || !fluxWindow_ ||
+        !canSendWaylandRequests(shared_)) {
       return kInvalidPopoverSurfaceId;
     }
     if (!xdgSurface_ && !layerSurface_) {
@@ -979,7 +1119,7 @@ public:
     xdg_positioner_destroy(positioner);
 
     wl_surface_commit(state->surface);
-    wl_display_flush(display_);
+    flushWaylandDisplay(shared_, "popover show");
     popovers_.push_back(std::move(state));
     return id;
   }
@@ -1011,9 +1151,7 @@ public:
       xdg_popup_reposition(state->popup, positioner, state->repositionToken++);
     }
     xdg_positioner_destroy(positioner);
-    if (display_) {
-      wl_display_flush(display_);
-    }
+    flushWaylandDisplay(shared_, "popover reposition");
   }
 
   Size currentSize() const override { return size_; }
@@ -1024,11 +1162,13 @@ public:
   void processEvents() override {
     drainWakePipe();
     dispatchReadyEvents(0);
+    if (shared_ && shared_->fatalError) return;
     flushDeferredRedraw();
   }
 
   void waitForEvents(int timeoutMs) override {
     dispatchReadyEvents(timeoutMs);
+    if (shared_ && shared_->fatalError) return;
     flushDeferredRedraw();
   }
 
@@ -1036,11 +1176,13 @@ public:
     char const c = 1;
     (void)write(wakePipe_[1], &c, 1);
   }
-  int eventFd() const override { return display_ ? wl_display_get_fd(display_) : -1; }
+  int eventFd() const override {
+    return display_ && shared_ && !shared_->fatalError ? wl_display_get_fd(display_) : -1;
+  }
   int wakeFd() const override { return wakePipe_[0]; }
 
   void requestAnimationFrame() override {
-    if (framePending_ || !surface_) return;
+    if (framePending_ || !surface_ || !canSendWaylandRequests(shared_)) return;
     framePending_ = true;
     if (detail::resizeTraceEnabled()) {
       detail::resizeTrace("wayland-window", "request-frame window=%u size=%dx%d\n",
@@ -1050,7 +1192,7 @@ public:
     frameCallback_ = wl_surface_frame(surface_);
     wl_callback_add_listener(frameCallback_, &frameCallbackListener_, this);
     wl_surface_commit(surface_);
-    wl_display_flush(display_);
+    flushWaylandDisplay(shared_, "animation frame request");
   }
 
   void acknowledgeAnimationFrameTick() override {
@@ -1061,7 +1203,7 @@ public:
       detail::resizeTrace("wayland-window", "complete-frame window=%u needsAnother=%d\n",
                    handle_, needsAnotherFrame ? 1 : 0);
     }
-    wl_display_flush(display_);
+    flushWaylandDisplay(shared_, "animation frame complete");
     framePending_ = false;
     if (needsAnotherFrame) requestAnimationFrame();
   }
@@ -1262,9 +1404,7 @@ private:
       }
     }
     popupMenu_.reset();
-    if (display_) {
-      wl_display_flush(display_);
-    }
+    flushWaylandDisplay(shared_, "popup menu dismiss");
   }
 
   WaylandPopoverSurfaceState* popoverForId(PopoverSurfaceId id) noexcept {
@@ -1318,9 +1458,7 @@ private:
     if (it != popovers_.end()) {
       popovers_.erase(it);
     }
-    if (display_) {
-      wl_display_flush(display_);
-    }
+    flushWaylandDisplay(shared_, "popover dismiss");
   }
 
   void finishPopoverEvent(WaylandPopoverSurfaceState& state) {
@@ -1367,9 +1505,7 @@ private:
     state.canvas->beginFrame();
     state.host->render(*state.canvas);
     state.canvas->present();
-    if (display_) {
-      wl_display_flush(display_);
-    }
+    flushWaylandDisplay(shared_, "popover render");
   }
 
   void dispatchPopoverPointerMove(WaylandPopoverSurfaceState& state, Point point) {
@@ -1498,9 +1634,7 @@ private:
     popupMenu_->hoverRow = row;
     renderPopupMenu(*popupMenu_);
     commitPopupMenuBuffer(*popupMenu_);
-    if (display_) {
-      wl_display_flush(display_);
-    }
+    flushWaylandDisplay(shared_, "popup menu hover");
   }
 
   void activatePopupMenuRow(int row) {
@@ -1533,9 +1667,7 @@ private:
         xdg_popup_grab(state->popup, state->shared->seat, state->grabSerial);
         state->grabbed = true;
       }
-      if (state->shared && state->shared->display) {
-        wl_display_flush(state->shared->display);
-      }
+      flushWaylandDisplay(state->shared, "popup configure");
     }
   }
 
@@ -1565,9 +1697,7 @@ private:
         xdg_popup_grab(state->popup, state->shared->seat, state->grabSerial);
         state->grabbed = true;
       }
-      if (state->shared && state->shared->display) {
-        wl_display_flush(state->shared->display);
-      }
+      flushWaylandDisplay(state->shared, "popover configure");
     }
   }
 
@@ -1844,7 +1974,7 @@ private:
   }
 
   void applyCursor(Cursor cursor) {
-    if (!shared_ || !shared_->pointer || pointerEnterSerial_ == 0) {
+    if (!shared_ || !shared_->pointer || pointerEnterSerial_ == 0 || !canSendWaylandRequests(shared_)) {
       return;
     }
     int const scale = static_cast<int>(std::max(1.f, std::round(dpiScaleX_)));
@@ -1873,10 +2003,13 @@ private:
     wl_pointer_set_cursor(shared_->pointer, pointerEnterSerial_, shared_->cursorSurface,
                           static_cast<std::int32_t>(image->hotspot_x / static_cast<std::uint32_t>(scale)),
                           static_cast<std::int32_t>(image->hotspot_y / static_cast<std::uint32_t>(scale)));
-    wl_display_flush(display_);
+    flushWaylandDisplay(shared_, "cursor update");
   }
 
   void requestServerSideDecorations() {
+    if (!canSendWaylandRequests(shared_)) {
+      return;
+    }
     if (decoration_) {
       zxdg_toplevel_decoration_v1_set_mode(decoration_, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
       return;
@@ -1904,8 +2037,11 @@ private:
     serverSideDecorationsActive_ = false;
     receivedCutout_ = false;
     if (cutouts_ && titlebarMode_ != WindowTitlebarMode::Integrated) {
-      xx_cutouts_v1_destroy(cutouts_);
+      if (canSendWaylandRequests(shared_)) xx_cutouts_v1_destroy(cutouts_);
       cutouts_ = nullptr;
+    }
+    if (!canSendWaylandRequests(shared_)) {
+      return;
     }
 
     if (titlebarMode_ == WindowTitlebarMode::Client || titlebarMode_ == WindowTitlebarMode::None) {
@@ -1922,11 +2058,9 @@ private:
   }
 
   void commitSurface() {
-    if (surface_) {
+    if (surface_ && canSendWaylandRequests(shared_)) {
       wl_surface_commit(surface_);
-      if (display_) {
-        wl_display_flush(display_);
-      }
+      flushWaylandDisplay(shared_, "surface commit");
     }
   }
 
@@ -1936,7 +2070,8 @@ private:
     bool const wantsBlur = wantsGlass ||
                            layerShellConfig_.backgroundBlur ||
                            chrome.style != LayerShellChromeStyle::None;
-    if (!shared_ || !shared_->backgroundEffectManager || !shared_->compositor || !surface_) {
+    if (!shared_ || !shared_->backgroundEffectManager || !shared_->compositor || !surface_ ||
+        !canSendWaylandRequests(shared_)) {
       return;
     }
     if (!wantsBlur) {
@@ -2034,10 +2169,10 @@ private:
 
   void requestCutouts() {
     if (cutouts_) {
-      xx_cutouts_v1_destroy(cutouts_);
+      if (canSendWaylandRequests(shared_)) xx_cutouts_v1_destroy(cutouts_);
       cutouts_ = nullptr;
     }
-    if (!shared_ || !shared_->cutoutsManager || !surface_) return;
+    if (!shared_ || !shared_->cutoutsManager || !surface_ || !canSendWaylandRequests(shared_)) return;
     cutouts_ = xx_cutouts_manager_v1_get_cutouts(shared_->cutoutsManager, surface_);
     if (cutouts_) xx_cutouts_v1_add_listener(cutouts_, &cutoutsListener_, this);
   }
@@ -2079,27 +2214,84 @@ private:
     while (read(wakePipe_[0], buffer, sizeof(buffer)) > 0) {}
   }
 
-  void dispatchReadyEvents(int timeoutMs) {
-    while (wl_display_prepare_read(display_) != 0) {
-      dispatchingWaylandEvents_ = true;
-      wl_display_dispatch_pending(display_);
-      dispatchingWaylandEvents_ = false;
+  bool dispatchPendingWayland(char const* context) {
+    if (!checkWaylandConnection(shared_, context)) {
+      return false;
     }
-    wl_display_flush(display_);
+    dispatchingWaylandEvents_ = true;
+    int const rc = wl_display_dispatch_pending(display_);
+    dispatchingWaylandEvents_ = false;
+    if (rc < 0) {
+      int const error = wl_display_get_error(display_);
+      markWaylandConnectionDead(shared_, context, error == 0 ? errno : error);
+      return false;
+    }
+    return checkWaylandConnection(shared_, context);
+  }
+
+  void dispatchReadyEvents(int timeoutMs) {
+    if (!display_ || !checkWaylandConnection(shared_, "event dispatch")) {
+      return;
+    }
+    for (;;) {
+      errno = 0;
+      if (wl_display_prepare_read(display_) == 0) {
+        break;
+      }
+      int const prepareErrno = errno;
+      if (prepareErrno != EAGAIN && prepareErrno != 0) {
+        markWaylandConnectionDead(shared_, "event prepare read", prepareErrno);
+        return;
+      }
+      if (!dispatchPendingWayland("pending event dispatch before read")) {
+        return;
+      }
+    }
+
+    bool preparedRead = true;
+    auto cancelPreparedRead = [&] {
+      if (preparedRead && display_) {
+        wl_display_cancel_read(display_);
+        preparedRead = false;
+      }
+    };
+
+    if (!flushWaylandDisplay(shared_, "event dispatch flush")) {
+      cancelPreparedRead();
+      return;
+    }
 
     pollfd fds[2]{{wl_display_get_fd(display_), POLLIN, 0}, {wakePipe_[0], POLLIN, 0}};
-    int const rc = poll(fds, 2, timeoutMs < 0 ? -1 : timeoutMs);
+    int rc = -1;
+    do {
+      rc = poll(fds, 2, timeoutMs < 0 ? -1 : timeoutMs);
+    } while (rc < 0 && errno == EINTR);
+
+    if (rc < 0) {
+      int const pollErrno = errno;
+      cancelPreparedRead();
+      markWaylandConnectionDead(shared_, "event poll", pollErrno);
+      return;
+    }
     if (rc > 0 && (fds[1].revents & POLLIN)) {
       drainWakePipe();
     }
-    if (rc > 0 && (fds[0].revents & POLLIN)) {
-      wl_display_read_events(display_);
-    } else {
-      wl_display_cancel_read(display_);
+    if (rc > 0 && (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL))) {
+      cancelPreparedRead();
+      markWaylandConnectionDead(shared_, "display poll", wl_display_get_error(display_));
+      return;
     }
-    dispatchingWaylandEvents_ = true;
-    wl_display_dispatch_pending(display_);
-    dispatchingWaylandEvents_ = false;
+    if (rc > 0 && (fds[0].revents & POLLIN)) {
+      preparedRead = false;
+      if (wl_display_read_events(display_) < 0) {
+        int const error = wl_display_get_error(display_);
+        markWaylandConnectionDead(shared_, "event read", error == 0 ? errno : error);
+        return;
+      }
+    } else {
+      cancelPreparedRead();
+    }
+    dispatchPendingWayland("pending event dispatch after read");
   }
 
   void flushDeferredRedraw() {
@@ -2450,7 +2642,12 @@ std::vector<std::string> availableWaylandOutputs() {
   SharedWaylandConnection* shared = nullptr;
   try {
     shared = acquireWaylandConnection();
-    wl_display_roundtrip(shared->display);
+    if (wl_display_roundtrip(shared->display) < 0) {
+      int const error = wl_display_get_error(shared->display);
+      markWaylandConnectionDead(shared, "output enumeration roundtrip", error == 0 ? errno : error);
+      releaseWaylandConnection();
+      return {};
+    }
 
     std::vector<std::string> outputs;
     outputs.reserve(shared->outputs.size());

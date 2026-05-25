@@ -95,6 +95,8 @@ These are the concrete findings to resolve or validate before broad refactors.
 
    `src/Platform/Linux/WaylandWindow.cpp` polls the Wayland display fd for `POLLIN` only, ignores fatal `POLLHUP`/`POLLERR`, does not check `wl_display_flush`, `wl_display_read_events`, or `wl_display_dispatch_pending` failures, and does not use `wl_display_get_error()` to terminate the app. `src/UI/Application.cpp` then keeps polling each unique platform event fd. This matches the observed behavior where `lambda-terminal`, `lambda-settings`, and `lambda-files` spin after compositor death.
 
+   Status: implemented and manually verified on 2026-05-25.
+
 2. Minimize does not actually mark a toplevel minimized.
 
    `minimizeToplevel()` in `src/Compositor/Window/FocusStack.cpp` lowers the surface and changes focus, but never sets `surface->minimized = true`. Snapshot generation already skips minimized surfaces, and `focusSurface()` already clears `minimized`, so the intended state model exists but the minimize command is incomplete.

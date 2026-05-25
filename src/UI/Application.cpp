@@ -709,6 +709,9 @@ int Application::exec() {
     }
 
     d->eventQueue_.dispatch();
+    if (d->quit_) {
+      break;
+    }
 
     for (unsigned int closeHandle : std::exchange(d->pendingCloseHandles_, {})) {
       auto it = std::find_if(d->windows_.begin(), d->windows_.end(),
@@ -728,11 +731,17 @@ int Application::exec() {
         quit();
       }
     }
+    if (d->quit_) {
+      break;
+    }
 
     for (auto& w : d->windows_) {
       if (w) {
         w->platformWindow()->processEvents();
       }
+    }
+    if (d->quit_) {
+      break;
     }
 
     processFrameCallbacks();
