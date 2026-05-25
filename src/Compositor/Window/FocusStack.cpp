@@ -133,6 +133,7 @@ using wm::setKeyboardFocus;
 using wm::sendPointerFocus;
 using wm::isManagedToplevel;
 using wm::lowerSurface;
+using wm::markToplevelMinimized;
 using wm::previousFocusedToplevel;
 
 void removeSurfaceFromFocusOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
@@ -156,13 +157,19 @@ void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
 }
 
 void minimizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs) {
-  if (!isManagedToplevel(surface)) return;
+  if (!markToplevelMinimized(surface)) return;
   lowerSurface(server, surface);
+  bool shellStateNotified = false;
   if (server->keyboardFocus_ == surface) {
     setKeyboardFocus(server, previousFocusedToplevel(server, surface));
+    shellStateNotified = true;
   }
   if (server->pointerFocus_ == surface) {
     sendPointerFocus(server, surfaceAt(server, server->pointerX_, server->pointerY_), timeMs);
+  }
+  if (!shellStateNotified) {
+    ++server->contentSerial_;
+    server->notifyShellStateChanged();
   }
 }
 

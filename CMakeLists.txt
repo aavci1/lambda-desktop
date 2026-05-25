@@ -933,6 +933,9 @@ if(FLUX_BUILD_TESTS)
       src/Compositor/PresenterEnv.cpp
       tests/VulkanRenderTargetTests.cpp
     )
+    if(FLUX_PLATFORM_LINUX_KMS OR LAMBDA_BUILD_WINDOW_MANAGER)
+      list(APPEND _flux_test_sources tests/CompositorWindowStateTests.cpp)
+    endif()
   endif()
   add_executable(flux_tests ${_flux_test_sources})
 
@@ -948,7 +951,14 @@ if(FLUX_BUILD_TESTS)
     doctest::doctest
   )
   if(FLUX_PLATFORM_LINUX_WAYLAND OR FLUX_PLATFORM_LINUX_KMS)
-    target_link_libraries(flux_tests PRIVATE PkgConfig::VULKAN)
+    target_include_directories(flux_tests PRIVATE ${FLUX_WAYLAND_PROTOCOL_DIR})
+    target_link_libraries(flux_tests PRIVATE
+      PkgConfig::VULKAN
+      PkgConfig::LIBDRM
+    )
+    if(FLUX_PLATFORM_LINUX_KMS OR LAMBDA_BUILD_WINDOW_MANAGER)
+      target_link_libraries(flux_tests PRIVATE PkgConfig::WAYLAND_SERVER)
+    endif()
   endif()
   target_compile_definitions(flux_tests PRIVATE FLUX_TESTING=1)
 

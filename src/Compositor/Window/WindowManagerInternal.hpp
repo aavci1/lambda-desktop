@@ -43,6 +43,13 @@ enum class ChromeButton {
 ChromeButton chromeButtonAt(ChromeHitContext const& context, float x, float y);
 
 bool isManagedToplevel(WaylandServer::Impl::Surface const* surface);
+inline bool markToplevelMinimized(WaylandServer::Impl::Surface* surface) {
+  if (!surfaceIsXdgToplevel(surface) || surface->minimized) {
+    return false;
+  }
+  surface->minimized = true;
+  return true;
+}
 bool containsPoint(float x, float y, float left, float top, float right, float bottom);
 WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surface);
 OutputGeometry outputGeometryFor(WaylandServer::Impl const* server);

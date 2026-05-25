@@ -101,6 +101,8 @@ These are the concrete findings to resolve or validate before broad refactors.
 
    `minimizeToplevel()` in `src/Compositor/Window/FocusStack.cpp` lowers the surface and changes focus, but never sets `surface->minimized = true`. Snapshot generation already skips minimized surfaces, and `focusSurface()` already clears `minimized`, so the intended state model exists but the minimize command is incomplete.
 
+   Status: implemented and covered by focused compositor state tests on 2026-05-25.
+
 3. Screenshot support is still full-output save only.
 
    `requestScreenshot()` stores a boolean, and `CompositorRuntime` captures the next full rendered frame and writes a PNG through `Screenshot.cpp`. There is no active-window mode, region mode, compositor-drawn selection UI, cancel path, clipboard path, cursor inclusion policy, or documented shadow/border policy for active-window capture.
