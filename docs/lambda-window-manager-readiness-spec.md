@@ -141,6 +141,8 @@ These are the concrete findings to resolve or validate before broad refactors.
 
    `CompositorWindowGeometryTests` covers snap, popup, restore-drag, and resize geometry helpers. There are no focused tests for `minimizeToplevel`, Shell IPC focus/restore, focus order after close/minimize, or minimized-window snapshot behavior.
 
+   Status: partially implemented with focused state tests on 2026-05-26. Minimized toplevel state transitions and shell focus restoration are now covered by deterministic tests. Shell-facing focus requests now restore minimized windows before focusing them, and app-id matching includes the in-tree Lambda app aliases used by the shell launcher. Broader focus-order coverage after close/minimize and minimized-window snapshot coverage still need integration-level tests.
+
 10. Real-app validation docs are incomplete.
 
     `docs/compositor-testing.md` covers compositor demos and `foot`, but the readiness spec also requires Firefox or another browser, one GTK app, and one Qt app where available. The smoke doc should be expanded when those checks are run.

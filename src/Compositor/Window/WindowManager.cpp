@@ -47,10 +47,12 @@ using wm::kSnapPreviewAnimationMs;
 using wm::monotonicMilliseconds;
 using wm::raiseSurface;
 using wm::resetDragSnapState;
+using wm::restoreSurfaceForShellFocus;
 using wm::resourceBelongsToSurfaceClient;
 using wm::sendPointerFocus;
 using wm::sendRelativePointerMotion;
 using wm::setKeyboardFocus;
+using wm::shellAppIdMatches;
 using wm::snapToplevel;
 using wm::titlebarAt;
 using wm::closeButtonAt;
@@ -459,18 +461,6 @@ std::optional<std::string> commandForAppId(std::string const& appId) {
   return std::nullopt;
 }
 
-bool shellAppIdMatches(std::string const& requested, std::string const& actual) {
-  if (requested == actual) return true;
-  if (requested == "terminal" && (actual == "lambda-terminal" || actual == "foot")) return true;
-  if (requested == "browser" && actual == "firefox") return true;
-  if (requested == "files" &&
-      (actual == "files" || actual == "lambda-files" || actual == "org.gnome.Nautilus" ||
-       actual == "nautilus" || actual == "thunar")) {
-    return true;
-  }
-  return false;
-}
-
 void spawnShellCommand(std::string const& command, std::string const& waylandDisplay) {
   if (command.empty()) return;
   pid_t const child = fork();
@@ -503,12 +493,10 @@ void WaylandServer::Impl::launchShellApp(std::string const& appId) {
 bool WaylandServer::Impl::focusShellApp(std::string const& appId, std::uint32_t timeMs) {
   for (auto it = surfaces_.rbegin(); it != surfaces_.rend(); ++it) {
     Surface* surface = it->get();
-    if (!surface || !surfaceIsXdgToplevel(surface) || surface->minimized) continue;
+    if (!surface || !surfaceIsXdgToplevel(surface)) continue;
     XdgToplevel* toplevel = toplevelForSurface(this, surface);
     if (!toplevel || !shellAppIdMatches(appId, toplevel->appId)) continue;
-    raiseSurface(this, surface);
-    setKeyboardFocus(this, surface);
-    sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+    focusSurface(this, surface, timeMs);
     return true;
   }
   return false;
@@ -517,11 +505,9 @@ bool WaylandServer::Impl::focusShellWindow(std::uint64_t windowId, std::uint32_t
   auto found = std::find_if(surfaces_.begin(), surfaces_.end(), [windowId](auto const& surface) {
     return surface && surface->id == windowId && surfaceIsXdgToplevel(surface.get());
   });
-  if (found == surfaces_.end() || (*found)->minimized) return false;
+  if (found == surfaces_.end() || !restoreSurfaceForShellFocus(found->get())) return false;
   Surface* surface = found->get();
-  raiseSurface(this, surface);
-  setKeyboardFocus(this, surface);
-  sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+  focusSurface(this, surface, timeMs);
   return true;
 }
 

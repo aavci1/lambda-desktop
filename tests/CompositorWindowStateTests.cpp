@@ -22,6 +22,36 @@ TEST_CASE("markToplevelMinimized rejects non-toplevel surfaces") {
   CHECK_FALSE(flux::compositor::wm::markToplevelMinimized(nullptr));
 }
 
+TEST_CASE("restoreSurfaceForShellFocus restores minimized toplevels") {
+  flux::compositor::WaylandServer::Impl::Surface surface{};
+  surface.role = flux::compositor::SurfaceRole::XdgToplevel;
+  surface.minimized = true;
+
+  CHECK(flux::compositor::wm::restoreSurfaceForShellFocus(&surface));
+  CHECK_FALSE(surface.minimized);
+}
+
+TEST_CASE("restoreSurfaceForShellFocus rejects non-toplevel surfaces") {
+  flux::compositor::WaylandServer::Impl::Surface popup{};
+  popup.role = flux::compositor::SurfaceRole::XdgPopup;
+  popup.minimized = true;
+
+  CHECK_FALSE(flux::compositor::wm::restoreSurfaceForShellFocus(&popup));
+  CHECK(popup.minimized);
+
+  CHECK_FALSE(flux::compositor::wm::restoreSurfaceForShellFocus(nullptr));
+}
+
+TEST_CASE("shell app id matching accepts built-in app aliases") {
+  CHECK(flux::compositor::wm::shellAppIdMatches("terminal", "lambda-terminal"));
+  CHECK(flux::compositor::wm::shellAppIdMatches("terminal", "foot"));
+  CHECK(flux::compositor::wm::shellAppIdMatches("browser", "firefox"));
+  CHECK(flux::compositor::wm::shellAppIdMatches("files", "lambda-files"));
+  CHECK(flux::compositor::wm::shellAppIdMatches("files", "org.gnome.Nautilus"));
+  CHECK(flux::compositor::wm::shellAppIdMatches("settings", "lambda-settings"));
+  CHECK(flux::compositor::wm::shellAppIdMatches("lambda-settings", "lambda-settings"));
+}
+
 TEST_CASE("surface input region defaults to full surface and can exclude points") {
   flux::compositor::WaylandServer::Impl::Surface surface{};
 

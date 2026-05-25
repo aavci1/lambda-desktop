@@ -106,6 +106,23 @@ inline bool markToplevelMinimized(WaylandServer::Impl::Surface* surface) {
   surface->minimized = true;
   return true;
 }
+inline bool restoreSurfaceForShellFocus(WaylandServer::Impl::Surface* surface) {
+  if (!surfaceIsXdgToplevel(surface)) return false;
+  surface->minimized = false;
+  return true;
+}
+inline bool shellAppIdMatches(std::string const& requested, std::string const& actual) {
+  if (requested == actual) return true;
+  if (requested == "terminal" && (actual == "lambda-terminal" || actual == "foot")) return true;
+  if (requested == "browser" && actual == "firefox") return true;
+  if (requested == "settings" && actual == "lambda-settings") return true;
+  if (requested == "files" &&
+      (actual == "files" || actual == "lambda-files" || actual == "org.gnome.Nautilus" ||
+       actual == "nautilus" || actual == "thunar")) {
+    return true;
+  }
+  return false;
+}
 bool containsPoint(float x, float y, float left, float top, float right, float bottom);
 inline bool inputRegionContains(WaylandServer::Impl::Surface const* surface, float localX, float localY) {
   if (!surface) return false;
