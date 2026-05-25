@@ -1,6 +1,7 @@
 #include "Shell/ShellModel.hpp"
 
 #include "Shell/ShellJson.hpp"
+#include "Shell/ShellModels.hpp"
 
 #include <Flux/Shell/ShellIpc.hpp>
 
@@ -62,7 +63,11 @@ bool ShellModel::appIdMatches(std::string_view requested, std::string_view actua
   if (requested == actual) return true;
   if (requested == "terminal" && (actual == "lambda-terminal" || actual == "foot")) return true;
   if (requested == "browser" && actual == "firefox") return true;
-  if (requested == "files" && (actual == "org.gnome.Nautilus" || actual == "nautilus" || actual == "thunar")) return true;
+  if (requested == "settings" && actual == "lambda-settings") return true;
+  if (requested == "files" &&
+      (actual == "lambda-files" || actual == "org.gnome.Nautilus" || actual == "nautilus" || actual == "thunar")) {
+    return true;
+  }
   return false;
 }
 
@@ -77,6 +82,7 @@ bool ShellModel::dockItemsVisualStateEqual(std::vector<DockItem> const& a,
 
 ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
   SnapshotChanges changes{};
+  ShellDesktopSnapshot const snapshot = parseShellSnapshot(json);
   auto items = dockItems_.peek();
   for (auto& item : items) {
     item.running = false;
@@ -85,35 +91,25 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
   std::string nextTitle;
   for (auto& item : items) {
     if (item.appId.empty()) continue;
-    std::size_t search = 0;
-    while (search < json.size()) {
-      std::size_t const pos = json.find("\"appId\":\"", search);
-      if (pos == std::string_view::npos) break;
-      std::size_t const valueStart = pos + 9u;
-      std::size_t const valueEnd = json.find('"', valueStart);
-      if (valueEnd == std::string_view::npos) break;
-      std::string_view actualAppId = json.substr(valueStart, valueEnd - valueStart);
-      if (appIdMatches(item.appId, actualAppId)) {
+    for (auto const& window : snapshot.windows) {
+      if (appIdMatches(item.appId, window.appId)) {
         item.running = true;
-        std::size_t const objectEnd = json.find('}', valueEnd);
-        item.focused = objectEnd != std::string_view::npos &&
-                       json.substr(valueEnd, objectEnd - valueEnd).find("\"focused\":true") != std::string_view::npos;
+        item.focused = window.focused;
         if (item.focused) {
-          nextTitle = jsonStringField(json, "title", pos);
+          nextTitle = window.title;
           if (nextTitle.empty()) nextTitle = item.label;
         }
         break;
       }
-      search = valueEnd + 1u;
     }
   }
 
   SystemStatus nextStatus{
-      .network = jsonStringField(json, "network"),
-      .wifi = jsonStringField(json, "wifi"),
-      .bluetooth = jsonStringField(json, "bluetooth"),
-      .volume = jsonStringField(json, "volume"),
-      .battery = jsonStringField(json, "battery"),
+      .network = snapshot.system.network,
+      .wifi = snapshot.system.wifi,
+      .bluetooth = snapshot.system.bluetooth,
+      .volume = snapshot.system.volume,
+      .battery = snapshot.system.battery,
   };
 
   if (!dockItemsVisualStateEqual(items, dockItems_.peek())) {

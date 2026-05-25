@@ -1,5 +1,7 @@
 #include "Shell/ShellModels.hpp"
 
+#include <Flux/Shell/ShellIpc.hpp>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -128,6 +130,65 @@ std::vector<std::string> parseStringArray(std::string_view value) {
     if (quoted) current.push_back(ch);
   }
   return strings;
+}
+
+bool jsonBoolField(std::string_view object, std::string_view name, bool fallback = false) {
+  std::string const key = "\"" + std::string(name) + "\"";
+  std::size_t pos = object.find(key);
+  if (pos == std::string_view::npos) return fallback;
+  pos = object.find(':', pos + key.size());
+  if (pos == std::string_view::npos) return fallback;
+  ++pos;
+  while (pos < object.size() && std::isspace(static_cast<unsigned char>(object[pos]))) ++pos;
+  if (object.substr(pos, 4) == "true") return true;
+  if (object.substr(pos, 5) == "false") return false;
+  return fallback;
+}
+
+std::vector<std::string_view> jsonArrayObjects(std::string_view json, std::string_view field) {
+  std::vector<std::string_view> objects;
+  std::string const key = "\"" + std::string(field) + "\"";
+  std::size_t pos = json.find(key);
+  if (pos == std::string_view::npos) return objects;
+  pos = json.find('[', pos + key.size());
+  if (pos == std::string_view::npos) return objects;
+
+  bool inString = false;
+  bool escaped = false;
+  int depth = 0;
+  std::size_t objectStart = std::string_view::npos;
+  for (std::size_t i = pos + 1u; i < json.size(); ++i) {
+    char const ch = json[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (inString && ch == '\\') {
+      escaped = true;
+      continue;
+    }
+    if (ch == '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch == '[' && depth == 0) continue;
+    if (ch == ']' && depth == 0) break;
+    if (ch == '{') {
+      if (depth == 0) objectStart = i;
+      ++depth;
+      continue;
+    }
+    if (ch == '}') {
+      if (depth <= 0) break;
+      --depth;
+      if (depth == 0 && objectStart != std::string_view::npos) {
+        objects.push_back(json.substr(objectStart, i - objectStart + 1u));
+        objectStart = std::string_view::npos;
+      }
+    }
+  }
+  return objects;
 }
 
 } // namespace
@@ -265,6 +326,40 @@ std::vector<QuickSettingState> quickSettingsSummary(std::vector<QuickSettingStat
     return a.id < b.id;
   });
   return providers;
+}
+
+ShellDesktopSnapshot parseShellSnapshot(std::string_view json) {
+  ShellDesktopSnapshot snapshot;
+
+  for (std::string_view object : jsonArrayObjects(json, "apps")) {
+    AppRegistryEntry app;
+    app.appId = flux::shell::jsonStringField(object, "id");
+    if (app.appId.empty()) app.appId = flux::shell::jsonStringField(object, "appId");
+    app.name = flux::shell::jsonStringField(object, "name");
+    app.icon = flux::shell::jsonStringField(object, "icon");
+    app.command = flux::shell::jsonStringField(object, "command");
+    if (!app.appId.empty()) snapshot.apps.push_back(std::move(app));
+  }
+
+  for (std::string_view object : jsonArrayObjects(json, "windows")) {
+    ShellWindowSnapshot window;
+    window.id = flux::shell::jsonUintField(object, "id");
+    window.appId = flux::shell::jsonStringField(object, "appId");
+    window.title = flux::shell::jsonStringField(object, "title");
+    window.focused = jsonBoolField(object, "focused");
+    window.minimized = flux::shell::jsonStringField(object, "state") == "minimized";
+    if (window.id != 0 || !window.appId.empty()) snapshot.windows.push_back(std::move(window));
+  }
+
+  snapshot.activeWindowId = flux::shell::jsonUintField(json, "activeWindowId");
+  snapshot.system = {
+      .network = flux::shell::jsonStringField(json, "network"),
+      .wifi = flux::shell::jsonStringField(json, "wifi"),
+      .bluetooth = flux::shell::jsonStringField(json, "bluetooth"),
+      .volume = flux::shell::jsonStringField(json, "volume"),
+      .battery = flux::shell::jsonStringField(json, "battery"),
+  };
+  return snapshot;
 }
 
 ShellConfig defaultShellConfig() {

@@ -115,6 +115,47 @@ TEST_CASE("Shell quick settings summary orders available providers first") {
   CHECK(summary[2].id == "bluetooth");
 }
 
+TEST_CASE("Shell snapshot parser handles reordered fields and escaped strings") {
+  auto snapshot = lambda_shell::parseShellSnapshot(R"({
+    "type":"lambda.windowManager.snapshot",
+    "windows":[
+      {"focused":false,"title":"Editor \"One\"","state":"normal","appId":"org.example.Editor","id":9},
+      {"state":"minimized","id":11,"appId":"lambda-terminal","title":"Terminal","focused":true}
+    ],
+    "apps":[
+      {"command":"editor %f","name":"Editor","id":"org.example.Editor","icon":"editor"},
+      {"name":"Terminal","id":"lambda-terminal","command":"lambda-terminal"}
+    ],
+    "activeWindowId":11,
+    "system":{"battery":"95%","volume":"44%","bluetooth":"off","wifi":"Home","network":"online"}
+  })");
+
+  REQUIRE(snapshot.apps.size() == 2);
+  CHECK(snapshot.apps[0].appId == "org.example.Editor");
+  CHECK(snapshot.apps[0].name == "Editor");
+  CHECK(snapshot.apps[0].command == "editor %f");
+
+  REQUIRE(snapshot.windows.size() == 2);
+  CHECK(snapshot.windows[0] == lambda_shell::ShellWindowSnapshot{
+                                 .id = 9,
+                                 .appId = "org.example.Editor",
+                                 .title = "Editor \"One\"",
+                             });
+  CHECK(snapshot.windows[1] == lambda_shell::ShellWindowSnapshot{
+                                 .id = 11,
+                                 .appId = "lambda-terminal",
+                                 .title = "Terminal",
+                                 .focused = true,
+                                 .minimized = true,
+                             });
+  CHECK(snapshot.activeWindowId == 11);
+  CHECK(snapshot.system.network == "online");
+  CHECK(snapshot.system.wifi == "Home");
+  CHECK(snapshot.system.bluetooth == "off");
+  CHECK(snapshot.system.volume == "44%");
+  CHECK(snapshot.system.battery == "95%");
+}
+
 TEST_CASE("Shell config parses defaults and invalid fallback") {
   auto defaults = lambda_shell::defaultShellConfig();
   CHECK(defaults.dockPinned == std::vector<std::string>{"lambda-files", "lambda-terminal", "lambda-settings", "firefox"});

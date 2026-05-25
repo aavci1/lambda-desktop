@@ -15,6 +15,27 @@ struct ShellWindowSnapshot {
   std::string title;
   bool focused = false;
   bool minimized = false;
+
+  bool operator==(ShellWindowSnapshot const&) const = default;
+};
+
+struct ShellSystemStatusSnapshot {
+  std::string network;
+  std::string wifi;
+  std::string bluetooth;
+  std::string volume;
+  std::string battery;
+
+  bool operator==(ShellSystemStatusSnapshot const&) const = default;
+};
+
+struct ShellDesktopSnapshot {
+  std::vector<AppRegistryEntry> apps;
+  std::vector<ShellWindowSnapshot> windows;
+  std::uint64_t activeWindowId = 0;
+  ShellSystemStatusSnapshot system;
+
+  bool operator==(ShellDesktopSnapshot const&) const = default;
 };
 
 struct DockModelEntry {
@@ -161,6 +182,7 @@ private:
                                                                  std::string_view query,
                                                                  std::size_t limit = 8);
 [[nodiscard]] std::vector<QuickSettingState> quickSettingsSummary(std::vector<QuickSettingState> providers);
+[[nodiscard]] ShellDesktopSnapshot parseShellSnapshot(std::string_view json);
 [[nodiscard]] ShellConfig defaultShellConfig();
 [[nodiscard]] ShellConfig parseShellConfig(std::string_view tomlText);
 
