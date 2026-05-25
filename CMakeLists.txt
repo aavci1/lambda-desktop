@@ -912,6 +912,8 @@ if(FLUX_BUILD_TESTS)
     tests/RuntimeInputTests.cpp
     tests/RuntimeTests.cpp
     tests/ShowTests.cpp
+    examples/lambda-settings/SettingsBackend.cpp
+    tests/SettingsBackendTests.cpp
     src/Shell/ShellAppRegistry.cpp
     src/Shell/ShellModels.cpp
     tests/ShellAppRegistryTests.cpp
@@ -957,6 +959,7 @@ if(FLUX_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/lambda-files
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/lambda-settings
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/lambda-terminal
   )
 

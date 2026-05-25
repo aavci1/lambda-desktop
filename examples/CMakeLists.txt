@@ -55,7 +55,8 @@ flux_add_example(lambda-shell-preview lambda-shell-preview/main.cpp)
 target_link_libraries(lambda-shell-preview PRIVATE lambda-shell-ui)
 
 flux_add_example(lambda-files lambda-files/main.cpp lambda-files/FilesStore.cpp)
-flux_add_example(lambda-settings lambda-settings/main.cpp)
+flux_add_example(lambda-settings lambda-settings/main.cpp lambda-settings/SettingsBackend.cpp)
+target_link_libraries(lambda-settings PRIVATE tomlplusplus::tomlplusplus)
 
 include(FetchContent)
 FetchContent_Declare(libvterm
