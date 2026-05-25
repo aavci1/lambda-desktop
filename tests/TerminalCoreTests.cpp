@@ -109,3 +109,88 @@ black_glass_tint = "#bad"
 )");
   CHECK(fallback == defaultTerminalConfig());
 }
+
+TEST_CASE("terminal text buffer enforces scrollback limit and viewport movement") {
+  TerminalTextBuffer buffer{3, 2};
+  buffer.pushLine("one");
+  buffer.pushLine("two");
+  buffer.pushLine("three");
+  buffer.pushLine("four");
+  buffer.pushLine("five");
+
+  CHECK(buffer.historyLineCount() == 2);
+  CHECK(buffer.logicalLines() == std::vector<std::string>{"one", "two", "three", "four", "five"});
+  CHECK(buffer.viewportLines() == std::vector<std::string>{"three", "four", "five"});
+
+  buffer.scrollViewport(2);
+  CHECK(buffer.viewportOffset() == 2);
+  CHECK(buffer.viewportLines() == std::vector<std::string>{"one", "two", "three"});
+
+  buffer.scrollViewport(50);
+  CHECK(buffer.viewportOffset() == 2);
+  buffer.scrollViewport(-1);
+  CHECK(buffer.viewportOffset() == 1);
+  CHECK(buffer.viewportLines() == std::vector<std::string>{"two", "three", "four"});
+}
+
+TEST_CASE("terminal text buffer keeps alternate screen separate from scrollback") {
+  TerminalTextBuffer buffer{2, 10};
+  buffer.pushLine("normal-1");
+  buffer.pushLine("normal-2");
+  buffer.pushLine("normal-3");
+  CHECK(buffer.historyLineCount() == 1);
+
+  buffer.enterAlternateScreen();
+  CHECK(buffer.alternateScreen());
+  CHECK(buffer.historyLineCount() == 1);
+  buffer.replaceVisibleLine(0, "editor-top");
+  buffer.replaceVisibleLine(1, "editor-bottom");
+  CHECK(buffer.viewportLines() == std::vector<std::string>{"editor-top", "editor-bottom"});
+  buffer.pushLine("editor-next");
+  CHECK(buffer.viewportLines() == std::vector<std::string>{"editor-bottom", "editor-next"});
+  CHECK(buffer.historyLineCount() == 1);
+
+  buffer.leaveAlternateScreen();
+  CHECK_FALSE(buffer.alternateScreen());
+  CHECK(buffer.viewportLines() == std::vector<std::string>{"normal-2", "normal-3"});
+  CHECK(buffer.logicalLines() == std::vector<std::string>{"normal-1", "normal-2", "normal-3"});
+}
+
+TEST_CASE("terminal text buffer reconstructs selected text across lines") {
+  TerminalTextBuffer buffer{3, 10};
+  buffer.pushLine("alpha");
+  buffer.pushLine("bravo");
+  buffer.pushLine("charlie");
+
+  CHECK(buffer.selectedText(TerminalSelection{
+            .anchor = {.line = 0, .column = 1},
+            .focus = {.line = 2, .column = 4},
+        }) == "lpha\nbravo\nchar");
+
+  CHECK(buffer.selectedText(TerminalSelection{
+            .anchor = {.line = 2, .column = 4},
+            .focus = {.line = 1, .column = 2},
+        }) == "avo\nchar");
+
+  CHECK(buffer.selectedText(TerminalSelection{
+            .anchor = {.line = 1, .column = 0},
+            .focus = {.line = 1, .column = 5},
+        }) == "bravo");
+}
+
+TEST_CASE("terminal text buffer row resizing moves normal overflow into history") {
+  TerminalTextBuffer buffer{4, 10};
+  buffer.pushLine("one");
+  buffer.pushLine("two");
+  buffer.pushLine("three");
+  buffer.pushLine("four");
+  buffer.resizeRows(2);
+
+  CHECK(buffer.visibleRows() == 2);
+  CHECK(buffer.historyLineCount() == 2);
+  CHECK(buffer.viewportLines() == std::vector<std::string>{"three", "four"});
+
+  buffer.resizeRows(4);
+  CHECK(buffer.visibleRows() == 4);
+  CHECK(buffer.viewportLines() == std::vector<std::string>{"one", "two", "three", "four"});
+}

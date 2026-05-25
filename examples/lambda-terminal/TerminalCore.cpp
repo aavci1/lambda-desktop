@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <string>
+#include <utility>
 
 namespace lambda_terminal {
 namespace {
@@ -124,6 +125,130 @@ using flux::Modifiers;
 }
 
 } // namespace
+
+TerminalTextBuffer::TerminalTextBuffer(int visibleRows, int scrollbackLimit)
+    : visibleRows_(std::max(1, visibleRows))
+    , scrollbackLimit_(std::max(0, scrollbackLimit)) {
+}
+
+int TerminalTextBuffer::historyLineCount() const noexcept {
+  return static_cast<int>(history_.size());
+}
+
+int TerminalTextBuffer::logicalLineCount() const noexcept {
+  return static_cast<int>(logicalLines().size());
+}
+
+void TerminalTextBuffer::resizeRows(int rows) {
+  rows = std::max(1, rows);
+  if (rows == visibleRows_) return;
+  visibleRows_ = rows;
+  auto& visible = alternateScreen_ ? alternateVisible_ : visible_;
+  if (static_cast<int>(visible.size()) > visibleRows_) {
+    if (!alternateScreen_) {
+      int const overflow = static_cast<int>(visible.size()) - visibleRows_;
+      history_.insert(history_.end(), visible.begin(), visible.begin() + overflow);
+      visible.erase(visible.begin(), visible.begin() + overflow);
+      setScrollbackLimit(scrollbackLimit_);
+    } else {
+      visible.erase(visible.begin(), visible.begin() + (static_cast<int>(visible.size()) - visibleRows_));
+    }
+  }
+  scrollViewport(0);
+}
+
+void TerminalTextBuffer::setScrollbackLimit(int limit) {
+  scrollbackLimit_ = std::max(0, limit);
+  if (static_cast<int>(history_.size()) > scrollbackLimit_) {
+    history_.erase(history_.begin(), history_.end() - scrollbackLimit_);
+  }
+  scrollViewport(0);
+}
+
+void TerminalTextBuffer::pushLine(std::string line) {
+  auto& visible = alternateScreen_ ? alternateVisible_ : visible_;
+  if (visibleRows_ <= 0) visibleRows_ = 1;
+  if (static_cast<int>(visible.size()) >= visibleRows_) {
+    if (!alternateScreen_) {
+      history_.push_back(std::move(visible.front()));
+      setScrollbackLimit(scrollbackLimit_);
+    }
+    visible.erase(visible.begin());
+  }
+  visible.push_back(std::move(line));
+  viewportOffset_ = 0;
+}
+
+void TerminalTextBuffer::replaceVisibleLine(int row, std::string line) {
+  if (row < 0 || row >= visibleRows_) return;
+  auto& visible = alternateScreen_ ? alternateVisible_ : visible_;
+  if (static_cast<int>(visible.size()) < visibleRows_) {
+    visible.resize(static_cast<std::size_t>(visibleRows_));
+  }
+  visible[static_cast<std::size_t>(row)] = std::move(line);
+}
+
+void TerminalTextBuffer::enterAlternateScreen() {
+  if (alternateScreen_) return;
+  alternateScreen_ = true;
+  viewportOffset_ = 0;
+  alternateVisible_.assign(static_cast<std::size_t>(visibleRows_), std::string{});
+}
+
+void TerminalTextBuffer::leaveAlternateScreen() {
+  if (!alternateScreen_) return;
+  alternateScreen_ = false;
+  viewportOffset_ = 0;
+  alternateVisible_.clear();
+}
+
+void TerminalTextBuffer::scrollViewport(int delta) {
+  int const maxOffset = alternateScreen_ ? 0 : static_cast<int>(history_.size());
+  viewportOffset_ = std::clamp(viewportOffset_ + delta, 0, maxOffset);
+}
+
+std::vector<std::string> TerminalTextBuffer::logicalLines() const {
+  if (alternateScreen_) return alternateVisible_;
+  std::vector<std::string> lines;
+  lines.reserve(history_.size() + visible_.size());
+  lines.insert(lines.end(), history_.begin(), history_.end());
+  lines.insert(lines.end(), visible_.begin(), visible_.end());
+  return lines;
+}
+
+std::vector<std::string> TerminalTextBuffer::viewportLines() const {
+  std::vector<std::string> lines = logicalLines();
+  if (lines.empty()) return {};
+  int const count = static_cast<int>(lines.size());
+  int const end = std::clamp(count - viewportOffset_, 0, count);
+  int const begin = std::max(0, end - visibleRows_);
+  return {lines.begin() + begin, lines.begin() + end};
+}
+
+std::string TerminalTextBuffer::selectedText(TerminalSelection selection) const {
+  TerminalBufferCoordinate start = selection.anchor;
+  TerminalBufferCoordinate end = selection.focus;
+  if (std::pair{end.line, end.column} < std::pair{start.line, start.column}) {
+    std::swap(start, end);
+  }
+
+  std::vector<std::string> const lines = logicalLines();
+  if (lines.empty()) return {};
+  start.line = std::clamp(start.line, 0, static_cast<int>(lines.size()) - 1);
+  end.line = std::clamp(end.line, 0, static_cast<int>(lines.size()) - 1);
+  std::string text;
+  for (int lineIndex = start.line; lineIndex <= end.line; ++lineIndex) {
+    std::string const& line = lines[static_cast<std::size_t>(lineIndex)];
+    int const from = lineIndex == start.line ? std::clamp(start.column, 0, static_cast<int>(line.size())) : 0;
+    int const to = lineIndex == end.line ? std::clamp(end.column, 0, static_cast<int>(line.size()))
+                                         : static_cast<int>(line.size());
+    if (to > from) {
+      text.append(line.substr(static_cast<std::size_t>(from), static_cast<std::size_t>(to - from)));
+    }
+    if (lineIndex != end.line) text.push_back('\n');
+  }
+  return text;
+}
 
 std::string encodeTerminalKey(KeyCode key, Modifiers modifiers, TerminalInputMode mode) {
   using namespace flux::keys;

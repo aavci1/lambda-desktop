@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace lambda_terminal {
 
@@ -79,6 +80,53 @@ struct TerminalConfig {
   flux::Color blackGlassTint{0.f, 0.f, 0.f, 0.58f};
 
   constexpr bool operator==(TerminalConfig const&) const = default;
+};
+
+struct TerminalBufferCoordinate {
+  int line = 0;
+  int column = 0;
+
+  constexpr bool operator==(TerminalBufferCoordinate const&) const = default;
+};
+
+struct TerminalSelection {
+  TerminalBufferCoordinate anchor;
+  TerminalBufferCoordinate focus;
+
+  constexpr bool operator==(TerminalSelection const&) const = default;
+};
+
+class TerminalTextBuffer {
+public:
+  explicit TerminalTextBuffer(int visibleRows = 24, int scrollbackLimit = 10'000);
+
+  [[nodiscard]] int visibleRows() const noexcept { return visibleRows_; }
+  [[nodiscard]] int scrollbackLimit() const noexcept { return scrollbackLimit_; }
+  [[nodiscard]] bool alternateScreen() const noexcept { return alternateScreen_; }
+  [[nodiscard]] int viewportOffset() const noexcept { return viewportOffset_; }
+  [[nodiscard]] int historyLineCount() const noexcept;
+  [[nodiscard]] int logicalLineCount() const noexcept;
+
+  void resizeRows(int rows);
+  void setScrollbackLimit(int limit);
+  void pushLine(std::string line);
+  void replaceVisibleLine(int row, std::string line);
+  void enterAlternateScreen();
+  void leaveAlternateScreen();
+  void scrollViewport(int delta);
+
+  [[nodiscard]] std::vector<std::string> logicalLines() const;
+  [[nodiscard]] std::vector<std::string> viewportLines() const;
+  [[nodiscard]] std::string selectedText(TerminalSelection selection) const;
+
+private:
+  int visibleRows_ = 24;
+  int scrollbackLimit_ = 10'000;
+  int viewportOffset_ = 0;
+  bool alternateScreen_ = false;
+  std::vector<std::string> history_;
+  std::vector<std::string> visible_;
+  std::vector<std::string> alternateVisible_;
 };
 
 [[nodiscard]] std::string encodeTerminalKey(flux::KeyCode key,
