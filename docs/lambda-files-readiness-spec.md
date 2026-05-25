@@ -74,7 +74,7 @@ These areas should be included in the Files milestone:
 - Add basic Files preferences through Settings later, but keep defaults usable now.
 - Add deterministic tests for path handling, operations, trash, selection, and model behavior.
 
-Status update 2026-05-26: `FilesStore` now has deterministic XDG user-directory parsing, home fallback coverage, breadcrumb generation for home/root/outside-home paths, explicit stable sorting by name/kind/size/modified time, and directory listing tests that cover hidden-file filtering plus modified-time capture. Operation, trash, selection, clipboard, open-with, and icon-theme fixture work remain open.
+Status update 2026-05-26: `FilesStore` now has deterministic XDG user-directory parsing, home fallback coverage, breadcrumb generation for home/root/outside-home paths, explicit stable sorting by name/kind/size/modified time, directory listing tests that cover hidden-file filtering plus modified-time capture, selection/range-selection helpers, collision-free folder/file creation, rename validation, copy/move/duplicate operations, and URI-list clipboard parsing/serialization. Trash, undo, open-with, and icon-theme fixture work remain open.
 
 ## Goals
 

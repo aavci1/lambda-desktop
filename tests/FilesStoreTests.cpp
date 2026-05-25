@@ -155,3 +155,112 @@ TEST_CASE("FilesStore directory listing records modified time and keeps folder-f
 
   std::filesystem::remove_all(root);
 }
+
+TEST_CASE("FilesStore selection supports single toggle range and clear") {
+  std::vector<lambda_files::FileEntry> entries{
+      {.name = "a", .path = "/tmp/a"},
+      {.name = "b", .path = "/tmp/b"},
+      {.name = "c", .path = "/tmp/c"},
+      {.name = "d", .path = "/tmp/d"},
+  };
+
+  auto state = lambda_files::selectOnly(entries, 1);
+  CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/b"});
+  CHECK(state.anchorIndex == 1);
+  CHECK(state.contains("/tmp/b"));
+
+  state = lambda_files::toggleSelection(state, entries, 3);
+  CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/b", "/tmp/d"});
+  CHECK(state.anchorIndex == 3);
+
+  state = lambda_files::toggleSelection(state, entries, 1);
+  CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/d"});
+
+  state = lambda_files::rangeSelection(state, entries, 0);
+  CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/a", "/tmp/b", "/tmp/c", "/tmp/d"});
+  CHECK(state.anchorIndex == 3);
+
+  state = lambda_files::clearSelection(state);
+  CHECK(state.selected.empty());
+  CHECK(state.anchorIndex == -1);
+}
+
+TEST_CASE("FilesStore creates folders and files with collision-free names") {
+  auto root = tempRoot("lambda-files-create-test");
+  REQUIRE(lambda_files::createFolder(root, "New Folder").ok);
+
+  auto folder = lambda_files::createFolder(root, "New Folder");
+  CHECK(folder.ok);
+  CHECK(folder.path.filename() == "New Folder 2");
+  CHECK(std::filesystem::is_directory(folder.path));
+
+  auto file = lambda_files::createFile(root, "Note.txt");
+  CHECK(file.ok);
+  CHECK(file.path.filename() == "Note.txt");
+  auto file2 = lambda_files::createFile(root, "Note.txt");
+  CHECK(file2.ok);
+  CHECK(file2.path.filename() == "Note 2.txt");
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("FilesStore validates and renames paths") {
+  auto root = tempRoot("lambda-files-rename-test");
+  {
+    std::ofstream(root / "old.txt") << "old";
+    std::ofstream(root / "taken.txt") << "taken";
+  }
+
+  CHECK(lambda_files::validateRename(root / "old.txt", "").find("empty") != std::string::npos);
+  CHECK(lambda_files::validateRename(root / "old.txt", "../bad").find("separator") != std::string::npos);
+  CHECK(lambda_files::validateRename(root / "old.txt", "taken.txt").find("exists") != std::string::npos);
+
+  auto renamed = lambda_files::renamePath(root / "old.txt", "new.txt");
+  CHECK(renamed.ok);
+  CHECK(renamed.path == root / "new.txt");
+  CHECK(std::filesystem::exists(root / "new.txt"));
+  CHECK_FALSE(std::filesystem::exists(root / "old.txt"));
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("FilesStore copies moves and duplicates files and folders") {
+  auto root = tempRoot("lambda-files-operation-test");
+  auto sourceDir = root / "source";
+  auto destination = root / "destination";
+  std::filesystem::create_directories(sourceDir / "nested");
+  std::filesystem::create_directories(destination);
+  {
+    std::ofstream(sourceDir / "nested" / "file.txt") << "hello";
+    std::ofstream(root / "single.txt") << "one";
+  }
+
+  auto copiedDir = lambda_files::copyPath(sourceDir, destination);
+  CHECK(copiedDir.ok);
+  CHECK(std::filesystem::exists(destination / "source" / "nested" / "file.txt"));
+
+  auto copiedAgain = lambda_files::copyPath(sourceDir, destination);
+  CHECK(copiedAgain.ok);
+  CHECK(copiedAgain.path.filename() == "source 2");
+
+  auto duplicate = lambda_files::duplicatePath(root / "single.txt");
+  CHECK(duplicate.ok);
+  CHECK(duplicate.path.filename() == "single copy.txt");
+  CHECK(std::filesystem::exists(duplicate.path));
+
+  auto moved = lambda_files::movePath(root / "single.txt", destination);
+  CHECK(moved.ok);
+  CHECK(std::filesystem::exists(destination / "single.txt"));
+  CHECK_FALSE(std::filesystem::exists(root / "single.txt"));
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("FilesStore serializes and parses URI lists") {
+  std::vector<std::filesystem::path> paths{"/tmp/alpha.txt", "/tmp/space name.txt"};
+  std::string const uriList = lambda_files::serializeUriList(paths);
+  CHECK(uriList.find("file:///tmp/space%20name.txt") != std::string::npos);
+
+  auto parsed = lambda_files::parseUriList("# comment\r\nfile:///tmp/alpha.txt\r\nfile:///tmp/space%20name.txt\r\n");
+  CHECK(parsed == paths);
+}

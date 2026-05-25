@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <fstream>
 #include <map>
 #include <sstream>
 #include <system_error>
@@ -90,6 +91,80 @@ bool isInsideOrEqual(std::filesystem::path const& path, std::filesystem::path co
     if (pathIt == path.end() || *pathIt != *rootIt) return false;
   }
   return true;
+}
+
+std::string percentEncodePath(std::string const& text) {
+  constexpr char hex[] = "0123456789ABCDEF";
+  std::string output;
+  output.reserve(text.size());
+  for (unsigned char ch : text) {
+    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') ||
+        ch == '/' || ch == '-' || ch == '_' || ch == '.' || ch == '~') {
+      output.push_back(static_cast<char>(ch));
+    } else {
+      output.push_back('%');
+      output.push_back(hex[ch >> 4u]);
+      output.push_back(hex[ch & 0x0fu]);
+    }
+  }
+  return output;
+}
+
+std::optional<unsigned char> hexByte(char high, char low) {
+  auto nibble = [](char ch) -> std::optional<unsigned char> {
+    if (ch >= '0' && ch <= '9') return static_cast<unsigned char>(ch - '0');
+    if (ch >= 'a' && ch <= 'f') return static_cast<unsigned char>(10 + ch - 'a');
+    if (ch >= 'A' && ch <= 'F') return static_cast<unsigned char>(10 + ch - 'A');
+    return std::nullopt;
+  };
+  auto h = nibble(high);
+  auto l = nibble(low);
+  if (!h || !l) return std::nullopt;
+  return static_cast<unsigned char>((*h << 4u) | *l);
+}
+
+std::string percentDecode(std::string_view text) {
+  std::string output;
+  output.reserve(text.size());
+  for (std::size_t i = 0; i < text.size(); ++i) {
+    if (text[i] == '%' && i + 2u < text.size()) {
+      if (auto byte = hexByte(text[i + 1u], text[i + 2u])) {
+        output.push_back(static_cast<char>(*byte));
+        i += 2u;
+        continue;
+      }
+    }
+    output.push_back(text[i]);
+  }
+  return output;
+}
+
+std::filesystem::path copyTargetPath(std::filesystem::path const& source,
+                                     std::filesystem::path const& destinationDirectory) {
+  std::filesystem::path preferred = destinationDirectory / source.filename();
+  if (preferred == source) {
+    return collisionFreePath(destinationDirectory, source.stem().string() + " copy" + source.extension().string());
+  }
+  if (std::filesystem::exists(preferred)) {
+    return collisionFreePath(destinationDirectory, preferred.filename().string());
+  }
+  return preferred;
+}
+
+bool copyRecursive(std::filesystem::path const& source, std::filesystem::path const& destination, std::error_code& ec) {
+  ec.clear();
+  if (std::filesystem::is_directory(source, ec)) {
+    if (ec) return false;
+    std::filesystem::create_directories(destination, ec);
+    if (ec) return false;
+    for (auto const& entry : std::filesystem::directory_iterator(source, ec)) {
+      if (ec) return false;
+      if (!copyRecursive(entry.path(), destination / entry.path().filename(), ec)) return false;
+    }
+    return true;
+  }
+  std::filesystem::copy_file(source, destination, std::filesystem::copy_options::none, ec);
+  return !ec;
 }
 
 int runShellCommand(std::string const& command) {
@@ -203,6 +278,10 @@ std::filesystem::path homeDirectory() {
     return *home;
   }
   return std::filesystem::current_path();
+}
+
+bool FileSelectionState::contains(std::filesystem::path const& path) const {
+  return std::find(selected.begin(), selected.end(), path) != selected.end();
 }
 
 std::map<std::string, std::filesystem::path> parseXdgUserDirs(std::string_view configText,
@@ -546,6 +625,179 @@ NavigationHistory goUp(NavigationHistory history) {
     return navigateTo(std::move(history), *parent);
   }
   return history;
+}
+
+FileSelectionState selectOnly(std::vector<FileEntry> const& entries, int index) {
+  FileSelectionState state;
+  if (index < 0 || index >= static_cast<int>(entries.size())) return state;
+  state.selected.push_back(entries[static_cast<std::size_t>(index)].path);
+  state.anchorIndex = index;
+  return state;
+}
+
+FileSelectionState toggleSelection(FileSelectionState state, std::vector<FileEntry> const& entries, int index) {
+  if (index < 0 || index >= static_cast<int>(entries.size())) return state;
+  auto const& path = entries[static_cast<std::size_t>(index)].path;
+  auto found = std::find(state.selected.begin(), state.selected.end(), path);
+  if (found == state.selected.end()) {
+    state.selected.push_back(path);
+    state.anchorIndex = index;
+  } else {
+    state.selected.erase(found);
+    if (state.anchorIndex == index) state.anchorIndex = state.selected.empty() ? -1 : index;
+  }
+  return state;
+}
+
+FileSelectionState rangeSelection(FileSelectionState state, std::vector<FileEntry> const& entries, int index) {
+  if (index < 0 || index >= static_cast<int>(entries.size())) return state;
+  int const anchor = state.anchorIndex >= 0 ? state.anchorIndex : index;
+  int const first = std::min(anchor, index);
+  int const last = std::max(anchor, index);
+  state.selected.clear();
+  for (int i = first; i <= last; ++i) {
+    state.selected.push_back(entries[static_cast<std::size_t>(i)].path);
+  }
+  state.anchorIndex = anchor;
+  return state;
+}
+
+FileSelectionState clearSelection(FileSelectionState state) {
+  state.selected.clear();
+  state.anchorIndex = -1;
+  return state;
+}
+
+std::filesystem::path collisionFreePath(std::filesystem::path const& directory, std::string const& preferredName) {
+  std::filesystem::path preferred = directory / preferredName;
+  if (!std::filesystem::exists(preferred)) return preferred;
+
+  std::filesystem::path stem = std::filesystem::path(preferredName).stem();
+  std::filesystem::path extension = std::filesystem::path(preferredName).extension();
+  if (stem.empty()) stem = preferredName;
+  for (int index = 2; index < 10'000; ++index) {
+    std::filesystem::path candidate = directory / (stem.string() + " " + std::to_string(index) + extension.string());
+    if (!std::filesystem::exists(candidate)) return candidate;
+  }
+  return preferred;
+}
+
+FileOperationResult createFolder(std::filesystem::path const& directory, std::string preferredName) {
+  std::error_code ec;
+  if (!std::filesystem::is_directory(directory, ec) || ec) {
+    return {.ok = false, .error = "Destination is not a folder."};
+  }
+  std::filesystem::path path = collisionFreePath(directory, preferredName.empty() ? "New Folder" : preferredName);
+  std::filesystem::create_directory(path, ec);
+  if (ec) return {.ok = false, .path = path, .error = ec.message()};
+  return {.ok = true, .path = path};
+}
+
+FileOperationResult createFile(std::filesystem::path const& directory, std::string preferredName) {
+  std::error_code ec;
+  if (!std::filesystem::is_directory(directory, ec) || ec) {
+    return {.ok = false, .error = "Destination is not a folder."};
+  }
+  std::filesystem::path path = collisionFreePath(directory, preferredName.empty() ? "New File.txt" : preferredName);
+  std::ofstream file(path);
+  if (!file) return {.ok = false, .path = path, .error = "Could not create file."};
+  return {.ok = true, .path = path};
+}
+
+std::string validateRename(std::filesystem::path const& source, std::string const& newName) {
+  if (newName.empty()) return "Name cannot be empty.";
+  if (newName == "." || newName == "..") return "Name is reserved.";
+  if (newName.find('/') != std::string::npos || newName.find('\\') != std::string::npos) {
+    return "Name cannot contain path separators.";
+  }
+  std::error_code ec;
+  if (!std::filesystem::exists(source, ec) || ec) return "Source does not exist.";
+  std::filesystem::path target = source.parent_path() / newName;
+  if (target != source && std::filesystem::exists(target, ec) && !ec) return "An item with that name already exists.";
+  return {};
+}
+
+FileOperationResult renamePath(std::filesystem::path const& source, std::string const& newName) {
+  if (std::string error = validateRename(source, newName); !error.empty()) {
+    return {.ok = false, .path = source, .error = error};
+  }
+  std::filesystem::path target = source.parent_path() / newName;
+  std::error_code ec;
+  std::filesystem::rename(source, target, ec);
+  if (ec) return {.ok = false, .path = target, .error = ec.message()};
+  return {.ok = true, .path = target};
+}
+
+FileOperationResult copyPath(std::filesystem::path const& source, std::filesystem::path const& destinationDirectory) {
+  std::error_code ec;
+  if (!std::filesystem::exists(source, ec) || ec) return {.ok = false, .path = source, .error = "Source does not exist."};
+  if (!std::filesystem::is_directory(destinationDirectory, ec) || ec) {
+    return {.ok = false, .path = destinationDirectory, .error = "Destination is not a folder."};
+  }
+  std::filesystem::path target = copyTargetPath(source, destinationDirectory);
+  if (!copyRecursive(source, target, ec)) {
+    return {.ok = false, .path = target, .error = ec.message()};
+  }
+  return {.ok = true, .path = target};
+}
+
+FileOperationResult movePath(std::filesystem::path const& source, std::filesystem::path const& destinationDirectory) {
+  std::error_code ec;
+  if (!std::filesystem::exists(source, ec) || ec) return {.ok = false, .path = source, .error = "Source does not exist."};
+  if (!std::filesystem::is_directory(destinationDirectory, ec) || ec) {
+    return {.ok = false, .path = destinationDirectory, .error = "Destination is not a folder."};
+  }
+  std::filesystem::path target = copyTargetPath(source, destinationDirectory);
+  std::filesystem::rename(source, target, ec);
+  if (!ec) return {.ok = true, .path = target};
+  std::error_code copyEc;
+  if (!copyRecursive(source, target, copyEc)) {
+    return {.ok = false, .path = target, .error = copyEc.message()};
+  }
+  std::filesystem::remove_all(source, copyEc);
+  if (copyEc) return {.ok = false, .path = target, .error = copyEc.message()};
+  return {.ok = true, .path = target};
+}
+
+FileOperationResult duplicatePath(std::filesystem::path const& source) {
+  std::error_code ec;
+  if (!std::filesystem::exists(source, ec) || ec) return {.ok = false, .path = source, .error = "Source does not exist."};
+  std::filesystem::path target =
+      collisionFreePath(source.parent_path(), source.stem().string() + " copy" + source.extension().string());
+  if (!copyRecursive(source, target, ec)) {
+    return {.ok = false, .path = target, .error = ec.message()};
+  }
+  return {.ok = true, .path = target};
+}
+
+std::string serializeUriList(std::vector<std::filesystem::path> const& paths) {
+  std::string output;
+  for (auto const& path : paths) {
+    std::filesystem::path absolute = path.is_absolute() ? path : std::filesystem::absolute(path);
+    output += "file://";
+    output += percentEncodePath(absolute.lexically_normal().string());
+    output += "\r\n";
+  }
+  return output;
+}
+
+std::vector<std::filesystem::path> parseUriList(std::string_view text) {
+  std::vector<std::filesystem::path> paths;
+  std::size_t start = 0;
+  while (start <= text.size()) {
+    std::size_t end = text.find_first_of("\r\n", start);
+    std::string line = trim(text.substr(start, end == std::string_view::npos ? text.size() - start : end - start));
+    if (!line.empty() && line.front() != '#') {
+      constexpr std::string_view prefix = "file://";
+      if (line.starts_with(prefix)) {
+        paths.emplace_back(percentDecode(std::string_view(line).substr(prefix.size())));
+      }
+    }
+    if (end == std::string_view::npos) break;
+    start = end + 1u;
+    while (start < text.size() && (text[start] == '\r' || text[start] == '\n')) ++start;
+  }
+  return paths;
 }
 
 } // namespace lambda_files

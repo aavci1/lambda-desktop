@@ -66,6 +66,19 @@ struct NavigationHistory {
   bool canGoForward() const { return !forward.empty(); }
 };
 
+struct FileOperationResult {
+  bool ok = false;
+  std::filesystem::path path;
+  std::string error;
+};
+
+struct FileSelectionState {
+  std::vector<std::filesystem::path> selected;
+  int anchorIndex = -1;
+
+  [[nodiscard]] bool contains(std::filesystem::path const& path) const;
+};
+
 std::filesystem::path homeDirectory();
 std::map<std::string, std::filesystem::path> parseXdgUserDirs(std::string_view configText,
                                                               std::filesystem::path const& home);
@@ -90,5 +103,22 @@ NavigationHistory navigateTo(NavigationHistory history, std::filesystem::path pa
 NavigationHistory goBack(NavigationHistory history);
 NavigationHistory goForward(NavigationHistory history);
 NavigationHistory goUp(NavigationHistory history);
+
+FileSelectionState selectOnly(std::vector<FileEntry> const& entries, int index);
+FileSelectionState toggleSelection(FileSelectionState state, std::vector<FileEntry> const& entries, int index);
+FileSelectionState rangeSelection(FileSelectionState state, std::vector<FileEntry> const& entries, int index);
+FileSelectionState clearSelection(FileSelectionState state);
+
+std::filesystem::path collisionFreePath(std::filesystem::path const& directory, std::string const& preferredName);
+FileOperationResult createFolder(std::filesystem::path const& directory, std::string preferredName = "New Folder");
+FileOperationResult createFile(std::filesystem::path const& directory, std::string preferredName = "New File.txt");
+std::string validateRename(std::filesystem::path const& source, std::string const& newName);
+FileOperationResult renamePath(std::filesystem::path const& source, std::string const& newName);
+FileOperationResult copyPath(std::filesystem::path const& source, std::filesystem::path const& destinationDirectory);
+FileOperationResult movePath(std::filesystem::path const& source, std::filesystem::path const& destinationDirectory);
+FileOperationResult duplicatePath(std::filesystem::path const& source);
+
+std::string serializeUriList(std::vector<std::filesystem::path> const& paths);
+std::vector<std::filesystem::path> parseUriList(std::string_view text);
 
 } // namespace lambda_files
