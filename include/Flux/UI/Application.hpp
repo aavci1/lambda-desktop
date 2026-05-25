@@ -87,6 +87,8 @@ public:
   /// Presents pending frames immediately. Use when the main loop may not iterate (e.g. live window resize runs
   /// the run loop in `NSEventTrackingRunLoopMode`, so `waitForEvents` in `NSDefaultRunLoopMode` does not return).
   void flushRedraw();
+  /// Wakes any blocking platform event wait without forcing a rebuild/redraw.
+  void wakeEventLoop();
 
   /// Repeating timer using `std::chrono::steady_clock` in the main `exec()` loop; posts `TimerEvent` each tick.
   /// Returns an id for `cancelTimer`. `windowHandle` is optional metadata for handlers (e.g. redraw routing).
@@ -133,8 +135,6 @@ public:
   friend class EventQueue;
 private:
   bool isMainThread() const noexcept;
-  /// Wakes any blocking platform event wait without forcing a rebuild/redraw.
-  void wakeEventLoop();
   /// Arms platform frame pumps without marking any window dirty for redraw.
   void requestAnimationFrames();
   void saveOpenWindowStates();

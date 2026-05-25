@@ -103,7 +103,16 @@ echo "Run this while lambda-window-manager is active; resize the terminal during
 export LAMBDA_TERMINAL_TEST_MODE="$TEST_MODE"
 export LAMBDA_TERMINAL_WORKLOAD_SECONDS="$((TEST_SECONDS + 5))"
 
-command=("$BUILD_DIR/lambda-terminal")
+terminal_binary="$BUILD_DIR/examples/lambda-terminal"
+if [[ ! -x "$terminal_binary" ]]; then
+  terminal_binary="$BUILD_DIR/lambda-terminal"
+fi
+if [[ ! -x "$terminal_binary" ]]; then
+  echo "lambda-terminal not found in $BUILD_DIR/examples or $BUILD_DIR" >&2
+  exit 1
+fi
+
+command=("$terminal_binary")
 if command -v timeout >/dev/null 2>&1; then
   command=(timeout --foreground "${TEST_SECONDS}s" "${command[@]}")
 else

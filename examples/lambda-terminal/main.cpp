@@ -1,30 +1,29 @@
 #include <Flux.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/KeyCodes.hpp>
-#include <Flux/UI/Views/For.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Render.hpp>
-#include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
 #include <Flux/UI/Window.hpp>
 
 #include <vterm.h>
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cmath>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <poll.h>
 #include <string>
 #include <string_view>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -54,6 +53,7 @@ struct TerminalRun {
   std::string text;
   Color foreground{0.88f, 0.94f, 1.f, 0.96f};
   Color background{0.f, 0.f, 0.f, 0.f};
+  std::shared_ptr<TextLayout const> layout;
   bool hasBackground = false;
   bool bold = false;
 
@@ -63,9 +63,22 @@ struct TerminalRun {
 struct TerminalRow {
   int row = 0;
   std::uint64_t revision = 0;
+  std::shared_ptr<TextLayout const> layout;
   std::vector<TerminalRun> runs;
 
   bool operator==(TerminalRow const&) const = default;
+};
+
+struct CachedGlyph {
+  bool loaded = false;
+  bool valid = false;
+  std::uint32_t fontId = 0;
+  float fontSize = 0.f;
+  std::uint32_t glyphId = 0;
+  Point position{};
+  float baseline = 0.f;
+  float ascent = 0.f;
+  float descent = 0.f;
 };
 
 std::string shellName(std::string const& shellPath) {
@@ -99,6 +112,17 @@ Color terminalDefaultForeground(bool bold) {
   return bold ? Color{0.95f, 0.98f, 1.f, 1.f} : Color{0.84f, 0.90f, 0.98f, 0.96f};
 }
 
+Font terminalFont(bool bold) {
+  return Font{.family = "monospace", .size = 14.f, .weight = bold ? 700.f : 500.f};
+}
+
+TextLayoutOptions terminalTextOptions() {
+  return TextLayoutOptions{
+      .wrapping = TextWrapping::NoWrap,
+      .maxLines = 1,
+  };
+}
+
 class TerminalSession : public std::enable_shared_from_this<TerminalSession> {
 public:
   TerminalSession(Application& app, Window& window)
@@ -115,11 +139,16 @@ public:
     vterm_screen_set_damage_merge(screen_, VTERM_DAMAGE_ROW);
     vterm_screen_set_callbacks(screen_, &screenCallbacks(), this);
     vterm_screen_reset(screen_, 1);
+    frameObserver_ = app_->onNextFrameNeeded([this] { flushPendingRowsForFrame(); });
     spawnShell();
     refreshRows();
   }
 
   ~TerminalSession() {
+    stopWakeThread();
+    if (app_ && frameObserver_.isValid()) {
+      app_->unobserveNextFrame(frameObserver_);
+    }
     if (app_ && pollId_ != 0) {
       app_->unregisterEventPollSource(pollId_);
     }
@@ -155,7 +184,8 @@ public:
       size.ws_row = static_cast<unsigned short>(rowsCount_);
       ioctl(ptyFd_, TIOCSWINSZ, &size);
     }
-    refreshRows();
+    markAllRowsDirty();
+    refreshDirtyRows();
   }
 
   void sendText(std::string const& text) {
@@ -203,6 +233,35 @@ public:
     canvas.drawRect(frame, CornerRadius{}, FillStyle::solid(Color{0.f, 0.f, 0.f, 0.12f}), StrokeStyle::none());
   }
 
+  void drawTerminal(Canvas& canvas, Rect frame) {
+    drawBackground(canvas, frame);
+    canvas.save();
+    canvas.clipRect(frame);
+    std::vector<TerminalRow> const& rows = rows_.evaluate();
+    for (TerminalRow const& row : rows) {
+      float const y = frame.y + kContentInset + static_cast<float>(row.row) * kLineHeight;
+      for (TerminalRun const& run : row.runs) {
+        Rect const runRect{
+            frame.x + kContentInset + static_cast<float>(run.startCell) * kCellWidth,
+            y,
+            static_cast<float>(run.cellCount) * kCellWidth,
+            kLineHeight,
+        };
+        if (run.hasBackground) {
+          canvas.drawRect(runRect, CornerRadius{}, FillStyle::solid(run.background), StrokeStyle::none());
+        }
+        if (!row.layout && run.layout) {
+          canvas.drawTextLayout(*run.layout, Point{runRect.x, runRect.y});
+        }
+      }
+      if (row.layout) {
+        canvas.drawTextLayout(*row.layout, Point{frame.x + kContentInset, y});
+      }
+    }
+    drawCursor(canvas, frame);
+    canvas.restore();
+  }
+
   void drawCursor(Canvas& canvas, Rect frame) {
     resizeForFrame(frame);
     VTermPos const cursor = cursor_.evaluate();
@@ -233,8 +292,8 @@ private:
     return callbacks;
   }
 
-  static int onDamage(VTermRect, void* user) {
-    static_cast<TerminalSession*>(user)->refreshRows();
+  static int onDamage(VTermRect rect, void* user) {
+    static_cast<TerminalSession*>(user)->markRowsDirty(rect.start_row, rect.end_row);
     return 1;
   }
 
@@ -298,6 +357,7 @@ private:
       fcntl(ptyFd_, F_SETFL, flags | O_NONBLOCK);
     }
     pollId_ = app_->registerEventPollSource(ptyFd_, [this] { readFromPty(); });
+    startWakeThread();
   }
 
   void readFromPty() {
@@ -314,6 +374,7 @@ private:
         continue;
       }
       if (n == 0) {
+        wakeQueued_.store(false, std::memory_order_release);
         appendStatusLine("lambda-terminal: shell exited");
         return;
       }
@@ -321,13 +382,20 @@ private:
         break;
       }
       if (errno != EINTR) {
+        wakeQueued_.store(false, std::memory_order_release);
         appendStatusLine("lambda-terminal: pty read failed");
         return;
       }
     }
+    wakeQueued_.store(false, std::memory_order_release);
     if (readAny) {
       vterm_screen_flush_damage(screen_);
-      refreshRows();
+      if (!hasDirtyRows()) {
+        markAllRowsDirty();
+      }
+      if (window_) {
+        window_->requestRedraw();
+      }
     }
   }
 
@@ -350,57 +418,77 @@ private:
   }
 
   void refreshRows() {
-    std::vector<TerminalRow> next;
-    next.reserve(static_cast<std::size_t>(rowsCount_));
-    for (int row = 0; row < rowsCount_; ++row) {
-      TerminalRow terminalRow{.row = row, .revision = ++revision_, .runs = {}};
-      TerminalRun current;
-      bool hasCurrent = false;
-      for (int col = 0; col < cols_; ++col) {
-        VTermScreenCell cell{};
-        if (!vterm_screen_get_cell(screen_, VTermPos{row, col}, &cell)) {
-          cell.chars[0] = ' ';
-          cell.width = 1;
-          cell.fg.type = VTERM_COLOR_DEFAULT_FG;
-          cell.bg.type = VTERM_COLOR_DEFAULT_BG;
-        }
-        bool const bold = cell.attrs.bold != 0;
-        VTermColor fg = cell.fg;
-        VTermColor bg = cell.bg;
-        if (cell.attrs.reverse) {
-          std::swap(fg, bg);
-        }
-        Color const foreground = colorFromVTerm(fg, true, bold);
-        Color const background = colorFromVTerm(bg, false, false);
-        bool const hasBackground = background.a > 0.f;
-        bool const sameRun = hasCurrent &&
-                             current.bold == bold &&
-                             current.hasBackground == hasBackground &&
-                             current.foreground == foreground &&
-                             current.background == background;
-        if (!sameRun) {
-          if (hasCurrent) {
-            terminalRow.runs.push_back(std::move(current));
-          }
-          current = TerminalRun{
-              .startCell = col,
-              .cellCount = 0,
-              .revision = terminalRow.revision,
-              .text = {},
-              .foreground = foreground,
-              .background = background,
-              .hasBackground = hasBackground,
-              .bold = bold,
-          };
-          hasCurrent = true;
-        }
-        appendUtf8(current.text, cell.chars[0]);
-        current.cellCount += std::max(1, static_cast<int>(cell.width));
+    markAllRowsDirty();
+    refreshDirtyRows();
+  }
+
+  void flushPendingRowsForFrame() {
+    if (!hasDirtyRows()) {
+      return;
+    }
+    refreshDirtyRows();
+  }
+
+  void markRowsDirty(int startRow, int endRow) {
+    startRow = std::clamp(startRow, 0, rowsCount_);
+    endRow = std::clamp(endRow, 0, rowsCount_);
+    if (endRow <= startRow) {
+      return;
+    }
+    dirtyStartRow_ = std::min(dirtyStartRow_, startRow);
+    dirtyEndRow_ = std::max(dirtyEndRow_, endRow);
+  }
+
+  void markAllRowsDirty() {
+    dirtyStartRow_ = 0;
+    dirtyEndRow_ = rowsCount_;
+  }
+
+  bool hasDirtyRows() const { return dirtyStartRow_ >= 0 && dirtyEndRow_ > dirtyStartRow_; }
+
+  void refreshDirtyRows() {
+    if (!hasDirtyRows()) {
+      return;
+    }
+
+    int startRow = dirtyStartRow_;
+    int endRow = dirtyEndRow_;
+    dirtyStartRow_ = rowsCount_;
+    dirtyEndRow_ = -1;
+
+    std::vector<TerminalRow> next = rows_.peek();
+    bool changed = false;
+    if (static_cast<int>(next.size()) != rowsCount_) {
+      next.resize(static_cast<std::size_t>(rowsCount_));
+      startRow = 0;
+      endRow = rowsCount_;
+      changed = true;
+    }
+
+    startRow = std::clamp(startRow, 0, rowsCount_);
+    endRow = std::clamp(endRow, 0, rowsCount_);
+    for (int row = startRow; row < endRow; ++row) {
+      TerminalRow built = buildRow(row);
+      if (sameRowContent(next[static_cast<std::size_t>(row)], built)) {
+        continue;
       }
-      if (hasCurrent) {
-        terminalRow.runs.push_back(std::move(current));
+
+      std::uint64_t const revision = ++revision_;
+      built.revision = revision;
+      if (isFastAsciiRow(built)) {
+        built.layout = layoutForRow(built);
+      } else {
+        for (auto& run : built.runs) {
+          run.revision = revision;
+          run.layout = layoutForRun(run);
+        }
       }
-      next.push_back(std::move(terminalRow));
+      next[static_cast<std::size_t>(row)] = std::move(built);
+      changed = true;
+    }
+
+    if (!changed) {
+      return;
     }
     rows_.set(std::move(next));
     if (window_) {
@@ -408,30 +496,328 @@ private:
     }
   }
 
+  TerminalRow buildRow(int row) const {
+    TerminalRow terminalRow{.row = row, .revision = 0, .runs = {}};
+    TerminalRun current;
+    bool hasCurrent = false;
+    for (int col = 0; col < cols_; ++col) {
+      VTermScreenCell cell{};
+      if (!vterm_screen_get_cell(screen_, VTermPos{row, col}, &cell)) {
+        cell.chars[0] = ' ';
+        cell.width = 1;
+        cell.fg.type = VTERM_COLOR_DEFAULT_FG;
+        cell.bg.type = VTERM_COLOR_DEFAULT_BG;
+      }
+      bool const bold = cell.attrs.bold != 0;
+      VTermColor fg = cell.fg;
+      VTermColor bg = cell.bg;
+      if (cell.attrs.reverse) {
+        std::swap(fg, bg);
+      }
+      Color const foreground = colorFromVTerm(fg, true, bold);
+      Color const background = colorFromVTerm(bg, false, false);
+      bool const hasBackground = background.a > 0.f;
+      bool const sameRun = hasCurrent &&
+                           current.bold == bold &&
+                           current.hasBackground == hasBackground &&
+                           current.foreground == foreground &&
+                           current.background == background;
+      if (!sameRun) {
+        if (hasCurrent) {
+          terminalRow.runs.push_back(std::move(current));
+        }
+        current = TerminalRun{
+            .startCell = col,
+            .cellCount = 0,
+            .revision = 0,
+            .text = {},
+            .foreground = foreground,
+            .background = background,
+            .hasBackground = hasBackground,
+            .bold = bold,
+        };
+        hasCurrent = true;
+      }
+      appendUtf8(current.text, cell.chars[0]);
+      current.cellCount += std::max(1, static_cast<int>(cell.width));
+    }
+    if (hasCurrent) {
+      terminalRow.runs.push_back(std::move(current));
+    }
+    return terminalRow;
+  }
+
+  std::shared_ptr<TextLayout const> layoutForRun(TerminalRun const& run) const {
+    if (!app_ || run.text.empty()) {
+      return nullptr;
+    }
+    if (isFastAscii(run.text)) {
+      return asciiLayoutForRun(run);
+    }
+    return app_->textSystem().layout(run.text, terminalFont(run.bold), run.foreground, 0.f, terminalTextOptions());
+  }
+
+  std::shared_ptr<TextLayout const> asciiLayoutForRun(TerminalRun const& run) const {
+    auto layout = std::make_shared<TextLayout>();
+    auto storage = std::make_unique<TextLayoutStorage>();
+    storage->glyphArena.reserve(run.text.size());
+    storage->positionArena.reserve(run.text.size());
+
+    CachedGlyph metrics{};
+    bool haveMetrics = false;
+    for (std::size_t i = 0; i < run.text.size(); ++i) {
+      unsigned char const ch = static_cast<unsigned char>(run.text[i]);
+      CachedGlyph const glyph = glyphForAscii(ch, run.bold);
+      if (!glyph.valid) {
+        continue;
+      }
+      if (!haveMetrics) {
+        metrics = glyph;
+        haveMetrics = true;
+      }
+      storage->glyphArena.push_back(glyph.glyphId);
+      storage->positionArena.push_back(Point{static_cast<float>(i) * kCellWidth + glyph.position.x,
+                                             glyph.position.y});
+    }
+
+    if (haveMetrics && !storage->glyphArena.empty()) {
+      TextLayout::PlacedRun placed{};
+      placed.run.fontId = metrics.fontId;
+      placed.run.fontSize = metrics.fontSize;
+      placed.run.color = run.foreground;
+      placed.run.glyphIds = std::span<std::uint32_t const>(storage->glyphArena.data(),
+                                                           storage->glyphArena.size());
+      placed.run.positions = std::span<Point const>(storage->positionArena.data(),
+                                                    storage->positionArena.size());
+      placed.run.ascent = metrics.ascent;
+      placed.run.descent = metrics.descent;
+      placed.run.width = static_cast<float>(run.cellCount) * kCellWidth;
+      placed.origin = {0.f, metrics.baseline};
+      placed.utf8Begin = 0;
+      placed.utf8End = static_cast<std::uint32_t>(run.text.size());
+      placed.ctLineIndex = 0;
+      layout->runs.push_back(placed);
+      layout->firstBaseline = metrics.baseline;
+      layout->lastBaseline = metrics.baseline;
+    }
+
+    layout->lines.push_back(TextLayout::LineRange{
+        .ctLineIndex = 0,
+        .byteStart = 0,
+        .byteEnd = static_cast<int>(run.text.size()),
+        .lineMinX = 0.f,
+        .top = 0.f,
+        .bottom = kLineHeight,
+        .baseline = haveMetrics ? metrics.baseline : 0.f,
+    });
+    layout->measuredSize = {static_cast<float>(run.cellCount) * kCellWidth, kLineHeight};
+    layout->ownedStorage = std::move(storage);
+    return layout;
+  }
+
+  std::shared_ptr<TextLayout const> layoutForRow(TerminalRow const& row) const {
+    auto layout = std::make_shared<TextLayout>();
+    auto storage = std::make_unique<TextLayoutStorage>();
+
+    std::size_t totalGlyphs = 0;
+    float width = 0.f;
+    for (TerminalRun const& run : row.runs) {
+      totalGlyphs += run.text.size();
+      width = std::max(width, static_cast<float>(run.startCell + run.cellCount) * kCellWidth);
+    }
+    storage->glyphArena.reserve(totalGlyphs);
+    storage->positionArena.reserve(totalGlyphs);
+
+    float baseline = 0.f;
+    bool haveBaseline = false;
+    std::uint32_t byteOffset = 0;
+    for (TerminalRun const& run : row.runs) {
+      CachedGlyph metrics{};
+      bool haveMetrics = false;
+      std::size_t const glyphStart = storage->glyphArena.size();
+      std::size_t const positionStart = storage->positionArena.size();
+      for (std::size_t i = 0; i < run.text.size(); ++i) {
+        unsigned char const ch = static_cast<unsigned char>(run.text[i]);
+        CachedGlyph const glyph = glyphForAscii(ch, run.bold);
+        if (!glyph.valid) {
+          continue;
+        }
+        if (!haveMetrics) {
+          metrics = glyph;
+          haveMetrics = true;
+          if (!haveBaseline) {
+            baseline = glyph.baseline;
+            haveBaseline = true;
+          }
+        }
+        storage->glyphArena.push_back(glyph.glyphId);
+        storage->positionArena.push_back(Point{static_cast<float>(i) * kCellWidth + glyph.position.x,
+                                               glyph.position.y});
+      }
+
+      std::size_t const glyphCount = storage->glyphArena.size() - glyphStart;
+      if (haveMetrics && glyphCount > 0) {
+        TextLayout::PlacedRun placed{};
+        placed.run.fontId = metrics.fontId;
+        placed.run.fontSize = metrics.fontSize;
+        placed.run.color = run.foreground;
+        placed.run.glyphIds = std::span<std::uint32_t const>(storage->glyphArena.data() + glyphStart, glyphCount);
+        placed.run.positions = std::span<Point const>(storage->positionArena.data() + positionStart, glyphCount);
+        placed.run.ascent = metrics.ascent;
+        placed.run.descent = metrics.descent;
+        placed.run.width = width;
+        placed.origin = {static_cast<float>(run.startCell) * kCellWidth, metrics.baseline};
+        placed.utf8Begin = byteOffset;
+        placed.utf8End = byteOffset + static_cast<std::uint32_t>(run.text.size());
+        placed.ctLineIndex = 0;
+        layout->runs.push_back(placed);
+      }
+      byteOffset += static_cast<std::uint32_t>(run.text.size());
+    }
+
+    layout->lines.push_back(TextLayout::LineRange{
+        .ctLineIndex = 0,
+        .byteStart = 0,
+        .byteEnd = static_cast<int>(byteOffset),
+        .lineMinX = 0.f,
+        .top = 0.f,
+        .bottom = kLineHeight,
+        .baseline = baseline,
+    });
+    layout->measuredSize = {width, kLineHeight};
+    layout->firstBaseline = baseline;
+    layout->lastBaseline = baseline;
+    layout->ownedStorage = std::move(storage);
+    return layout;
+  }
+
+  CachedGlyph glyphForAscii(unsigned char ch, bool bold) const {
+    std::size_t const fontIndex = bold ? 1u : 0u;
+    CachedGlyph& cached = asciiGlyphs_[fontIndex][ch];
+    if (cached.loaded) {
+      return cached;
+    }
+
+    cached.loaded = true;
+    if (!app_) {
+      return cached;
+    }
+
+    char const c = static_cast<char>(ch);
+    std::shared_ptr<TextLayout const> layout =
+        app_->textSystem().layout(std::string_view(&c, 1), terminalFont(bold), Color{1.f, 1.f, 1.f, 1.f},
+                                  0.f, terminalTextOptions());
+    if (!layout || layout->runs.empty()) {
+      return cached;
+    }
+
+    TextLayout::PlacedRun const& placed = layout->runs.front();
+    if (placed.run.glyphIds.empty() || placed.run.positions.empty()) {
+      return cached;
+    }
+
+    cached.valid = true;
+    cached.fontId = placed.run.fontId;
+    cached.fontSize = placed.run.fontSize;
+    cached.glyphId = placed.run.glyphIds.front();
+    cached.position = placed.run.positions.front();
+    cached.baseline = placed.origin.y;
+    cached.ascent = placed.run.ascent;
+    cached.descent = placed.run.descent;
+    return cached;
+  }
+
+  static bool isFastAscii(std::string const& text) {
+    for (unsigned char ch : text) {
+      if (ch < 0x20u || ch >= 0x7fu) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool sameRunContent(TerminalRun const& a, TerminalRun const& b) {
+    return a.startCell == b.startCell &&
+           a.cellCount == b.cellCount &&
+           a.text == b.text &&
+           a.foreground == b.foreground &&
+           a.background == b.background &&
+           a.hasBackground == b.hasBackground &&
+           a.bold == b.bold;
+  }
+
+  static bool sameRowContent(TerminalRow const& a, TerminalRow const& b) {
+    if (a.row != b.row || a.runs.size() != b.runs.size()) {
+      return false;
+    }
+    for (std::size_t i = 0; i < a.runs.size(); ++i) {
+      if (!sameRunContent(a.runs[i], b.runs[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool isFastAsciiRow(TerminalRow const& row) {
+    return std::all_of(row.runs.begin(), row.runs.end(), [](TerminalRun const& run) {
+      return isFastAscii(run.text);
+    });
+  }
+
+  void startWakeThread() {
+    if (ptyFd_ < 0 || !app_ || wakeThread_.joinable()) {
+      return;
+    }
+    wakeThreadStop_.store(false, std::memory_order_release);
+    wakeThread_ = std::thread([this] {
+      while (!wakeThreadStop_.load(std::memory_order_acquire)) {
+        pollfd pfd{.fd = ptyFd_, .events = POLLIN | POLLHUP | POLLERR, .revents = 0};
+        int const ready = poll(&pfd, 1, 100);
+        if (ready > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR))) {
+          if (app_ && !wakeQueued_.exchange(true, std::memory_order_acq_rel)) {
+            app_->wakeEventLoop();
+          }
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+      }
+    });
+  }
+
+  void stopWakeThread() {
+    wakeThreadStop_.store(true, std::memory_order_release);
+    if (wakeThread_.joinable()) {
+      wakeThread_.join();
+    }
+  }
+
   void appendStatusLine(std::string_view message) {
     std::vector<TerminalRow> next = rows_.peek();
     if (next.empty()) {
       std::uint64_t const revision = ++revision_;
+      TerminalRun run{
+          .startCell = 0,
+          .cellCount = static_cast<int>(message.size()),
+          .revision = revision,
+          .text = std::string(message),
+          .foreground = Color{1.f, 0.74f, 0.38f, 1.f},
+      };
+      run.layout = layoutForRun(run);
       next.push_back(TerminalRow{
           .row = 0,
           .revision = revision,
-          .runs = {TerminalRun{
-              .startCell = 0,
-              .cellCount = static_cast<int>(message.size()),
-              .revision = revision,
-              .text = std::string(message),
-              .foreground = Color{1.f, 0.74f, 0.38f, 1.f},
-          }},
+          .runs = {std::move(run)},
       });
     } else {
       next.back().revision = ++revision_;
-      next.back().runs = {TerminalRun{
+      TerminalRun run{
           .startCell = 0,
           .cellCount = static_cast<int>(message.size()),
           .revision = next.back().revision,
           .text = std::string(message),
           .foreground = Color{1.f, 0.74f, 0.38f, 1.f},
-      }};
+      };
+      run.layout = layoutForRun(run);
+      next.back().runs = {std::move(run)};
     }
     rows_.set(std::move(next));
     if (window_) {
@@ -446,9 +832,16 @@ private:
   int ptyFd_ = -1;
   pid_t childPid_ = -1;
   std::uint64_t pollId_ = 0;
+  ObserverHandle frameObserver_{};
   int rowsCount_ = kInitialRows;
   int cols_ = kInitialCols;
   std::uint64_t revision_ = 0;
+  int dirtyStartRow_ = kInitialRows;
+  int dirtyEndRow_ = -1;
+  std::atomic_bool wakeQueued_{false};
+  std::atomic_bool wakeThreadStop_{false};
+  std::thread wakeThread_;
+  mutable std::array<std::array<CachedGlyph, 128>, 2> asciiGlyphs_{};
   Reactive::Signal<std::vector<TerminalRow>> rows_;
   Reactive::Signal<VTermPos> cursor_;
 };
@@ -457,70 +850,17 @@ struct TerminalApp {
   std::shared_ptr<TerminalSession> session;
 
   Element body() const {
-    auto rowsSignal = session->rows();
-    Element cursorLayer = Render{.draw = [session = session](Canvas& canvas, Rect frame) {
-              session->drawCursor(canvas, frame);
+    return Render{.draw = [session = session](Canvas& canvas, Rect frame) {
+              session->drawTerminal(canvas, frame);
             }}
-            .flex(1.f, 1.f, 0.f)
-            .onPointerDown([](Point) {})
-            .onTextInput([session = session](std::string const& text) { session->sendText(text); })
-            .onKeyDown([session = session](KeyCode key, Modifiers modifiers) {
-              session->sendKey(key, modifiers);
-            })
-            .focusable(true)
-            .cursor(Cursor::IBeam);
-    auto terminal = ZStack{
-        .horizontalAlignment = Alignment::Stretch,
-        .verticalAlignment = Alignment::Stretch,
-        .children = children(
-            Render{.draw = [session = session](Canvas& canvas, Rect frame) {
-              session->drawBackground(canvas, frame);
-            }}.flex(1.f, 1.f, 0.f),
-            VStack{
-                .spacing = 0.f,
-                .alignment = Alignment::Stretch,
-                .children = children(Element{For(
-                    rowsSignal,
-                    [](TerminalRow const& row) {
-                      return std::to_string(row.row) + ":" + std::to_string(row.revision);
-                    },
-                    [](TerminalRow const& row, Reactive::Signal<std::size_t> const&) {
-                      std::vector<Element> runs;
-                      runs.reserve(row.runs.size());
-                      for (TerminalRun const& run : row.runs) {
-                        Element runText = Text{
-                            .text = run.text,
-                            .font = Font{.family = "monospace", .size = 14.f, .weight = run.bold ? 700.f : 500.f},
-                            .color = run.foreground,
-                            .wrapping = TextWrapping::NoWrap,
-                            .maxLines = 1,
-                        }
-                            .size(static_cast<float>(run.cellCount) * kCellWidth, kLineHeight);
-                        if (run.hasBackground) {
-                          runText = ZStack{
-                              .children = children(
-                                  Rectangle{}
-                                      .fill(FillStyle::solid(run.background))
-                                      .size(static_cast<float>(run.cellCount) * kCellWidth, kLineHeight),
-                                  std::move(runText))}
-                              .size(static_cast<float>(run.cellCount) * kCellWidth, kLineHeight);
-                        }
-                        runs.push_back(std::move(runText));
-                      }
-                      return HStack{
-                                 .spacing = 0.f,
-                                 .alignment = Alignment::Start,
-                                 .children = std::move(runs),
-                             }
-                          .height(kLineHeight);
-                    })})}
-                .padding(kContentInset, kContentInset, kContentInset, kContentInset)
-                .flex(1.f, 1.f, 0.f),
-            std::move(cursorLayer))}
         .flex(1.f, 1.f, 0.f)
-        .clipContent(true)
+        .onPointerDown([](Point) {})
+        .onTextInput([session = session](std::string const& text) { session->sendText(text); })
+        .onKeyDown([session = session](KeyCode key, Modifiers modifiers) {
+          session->sendKey(key, modifiers);
+        })
+        .focusable(true)
         .cursor(Cursor::IBeam);
-    return terminal;
   }
 };
 

@@ -590,9 +590,7 @@ void Application::requestWindowRedraw(unsigned int handle) {
   }
   bool const alreadyRequested = stateIt->second.redrawRequested;
   stateIt->second.redrawRequested = true;
-  if (!alreadyRequested) {
-    windowIt->second->platformWindow()->requestAnimationFrame();
-  }
+  windowIt->second->platformWindow()->requestAnimationFrame();
   if (!alreadyRequested && !isMainThread()) {
     wakeEventLoop();
   }

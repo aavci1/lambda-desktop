@@ -69,6 +69,8 @@ constexpr std::size_t kMaxFramesInFlight = 3;
 constexpr int kBackdropBlurIterations = 2;
 constexpr std::uint32_t kBackdropBlurDownsample = 2;
 constexpr float kBackdropBlurRadiusBoost = 1.35f;
+constexpr std::uint32_t kDescriptorPoolStorageBufferSets = 4096;
+constexpr std::uint32_t kDescriptorPoolImageSamplerSets = 8192;
 
 bool renderTargetFrameCacheDisabled() {
   static bool const disabled = [] {
@@ -364,9 +366,46 @@ Rect unionRects(Rect a, Rect b) {
   return Rect::sharp(x0, y0, std::max(0.f, x1 - x0), std::max(0.f, y1 - y0));
 }
 
+char const* vkResultName(VkResult result) {
+  switch (result) {
+  case VK_SUCCESS: return "VK_SUCCESS";
+  case VK_NOT_READY: return "VK_NOT_READY";
+  case VK_TIMEOUT: return "VK_TIMEOUT";
+  case VK_EVENT_SET: return "VK_EVENT_SET";
+  case VK_EVENT_RESET: return "VK_EVENT_RESET";
+  case VK_INCOMPLETE: return "VK_INCOMPLETE";
+  case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
+  case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+  case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
+  case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
+  case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
+  case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
+  case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
+  case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
+  case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
+  case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
+  case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+  case VK_ERROR_FRAGMENTED_POOL: return "VK_ERROR_FRAGMENTED_POOL";
+  case VK_ERROR_UNKNOWN: return "VK_ERROR_UNKNOWN";
+  case VK_ERROR_OUT_OF_POOL_MEMORY: return "VK_ERROR_OUT_OF_POOL_MEMORY";
+  case VK_ERROR_INVALID_EXTERNAL_HANDLE: return "VK_ERROR_INVALID_EXTERNAL_HANDLE";
+  case VK_ERROR_FRAGMENTATION: return "VK_ERROR_FRAGMENTATION";
+  case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS: return "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS";
+  case VK_ERROR_SURFACE_LOST_KHR: return "VK_ERROR_SURFACE_LOST_KHR";
+  case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
+  case VK_SUBOPTIMAL_KHR: return "VK_SUBOPTIMAL_KHR";
+  case VK_ERROR_OUT_OF_DATE_KHR: return "VK_ERROR_OUT_OF_DATE_KHR";
+  case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR: return "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR";
+  case VK_ERROR_VALIDATION_FAILED_EXT: return "VK_ERROR_VALIDATION_FAILED_EXT";
+  case VK_ERROR_INVALID_SHADER_NV: return "VK_ERROR_INVALID_SHADER_NV";
+  default: return "VK_ERROR_UNRECOGNIZED";
+  }
+}
+
 void vkCheck(VkResult result, char const *what) {
   if (result != VK_SUCCESS) {
-    throw std::runtime_error(std::string(what) + " failed");
+    throw std::runtime_error(std::string(what) + " failed: " + vkResultName(result) +
+                             " (" + std::to_string(static_cast<int>(result)) + ")");
   }
 }
 
@@ -2741,12 +2780,12 @@ private:
   void createDescriptors() {
     auto &res = resources();
     VkDescriptorPoolSize sizes[2]{
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 512},
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 512},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kDescriptorPoolStorageBufferSets},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kDescriptorPoolImageSamplerSets},
     };
     VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    pool.maxSets = 1024;
+    pool.maxSets = kDescriptorPoolStorageBufferSets + kDescriptorPoolImageSamplerSets;
     pool.poolSizeCount = 2;
     pool.pPoolSizes = sizes;
     vkCheck(vkCreateDescriptorPool(device_, &pool, nullptr, &res.descriptorPool), "vkCreateDescriptorPool");

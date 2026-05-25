@@ -558,9 +558,7 @@ void Application::requestWindowRedraw(unsigned int handle) {
                         alreadyRequested ? 1 : 0,
                         stateIt->second.frameReady ? 1 : 0);
   }
-  if (!alreadyRequested) {
-    windowIt->second->platformWindow()->requestAnimationFrame();
-  }
+  windowIt->second->platformWindow()->requestAnimationFrame();
   if (!alreadyRequested && !isMainThread()) {
     wakeEventLoop();
   }
