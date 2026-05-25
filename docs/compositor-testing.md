@@ -194,10 +194,28 @@ Expected result: a centered command launcher appears, the typed command is visib
 
 ## Real App Tests
 
+Run real apps after the in-tree demos. These checks catch protocol gaps that the demos do not exercise, especially xdg-popup menu behavior, clipboard ownership, keyboard focus, and resize behavior under mature toolkit clients.
+
+Set the compositor display once in the shell where the apps will be launched:
+
+```sh
+export WAYLAND_DISPLAY="$(cat "$XDG_RUNTIME_DIR/lambda-window-manager-display")"
+```
+
+For every real app below, first validate the common window-manager actions:
+
+- focus by clicking the window and by using the shell/dock when available
+- move by dragging the server-side titlebar or app-provided titlebar
+- resize from each edge and at least one corner
+- snap left/right, maximize, restore, minimize, and restore from the shell/dock
+- type into a text field or terminal prompt
+- close the window and confirm the previous focused window is sensible
+- leave the app idle for a minute and confirm it does not make the compositor redraw continuously
+
 ### foot
 
 ```sh
-WAYLAND_DISPLAY="$(cat "$XDG_RUNTIME_DIR/lambda-window-manager-display")" foot
+foot
 ```
 
 Expected result:
@@ -207,6 +225,70 @@ Expected result:
 - Multiple windows can be opened and focused.
 - Resizing should reflow terminal content rather than stretch it.
 - Plain right-click may not open a menu with the default local `foot` config; the default binding is selection extension. Use a configured popup/menu action if testing `foot` popups specifically.
+
+### Browser
+
+Use Firefox when available:
+
+```sh
+MOZ_ENABLE_WAYLAND=1 firefox
+```
+
+If Firefox is unavailable, use another pure-Wayland browser installed on the target machine.
+
+Expected result:
+
+- A normal browser window opens without XWayland.
+- Address-bar typing works.
+- Page scrolling works with wheel/trackpad input.
+- Browser menus, context menus, and permission/popover UI appear at the correct position and dismiss correctly.
+- Fullscreen enter/exit does not leave the window, shell panels, or focus state stuck.
+- Clipboard copy/paste works between the browser and another Wayland client.
+
+### GTK App
+
+Use any installed GTK app with text input and menus. Good candidates:
+
+```sh
+gedit
+nautilus
+gnome-text-editor
+```
+
+Expected result:
+
+- The app launches as Wayland, not XWayland.
+- Headerbar or server-side decoration mode is usable.
+- Menus, popovers, file/path entries, and context menus are positioned correctly.
+- Text input and clipboard copy/paste work.
+- Resizing and snapping do not leave blank newly exposed regions.
+
+### Qt App
+
+Run this only if a Qt Wayland app is installed. Good candidates:
+
+```sh
+QT_QPA_PLATFORM=wayland kate
+QT_QPA_PLATFORM=wayland dolphin
+QT_QPA_PLATFORM=wayland qterminal
+```
+
+Expected result:
+
+- The app launches through the Wayland platform plugin.
+- Menus and context menus appear above the app and dismiss correctly.
+- Text input and clipboard copy/paste work.
+- Resize, maximize, restore, minimize, and shell focus restore work.
+
+### Cross-App Clipboard
+
+Open at least two mature clients, for example `foot` and Firefox or a GTK editor.
+
+Expected result:
+
+- Copy from one app and paste into the other.
+- Copy in the reverse direction.
+- If the source app exits after copying, pasting should either continue through the source protocol handoff or fail cleanly without freezing the compositor.
 
 ## Regression Checks
 

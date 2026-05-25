@@ -147,6 +147,8 @@ These are the concrete findings to resolve or validate before broad refactors.
 
     `docs/compositor-testing.md` covers compositor demos and `foot`, but the readiness spec also requires Firefox or another browser, one GTK app, and one Qt app where available. The smoke doc should be expanded when those checks are run.
 
+    Status: documentation checklist expanded on 2026-05-26. `docs/compositor-testing.md` now includes real-app smoke coverage for browser, GTK, Qt, cross-app clipboard, and common window-management actions. The actual real-app matrix still requires live validation on the target desktop session.
+
 11. Config contract is not ready for Settings.
 
     Existing config parsing covers background, wallpaper, output, scale, cursor, animations, hardware cursor, idle blanking, chrome, keybindings, popup grabs, and keyboard config. It does not yet cover screenshot options or a canonical hot-reload/applies-next-window/restart-required matrix for every key.
