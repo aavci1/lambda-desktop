@@ -6,6 +6,7 @@
 #include "Compositor/Window/WindowGeometry.hpp"
 
 #include <cstdint>
+#include <algorithm>
 #include <optional>
 #include <string>
 
@@ -51,6 +52,17 @@ inline bool markToplevelMinimized(WaylandServer::Impl::Surface* surface) {
   return true;
 }
 bool containsPoint(float x, float y, float left, float top, float right, float bottom);
+inline bool inputRegionContains(WaylandServer::Impl::Surface const* surface, float localX, float localY) {
+  if (!surface) return false;
+  if (surface->inputRegionInfinite) return true;
+  return std::any_of(surface->inputRegionRects.begin(), surface->inputRegionRects.end(),
+                     [&](CommittedSurfaceSnapshot::RegionRect const& rect) {
+                       return localX >= static_cast<float>(rect.x) &&
+                              localY >= static_cast<float>(rect.y) &&
+                              localX < static_cast<float>(rect.x + rect.width) &&
+                              localY < static_cast<float>(rect.y + rect.height);
+                     });
+}
 WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surface);
 OutputGeometry outputGeometryFor(WaylandServer::Impl const* server);
 OutputGeometry snapOutputGeometryFor(WaylandServer::Impl const* server);

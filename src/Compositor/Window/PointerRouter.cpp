@@ -48,6 +48,7 @@ WaylandServer::Impl::Surface* subsurfaceAt(WaylandServer::Impl* server,
     float const right = left + static_cast<float>(width);
     float const bottom = top + static_cast<float>(height);
     if (!containsPoint(x, y, left, top, right, bottom)) continue;
+    if (!inputRegionContains(surface, x - left, y - top)) continue;
     if (WaylandServer::Impl::Surface* nested = subsurfaceAt(server, surface, left, top, x, y)) return nested;
     return surface;
   }
@@ -61,6 +62,7 @@ namespace flux::compositor {
 using wm::aboveWindowLayerAt;
 using wm::ChromeHitContext;
 using wm::controlsRegionContains;
+using wm::inputRegionContains;
 using wm::popupAt;
 using wm::subsurfaceAt;
 using wm::surfaceUsesCutouts;
@@ -83,6 +85,7 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
     float const right = left + static_cast<float>(width);
     float const bottom = top + static_cast<float>(height);
     if (x >= left && x < right && y >= top && y < bottom) {
+      if (!inputRegionContains(surface, x - left, y - top)) continue;
       if (surfaceUsesCutouts(server, surface)) {
         ChromeHitContext context{
             .surface = surface,
@@ -544,4 +547,3 @@ std::uint32_t keyboardModifierMask(WaylandServer::Impl* server) {
 }
 
 } // namespace flux::compositor::wm
-

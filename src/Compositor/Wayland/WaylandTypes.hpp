@@ -83,6 +83,7 @@ struct CommittedSurfaceSnapshot {
   std::int32_t committedHeight = 0;
   std::int32_t bufferWidth = 0;
   std::int32_t bufferHeight = 0;
+  std::int32_t bufferTransform = 0;
   float sourceX = 0.f;
   float sourceY = 0.f;
   float sourceWidth = 0.f;
@@ -119,6 +120,7 @@ struct CommittedSurfaceSnapshot {
   std::uint64_t lastConfigureAckNsec = 0;
   std::uint64_t lastCommitNsec = 0;
   std::vector<RegionRect> backgroundBlurRects;
+  std::vector<RegionRect> opaqueRegionRects;
   std::shared_ptr<std::vector<std::uint8_t> const> rgbaPixels;
   Image::PixelFormat pixelFormat = Image::PixelFormat::Rgba8888;
   std::uint64_t dmabufBufferId = 0;

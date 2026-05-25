@@ -45,6 +45,41 @@ void appendRegionRect(std::vector<RegionRect>& rects, RegionRect rect) {
   if (!emptyRegionRect(rect)) rects.push_back(rect);
 }
 
+std::vector<RegionRect> copyRegionRects(wl_resource* regionResource) {
+  auto* region = resourceData<WaylandServer::Impl::Region>(regionResource);
+  return region ? region->rects : std::vector<RegionRect>{};
+}
+
+bool regionsEqual(std::vector<RegionRect> const& a, std::vector<RegionRect> const& b) {
+  if (a.size() != b.size()) return false;
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    if (a[i].x != b[i].x ||
+        a[i].y != b[i].y ||
+        a[i].width != b[i].width ||
+        a[i].height != b[i].height) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool transformSwapsAxes(std::int32_t transform) {
+  return transform == WL_OUTPUT_TRANSFORM_90 ||
+         transform == WL_OUTPUT_TRANSFORM_270 ||
+         transform == WL_OUTPUT_TRANSFORM_FLIPPED_90 ||
+         transform == WL_OUTPUT_TRANSFORM_FLIPPED_270;
+}
+
+std::int32_t transformedBufferWidth(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  return transformSwapsAxes(surface->bufferTransform) ? surface->height : surface->width;
+}
+
+std::int32_t transformedBufferHeight(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  return transformSwapsAxes(surface->bufferTransform) ? surface->width : surface->height;
+}
+
 void subtractRegionRect(std::vector<RegionRect>& rects, RegionRect cut) {
   if (emptyRegionRect(cut)) return;
 
@@ -215,10 +250,18 @@ void surfaceDestroy(wl_client*, wl_resource* resource) {
 
 void surfaceAttach(wl_client*, wl_resource* resource, wl_resource* buffer, std::int32_t x, std::int32_t y) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
+  if (wl_resource_get_version(resource) >= WL_SURFACE_OFFSET_SINCE_VERSION && (x != 0 || y != 0)) {
+    wl_resource_post_error(resource, WL_SURFACE_ERROR_INVALID_OFFSET,
+                           "wl_surface.attach x/y must be 0 for wl_surface version 5 or newer");
+    return;
+  }
   surface->pendingBuffer = buffer;
   surface->pendingBufferAttached = true;
-  surface->x = x;
-  surface->y = y;
+  if (x != 0 || y != 0) {
+    surface->pendingBufferOffsetX = x;
+    surface->pendingBufferOffsetY = y;
+    surface->pendingBufferOffsetSet = true;
+  }
 }
 
 void surfaceFrame(wl_client* client, wl_resource* resource, std::uint32_t id) {
@@ -229,6 +272,28 @@ void surfaceFrame(wl_client* client, wl_resource* resource, std::uint32_t id) {
     return;
   }
   surface->frameCallbacks.push_back(callback);
+}
+
+void surfaceDamage(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y,
+                   std::int32_t width, std::int32_t height) {
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
+  if (!surface) return;
+  appendRegionRect(surface->pendingSurfaceDamageRects, normalizedRegionRect(x, y, width, height));
+}
+
+void surfaceSetOpaqueRegion(wl_client*, wl_resource* resource, wl_resource* regionResource) {
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
+  if (!surface) return;
+  surface->pendingOpaqueRegionRects = copyRegionRects(regionResource);
+  surface->pendingOpaqueRegionSet = true;
+}
+
+void surfaceSetInputRegion(wl_client*, wl_resource* resource, wl_resource* regionResource) {
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
+  if (!surface) return;
+  surface->pendingInputRegionInfinite = regionResource == nullptr;
+  surface->pendingInputRegionRects = copyRegionRects(regionResource);
+  surface->pendingInputRegionSet = true;
 }
 
 WaylandServer::Impl::ShmBuffer* shmBufferFor(WaylandServer::Impl* server, wl_resource* resource) {
@@ -292,14 +357,14 @@ std::int32_t committedDisplayWidth(WaylandServer::Impl::Surface const* surface) 
   if (!surface) return 0;
   if (surface->destinationSet) return surface->destinationWidth;
   if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceWidth);
-  return std::max(1, surface->width / std::max(1, surface->scale));
+  return std::max(1, transformedBufferWidth(surface) / std::max(1, surface->scale));
 }
 
 std::int32_t committedDisplayHeight(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return 0;
   if (surface->destinationSet) return surface->destinationHeight;
   if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceHeight);
-  return std::max(1, surface->height / std::max(1, surface->scale));
+  return std::max(1, transformedBufferHeight(surface) / std::max(1, surface->scale));
 }
 
 bool clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
@@ -484,6 +549,105 @@ bool applyBackgroundBlurState(WaylandServer::Impl::Surface* surface) {
   return changed;
 }
 
+bool surfaceHasPendingDamage(WaylandServer::Impl::Surface const* surface) {
+  return surface &&
+         (!surface->pendingSurfaceDamageRects.empty() || !surface->pendingBufferDamageRects.empty());
+}
+
+void clearPendingDamage(WaylandServer::Impl::Surface* surface) {
+  if (!surface) return;
+  surface->pendingSurfaceDamageRects.clear();
+  surface->pendingBufferDamageRects.clear();
+}
+
+bool applySurfaceProtocolState(WaylandServer::Impl::Surface* surface,
+                               bool hasBufferAttach,
+                               bool& inputRegionChanged) {
+  if (!surface) return false;
+  bool renderStateChanged = false;
+  inputRegionChanged = false;
+
+  if (surface->pendingScaleSet) {
+    if (surface->scale != surface->pendingScale) {
+      surface->scale = surface->pendingScale;
+      renderStateChanged = true;
+    }
+    surface->pendingScaleSet = false;
+  }
+
+  if (surface->pendingBufferTransformSet) {
+    if (surface->bufferTransform != surface->pendingBufferTransform) {
+      surface->bufferTransform = surface->pendingBufferTransform;
+      renderStateChanged = true;
+    }
+    surface->pendingBufferTransformSet = false;
+  }
+
+  if (surface->pendingBufferOffsetSet) {
+    if (surface->bufferOffsetX != surface->pendingBufferOffsetX ||
+        surface->bufferOffsetY != surface->pendingBufferOffsetY) {
+      surface->bufferOffsetX = surface->pendingBufferOffsetX;
+      surface->bufferOffsetY = surface->pendingBufferOffsetY;
+      surface->x = surface->bufferOffsetX;
+      surface->y = surface->bufferOffsetY;
+      renderStateChanged = true;
+      if (hasBufferAttach && surfaceIsTopLevelRenderable(surface)) {
+        surface->windowX += surface->bufferOffsetX;
+        surface->windowY += surface->bufferOffsetY;
+      }
+    }
+    surface->pendingBufferOffsetX = 0;
+    surface->pendingBufferOffsetY = 0;
+    surface->pendingBufferOffsetSet = false;
+  }
+
+  if (surface->pendingOpaqueRegionSet) {
+    if (!regionsEqual(surface->opaqueRegionRects, surface->pendingOpaqueRegionRects)) {
+      surface->opaqueRegionRects = surface->pendingOpaqueRegionRects;
+      renderStateChanged = true;
+    }
+    surface->pendingOpaqueRegionSet = false;
+  }
+
+  if (surface->pendingInputRegionSet) {
+    if (surface->inputRegionInfinite != surface->pendingInputRegionInfinite ||
+        !regionsEqual(surface->inputRegionRects, surface->pendingInputRegionRects)) {
+      surface->inputRegionInfinite = surface->pendingInputRegionInfinite;
+      surface->inputRegionRects = surface->pendingInputRegionRects;
+      inputRegionChanged = true;
+    }
+    surface->pendingInputRegionSet = false;
+  }
+
+  return renderStateChanged;
+}
+
+bool bufferSizeValidForScale(WaylandServer::Impl::Surface const* surface) {
+  if (!surface || surface->width <= 0 || surface->height <= 0) return true;
+  std::int32_t const scale = std::max(1, surface->scale);
+  return transformedBufferWidth(surface) % scale == 0 &&
+         transformedBufferHeight(surface) % scale == 0;
+}
+
+bool refreshCurrentShmBuffer(WaylandServer::Impl::Surface* surface,
+                             WaylandServer::Impl::ShmBuffer const& shmBuffer) {
+  std::vector<std::uint8_t> pixels;
+  Image::PixelFormat pixelFormat = Image::PixelFormat::Rgba8888;
+  bool fullyOpaque = false;
+  auto const copyStart = diagnostics::cpuTraceNow();
+  if (!copyShmBufferToPixels(shmBuffer, pixels, pixelFormat, fullyOpaque)) {
+    return false;
+  }
+  diagnostics::recordShmCopy(pixels.size(), diagnostics::cpuTraceElapsedMilliseconds(copyStart));
+  surface->rgbaPixels = std::make_shared<std::vector<std::uint8_t> const>(std::move(pixels));
+  surface->pixelFormat = pixelFormat;
+  surface->rgbaFullyOpaque = fullyOpaque;
+  surface->width = shmBuffer.width;
+  surface->height = shmBuffer.height;
+  surface->dmabufBuffer = nullptr;
+  return true;
+}
+
 bool pendingViewportStateChanged(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return false;
   return surface->pendingSourceSet != surface->sourceSet ||
@@ -564,15 +728,56 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   surface->presentationFeedbacks = std::move(surface->pendingPresentationFeedbacks);
   surface->pendingPresentationFeedbacks.clear();
   bool const backgroundBlurChanged = applyBackgroundBlurState(surface);
+  bool inputRegionChanged = false;
+  bool const protocolRenderStateChanged =
+      applySurfaceProtocolState(surface, hasBufferAttach, inputRegionChanged);
+  bool const viewportChanged = pendingViewportStateChanged(surface);
+  bool const damagePending = surfaceHasPendingDamage(surface);
 
   if (!hasBufferAttach) {
-    bool const viewportChanged = pendingViewportStateChanged(surface);
-    if (!viewportChanged && !backgroundBlurChanged &&
+    bool serialBumped = false;
+    bool const needsBufferRefresh = damagePending && surface->currentBuffer;
+    if (!viewportChanged && !backgroundBlurChanged && !protocolRenderStateChanged &&
+        !inputRegionChanged && !needsBufferRefresh &&
         surface->presentationFeedbacks.empty()) {
       traceCrashSurfaceCommit(surface, "state", 0u, 0u);
+      clearPendingDamage(surface);
       return;
     }
-    if (surface->pendingSourceSet || surface->pendingDestinationSet) {
+    if (needsBufferRefresh) {
+      if (auto* shmBuffer = shmBufferFor(surface->server, surface->currentBuffer)) {
+        if (refreshCurrentShmBuffer(surface, *shmBuffer)) {
+          if (!bufferSizeValidForScale(surface)) {
+            wl_resource_post_error(resource,
+                                   WL_SURFACE_ERROR_INVALID_SIZE,
+                                   "buffer size is not divisible by wl_surface buffer scale");
+            return;
+          }
+          if (!applyViewportState(surface)) return;
+          applyLayerGeometry(surface->layerSurface);
+          maybeSendInitialCutoutsConfigure(surface->server, surface);
+          bumpSurfaceSerial(surface);
+          serialBumped = true;
+          surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
+          traceResizeSurface("commit-damage-shm", surface);
+        }
+      } else if (auto* dmabufBuffer = dmabufBufferFor(surface->server, surface->currentBuffer)) {
+        surface->dmabufBuffer = dmabufBuffer;
+        if (!bufferSizeValidForScale(surface)) {
+          wl_resource_post_error(resource,
+                                 WL_SURFACE_ERROR_INVALID_SIZE,
+                                 "buffer size is not divisible by wl_surface buffer scale");
+          return;
+        }
+        if (!applyViewportState(surface)) return;
+        applyLayerGeometry(surface->layerSurface);
+        maybeSendInitialCutoutsConfigure(surface->server, surface);
+        bumpSurfaceSerial(surface);
+        serialBumped = true;
+        surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
+        traceResizeSurface("commit-damage-dmabuf", surface);
+      }
+    } else if (surface->pendingSourceSet || surface->pendingDestinationSet) {
       traceResizeSurface("commit-state-defer-viewport", surface);
     } else if (pendingViewportSourceFitsCurrentBuffer(surface)) {
       if (!applyViewportState(surface)) return;
@@ -580,7 +785,10 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       maybeSendInitialCutoutsConfigure(surface->server, surface);
       traceResizeSurface("commit-state", surface);
     }
-    if (backgroundBlurChanged) bumpSurfaceSerial(surface);
+    if ((backgroundBlurChanged || protocolRenderStateChanged || viewportChanged) && !serialBumped) {
+      bumpSurfaceSerial(surface);
+    }
+    clearPendingDamage(surface);
     traceCrashSurfaceCommit(surface, "state", 0u, 0u);
     return;
   }
@@ -596,18 +804,15 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   bool releaseCurrentBufferImmediately = false;
   if (surface->currentBuffer) {
     if (auto* shmBuffer = shmBufferFor(surface->server, surface->currentBuffer)) {
-      std::vector<std::uint8_t> pixels;
-      Image::PixelFormat pixelFormat = Image::PixelFormat::Rgba8888;
-      bool fullyOpaque = false;
-      auto const copyStart = diagnostics::cpuTraceNow();
-      if (copyShmBufferToPixels(*shmBuffer, pixels, pixelFormat, fullyOpaque)) {
-        diagnostics::recordShmCopy(pixels.size(),
-                                   diagnostics::cpuTraceElapsedMilliseconds(copyStart));
-        surface->rgbaPixels = std::make_shared<std::vector<std::uint8_t> const>(std::move(pixels));
-        surface->pixelFormat = pixelFormat;
-        surface->rgbaFullyOpaque = fullyOpaque;
+      if (refreshCurrentShmBuffer(surface, *shmBuffer)) {
         surface->width = shmBuffer->width;
         surface->height = shmBuffer->height;
+        if (!bufferSizeValidForScale(surface)) {
+          wl_resource_post_error(resource,
+                                 WL_SURFACE_ERROR_INVALID_SIZE,
+                                 "buffer size is not divisible by wl_surface buffer scale");
+          return;
+        }
         if (!applyViewportState(surface)) return;
         traceConfigureCommitLag("commit-match-shm", surface);
         bool const matchedConfigureCommit = clearMatchedConfigureCommit(surface);
@@ -630,6 +835,12 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         surface->rgbaFullyOpaque = false;
         surface->width = dmabufBuffer->width;
         surface->height = dmabufBuffer->height;
+        if (!bufferSizeValidForScale(surface)) {
+          wl_resource_post_error(resource,
+                                 WL_SURFACE_ERROR_INVALID_SIZE,
+                                 "buffer size is not divisible by wl_surface buffer scale");
+          return;
+        }
         if (!applyViewportState(surface)) return;
         traceConfigureCommitLag("commit-match-dmabuf", surface);
         bool const matchedConfigureCommit = clearMatchedConfigureCommit(surface);
@@ -663,25 +874,55 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     traceResizeSurface("commit-empty", surface);
     traceCrashSurfaceCommit(surface, "empty", 0u, 0u);
   }
+  clearPendingDamage(surface);
 }
 
 void surfaceSetBufferScale(wl_client*, wl_resource* resource, std::int32_t scale) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
-  surface->scale = std::max(1, scale);
+  if (scale <= 0) {
+    wl_resource_post_error(resource, WL_SURFACE_ERROR_INVALID_SCALE, "invalid wl_surface buffer scale");
+    return;
+  }
+  surface->pendingScale = scale;
+  surface->pendingScaleSet = true;
+}
+
+void surfaceSetBufferTransform(wl_client*, wl_resource* resource, std::int32_t transform) {
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
+  if (!wl_output_transform_is_valid(static_cast<std::uint32_t>(transform), 1)) {
+    wl_resource_post_error(resource, WL_SURFACE_ERROR_INVALID_TRANSFORM, "invalid wl_surface buffer transform");
+    return;
+  }
+  surface->pendingBufferTransform = transform;
+  surface->pendingBufferTransformSet = true;
+}
+
+void surfaceDamageBuffer(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y,
+                         std::int32_t width, std::int32_t height) {
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
+  if (!surface) return;
+  appendRegionRect(surface->pendingBufferDamageRects, normalizedRegionRect(x, y, width, height));
+}
+
+void surfaceOffset(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y) {
+  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
+  surface->pendingBufferOffsetX = x;
+  surface->pendingBufferOffsetY = y;
+  surface->pendingBufferOffsetSet = true;
 }
 
 struct wl_surface_interface const surfaceImpl{
     .destroy = surfaceDestroy,
     .attach = surfaceAttach,
-    .damage = [](wl_client*, wl_resource*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {},
+    .damage = surfaceDamage,
     .frame = surfaceFrame,
-    .set_opaque_region = [](wl_client*, wl_resource*, wl_resource*) {},
-    .set_input_region = [](wl_client*, wl_resource*, wl_resource*) {},
+    .set_opaque_region = surfaceSetOpaqueRegion,
+    .set_input_region = surfaceSetInputRegion,
     .commit = surfaceCommit,
-    .set_buffer_transform = [](wl_client*, wl_resource*, std::int32_t) {},
+    .set_buffer_transform = surfaceSetBufferTransform,
     .set_buffer_scale = surfaceSetBufferScale,
-    .damage_buffer = [](wl_client*, wl_resource*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {},
-    .offset = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
+    .damage_buffer = surfaceDamageBuffer,
+    .offset = surfaceOffset,
     .get_release = surfaceFrame,
 };
 
@@ -694,11 +935,15 @@ void setConfiguredFrameSize(WaylandServer::Impl::Surface* surface, std::int32_t 
 }
 
 std::int32_t displayWidth(WaylandServer::Impl::Surface const* surface) {
-  return surface && surface->frameWidth > 0 ? surface->frameWidth : surface ? surface->width : 0;
+  return surface && surface->frameWidth > 0
+             ? surface->frameWidth
+             : surface ? std::max(0, transformedBufferWidth(surface) / std::max(1, surface->scale)) : 0;
 }
 
 std::int32_t displayHeight(WaylandServer::Impl::Surface const* surface) {
-  return surface && surface->frameHeight > 0 ? surface->frameHeight : surface ? surface->height : 0;
+  return surface && surface->frameHeight > 0
+             ? surface->frameHeight
+             : surface ? std::max(0, transformedBufferHeight(surface) / std::max(1, surface->scale)) : 0;
 }
 
 void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* surface) {

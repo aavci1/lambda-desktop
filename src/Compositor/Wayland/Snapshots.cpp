@@ -30,8 +30,92 @@ bool dmabufFormatFullyOpaque(std::uint32_t format) {
   return format == DRM_FORMAT_XRGB8888 || format == DRM_FORMAT_XBGR8888;
 }
 
+using RegionRect = CommittedSurfaceSnapshot::RegionRect;
+
+bool emptyRegionRect(RegionRect const& rect) {
+  return rect.width <= 0 || rect.height <= 0;
+}
+
+void appendRegionRect(std::vector<RegionRect>& rects, RegionRect rect) {
+  if (!emptyRegionRect(rect)) rects.push_back(rect);
+}
+
+void subtractRegionRect(std::vector<RegionRect>& rects, RegionRect cut) {
+  if (emptyRegionRect(cut)) return;
+  std::vector<RegionRect> result;
+  result.reserve(rects.size() + 4u);
+  std::int64_t const cutLeft = cut.x;
+  std::int64_t const cutTop = cut.y;
+  std::int64_t const cutRight = cutLeft + cut.width;
+  std::int64_t const cutBottom = cutTop + cut.height;
+  for (RegionRect const& rect : rects) {
+    std::int64_t const left = rect.x;
+    std::int64_t const top = rect.y;
+    std::int64_t const right = left + rect.width;
+    std::int64_t const bottom = top + rect.height;
+    std::int64_t const overlapLeft = std::max(left, cutLeft);
+    std::int64_t const overlapTop = std::max(top, cutTop);
+    std::int64_t const overlapRight = std::min(right, cutRight);
+    std::int64_t const overlapBottom = std::min(bottom, cutBottom);
+    if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) {
+      result.push_back(rect);
+      continue;
+    }
+    appendRegionRect(result, RegionRect{rect.x, rect.y, rect.width,
+                                        static_cast<std::int32_t>(overlapTop - top)});
+    appendRegionRect(result, RegionRect{rect.x, static_cast<std::int32_t>(overlapBottom),
+                                        rect.width, static_cast<std::int32_t>(bottom - overlapBottom)});
+    appendRegionRect(result, RegionRect{rect.x, static_cast<std::int32_t>(overlapTop),
+                                        static_cast<std::int32_t>(overlapLeft - left),
+                                        static_cast<std::int32_t>(overlapBottom - overlapTop)});
+    appendRegionRect(result, RegionRect{static_cast<std::int32_t>(overlapRight),
+                                        static_cast<std::int32_t>(overlapTop),
+                                        static_cast<std::int32_t>(right - overlapRight),
+                                        static_cast<std::int32_t>(overlapBottom - overlapTop)});
+  }
+  rects = std::move(result);
+}
+
+bool regionCoversRect(std::vector<RegionRect> const& rects,
+                      std::int32_t x,
+                      std::int32_t y,
+                      std::int32_t width,
+                      std::int32_t height) {
+  if (width <= 0 || height <= 0) return false;
+  std::vector<RegionRect> remaining{RegionRect{x, y, width, height}};
+  for (RegionRect const& rect : rects) {
+    subtractRegionRect(remaining, rect);
+    if (remaining.empty()) return true;
+  }
+  return remaining.empty();
+}
+
+bool transformSwapsAxes(std::int32_t transform) {
+  return transform == WL_OUTPUT_TRANSFORM_90 ||
+         transform == WL_OUTPUT_TRANSFORM_270 ||
+         transform == WL_OUTPUT_TRANSFORM_FLIPPED_90 ||
+         transform == WL_OUTPUT_TRANSFORM_FLIPPED_270;
+}
+
+std::int32_t transformedBufferWidth(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  return transformSwapsAxes(surface->bufferTransform) ? surface->height : surface->width;
+}
+
+std::int32_t transformedBufferHeight(WaylandServer::Impl::Surface const* surface) {
+  if (!surface) return 0;
+  return transformSwapsAxes(surface->bufferTransform) ? surface->width : surface->height;
+}
+
+std::int32_t committedDisplayWidthForSurface(WaylandServer::Impl::Surface const* surface);
+std::int32_t committedDisplayHeightForSurface(WaylandServer::Impl::Surface const* surface);
+
 bool surfaceContentFullyOpaque(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return false;
+  if (regionCoversRect(surface->opaqueRegionRects, 0, 0, committedDisplayWidthForSurface(surface),
+                       committedDisplayHeightForSurface(surface))) {
+    return true;
+  }
   if (surface->rgbaPixels && !surface->rgbaPixels->empty()) return surface->rgbaFullyOpaque;
   if (surface->dmabufBuffer) return dmabufFormatFullyOpaque(surface->dmabufBuffer->format);
   return false;
@@ -41,14 +125,14 @@ std::int32_t committedDisplayWidthForSurface(WaylandServer::Impl::Surface const*
   if (!surface) return 0;
   if (surface->destinationSet) return surface->destinationWidth;
   if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceWidth);
-  return std::max(1, surface->width / std::max(1, surface->scale));
+  return std::max(1, transformedBufferWidth(surface) / std::max(1, surface->scale));
 }
 
 std::int32_t committedDisplayHeightForSurface(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return 0;
   if (surface->destinationSet) return surface->destinationHeight;
   if (surface->sourceSet) return static_cast<std::int32_t>(surface->sourceHeight);
-  return std::max(1, surface->height / std::max(1, surface->scale));
+  return std::max(1, transformedBufferHeight(surface) / std::max(1, surface->scale));
 }
 
 WaylandServer::Impl::XdgToplevel const* toplevelForSurface(WaylandServer::Impl const* server,
@@ -146,6 +230,7 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .committedHeight = committedHeight,
       .bufferWidth = surface->width,
       .bufferHeight = surface->height,
+      .bufferTransform = surface->bufferTransform,
       .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
       .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
       .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
@@ -187,6 +272,7 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
 	      .lastConfigureAckNsec = surface->lastConfigureAckNsec,
 	      .lastCommitNsec = surface->lastCommitNsec,
 	      .backgroundBlurRects = surface->backgroundBlurRects,
+	      .opaqueRegionRects = surface->opaqueRegionRects,
 	      .rgbaPixels = surface->rgbaPixels,
 	      .pixelFormat = surface->pixelFormat,
 	      .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,
@@ -288,6 +374,7 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
       .committedHeight = committedDisplayHeightForSurface(surface),
       .bufferWidth = surface->width,
       .bufferHeight = surface->height,
+      .bufferTransform = surface->bufferTransform,
       .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
       .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
       .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),

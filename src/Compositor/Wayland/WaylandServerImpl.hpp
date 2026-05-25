@@ -11,6 +11,7 @@
 
 #include <drm_fourcc.h>
 #include <wayland-server-core.h>
+#include <wayland-server-protocol.h>
 
 #include <cstdint>
 #include <memory>
@@ -316,6 +317,16 @@ struct WaylandServer::Impl::Surface {
   std::int32_t x = 0;
   std::int32_t y = 0;
   std::int32_t scale = 1;
+  std::int32_t pendingScale = 1;
+  bool pendingScaleSet = false;
+  std::int32_t bufferTransform = WL_OUTPUT_TRANSFORM_NORMAL;
+  std::int32_t pendingBufferTransform = WL_OUTPUT_TRANSFORM_NORMAL;
+  bool pendingBufferTransformSet = false;
+  std::int32_t bufferOffsetX = 0;
+  std::int32_t bufferOffsetY = 0;
+  std::int32_t pendingBufferOffsetX = 0;
+  std::int32_t pendingBufferOffsetY = 0;
+  bool pendingBufferOffsetSet = false;
   std::int32_t windowX = 96;
   std::int32_t windowY = 96;
   SurfaceRole role = SurfaceRole::None;
@@ -385,6 +396,16 @@ struct WaylandServer::Impl::Surface {
   SurfaceBackgroundEffectSnapshot pendingBackgroundEffectState;
   bool backgroundBlurPending = false;
   bool backgroundEffectStatePending = false;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> opaqueRegionRects;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingOpaqueRegionRects;
+  bool pendingOpaqueRegionSet = false;
+  bool inputRegionInfinite = true;
+  bool pendingInputRegionInfinite = true;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> inputRegionRects;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingInputRegionRects;
+  bool pendingInputRegionSet = false;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingSurfaceDamageRects;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingBufferDamageRects;
   Viewport* viewport = nullptr;
   FractionalScale* fractionalScale = nullptr;
   LayerSurface* layerSurface = nullptr;

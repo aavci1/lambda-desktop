@@ -72,6 +72,7 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, surface.committedHeight);
   hashValue(hash, surface.bufferWidth);
   hashValue(hash, surface.bufferHeight);
+  hashValue(hash, surface.bufferTransform);
   hashValue(hash, surface.sourceX);
   hashValue(hash, surface.sourceY);
   hashValue(hash, surface.sourceWidth);

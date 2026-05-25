@@ -89,6 +89,7 @@ WaylandServer::Impl::Surface* aboveWindowLayerAt(WaylandServer::Impl* server, fl
       float const left = static_cast<float>(surface->windowX);
       float const top = static_cast<float>(surface->windowY);
       if (containsPoint(x, y, left, top, left + static_cast<float>(width), top + static_cast<float>(height))) {
+        if (!inputRegionContains(surface, x - left, y - top)) continue;
         return surface;
       }
     }
@@ -320,7 +321,10 @@ WaylandServer::Impl::Surface* popupAt(WaylandServer::Impl* server, float x, floa
     float const top = static_cast<float>(bounds->y);
     float const right = left + static_cast<float>(bounds->width);
     float const bottom = top + static_cast<float>(bounds->height);
-    if (containsPoint(x, y, left, top, right, bottom)) return popup->xdgSurface->surface;
+    if (containsPoint(x, y, left, top, right, bottom) &&
+        inputRegionContains(popup->xdgSurface->surface, x - left, y - top)) {
+      return popup->xdgSurface->surface;
+    }
   }
   return nullptr;
 }

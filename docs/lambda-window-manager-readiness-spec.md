@@ -117,6 +117,8 @@ These are the concrete findings to resolve or validate before broad refactors.
 
    `wl_surface.damage`, `damage_buffer`, `set_opaque_region`, `set_input_region`, `set_buffer_transform`, and `offset` are no-ops. This may be acceptable for a narrow client set only if explicitly documented, but protocol readiness requires either implementation or a clear limitation for each ignored request.
 
+   Status: implemented and manually accepted on 2026-05-26. Damage-only commits now refresh current shm buffers or mark current dmabuf content dirty, input regions participate in pointer hit testing, opaque regions participate in full-surface opacity/material decisions, buffer scale and transform are committed as double-buffered surface state with protocol validation, and attach/offset requests are no longer ignored. Input, popups, mouse, and keyboard behavior were manually verified; the remaining titlebar/desktop flicker is tracked as pre-existing visual stability work, not a blocker for this item.
+
 6. Several xdg-shell toplevel requests are no-ops.
 
    `set_window_geometry`, `set_parent`, `show_window_menu`, `set_min_size`, `set_max_size`, `set_fullscreen`, and `unset_fullscreen` are currently ignored. Real GTK/Qt/browser validation should decide which of these must be implemented for daily-driver use and which remain documented limitations.

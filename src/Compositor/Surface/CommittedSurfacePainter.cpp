@@ -39,6 +39,7 @@ bool renderSnapshotChanged(CommittedSurfaceSnapshot const& current,
          current.committedWidth != previous.committedWidth ||
          current.committedHeight != previous.committedHeight ||
          current.bufferWidth != previous.bufferWidth || current.bufferHeight != previous.bufferHeight ||
+         current.bufferTransform != previous.bufferTransform ||
          current.activeSizing != previous.activeSizing ||
          current.geometryAnimationGrowing != previous.geometryAnimationGrowing ||
          current.serial != previous.serial ||
