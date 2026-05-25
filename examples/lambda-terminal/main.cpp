@@ -4,6 +4,8 @@
 #include <Flux/UI/Views/Render.hpp>
 #include <Flux/UI/Window.hpp>
 
+#include "TerminalCore.hpp"
+
 #include <vterm.h>
 
 #include <algorithm>
@@ -171,8 +173,17 @@ public:
   Reactive::Signal<VTermPos> cursor() const { return cursor_; }
 
   void scheduleResizeForFrame(Rect frame) {
-    int const nextCols = std::max(20, static_cast<int>(std::floor((frame.width - kContentInset * 2.f) / kCellWidth)));
-    int const nextRows = std::max(6, static_cast<int>(std::floor((frame.height - kContentInset * 2.f) / kLineHeight)));
+    TerminalGridSize const grid = terminalGridSize(frame.width,
+                                                   frame.height,
+                                                   TerminalGridMetrics{
+                                                       .cellWidth = kCellWidth,
+                                                       .lineHeight = kLineHeight,
+                                                       .contentInset = kContentInset,
+                                                       .minColumns = 20,
+                                                       .minRows = 6,
+                                                   });
+    int const nextCols = grid.columns;
+    int const nextRows = grid.rows;
     if (!pendingResize_ && nextCols == cols_ && nextRows == rowsCount_) {
       return;
     }
@@ -195,36 +206,8 @@ public:
   }
 
   void sendKey(KeyCode key, Modifiers modifiers) {
-    using namespace flux::keys;
-    if (any(modifiers & Modifiers::Ctrl)) {
-      static constexpr std::array<KeyCode, 26> keyByLetter{
-          A, B, C, D, E, F, G, H, I, J, K, L, M,
-          N, O, P, Q, R, S, T, U, V, W, X, Y, Z};
-      for (std::size_t i = 0; i < keyByLetter.size(); ++i) {
-        if (key == keyByLetter[i]) {
-          char const control = static_cast<char>(i + 1u);
-          writeAll(&control, 1);
-          return;
-        }
-      }
-    }
-
-    switch (key) {
-    case Return: writeAll("\r", 1); break;
-    case Tab: writeAll("\t", 1); break;
-    case Delete: writeAll("\x7f", 1); break;
-    case ForwardDelete: writeAll("\x1b[3~", 4); break;
-    case Escape: writeAll("\x1b", 1); break;
-    case LeftArrow: writeAll("\x1b[D", 3); break;
-    case RightArrow: writeAll("\x1b[C", 3); break;
-    case UpArrow: writeAll("\x1b[A", 3); break;
-    case DownArrow: writeAll("\x1b[B", 3); break;
-    case Home: writeAll("\x1b[H", 3); break;
-    case End: writeAll("\x1b[F", 3); break;
-    case PageUp: writeAll("\x1b[5~", 4); break;
-    case PageDown: writeAll("\x1b[6~", 4); break;
-    default: break;
-    }
+    std::string const encoded = encodeTerminalKey(key, modifiers);
+    writeAll(encoded.data(), encoded.size());
   }
 
   void drawBackground(Canvas& canvas, Rect frame) {

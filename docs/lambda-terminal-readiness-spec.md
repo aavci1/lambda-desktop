@@ -74,6 +74,8 @@ These areas should be included in the Terminal milestone:
 - Add desktop integration: app id, desktop entry/app registry, Settings handoff, clipboard services, URL opening, and window title behavior.
 - Add performance targets and repeatable tests for high-output workloads and resize workloads.
 
+Status update 2026-05-26: the first terminal core split is in place. `TerminalCore` now covers deterministic key sequence generation, application cursor/keypad mode encoding, bracketed paste wrapping, resize row/column calculation, Unicode width handling, ANSI/256/truecolor conversion, basic attribute resolution, and preference parsing/default fallback. `lambda-terminal` uses the shared key encoder and resize calculator. Scrollback, selection, PTY smoke, and renderer/model split work remain open.
+
 ## Goals
 
 1. Make `lambda-terminal` usable for normal daily shell work.
@@ -682,6 +684,7 @@ Scope:
 Acceptance:
 
 - Unit tests cover key sequence generation.
+- Unit tests cover application cursor/keypad mode sequence generation.
 - Unit tests cover scrollback push, viewport movement, and limit enforcement.
 - Unit tests cover normal vs alternate screen behavior.
 - Unit tests cover selection and copied text.

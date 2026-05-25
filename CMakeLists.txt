@@ -911,6 +911,8 @@ if(FLUX_BUILD_TESTS)
     tests/ShowTests.cpp
     tests/ShellIpcTests.cpp
     tests/SvgPathTests.cpp
+    examples/lambda-terminal/TerminalCore.cpp
+    tests/TerminalCoreTests.cpp
     tests/ThemeReactivityTests.cpp
   )
   if(FLUX_PLATFORM_MACOS)
@@ -947,6 +949,7 @@ if(FLUX_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/lambda-files
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/lambda-terminal
   )
 
   target_link_libraries(flux_tests PRIVATE
