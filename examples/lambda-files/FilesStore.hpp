@@ -29,6 +29,11 @@ enum class FileSortKey {
   ModifiedTime,
 };
 
+enum class FileClipboardIntent {
+  Copy,
+  Cut,
+};
+
 struct FileEntry {
   std::string name;
   std::filesystem::path path;
@@ -72,6 +77,32 @@ struct FileOperationResult {
   bool ok = false;
   std::filesystem::path path;
   std::string error;
+};
+
+struct FileClipboardState {
+  FileClipboardIntent intent = FileClipboardIntent::Copy;
+  std::vector<std::filesystem::path> paths;
+
+  [[nodiscard]] bool empty() const noexcept { return paths.empty(); }
+};
+
+struct DirectoryChangeSet {
+  std::vector<std::filesystem::path> added;
+  std::vector<std::filesystem::path> removed;
+  std::vector<std::filesystem::path> modified;
+
+  bool operator==(DirectoryChangeSet const&) const = default;
+};
+
+struct FilesPreferences {
+  bool showHidden = false;
+  std::string viewMode = "grid";
+  FileSortKey sortKey = FileSortKey::Name;
+  bool sortAscending = true;
+  int iconSize = 96;
+  bool showTrash = true;
+
+  bool operator==(FilesPreferences const&) const = default;
 };
 
 enum class FileConflictDecision {
@@ -136,6 +167,8 @@ std::vector<FileEntry> sortedEntries(std::vector<FileEntry> entries,
                                      FileSortKey key = FileSortKey::Name,
                                      bool ascending = true,
                                      bool directoriesFirst = true);
+std::vector<FileEntry> filterEntries(std::vector<FileEntry> const& entries, std::string_view query);
+DirectoryChangeSet diffDirectoryEntries(std::vector<FileEntry> before, std::vector<FileEntry> after);
 std::vector<BreadcrumbCrumb> breadcrumbCrumbs(std::filesystem::path const& path);
 std::optional<std::filesystem::path> parentDirectory(std::filesystem::path const& path);
 FileVisualKind visualKindForEntry(std::filesystem::path const& path, bool isDirectory);
@@ -171,6 +204,9 @@ std::optional<TrashInfo> parseTrashInfo(std::filesystem::path const& infoPath);
 std::filesystem::path resolveConflictPath(std::filesystem::path const& destination,
                                           FileConflictDecision decision);
 FileOperationResult undoFileOperation(FileUndoAction const& action);
+FileClipboardState makeFileClipboard(std::vector<std::filesystem::path> paths, FileClipboardIntent intent);
+std::vector<FileOperationResult> pasteFileClipboard(FileClipboardState const& clipboard,
+                                                    std::filesystem::path const& destinationDirectory);
 
 std::string mimeTypeForPath(std::filesystem::path const& path, bool isDirectory);
 MimeAppsList parseMimeAppsList(std::string_view text);
@@ -187,6 +223,9 @@ FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
                               std::filesystem::path const& path,
                               bool isDirectory,
                               int preferredSize = 48);
+FilesPreferences defaultFilesPreferences();
+FilesPreferences parseFilesPreferencesToml(std::string_view tomlText);
+std::string writeFilesPreferencesToml(FilesPreferences const& preferences);
 
 std::string serializeUriList(std::vector<std::filesystem::path> const& paths);
 std::vector<std::filesystem::path> parseUriList(std::string_view text);

@@ -156,6 +156,30 @@ TEST_CASE("FilesStore directory listing records modified time and keeps folder-f
   std::filesystem::remove_all(root);
 }
 
+TEST_CASE("FilesStore filters entries and computes directory refresh diffs") {
+  using lambda_files::FileEntry;
+  auto now = std::filesystem::file_time_type::clock::now();
+  std::vector<FileEntry> before{
+      {.name = "alpha.txt", .path = "/tmp/alpha.txt", .size = 1, .modifiedAt = now},
+      {.name = "Beta", .path = "/tmp/Beta", .isDirectory = true, .modifiedAt = now},
+      {.name = "notes.md", .path = "/tmp/notes.md", .size = 5, .modifiedAt = now},
+  };
+  std::vector<FileEntry> after{
+      {.name = "alpha.txt", .path = "/tmp/alpha.txt", .size = 2, .modifiedAt = now + std::chrono::seconds(1)},
+      {.name = "Beta", .path = "/tmp/Beta", .isDirectory = true, .modifiedAt = now},
+      {.name = "new.txt", .path = "/tmp/new.txt", .size = 1, .modifiedAt = now},
+  };
+
+  auto filtered = lambda_files::filterEntries(before, "TA");
+  REQUIRE(filtered.size() == 1);
+  CHECK(filtered[0].name == "Beta");
+
+  auto changes = lambda_files::diffDirectoryEntries(before, after);
+  CHECK(changes.added == std::vector<std::filesystem::path>{"/tmp/new.txt"});
+  CHECK(changes.removed == std::vector<std::filesystem::path>{"/tmp/notes.md"});
+  CHECK(changes.modified == std::vector<std::filesystem::path>{"/tmp/alpha.txt"});
+}
+
 TEST_CASE("FilesStore selection supports single toggle range and clear") {
   std::vector<lambda_files::FileEntry> entries{
       {.name = "a", .path = "/tmp/a"},
@@ -252,6 +276,34 @@ TEST_CASE("FilesStore copies moves and duplicates files and folders") {
   CHECK(moved.ok);
   CHECK(std::filesystem::exists(destination / "single.txt"));
   CHECK_FALSE(std::filesystem::exists(root / "single.txt"));
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("FilesStore internal clipboard copies and cuts selected paths") {
+  auto root = tempRoot("lambda-files-clipboard-operation-test");
+  auto source = root / "source";
+  auto destination = root / "destination";
+  std::filesystem::create_directories(source);
+  std::filesystem::create_directories(destination);
+  {
+    std::ofstream(source / "copy.txt") << "copy";
+    std::ofstream(source / "cut.txt") << "cut";
+  }
+
+  auto copyClipboard = lambda_files::makeFileClipboard({source / "copy.txt"}, lambda_files::FileClipboardIntent::Copy);
+  auto copied = lambda_files::pasteFileClipboard(copyClipboard, destination);
+  REQUIRE(copied.size() == 1);
+  CHECK(copied[0].ok);
+  CHECK(std::filesystem::exists(source / "copy.txt"));
+  CHECK(std::filesystem::exists(destination / "copy.txt"));
+
+  auto cutClipboard = lambda_files::makeFileClipboard({source / "cut.txt"}, lambda_files::FileClipboardIntent::Cut);
+  auto moved = lambda_files::pasteFileClipboard(cutClipboard, destination);
+  REQUIRE(moved.size() == 1);
+  CHECK(moved[0].ok);
+  CHECK_FALSE(std::filesystem::exists(source / "cut.txt"));
+  CHECK(std::filesystem::exists(destination / "cut.txt"));
 
   std::filesystem::remove_all(root);
 }
@@ -489,4 +541,31 @@ TEST_CASE("FilesStore looks up file icons through icon theme fallback data") {
   CHECK(unknown.fallback);
 
   std::filesystem::remove_all(root);
+}
+
+TEST_CASE("FilesStore preferences parse serialize and preserve defaults for invalid values") {
+  auto preferences = lambda_files::parseFilesPreferencesToml(R"(
+show_hidden = true
+view_mode = "list"
+sort_key = "modified_time"
+sort_ascending = false
+icon_size = 128
+show_trash = false
+)");
+  CHECK(preferences.showHidden);
+  CHECK(preferences.viewMode == "list");
+  CHECK(preferences.sortKey == lambda_files::FileSortKey::ModifiedTime);
+  CHECK_FALSE(preferences.sortAscending);
+  CHECK(preferences.iconSize == 128);
+  CHECK_FALSE(preferences.showTrash);
+
+  CHECK(lambda_files::parseFilesPreferencesToml(lambda_files::writeFilesPreferencesToml(preferences)) == preferences);
+
+  auto fallback = lambda_files::parseFilesPreferencesToml(R"(
+show_hidden = maybe
+view_mode = "columns"
+sort_key = "random"
+icon_size = 4
+)");
+  CHECK(fallback == lambda_files::defaultFilesPreferences());
 }

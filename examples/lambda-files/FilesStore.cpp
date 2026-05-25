@@ -577,6 +577,56 @@ std::vector<FileEntry> sortedEntries(std::vector<FileEntry> entries,
   return entries;
 }
 
+std::vector<FileEntry> filterEntries(std::vector<FileEntry> const& entries, std::string_view query) {
+  std::string needle = lowerAscii(trim(query));
+  if (needle.empty()) return entries;
+  std::vector<FileEntry> filtered;
+  for (auto const& entry : entries) {
+    if (lowerAscii(entry.name).find(needle) != std::string::npos ||
+        lowerAscii(entry.path.string()).find(needle) != std::string::npos) {
+      filtered.push_back(entry);
+    }
+  }
+  return filtered;
+}
+
+DirectoryChangeSet diffDirectoryEntries(std::vector<FileEntry> before, std::vector<FileEntry> after) {
+  auto byPath = [](FileEntry const& a, FileEntry const& b) {
+    return a.path < b.path;
+  };
+  std::sort(before.begin(), before.end(), byPath);
+  std::sort(after.begin(), after.end(), byPath);
+
+  DirectoryChangeSet changes;
+  std::size_t i = 0;
+  std::size_t j = 0;
+  while (i < before.size() || j < after.size()) {
+    if (i >= before.size()) {
+      changes.added.push_back(after[j++].path);
+      continue;
+    }
+    if (j >= after.size()) {
+      changes.removed.push_back(before[i++].path);
+      continue;
+    }
+    if (before[i].path < after[j].path) {
+      changes.removed.push_back(before[i++].path);
+      continue;
+    }
+    if (after[j].path < before[i].path) {
+      changes.added.push_back(after[j++].path);
+      continue;
+    }
+    if (before[i].size != after[j].size || before[i].isDirectory != after[j].isDirectory ||
+        before[i].modifiedAt != after[j].modifiedAt) {
+      changes.modified.push_back(after[j].path);
+    }
+    ++i;
+    ++j;
+  }
+  return changes;
+}
+
 std::vector<BreadcrumbCrumb> breadcrumbCrumbs(std::filesystem::path const& path) {
   std::vector<BreadcrumbCrumb> crumbs;
   std::error_code ec;
@@ -986,6 +1036,28 @@ FileOperationResult undoFileOperation(FileUndoAction const& action) {
   return {.ok = false, .error = "Unsupported undo action."};
 }
 
+FileClipboardState makeFileClipboard(std::vector<std::filesystem::path> paths, FileClipboardIntent intent) {
+  paths.erase(std::remove_if(paths.begin(), paths.end(), [](auto const& path) {
+                return path.empty();
+              }),
+              paths.end());
+  return {.intent = intent, .paths = std::move(paths)};
+}
+
+std::vector<FileOperationResult> pasteFileClipboard(FileClipboardState const& clipboard,
+                                                    std::filesystem::path const& destinationDirectory) {
+  std::vector<FileOperationResult> results;
+  results.reserve(clipboard.paths.size());
+  for (auto const& path : clipboard.paths) {
+    if (clipboard.intent == FileClipboardIntent::Cut) {
+      results.push_back(movePath(path, destinationDirectory));
+    } else {
+      results.push_back(copyPath(path, destinationDirectory));
+    }
+  }
+  return results;
+}
+
 std::string mimeTypeForPath(std::filesystem::path const& path, bool isDirectory) {
   if (isDirectory) return "inode/directory";
   std::string ext = lowerAscii(path.extension().string());
@@ -1108,6 +1180,74 @@ FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
     }
   }
   return {.iconName = fallback, .fallback = true};
+}
+
+FilesPreferences defaultFilesPreferences() {
+  return FilesPreferences{};
+}
+
+FilesPreferences parseFilesPreferencesToml(std::string_view tomlText) {
+  FilesPreferences preferences = defaultFilesPreferences();
+  std::istringstream input{std::string(tomlText)};
+  std::string line;
+  while (std::getline(input, line)) {
+    std::string_view view(line);
+    if (auto hash = view.find('#'); hash != std::string_view::npos) view = view.substr(0, hash);
+    std::string stripped = trim(view);
+    if (stripped.empty()) continue;
+    auto equals = stripped.find('=');
+    if (equals == std::string::npos) continue;
+    std::string key = trim(std::string_view(stripped).substr(0, equals));
+    std::string value = trim(std::string_view(stripped).substr(equals + 1u));
+    if (value.size() >= 2u && value.front() == '"' && value.back() == '"') {
+      value = value.substr(1u, value.size() - 2u);
+    }
+    std::string lower = lowerAscii(value);
+    if (key == "show_hidden") {
+      if (lower == "true" || lower == "1") preferences.showHidden = true;
+      else if (lower == "false" || lower == "0") preferences.showHidden = false;
+    } else if (key == "view_mode") {
+      if (lower == "grid" || lower == "list") preferences.viewMode = lower;
+    } else if (key == "sort_key") {
+      if (lower == "name") preferences.sortKey = FileSortKey::Name;
+      else if (lower == "kind") preferences.sortKey = FileSortKey::Kind;
+      else if (lower == "size") preferences.sortKey = FileSortKey::Size;
+      else if (lower == "modified_time") preferences.sortKey = FileSortKey::ModifiedTime;
+    } else if (key == "sort_ascending") {
+      if (lower == "true" || lower == "1") preferences.sortAscending = true;
+      else if (lower == "false" || lower == "0") preferences.sortAscending = false;
+    } else if (key == "icon_size") {
+      char* end = nullptr;
+      long parsed = std::strtol(value.c_str(), &end, 10);
+      if (end != value.c_str() && *end == '\0' && parsed >= 32 && parsed <= 256) {
+        preferences.iconSize = static_cast<int>(parsed);
+      }
+    } else if (key == "show_trash") {
+      if (lower == "true" || lower == "1") preferences.showTrash = true;
+      else if (lower == "false" || lower == "0") preferences.showTrash = false;
+    }
+  }
+  return preferences;
+}
+
+std::string writeFilesPreferencesToml(FilesPreferences const& preferences) {
+  auto sortKey = [&] {
+    switch (preferences.sortKey) {
+    case FileSortKey::Name: return "name";
+    case FileSortKey::Kind: return "kind";
+    case FileSortKey::Size: return "size";
+    case FileSortKey::ModifiedTime: return "modified_time";
+    }
+    return "name";
+  };
+  std::ostringstream out;
+  out << "show_hidden = " << (preferences.showHidden ? "true" : "false") << "\n";
+  out << "view_mode = \"" << preferences.viewMode << "\"\n";
+  out << "sort_key = \"" << sortKey() << "\"\n";
+  out << "sort_ascending = " << (preferences.sortAscending ? "true" : "false") << "\n";
+  out << "icon_size = " << preferences.iconSize << "\n";
+  out << "show_trash = " << (preferences.showTrash ? "true" : "false") << "\n";
+  return out.str();
 }
 
 std::string serializeUriList(std::vector<std::filesystem::path> const& paths) {
