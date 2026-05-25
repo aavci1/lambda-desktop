@@ -69,6 +69,7 @@ struct SystemInfo {
 };
 
 [[nodiscard]] std::vector<SettingSchema> windowManagerSettingsSchema();
+[[nodiscard]] std::vector<SettingSchema> shellSettingsSchema();
 [[nodiscard]] std::map<std::string, std::string> schemaDefaults(std::vector<SettingSchema> const& schema);
 [[nodiscard]] bool schemaIdsUnique(std::vector<SettingSchema> const& schema);
 
@@ -81,6 +82,9 @@ struct SystemInfo {
 [[nodiscard]] SettingsDocument loadWindowManagerSettings(std::string_view tomlText);
 [[nodiscard]] std::string writeWindowManagerSettings(std::string_view originalToml,
                                                      std::map<std::string, std::string> const& updates);
+[[nodiscard]] SettingsDocument loadShellSettings(std::string_view tomlText);
+[[nodiscard]] std::string writeShellSettings(std::string_view originalToml,
+                                             std::map<std::string, std::string> const& updates);
 [[nodiscard]] bool atomicWriteFile(std::filesystem::path const& path, std::string_view contents, std::string& error);
 
 [[nodiscard]] std::vector<std::string> discoverThemeNames(std::vector<std::filesystem::path> const& roots);

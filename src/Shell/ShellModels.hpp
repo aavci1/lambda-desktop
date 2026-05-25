@@ -77,11 +77,40 @@ struct QuickSettingState {
 };
 
 struct ShellConfig {
-  std::vector<std::string> dockPins{"files", "browser", "terminal", "settings"};
+  std::string iconTheme;
+  std::string symbolicIconTheme;
+  int iconSize = 48;
+  bool reducedMotion = false;
+
+  std::string dockPosition = "bottom";
+  bool dockAutoHide = false;
+  bool showRunningUnpinned = true;
+  bool dockShowTooltips = true;
+  std::vector<std::string> dockPinned{"lambda-files", "lambda-terminal", "lambda-settings", "firefox"};
+
+  std::string topBarClockFormat = "%a %d %b, %H:%M";
+  bool topBarShowActiveTitle = true;
+  std::vector<std::string> topBarModules{"network", "bluetooth", "volume", "battery", "notifications", "clipboard",
+                                         "clock"};
+
+  std::vector<std::string> quickSettingsModules{"network", "bluetooth", "audio", "battery", "brightness",
+                                                "do_not_disturb"};
+
+  bool notificationsEnabled = true;
+  bool notificationsDoNotDisturb = false;
+  int notificationBannerTimeoutSeconds = 6;
+  std::size_t notificationHistoryLimit = 100;
+  bool notificationShowPreviews = true;
+
   bool clipboardHistoryEnabled = true;
-  std::size_t clipboardHistoryLimit = 20;
-  bool doNotDisturb = false;
-  std::size_t notificationHistoryLimit = 50;
+  bool clipboardHistoryPersist = false;
+  std::size_t clipboardHistoryMaxEntries = 100;
+  std::size_t clipboardHistoryMaxTextBytes = 1048576;
+  bool clipboardHistoryRecordPrimarySelection = false;
+
+  std::string launcherEmptyQuery = "recommended";
+  std::size_t launcherMaxResults = 12;
+  bool launcherShowCategories = true;
 
   bool operator==(ShellConfig const&) const = default;
 };

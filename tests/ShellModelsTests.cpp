@@ -117,34 +117,72 @@ TEST_CASE("Shell quick settings summary orders available providers first") {
 
 TEST_CASE("Shell config parses defaults and invalid fallback") {
   auto defaults = lambda_shell::defaultShellConfig();
-  CHECK(defaults.dockPins == std::vector<std::string>{"files", "browser", "terminal", "settings"});
+  CHECK(defaults.dockPinned == std::vector<std::string>{"lambda-files", "lambda-terminal", "lambda-settings", "firefox"});
+  CHECK(defaults.iconSize == 48);
+  CHECK(defaults.topBarModules.back() == "clock");
   CHECK(defaults.clipboardHistoryEnabled);
-  CHECK(defaults.notificationHistoryLimit == 50);
+  CHECK(defaults.clipboardHistoryMaxEntries == 100);
+  CHECK(defaults.notificationHistoryLimit == 100);
+  CHECK(defaults.launcherMaxResults == 12);
 
   auto parsed = lambda_shell::parseShellConfig(R"(
+[appearance]
+icon_theme = "Adwaita"
+icon_size = 64
+reduced_motion = true
 [dock]
-pins = ["terminal", "files"]
-[clipboard]
+pinned = ["lambda-terminal", "lambda-files"]
+auto_hide = true
+show_running_unpinned = false
+[top_bar]
+clock_format = "%H:%M"
+modules = ["notifications", "clock"]
+[quick_settings]
+modules = ["audio", "battery"]
+[clipboard_history]
 enabled = false
-history_limit = 5
+max_entries = 5
+persist = true
 [notifications]
 do_not_disturb = true
+banner_timeout_seconds = 8
 history_limit = 7
+[launcher]
+empty_query = "apps"
+max_results = 4
 )");
-  CHECK(parsed.dockPins == std::vector<std::string>{"terminal", "files"});
+  CHECK(parsed.iconTheme == "Adwaita");
+  CHECK(parsed.iconSize == 64);
+  CHECK(parsed.reducedMotion);
+  CHECK(parsed.dockPinned == std::vector<std::string>{"lambda-terminal", "lambda-files"});
+  CHECK(parsed.dockAutoHide);
+  CHECK_FALSE(parsed.showRunningUnpinned);
+  CHECK(parsed.topBarClockFormat == "%H:%M");
+  CHECK(parsed.topBarModules == std::vector<std::string>{"notifications", "clock"});
+  CHECK(parsed.quickSettingsModules == std::vector<std::string>{"audio", "battery"});
   CHECK_FALSE(parsed.clipboardHistoryEnabled);
-  CHECK(parsed.clipboardHistoryLimit == 5);
-  CHECK(parsed.doNotDisturb);
+  CHECK(parsed.clipboardHistoryMaxEntries == 5);
+  CHECK(parsed.clipboardHistoryPersist);
+  CHECK(parsed.notificationsDoNotDisturb);
+  CHECK(parsed.notificationBannerTimeoutSeconds == 8);
   CHECK(parsed.notificationHistoryLimit == 7);
+  CHECK(parsed.launcherEmptyQuery == "apps");
+  CHECK(parsed.launcherMaxResults == 4);
 
   auto fallback = lambda_shell::parseShellConfig(R"(
+[appearance]
+icon_size = -1
 [dock]
-pins = []
-[clipboard]
+pinned = []
+position = "floating"
+[clipboard_history]
 enabled = maybe
-history_limit = -1
+max_entries = -1
 [notifications]
 history_limit = 2000
+[launcher]
+empty_query = "everything"
+max_results = 1000
 )");
   CHECK(fallback == defaults);
 }

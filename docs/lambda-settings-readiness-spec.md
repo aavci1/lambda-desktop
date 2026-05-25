@@ -57,7 +57,7 @@ These areas should be included in the Settings milestone:
 - Add apply/revert/error UX that is explicit enough to prevent silent config corruption.
 - Add tests for config read/write, validation, schema metadata, and settings model behavior.
 
-Status update 2026-05-26: a first `SettingsBackend` is in place with deterministic schema descriptors, apply-mode metadata, default extraction, validation for color/number/enum/path/shortcut values, dirty/revert/reset/save model state, Window Manager TOML load/write while preserving unknown keys, atomic file writes, shortcut conflict detection, wallpaper path normalization, theme discovery, and fixture-based system-info parsing. Shell config round-trip, full UI binding, write-failure edge fixtures, and richer provider discovery remain open.
+Status update 2026-05-26: a first `SettingsBackend` is in place with deterministic schema descriptors, apply-mode metadata, default extraction, validation for color/number/enum/path/shortcut values, dirty/revert/reset/save model state, Window Manager TOML load/write while preserving unknown keys, Shell TOML load/write for the current Shell config contract while preserving unknown keys, atomic file writes including write-failure preservation tests, shortcut conflict detection, wallpaper path normalization, theme discovery, and fixture-based system-info parsing. Full UI binding and richer provider discovery remain open.
 
 ## Goals
 

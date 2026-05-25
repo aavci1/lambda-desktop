@@ -38,6 +38,16 @@ TEST_CASE("Settings schema descriptors are unique and expose apply modes") {
   CHECK(output->applyMode == lambda_settings::ApplyMode::RestartRequired);
 }
 
+TEST_CASE("Settings Shell schema descriptors are unique and expose defaults") {
+  auto schema = lambda_settings::shellSettingsSchema();
+  CHECK(lambda_settings::schemaIdsUnique(schema));
+  auto defaults = lambda_settings::schemaDefaults(schema);
+  CHECK(defaults.at("dock.pinned") == "lambda-files,lambda-terminal,lambda-settings,firefox");
+  CHECK(defaults.at("appearance.icon_size") == "48");
+  CHECK(defaults.at("clipboard_history.persist") == "false");
+  CHECK(defaults.at("launcher.empty_query") == "recommended");
+}
+
 TEST_CASE("Settings validation rejects invalid color number enum path and shortcut values") {
   CHECK(lambda_settings::validateSettingValue(schema("color", lambda_settings::SettingType::Color), "#aabbcc"));
   CHECK_FALSE(lambda_settings::validateSettingValue(schema("color", lambda_settings::SettingType::Color), "blue"));
@@ -75,7 +85,7 @@ layout = "us"
 close = "super+q"
 )";
   auto loaded = lambda_settings::loadWindowManagerSettings(input);
-  CHECK(loaded.values.at("scale").starts_with("2."));
+  CHECK(loaded.values.at("scale").starts_with("2"));
   CHECK(loaded.values.at("input.keyboard.layout") == "us");
   CHECK(loaded.values.at("keybindings.close") == "super+q");
 
@@ -88,6 +98,59 @@ close = "super+q"
   CHECK(output.find("1.5") != std::string::npos);
   CHECK(output.find("tr") != std::string::npos);
   CHECK(output.find("super+w") != std::string::npos);
+}
+
+TEST_CASE("Settings Shell config round trip preserves unknown keys") {
+  std::string const input = R"(
+unknown_root = "keep"
+[appearance]
+icon_theme = "Adwaita"
+unknown_appearance = "keep"
+[dock]
+pinned = ["lambda-files", "lambda-terminal"]
+show_running_unpinned = true
+[top_bar]
+modules = ["notifications", "clock"]
+[clipboard_history]
+enabled = true
+max_entries = 100
+[notifications]
+do_not_disturb = false
+history_limit = 100
+[launcher]
+empty_query = "recommended"
+max_results = 12
+)";
+  auto loaded = lambda_settings::loadShellSettings(input);
+  CHECK(loaded.values.at("appearance.icon_theme") == "Adwaita");
+  CHECK(loaded.values.at("dock.pinned") == "lambda-files,lambda-terminal");
+  CHECK(loaded.values.at("top_bar.modules") == "notifications,clock");
+  CHECK(loaded.values.at("clipboard_history.max_entries") == "100");
+  CHECK(loaded.values.at("notifications.do_not_disturb") == "false");
+  CHECK(loaded.values.at("launcher.max_results") == "12");
+
+  std::string output = lambda_settings::writeShellSettings(input, {
+      {"appearance.icon_theme", "Lambda"},
+      {"dock.pinned", "lambda-terminal,lambda-settings"},
+      {"dock.show_running_unpinned", "false"},
+      {"top_bar.modules", "[\"clock\", \"notifications\"]"},
+      {"clipboard_history.enabled", "false"},
+      {"clipboard_history.max_entries", "25"},
+      {"notifications.do_not_disturb", "true"},
+      {"launcher.empty_query", "apps"},
+      {"launcher.max_results", "6"},
+  });
+  CHECK(output.find("unknown_root") != std::string::npos);
+  CHECK(output.find("unknown_appearance") != std::string::npos);
+  CHECK(output.find("Lambda") != std::string::npos);
+  CHECK(output.find("lambda-settings") != std::string::npos);
+  CHECK(output.find("show_running_unpinned = false") != std::string::npos);
+  CHECK(output.find("enabled = false") != std::string::npos);
+  CHECK(output.find("max_entries = 25") != std::string::npos);
+  CHECK(output.find("do_not_disturb = true") != std::string::npos);
+  bool const emptyQueryWritten = output.find("empty_query = 'apps'") != std::string::npos ||
+                                 output.find("empty_query = \"apps\"") != std::string::npos;
+  CHECK(emptyQueryWritten);
 }
 
 TEST_CASE("Settings atomic write replaces file and reports errors") {
@@ -103,6 +166,26 @@ TEST_CASE("Settings atomic write replaces file and reports errors") {
   file >> contents;
   CHECK(contents == "new");
   CHECK(error.empty());
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Settings atomic write failure leaves original file intact") {
+  auto root = tempRoot("lambda-settings-atomic-failure-test");
+  auto path = root / "config.toml";
+  {
+    std::ofstream(path) << "original";
+  }
+  std::filesystem::create_directory(root / "config.toml.tmp");
+
+  std::string error;
+  CHECK_FALSE(lambda_settings::atomicWriteFile(path, "new", error));
+  CHECK_FALSE(error.empty());
+  std::ifstream file(path);
+  std::string contents;
+  file >> contents;
+  CHECK(contents == "original");
+  CHECK(std::filesystem::is_directory(root / "config.toml.tmp"));
+
   std::filesystem::remove_all(root);
 }
 

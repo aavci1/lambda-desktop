@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <optional>
 #include <set>
 #include <sstream>
 
@@ -88,6 +89,14 @@ bool parseBoolValue(std::string value, bool fallback) {
   if (value == "true" || value == "1" || value == "yes") return true;
   if (value == "false" || value == "0" || value == "no") return false;
   return fallback;
+}
+
+std::optional<long long> parseIntegerValue(std::string value) {
+  value = trim(value);
+  char* end = nullptr;
+  long long parsed = std::strtoll(value.c_str(), &end, 10);
+  if (end == value.c_str() || *end != '\0') return std::nullopt;
+  return parsed;
 }
 
 std::vector<std::string> parseStringArray(std::string_view value) {
@@ -281,21 +290,84 @@ ShellConfig parseShellConfig(std::string_view tomlText) {
     std::string key = trim(std::string_view(stripped).substr(0, equals));
     std::string value = trim(std::string_view(stripped).substr(equals + 1u));
     std::string fullKey = section.empty() ? key : section + "." + key;
-    if (fullKey == "dock.pins") {
+    if (fullKey == "appearance.icon_theme") {
+      if (value.size() >= 2u && value.front() == '"' && value.back() == '"') {
+        config.iconTheme = value.substr(1u, value.size() - 2u);
+      }
+    } else if (fullKey == "appearance.symbolic_icon_theme") {
+      if (value.size() >= 2u && value.front() == '"' && value.back() == '"') {
+        config.symbolicIconTheme = value.substr(1u, value.size() - 2u);
+      }
+    } else if (fullKey == "appearance.icon_size") {
+      if (auto parsed = parseIntegerValue(value); parsed && *parsed > 0 && *parsed <= 512) {
+        config.iconSize = static_cast<int>(*parsed);
+      }
+    } else if (fullKey == "appearance.reduced_motion") {
+      config.reducedMotion = parseBoolValue(value, config.reducedMotion);
+    } else if (fullKey == "dock.position") {
+      if (value == "\"left\"" || value == "\"right\"" || value == "\"bottom\"") {
+        config.dockPosition = value.substr(1u, value.size() - 2u);
+      }
+    } else if (fullKey == "dock.auto_hide") {
+      config.dockAutoHide = parseBoolValue(value, config.dockAutoHide);
+    } else if (fullKey == "dock.show_running_unpinned") {
+      config.showRunningUnpinned = parseBoolValue(value, config.showRunningUnpinned);
+    } else if (fullKey == "dock.show_tooltips") {
+      config.dockShowTooltips = parseBoolValue(value, config.dockShowTooltips);
+    } else if (fullKey == "dock.pinned") {
       auto pins = parseStringArray(value);
-      if (!pins.empty()) config.dockPins = std::move(pins);
-    } else if (fullKey == "clipboard.enabled") {
-      config.clipboardHistoryEnabled = parseBoolValue(value, config.clipboardHistoryEnabled);
-    } else if (fullKey == "clipboard.history_limit") {
-      if (auto parsed = std::strtoll(value.c_str(), nullptr, 10); parsed > 0 && parsed <= 1000) {
-        config.clipboardHistoryLimit = static_cast<std::size_t>(parsed);
+      if (!pins.empty()) config.dockPinned = std::move(pins);
+    } else if (fullKey == "top_bar.clock_format") {
+      if (value.size() >= 2u && value.front() == '"' && value.back() == '"') {
+        config.topBarClockFormat = value.substr(1u, value.size() - 2u);
       }
+    } else if (fullKey == "top_bar.show_active_title") {
+      config.topBarShowActiveTitle = parseBoolValue(value, config.topBarShowActiveTitle);
+    } else if (fullKey == "top_bar.modules") {
+      auto modules = parseStringArray(value);
+      if (!modules.empty()) config.topBarModules = std::move(modules);
+    } else if (fullKey == "quick_settings.modules") {
+      auto modules = parseStringArray(value);
+      if (!modules.empty()) config.quickSettingsModules = std::move(modules);
+    } else if (fullKey == "notifications.enabled") {
+      config.notificationsEnabled = parseBoolValue(value, config.notificationsEnabled);
     } else if (fullKey == "notifications.do_not_disturb") {
-      config.doNotDisturb = parseBoolValue(value, config.doNotDisturb);
-    } else if (fullKey == "notifications.history_limit") {
-      if (auto parsed = std::strtoll(value.c_str(), nullptr, 10); parsed > 0 && parsed <= 1000) {
-        config.notificationHistoryLimit = static_cast<std::size_t>(parsed);
+      config.notificationsDoNotDisturb = parseBoolValue(value, config.notificationsDoNotDisturb);
+    } else if (fullKey == "notifications.banner_timeout_seconds") {
+      if (auto parsed = parseIntegerValue(value); parsed && *parsed >= 0 && *parsed <= 3600) {
+        config.notificationBannerTimeoutSeconds = static_cast<int>(*parsed);
       }
+    } else if (fullKey == "notifications.history_limit") {
+      if (auto parsed = parseIntegerValue(value); parsed && *parsed > 0 && *parsed <= 1000) {
+        config.notificationHistoryLimit = static_cast<std::size_t>(*parsed);
+      }
+    } else if (fullKey == "notifications.show_previews") {
+      config.notificationShowPreviews = parseBoolValue(value, config.notificationShowPreviews);
+    } else if (fullKey == "clipboard_history.enabled") {
+      config.clipboardHistoryEnabled = parseBoolValue(value, config.clipboardHistoryEnabled);
+    } else if (fullKey == "clipboard_history.persist") {
+      config.clipboardHistoryPersist = parseBoolValue(value, config.clipboardHistoryPersist);
+    } else if (fullKey == "clipboard_history.max_entries") {
+      if (auto parsed = parseIntegerValue(value); parsed && *parsed > 0 && *parsed <= 1000) {
+        config.clipboardHistoryMaxEntries = static_cast<std::size_t>(*parsed);
+      }
+    } else if (fullKey == "clipboard_history.max_text_bytes") {
+      if (auto parsed = parseIntegerValue(value); parsed && *parsed > 0 && *parsed <= 128 * 1024 * 1024) {
+        config.clipboardHistoryMaxTextBytes = static_cast<std::size_t>(*parsed);
+      }
+    } else if (fullKey == "clipboard_history.record_primary_selection") {
+      config.clipboardHistoryRecordPrimarySelection =
+          parseBoolValue(value, config.clipboardHistoryRecordPrimarySelection);
+    } else if (fullKey == "launcher.empty_query") {
+      if (value == "\"recommended\"" || value == "\"apps\"" || value == "\"recent\"") {
+        config.launcherEmptyQuery = value.substr(1u, value.size() - 2u);
+      }
+    } else if (fullKey == "launcher.max_results") {
+      if (auto parsed = parseIntegerValue(value); parsed && *parsed > 0 && *parsed <= 100) {
+        config.launcherMaxResults = static_cast<std::size_t>(*parsed);
+      }
+    } else if (fullKey == "launcher.show_categories") {
+      config.launcherShowCategories = parseBoolValue(value, config.launcherShowCategories);
     }
   }
   return config;

@@ -49,6 +49,61 @@ std::vector<std::string> splitShortcut(std::string const& shortcut) {
   return parts;
 }
 
+std::vector<std::string> parseStringListValue(std::string_view value) {
+  std::vector<std::string> items;
+  std::string trimmed;
+  std::size_t begin = 0;
+  while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin]))) ++begin;
+  std::size_t end = value.size();
+  while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1u]))) --end;
+  trimmed = std::string(value.substr(begin, end - begin));
+  if (trimmed.empty()) return items;
+
+  if (trimmed.front() == '[') {
+    try {
+      toml::table table = toml::parse("value = " + trimmed);
+      if (auto* array = table["value"].as_array()) {
+        for (auto const& item : *array) {
+          if (auto string = item.value<std::string>()) items.push_back(*string);
+        }
+        return items;
+      }
+    } catch (...) {
+      return items;
+    }
+  }
+
+  std::size_t start = 0;
+  while (start <= trimmed.size()) {
+    std::size_t comma = trimmed.find(',', start);
+    std::string item = trimmed.substr(start, comma == std::string::npos ? trimmed.size() - start : comma - start);
+    std::size_t itemBegin = 0;
+    while (itemBegin < item.size() && std::isspace(static_cast<unsigned char>(item[itemBegin]))) ++itemBegin;
+    std::size_t itemEnd = item.size();
+    while (itemEnd > itemBegin && std::isspace(static_cast<unsigned char>(item[itemEnd - 1u]))) --itemEnd;
+    item = item.substr(itemBegin, itemEnd - itemBegin);
+    if (item.size() >= 2u && item.front() == '"' && item.back() == '"') {
+      item = item.substr(1u, item.size() - 2u);
+    }
+    if (!item.empty()) items.push_back(std::move(item));
+    if (comma == std::string::npos) break;
+    start = comma + 1u;
+  }
+  return items;
+}
+
+toml::array tomlStringArray(std::vector<std::string> const& values) {
+  toml::array array;
+  for (auto const& value : values) array.push_back(value);
+  return array;
+}
+
+toml::table& ensureTomlTable(toml::table& table, std::string const& section) {
+  if (auto* existing = table[section].as_table()) return *existing;
+  table.insert_or_assign(section, toml::table{});
+  return *table[section].as_table();
+}
+
 void setTomlValue(toml::table& table, std::string const& key, std::string const& value) {
   if (key == "background" || key == "wallpaper" || key == "output" || key == "cursor_theme") {
     table.insert_or_assign(key, value);
@@ -73,14 +128,69 @@ void setTomlValue(toml::table& table, std::string const& key, std::string const&
   }
 }
 
+void setShellTomlValue(toml::table& table, std::string const& key, std::string const& value) {
+  auto setString = [&](std::string const& section, std::string const& field) {
+    ensureTomlTable(table, section).insert_or_assign(field, value);
+  };
+  auto setBool = [&](std::string const& section, std::string const& field) {
+    ensureTomlTable(table, section).insert_or_assign(field, lowerAscii(value) == "true" || value == "1");
+  };
+  auto setInt = [&](std::string const& section, std::string const& field) {
+    ensureTomlTable(table, section).insert_or_assign(field, static_cast<std::int64_t>(std::strtoll(value.c_str(), nullptr, 10)));
+  };
+  auto setArray = [&](std::string const& section, std::string const& field) {
+    ensureTomlTable(table, section).insert_or_assign(field, tomlStringArray(parseStringListValue(value)));
+  };
+
+  if (key == "appearance.icon_theme") setString("appearance", "icon_theme");
+  else if (key == "appearance.symbolic_icon_theme") setString("appearance", "symbolic_icon_theme");
+  else if (key == "appearance.icon_size") setInt("appearance", "icon_size");
+  else if (key == "appearance.reduced_motion") setBool("appearance", "reduced_motion");
+  else if (key == "dock.position") setString("dock", "position");
+  else if (key == "dock.auto_hide") setBool("dock", "auto_hide");
+  else if (key == "dock.show_running_unpinned") setBool("dock", "show_running_unpinned");
+  else if (key == "dock.show_tooltips") setBool("dock", "show_tooltips");
+  else if (key == "dock.pinned") setArray("dock", "pinned");
+  else if (key == "top_bar.clock_format") setString("top_bar", "clock_format");
+  else if (key == "top_bar.show_active_title") setBool("top_bar", "show_active_title");
+  else if (key == "top_bar.modules") setArray("top_bar", "modules");
+  else if (key == "quick_settings.modules") setArray("quick_settings", "modules");
+  else if (key == "notifications.enabled") setBool("notifications", "enabled");
+  else if (key == "notifications.do_not_disturb") setBool("notifications", "do_not_disturb");
+  else if (key == "notifications.banner_timeout_seconds") setInt("notifications", "banner_timeout_seconds");
+  else if (key == "notifications.history_limit") setInt("notifications", "history_limit");
+  else if (key == "notifications.show_previews") setBool("notifications", "show_previews");
+  else if (key == "clipboard_history.enabled") setBool("clipboard_history", "enabled");
+  else if (key == "clipboard_history.persist") setBool("clipboard_history", "persist");
+  else if (key == "clipboard_history.max_entries") setInt("clipboard_history", "max_entries");
+  else if (key == "clipboard_history.max_text_bytes") setInt("clipboard_history", "max_text_bytes");
+  else if (key == "clipboard_history.record_primary_selection") setBool("clipboard_history", "record_primary_selection");
+  else if (key == "launcher.empty_query") setString("launcher", "empty_query");
+  else if (key == "launcher.max_results") setInt("launcher", "max_results");
+  else if (key == "launcher.show_categories") setBool("launcher", "show_categories");
+}
+
 std::string tomlString(toml::table const& table, char const* key) {
   if (auto value = table[key].value<std::string>()) return *value;
   return {};
 }
 
+std::string tomlStringList(toml::table const& table, char const* key) {
+  auto* array = table[key].as_array();
+  if (!array) return {};
+  std::string output;
+  for (auto const& item : *array) {
+    auto value = item.value<std::string>();
+    if (!value) continue;
+    if (!output.empty()) output += ",";
+    output += *value;
+  }
+  return output;
+}
+
 std::string tomlNumber(toml::table const& table, char const* key) {
-  if (auto value = table[key].value<double>()) return std::to_string(*value);
   if (auto value = table[key].value<std::int64_t>()) return std::to_string(*value);
+  if (auto value = table[key].value<double>()) return std::to_string(*value);
   return {};
 }
 
@@ -150,6 +260,64 @@ std::vector<SettingSchema> windowManagerSettingsSchema() {
        .applyMode = ApplyMode::HotReload, .defaultValue = "600"},
       {.id = "keybindings.close", .label = "Close window", .type = SettingType::Shortcut,
        .applyMode = ApplyMode::HotReload, .defaultValue = "super+q"},
+  };
+}
+
+std::vector<SettingSchema> shellSettingsSchema() {
+  return {
+      {.id = "appearance.icon_theme", .label = "Icon theme", .type = SettingType::String,
+       .applyMode = ApplyMode::HotReload},
+      {.id = "appearance.symbolic_icon_theme", .label = "Symbolic icon theme", .type = SettingType::String,
+       .applyMode = ApplyMode::HotReload},
+      {.id = "appearance.icon_size", .label = "Icon size", .type = SettingType::Integer,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "48"},
+      {.id = "appearance.reduced_motion", .label = "Reduced motion", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
+      {.id = "dock.position", .label = "Dock position", .type = SettingType::Enum,
+       .applyMode = ApplyMode::HotReload, .enumValues = {"left", "right", "bottom"}, .defaultValue = "bottom"},
+      {.id = "dock.auto_hide", .label = "Dock auto-hide", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
+      {.id = "dock.show_running_unpinned", .label = "Show running unpinned apps", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
+      {.id = "dock.show_tooltips", .label = "Dock tooltips", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
+      {.id = "dock.pinned", .label = "Pinned apps", .type = SettingType::String,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "lambda-files,lambda-terminal,lambda-settings,firefox"},
+      {.id = "top_bar.clock_format", .label = "Clock format", .type = SettingType::String,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "%a %d %b, %H:%M"},
+      {.id = "top_bar.show_active_title", .label = "Show active title", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
+      {.id = "top_bar.modules", .label = "Top bar modules", .type = SettingType::String,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "network,bluetooth,volume,battery,notifications,clipboard,clock"},
+      {.id = "quick_settings.modules", .label = "Quick settings modules", .type = SettingType::String,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "network,bluetooth,audio,battery,brightness,do_not_disturb"},
+      {.id = "notifications.enabled", .label = "Notifications", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
+      {.id = "notifications.do_not_disturb", .label = "Do not disturb", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
+      {.id = "notifications.banner_timeout_seconds", .label = "Notification banner timeout", .type = SettingType::Integer,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "6"},
+      {.id = "notifications.history_limit", .label = "Notification history limit", .type = SettingType::Integer,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "100"},
+      {.id = "notifications.show_previews", .label = "Notification previews", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
+      {.id = "clipboard_history.enabled", .label = "Clipboard history", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
+      {.id = "clipboard_history.persist", .label = "Persist clipboard history", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
+      {.id = "clipboard_history.max_entries", .label = "Clipboard history entries", .type = SettingType::Integer,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "100"},
+      {.id = "clipboard_history.max_text_bytes", .label = "Clipboard max text bytes", .type = SettingType::Integer,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "1048576"},
+      {.id = "clipboard_history.record_primary_selection", .label = "Record primary selection",
+       .type = SettingType::Boolean, .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
+      {.id = "launcher.empty_query", .label = "Launcher empty query", .type = SettingType::Enum,
+       .applyMode = ApplyMode::HotReload, .enumValues = {"recommended", "apps", "recent"},
+       .defaultValue = "recommended"},
+      {.id = "launcher.max_results", .label = "Launcher max results", .type = SettingType::Integer,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "12"},
+      {.id = "launcher.show_categories", .label = "Launcher categories", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
   };
 }
 
@@ -257,6 +425,74 @@ std::string writeWindowManagerSettings(std::string_view originalToml,
     table = toml::table{};
   }
   for (auto const& [key, value] : updates) setTomlValue(table, key, value);
+  std::ostringstream out;
+  out << table;
+  return out.str();
+}
+
+SettingsDocument loadShellSettings(std::string_view tomlText) {
+  SettingsDocument document{.originalToml = std::string(tomlText)};
+  toml::table table;
+  try {
+    table = toml::parse(std::string(tomlText));
+  } catch (...) {
+    return document;
+  }
+  auto setIf = [&](std::string key, std::string value) {
+    if (!value.empty()) document.values[std::move(key)] = std::move(value);
+  };
+  if (auto* appearance = table["appearance"].as_table()) {
+    setIf("appearance.icon_theme", tomlString(*appearance, "icon_theme"));
+    setIf("appearance.symbolic_icon_theme", tomlString(*appearance, "symbolic_icon_theme"));
+    setIf("appearance.icon_size", tomlNumber(*appearance, "icon_size"));
+    setIf("appearance.reduced_motion", tomlBool(*appearance, "reduced_motion"));
+  }
+  if (auto* dock = table["dock"].as_table()) {
+    setIf("dock.position", tomlString(*dock, "position"));
+    setIf("dock.auto_hide", tomlBool(*dock, "auto_hide"));
+    setIf("dock.show_running_unpinned", tomlBool(*dock, "show_running_unpinned"));
+    setIf("dock.show_tooltips", tomlBool(*dock, "show_tooltips"));
+    setIf("dock.pinned", tomlStringList(*dock, "pinned"));
+  }
+  if (auto* topBar = table["top_bar"].as_table()) {
+    setIf("top_bar.clock_format", tomlString(*topBar, "clock_format"));
+    setIf("top_bar.show_active_title", tomlBool(*topBar, "show_active_title"));
+    setIf("top_bar.modules", tomlStringList(*topBar, "modules"));
+  }
+  if (auto* quickSettings = table["quick_settings"].as_table()) {
+    setIf("quick_settings.modules", tomlStringList(*quickSettings, "modules"));
+  }
+  if (auto* notifications = table["notifications"].as_table()) {
+    setIf("notifications.enabled", tomlBool(*notifications, "enabled"));
+    setIf("notifications.do_not_disturb", tomlBool(*notifications, "do_not_disturb"));
+    setIf("notifications.banner_timeout_seconds", tomlNumber(*notifications, "banner_timeout_seconds"));
+    setIf("notifications.history_limit", tomlNumber(*notifications, "history_limit"));
+    setIf("notifications.show_previews", tomlBool(*notifications, "show_previews"));
+  }
+  if (auto* clipboard = table["clipboard_history"].as_table()) {
+    setIf("clipboard_history.enabled", tomlBool(*clipboard, "enabled"));
+    setIf("clipboard_history.persist", tomlBool(*clipboard, "persist"));
+    setIf("clipboard_history.max_entries", tomlNumber(*clipboard, "max_entries"));
+    setIf("clipboard_history.max_text_bytes", tomlNumber(*clipboard, "max_text_bytes"));
+    setIf("clipboard_history.record_primary_selection", tomlBool(*clipboard, "record_primary_selection"));
+  }
+  if (auto* launcher = table["launcher"].as_table()) {
+    setIf("launcher.empty_query", tomlString(*launcher, "empty_query"));
+    setIf("launcher.max_results", tomlNumber(*launcher, "max_results"));
+    setIf("launcher.show_categories", tomlBool(*launcher, "show_categories"));
+  }
+  return document;
+}
+
+std::string writeShellSettings(std::string_view originalToml,
+                               std::map<std::string, std::string> const& updates) {
+  toml::table table;
+  try {
+    table = toml::parse(std::string(originalToml));
+  } catch (...) {
+    table = toml::table{};
+  }
+  for (auto const& [key, value] : updates) setShellTomlValue(table, key, value);
   std::ostringstream out;
   out << table;
   return out.str();
