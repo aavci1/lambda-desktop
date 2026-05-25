@@ -103,9 +103,9 @@ These are the concrete findings to resolve or validate before broad refactors.
 
    Status: implemented and covered by focused compositor state tests on 2026-05-25.
 
-3. Screenshot support is still full-output save only.
+3. Screenshot support has an initial compositor-owned implementation.
 
-   `requestScreenshot()` stores a boolean, and `CompositorRuntime` captures the next full rendered frame and writes a PNG through `Screenshot.cpp`. There is no active-window mode, region mode, compositor-drawn selection UI, cancel path, clipboard path, cursor inclusion policy, or documented shadow/border policy for active-window capture.
+   Status: implemented in code on 2026-05-25 and pending manual UI verification. Full-output capture is bound to `PrintScreen`, `SysRq`, and `Super+Shift+3`; region capture is bound to `Super+Shift+4`; active-window capture is bound to `Super+Shift+5`, `Alt+PrintScreen`, and `Alt+SysRq`. The compositor owns region-selection UI and hides it before the captured frame, so the overlay should not appear in saved images. Full-output and active-window modes include the cursor by forcing software cursor rendering for the captured frame; region mode excludes the cursor. Active-window capture uses the focused toplevel frame, including server-side titlebar/content/border and transparent rounded corners, and excludes the shadow. A short compositor flash confirms successful saves. Clipboard copy and the larger mode/options overlay are still future work.
 
 4. Keyboard configuration is absent.
 
@@ -432,7 +432,11 @@ Acceptance:
 
 Implementation notes:
 
-- If cursor inclusion is currently undefined, define and document it.
+- Current implemented shortcut policy: `PrintScreen`, `SysRq`, and `Super+Shift+3` capture the full output; `Super+Shift+4` enters region selection; `Super+Shift+5`, `Alt+PrintScreen`, and `Alt+SysRq` capture the active focused window.
+- Current implemented cursor policy: full-output and active-window screenshots include the cursor; region screenshots exclude it.
+- Current implemented active-window policy: capture the focused toplevel frame including server-side chrome/titlebar/content/border, with rounded-corner outside pixels made transparent, and excluding shadow.
+- Current implemented region UI: drag with the pointer to select, release to save, press `Esc` to cancel, or press `Enter`/`Space` to save the current region.
+- Current implemented feedback UI: flash the output briefly after a screenshot file is saved successfully.
 - Keep screenshot UI compositor-owned because the Window Manager owns pixels, output geometry, surface stacking, and trusted capture timing.
 - The overlay should reuse existing compositor drawing primitives used for snap previews/window chrome where possible.
 - Region selection should operate in logical coordinates and convert to framebuffer coordinates at capture time.

@@ -710,6 +710,7 @@ if(LAMBDA_BUILD_WINDOW_MANAGER)
     src/Compositor/Window/PointerRouter.cpp
     src/Compositor/Window/FocusStack.cpp
     src/Compositor/Window/KeyboardShortcuts.cpp
+    src/Compositor/Window/ScreenshotSelection.cpp
     src/Compositor/Window/InteractiveMoveResize.cpp
     src/Compositor/Window/LayerShellInput.cpp
     src/Compositor/main.cpp
@@ -919,6 +920,7 @@ if(FLUX_BUILD_TESTS)
     list(APPEND _flux_test_sources
       src/Compositor/Chrome/WindowChromeRenderer.cpp
       src/Compositor/Config/CompositorConfig.cpp
+      src/Compositor/Screenshot.cpp
       src/Compositor/Surface/CommittedSurfacePainter.cpp
       src/Compositor/Window/WindowGeometry.cpp
       tests/CompositorConfigTests.cpp
@@ -927,6 +929,7 @@ if(FLUX_BUILD_TESTS)
       tests/CompositorConfigHotReloadTests.cpp
       tests/CompositorLayerShellZoneTests.cpp
       tests/CompositorPresentationFeedbackTests.cpp
+      tests/CompositorScreenshotTests.cpp
       tests/CompositorSnapshotBuilderTests.cpp
       tests/CompositorSubsurfaceHitTests.cpp
       src/Compositor/Wayland/LayerShellZones.cpp
@@ -955,6 +958,7 @@ if(FLUX_BUILD_TESTS)
     target_link_libraries(flux_tests PRIVATE
       PkgConfig::VULKAN
       PkgConfig::LIBDRM
+      PkgConfig::ZLIB
     )
     if(FLUX_PLATFORM_LINUX_KMS OR LAMBDA_BUILD_WINDOW_MANAGER)
       target_link_libraries(flux_tests PRIVATE PkgConfig::WAYLAND_SERVER)

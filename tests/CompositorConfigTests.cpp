@@ -387,6 +387,8 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
   file << "cycle = \"alt+tab\"\n";
   file << "run = \"ctrl+space\"\n";
   file << "screenshot = \"super+shift+3\"\n";
+  file << "screenshot_region = \"super+shift+4\"\n";
+  file << "screenshot_active_window = \"alt+printscreen\"\n";
   file << "quit = \"ctrl+alt+delete\"\n";
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
@@ -427,6 +429,18 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
   CHECK(screenshot->meta);
   CHECK(screenshot->shift);
   CHECK(screenshot->key == KEY_3);
+
+  auto screenshotRegion = findAction(flux::compositor::WaylandServer::ShortcutAction::ScreenshotRegion);
+  REQUIRE(screenshotRegion != config.shortcutBindings.end());
+  CHECK(screenshotRegion->meta);
+  CHECK(screenshotRegion->shift);
+  CHECK(screenshotRegion->key == KEY_4);
+
+  auto screenshotActiveWindow = findAction(flux::compositor::WaylandServer::ShortcutAction::ScreenshotActiveWindow);
+  REQUIRE(screenshotActiveWindow != config.shortcutBindings.end());
+  CHECK(screenshotActiveWindow->alt);
+  CHECK_FALSE(screenshotActiveWindow->meta);
+  CHECK(screenshotActiveWindow->key == KEY_PRINT);
 
   std::filesystem::remove(path);
 }

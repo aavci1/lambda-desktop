@@ -145,5 +145,21 @@ void updateResize(WaylandServer::Impl* server);
 
 bool updateShortcutModifier(WaylandServer::Impl* server, std::uint32_t key, bool pressed);
 bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bool pressed, std::uint32_t timeMs);
+bool handleScreenshotSelectionPointerMotion(WaylandServer::Impl* server,
+                                            double dx,
+                                            double dy,
+                                            std::uint32_t timeMs);
+bool handleScreenshotSelectionPointerPosition(WaylandServer::Impl* server,
+                                              double x,
+                                              double y,
+                                              std::uint32_t timeMs);
+bool handleScreenshotSelectionPointerButton(WaylandServer::Impl* server,
+                                            std::uint32_t button,
+                                            bool pressed,
+                                            std::uint32_t timeMs);
+bool handleScreenshotSelectionKey(WaylandServer::Impl* server,
+                                  std::uint32_t key,
+                                  bool pressed,
+                                  std::uint32_t timeMs);
 
 } // namespace flux::compositor::wm

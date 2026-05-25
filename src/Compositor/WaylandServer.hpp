@@ -42,7 +42,8 @@ public:
 
   void dispatch();
   void dispatchShellIpc();
-  [[nodiscard]] bool consumeScreenshotRequest();
+  [[nodiscard]] std::optional<ScreenshotRequest> consumeScreenshotRequest();
+  [[nodiscard]] std::optional<ScreenshotSelectionOverlay> screenshotSelectionOverlay() const;
   void notifyShellStateChanged();
   void flushClients();
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);

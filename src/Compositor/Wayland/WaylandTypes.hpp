@@ -4,6 +4,8 @@
 #include <Flux/Graphics/Image.hpp>
 #include <Flux/UI/Window.hpp>
 
+#include "Compositor/Screenshot.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -149,6 +151,8 @@ enum class ShortcutAction : std::uint8_t {
   Restore,
   LaunchCommand,
   Screenshot,
+  ScreenshotRegion,
+  ScreenshotActiveWindow,
   Terminate,
 };
 

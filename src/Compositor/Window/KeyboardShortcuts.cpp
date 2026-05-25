@@ -92,7 +92,13 @@ bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bo
       server->requestShellOpenCommandLauncher();
       return true;
     case WaylandServer::ShortcutAction::Screenshot:
-      server->requestScreenshot();
+      server->requestScreenshot(ScreenshotMode::FullOutput, timeMs);
+      return true;
+    case WaylandServer::ShortcutAction::ScreenshotRegion:
+      server->requestScreenshot(ScreenshotMode::Region, timeMs);
+      return true;
+    case WaylandServer::ShortcutAction::ScreenshotActiveWindow:
+      server->requestScreenshot(ScreenshotMode::ActiveWindow, timeMs);
       return true;
     case WaylandServer::ShortcutAction::Terminate:
       std::raise(SIGTERM);

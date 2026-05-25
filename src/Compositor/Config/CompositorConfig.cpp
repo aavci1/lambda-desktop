@@ -189,6 +189,10 @@ std::vector<WaylandServer::ShortcutBinding> defaultShortcutBindings() {
       {.action = Action::Screenshot, .key = KEY_3, .meta = true, .shift = true},
       {.action = Action::Screenshot, .key = KEY_SYSRQ},
       {.action = Action::Screenshot, .key = KEY_PRINT},
+      {.action = Action::ScreenshotRegion, .key = KEY_4, .meta = true, .shift = true},
+      {.action = Action::ScreenshotActiveWindow, .key = KEY_5, .meta = true, .shift = true},
+      {.action = Action::ScreenshotActiveWindow, .key = KEY_SYSRQ, .alt = true},
+      {.action = Action::ScreenshotActiveWindow, .key = KEY_PRINT, .alt = true},
       {.action = Action::Terminate, .key = KEY_BACKSPACE, .ctrl = true, .alt = true},
   };
 }
@@ -196,7 +200,16 @@ std::vector<WaylandServer::ShortcutBinding> defaultShortcutBindings() {
 std::optional<std::uint32_t> keyCodeForName(std::string const& token) {
   static std::unordered_map<std::string, std::uint32_t> const keyCodes{
       {"a", KEY_A},
+      {"0", KEY_0},
+      {"1", KEY_1},
+      {"2", KEY_2},
       {"3", KEY_3},
+      {"4", KEY_4},
+      {"5", KEY_5},
+      {"6", KEY_6},
+      {"7", KEY_7},
+      {"8", KEY_8},
+      {"9", KEY_9},
       {"backspace", KEY_BACKSPACE},
       {"b", KEY_B},
       {"c", KEY_C},
@@ -288,6 +301,10 @@ std::optional<WaylandServer::ShortcutAction> shortcutActionForKey(std::string co
       {"launch_command", Action::LaunchCommand},
       {"run", Action::LaunchCommand},
       {"screenshot", Action::Screenshot},
+      {"screenshot_full", Action::Screenshot},
+      {"screenshot_region", Action::ScreenshotRegion},
+      {"screenshot_window", Action::ScreenshotActiveWindow},
+      {"screenshot_active_window", Action::ScreenshotActiveWindow},
       {"snap_left", Action::SnapLeft},
       {"snap_right", Action::SnapRight},
       {"terminate", Action::Terminate},

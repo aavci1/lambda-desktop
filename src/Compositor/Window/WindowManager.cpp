@@ -37,6 +37,10 @@ using wm::closeFocusedToplevel;
 using wm::dismissTopPopup;
 using wm::dismissTopPopupOutside;
 using wm::handleCompositorShortcut;
+using wm::handleScreenshotSelectionKey;
+using wm::handleScreenshotSelectionPointerButton;
+using wm::handleScreenshotSelectionPointerMotion;
+using wm::handleScreenshotSelectionPointerPosition;
 using wm::isManagedToplevel;
 using wm::kSnapDwellMs;
 using wm::kSnapPreviewAnimationMs;
@@ -79,6 +83,7 @@ std::optional<int> WaylandServer::Impl::snapPreviewWakeDelayMs() const {
   return static_cast<int>(kSnapDwellMs - elapsed);
 }
 void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_t timeMs) {
+  if (handleScreenshotSelectionPointerMotion(this, dx, dy, timeMs)) return;
   if (auto* constraint = activePointerConstraint(this);
       constraint && constraint->kind == PointerConstraint::Kind::Lock) {
     sendRelativePointerMotion(this, dx, dy, timeMs);
@@ -120,6 +125,7 @@ void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_
   sendRelativePointerMotion(this, dx, dy, timeMs);
 }
 void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_t timeMs) {
+  if (handleScreenshotSelectionPointerPosition(this, x, y, timeMs)) return;
   if (auto* constraint = activePointerConstraint(this);
       constraint && constraint->kind == PointerConstraint::Kind::Lock) {
     return;
@@ -159,6 +165,7 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
   updateCompositorCursorForPointer(this);
 }
 void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
+  if (handleScreenshotSelectionPointerButton(this, button, pressed, timeMs)) return;
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
   if (button == BTN_LEFT && !pressed && dndSource_) {
     updateDndTarget(this, target, timeMs);
@@ -381,6 +388,7 @@ void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std
   }
   bool const consumeModifier = updateShortcutModifier(this, key, pressed);
   if (consumeModifier) return;
+  if (handleScreenshotSelectionKey(this, key, pressed, timeMs)) return;
   if (pressed && key == KEY_ESC && dismissTopPopup(this)) return;
   if (handleCompositorShortcut(this, key, pressed, timeMs)) return;
   if (!keyboardFocus_) return;

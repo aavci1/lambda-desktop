@@ -105,6 +105,11 @@ struct RegionStats {
   std::uint64_t pixels = 0;
 };
 
+struct ActiveWindowScreenshotTarget {
+  ScreenshotRegion region;
+  CornerRadius cornerRadius{};
+};
+
 std::optional<RegionStats> captureRegionStats(std::vector<std::uint8_t> const& bgra,
                                               std::uint32_t width,
                                               std::uint32_t height,
@@ -149,6 +154,101 @@ std::optional<RegionStats> captureRegionStats(std::vector<std::uint8_t> const& b
       .meanAlpha = alpha / static_cast<double>(count),
       .pixels = count,
   };
+}
+
+std::optional<ActiveWindowScreenshotTarget> focusedWindowScreenshotTarget(WaylandServer const& wayland,
+                                                                         ChromeConfig const& chrome) {
+  for (auto const& surface : wayland.committedSurfaces()) {
+    if (!surface.focused || surface.width <= 0 || surface.height <= 0) continue;
+    ScreenshotRegion const region{
+        .x = surface.x,
+        .y = surface.y - surface.titleBarHeight,
+        .width = surface.width,
+        .height = surface.height + surface.titleBarHeight,
+    };
+    auto normalized = normalizeScreenshotRegion(region, wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
+    if (!normalized) return std::nullopt;
+    return ActiveWindowScreenshotTarget{
+        .region = *normalized,
+        .cornerRadius = surface.backgroundEffect.cornerRadiusSet ? surface.backgroundEffect.cornerRadius
+                                                                 : chrome.windowCornerRadius,
+    };
+  }
+  return std::nullopt;
+}
+
+bool logScreenshotSaveResult(ScreenshotSaveResult const& saved) {
+  if (saved.error.empty()) {
+    std::fprintf(stderr, "lambda-window-manager: saved screenshot to %s\n", saved.path.string().c_str());
+    return true;
+  } else {
+    std::fprintf(stderr,
+                 "lambda-window-manager: failed to save screenshot to %s: %s\n",
+                 saved.path.string().c_str(),
+                 saved.error.c_str());
+    return false;
+  }
+}
+
+CornerRadius scaleCornerRadius(CornerRadius corners, double scale) {
+  float const factor = static_cast<float>(scale);
+  return CornerRadius{
+      corners.topLeft * factor,
+      corners.topRight * factor,
+      corners.bottomRight * factor,
+      corners.bottomLeft * factor,
+  };
+}
+
+bool saveScreenshotRequest(ScreenshotRequest const& request,
+                           std::vector<std::uint8_t> const& pixels,
+                           std::uint32_t width,
+                           std::uint32_t height,
+                           WaylandServer const& wayland,
+                           ChromeConfig const& chrome) {
+  if (request.mode == ScreenshotMode::FullOutput) {
+    return logScreenshotSaveResult(saveScreenshotPng(pixels, width, height));
+  }
+
+  std::optional<ScreenshotRegion> logicalRegion = request.region;
+  CornerRadius activeWindowCorners{};
+  if (request.mode == ScreenshotMode::ActiveWindow) {
+    auto target = focusedWindowScreenshotTarget(wayland, chrome);
+    if (!target) {
+      std::fprintf(stderr, "lambda-window-manager: active-window screenshot skipped; no focused window\n");
+      return false;
+    }
+    logicalRegion = target->region;
+    activeWindowCorners = target->cornerRadius;
+  }
+  if (!logicalRegion) {
+    std::fprintf(stderr, "lambda-window-manager: screenshot skipped; empty region\n");
+    return false;
+  }
+
+  auto framebufferRegion = logicalRegionToFramebuffer(*logicalRegion,
+                                                      wayland.logicalOutputWidth(),
+                                                      wayland.logicalOutputHeight(),
+                                                      width,
+                                                      height);
+  if (!framebufferRegion) {
+    std::fprintf(stderr, "lambda-window-manager: screenshot skipped; region is outside the output\n");
+    return false;
+  }
+  auto cropped = cropBgra(pixels, width, height, *framebufferRegion);
+  if (!cropped) {
+    std::fprintf(stderr, "lambda-window-manager: screenshot skipped; failed to crop region\n");
+    return false;
+  }
+  if (request.mode == ScreenshotMode::ActiveWindow) {
+    double const scaleX = static_cast<double>(framebufferRegion->width) / static_cast<double>(logicalRegion->width);
+    double const scaleY = static_cast<double>(framebufferRegion->height) / static_cast<double>(logicalRegion->height);
+    maskBgraToRoundedRect(cropped->pixels,
+                          cropped->width,
+                          cropped->height,
+                          scaleCornerRadius(activeWindowCorners, std::min(scaleX, scaleY)));
+  }
+  return logScreenshotSaveResult(saveScreenshotPng(cropped->pixels, cropped->width, cropped->height));
 }
 
 std::vector<CaptureRegion> snapCaptureRegions(WaylandServer const& wayland) {
@@ -605,11 +705,30 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     }
 
     bool forceRender = true;
-    bool screenshotPending = false;
+    std::optional<ScreenshotRequest> screenshotPending;
     SnapFrameCapture snapFrameCapture = SnapFrameCapture::fromEnvironment();
     SnapAnimationTrace snapAnimationTrace = SnapAnimationTrace::fromEnvironment();
     if (snapAnimationTrace.enabled) snapAnimationTrace.ensureOpen();
     bool skipNextVblank = true;
+    constexpr auto kScreenshotFlashDuration = std::chrono::milliseconds(170);
+    std::optional<std::chrono::steady_clock::time_point> screenshotFlashStartedAt;
+    auto screenshotFlashOpacityAt = [&](std::chrono::steady_clock::time_point now) {
+      if (!screenshotFlashStartedAt) return 0.f;
+      auto const elapsed = now - *screenshotFlashStartedAt;
+      if (elapsed >= kScreenshotFlashDuration) return 0.f;
+      float const t = std::clamp(
+          static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()) /
+              static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(kScreenshotFlashDuration).count()),
+          0.f,
+          1.f);
+      float const remaining = 1.f - t;
+      return 0.42f * remaining * remaining;
+    };
+    auto startScreenshotFlash = [&] {
+      screenshotFlashStartedAt = std::chrono::steady_clock::now();
+      skipNextVblank = true;
+      if (idleBlanked) idleBlanked = false;
+    };
     bool wasVtForeground = device->isVtForeground();
     bool vtAcquireFramePending = false;
     std::uint64_t softwarePresentationSequence = 0;
@@ -955,20 +1074,24 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                      bool renderAheadFrame) {
       bool snapTraceThisFrame = snapAnimationTrace.wantsFrame(wayland);
       bool snapCaptureThisFrame = snapFrameCapture.wantsFrame(wayland);
-      bool frameCapturePending = screenshotPending || snapCaptureThisFrame;
+      bool const screenshotCaptureThisFrame = screenshotPending.has_value();
+      bool frameCapturePending = screenshotCaptureThisFrame || snapCaptureThisFrame;
       if (frameCapturePending && !flux::requestNextFrameCaptureForCanvas(canvas)) {
-        if (screenshotPending) {
+        if (screenshotCaptureThisFrame) {
           std::fprintf(stderr, "lambda-window-manager: screenshots are not supported by this presenter\n");
         }
         if (snapCaptureThisFrame) {
           std::fprintf(stderr, "lambda-window-manager: snap frame capture is not supported by this presenter\n");
           snapFrameCapture.enabled = false;
         }
-        screenshotPending = false;
+        screenshotPending.reset();
         snapCaptureThisFrame = false;
         frameCapturePending = false;
       }
       renderFrameCtx.idleBlanked = idleBlanked;
+      renderFrameCtx.hardwareCursorAvailable =
+          hardwareCursorAvailable && !(screenshotPending && screenshotPending->includeCursor);
+      renderFrameCtx.screenshotFlashOpacity = screenshotFlashOpacityAt(frameTime);
       renderFrameCtx.vulkanDisplayTimingSupportLogged = displayTimingSupportLogged;
       renderFrameCtx.useVulkanPresentationCompletion = useVulkanPresentationCompletion;
       flux::compositor::renderCompositorFrame(renderFrameCtx, frameTime, renderStart, presentationTiming, renderAheadFrame);
@@ -983,14 +1106,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         std::uint32_t height = 0;
         if (flux::takeCapturedFrameForCanvas(canvas, pixels, width, height)) {
           if (screenshotPending) {
-            auto saved = saveScreenshotPng(pixels, width, height);
-            if (saved.error.empty()) {
-              std::fprintf(stderr, "lambda-window-manager: saved screenshot to %s\n",
-                           saved.path.string().c_str());
-            } else {
-              std::fprintf(stderr, "lambda-window-manager: failed to save screenshot to %s: %s\n",
-                           saved.path.string().c_str(),
-                           saved.error.c_str());
+            if (saveScreenshotRequest(*screenshotPending, pixels, width, height, wayland, appliedConfig.config.chrome)) {
+              startScreenshotFlash();
             }
           }
           if (snapCaptureThisFrame) {
@@ -999,14 +1116,18 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         } else {
           std::fprintf(stderr, "lambda-window-manager: screenshot capture did not produce a frame\n");
         }
-        screenshotPending = false;
+        screenshotPending.reset();
+      }
+      if (screenshotFlashStartedAt && frameTime - *screenshotFlashStartedAt >= kScreenshotFlashDuration) {
+        screenshotFlashStartedAt.reset();
       }
     };
     auto queueScreenshotIfRequested = [&] {
-      if (!wayland.consumeScreenshotRequest()) {
+      auto request = wayland.consumeScreenshotRequest();
+      if (!request) {
         return;
       }
-      screenshotPending = true;
+      screenshotPending = *request;
       forceRender = true;
       skipNextVblank = true;
       if (idleBlanked) {
@@ -1050,6 +1171,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           hasActiveSurfaceAnimations(surfaceRenderState,
                                      animationCheckTime,
                                      appliedConfig.config.animationsEnabled);
+      bool const screenshotFlashFrameNeededBeforePoll = screenshotFlashStartedAt.has_value();
       std::array<int, 4> eventFdStorage{};
       std::span<int const> const eventFds = pollFds(eventFdStorage);
       bool const atomicPageFlipPendingBeforePoll =
@@ -1069,7 +1191,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const snapPreviewCanRenderBeforePoll =
           snapPreviewFrameNeededBeforePoll && !atomicFrameBlockedBeforePoll;
       bool const animationCanRenderBeforePoll =
-          (animationFrameNeeded || snapPreviewCanRenderBeforePoll || (presenter->atomicPresenter() && atomicFrameDirty)) &&
+          (animationFrameNeeded || screenshotFlashFrameNeededBeforePoll || snapPreviewCanRenderBeforePoll ||
+           (presenter->atomicPresenter() && atomicFrameDirty)) &&
           !atomicFrameBlockedBeforePoll;
       int const renderAheadDelayBeforePoll = atomicRenderAheadDelayMs();
       int pollTimeoutMs = forceRender || animationCanRenderBeforePoll || renderAheadNeededBeforePoll
@@ -1199,10 +1322,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           (pollResult.inputOrSystem || waylandWoke || (pollWoke && (!pageFlipWoke || !pageFlipCompleted)));
       std::optional<int> const snapPreviewDelay = wayland.snapPreviewWakeDelayMs();
       bool const snapPreviewFrameNeeded = snapPreviewDelay && *snapPreviewDelay <= 0;
+      bool const screenshotFlashFrameNeeded = screenshotFlashStartedAt.has_value();
       if (forceRender || pollResult.inputOrSystem || waylandWoke || hadInputActivity || configReloaded ||
-          animationFrameNeeded || snapPreviewFrameNeeded) {
+          animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded) {
         if (!presenter->atomicPresenter() || forceRender || waylandWoke || hadInputActivity || configReloaded ||
-            animationFrameNeeded || snapPreviewFrameNeeded) {
+            animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded) {
           atomicFrameDirty = true;
         }
       }
@@ -1216,10 +1340,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           presenter->atomicPresenter() && atomicFrameDirty && atomicPageFlipPending && !atomicReadyFrame.ready &&
           atomicRenderAheadDue();
       bool const animationCanRenderNow = animationFrameNeeded && !atomicFrameBlocked;
+      bool const screenshotFlashCanRenderNow = screenshotFlashFrameNeeded && !atomicFrameBlocked;
       bool const snapPreviewCanRenderNow = snapPreviewFrameNeeded && !atomicFrameBlocked;
       bool const renderNeeded =
-          forceRender || animationCanRenderNow || snapPreviewCanRenderNow || renderAheadNeeded || genericRenderWake ||
-          hadInputActivity || configReloaded ||
+          forceRender || animationCanRenderNow || screenshotFlashCanRenderNow || snapPreviewCanRenderNow ||
+          renderAheadNeeded || genericRenderWake || hadInputActivity || configReloaded ||
           (presenter->atomicPresenter() && atomicFrameDirty && !atomicReadyFrame.ready);
       if (pollWoke || renderNeeded) {
         tracePacing("loop woke=%d system=%d extra=0x%llx waylandWake=%d pageFlipWake=%d "

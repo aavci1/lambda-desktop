@@ -74,8 +74,12 @@ void WaylandServer::dispatchShellIpc() {
   impl_->dispatchShellIpc();
 }
 
-bool WaylandServer::consumeScreenshotRequest() {
+std::optional<ScreenshotRequest> WaylandServer::consumeScreenshotRequest() {
   return impl_->consumeScreenshotRequest();
+}
+
+std::optional<ScreenshotSelectionOverlay> WaylandServer::screenshotSelectionOverlay() const {
+  return impl_->screenshotSelectionOverlay();
 }
 
 void WaylandServer::notifyShellStateChanged() {

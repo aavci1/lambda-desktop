@@ -9,10 +9,89 @@
 
 #include "presentation-time-server-protocol.h"
 
+#include <algorithm>
 #include <unordered_set>
 #include <vector>
 
 namespace flux::compositor {
+namespace {
+
+void drawScreenshotSelectionOverlay(Canvas& canvas,
+                                    WaylandServer const& wayland,
+                                    ScreenshotSelectionOverlay const& overlay) {
+  float const outputWidth = static_cast<float>(wayland.logicalOutputWidth());
+  float const outputHeight = static_cast<float>(wayland.logicalOutputHeight());
+  if (outputWidth <= 0.f || outputHeight <= 0.f) return;
+
+  Color const scrim{0.f, 0.f, 0.f, 0.36f};
+  Color const guide{0.38f, 0.68f, 1.f, 0.72f};
+  Color const fill{0.38f, 0.68f, 1.f, 0.12f};
+  Color const border{0.86f, 0.95f, 1.f, 0.96f};
+  Rect const outputRect = Rect::sharp(0.f, 0.f, outputWidth, outputHeight);
+
+  if (!overlay.region) {
+    canvas.drawRect(outputRect,
+                    CornerRadius{},
+                    FillStyle::solid(Color{0.f, 0.f, 0.f, 0.12f}),
+                    StrokeStyle::none(),
+                    ShadowStyle::none());
+    float const x = std::clamp(overlay.currentX, 0.f, outputWidth);
+    float const y = std::clamp(overlay.currentY, 0.f, outputHeight);
+    canvas.drawLine(Point{x, 0.f}, Point{x, outputHeight}, StrokeStyle::solid(guide, 1.f));
+    canvas.drawLine(Point{0.f, y}, Point{outputWidth, y}, StrokeStyle::solid(guide, 1.f));
+    return;
+  }
+
+  Rect const selected = Rect::sharp(static_cast<float>(overlay.region->x),
+                                   static_cast<float>(overlay.region->y),
+                                   static_cast<float>(overlay.region->width),
+                                   static_cast<float>(overlay.region->height));
+  canvas.drawRect(Rect::sharp(0.f, 0.f, outputWidth, selected.y),
+                  CornerRadius{},
+                  FillStyle::solid(scrim),
+                  StrokeStyle::none(),
+                  ShadowStyle::none());
+  canvas.drawRect(Rect::sharp(0.f, selected.y, selected.x, selected.height),
+                  CornerRadius{},
+                  FillStyle::solid(scrim),
+                  StrokeStyle::none(),
+                  ShadowStyle::none());
+  canvas.drawRect(Rect::sharp(selected.x + selected.width,
+                              selected.y,
+                              std::max(0.f, outputWidth - selected.x - selected.width),
+                              selected.height),
+                  CornerRadius{},
+                  FillStyle::solid(scrim),
+                  StrokeStyle::none(),
+                  ShadowStyle::none());
+  canvas.drawRect(Rect::sharp(0.f,
+                              selected.y + selected.height,
+                              outputWidth,
+                              std::max(0.f, outputHeight - selected.y - selected.height)),
+                  CornerRadius{},
+                  FillStyle::solid(scrim),
+                  StrokeStyle::none(),
+                  ShadowStyle::none());
+  canvas.drawRect(selected,
+                  CornerRadius{},
+                  FillStyle::solid(fill),
+                  StrokeStyle::solid(border, 1.5f),
+                  ShadowStyle::none());
+}
+
+void drawScreenshotFlash(Canvas& canvas, WaylandServer const& wayland, float opacity) {
+  if (opacity <= 0.f) return;
+  float const outputWidth = static_cast<float>(wayland.logicalOutputWidth());
+  float const outputHeight = static_cast<float>(wayland.logicalOutputHeight());
+  if (outputWidth <= 0.f || outputHeight <= 0.f) return;
+  canvas.drawRect(Rect::sharp(0.f, 0.f, outputWidth, outputHeight),
+                  CornerRadius{},
+                  FillStyle::solid(Color{1.f, 1.f, 1.f, std::clamp(opacity, 0.f, 1.f)}),
+                  StrokeStyle::none(),
+                  ShadowStyle::none());
+}
+
+} // namespace
 
 void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                            std::chrono::steady_clock::time_point frameTime,
@@ -195,6 +274,9 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                          frameTime,
                          ctx.appliedConfig.config.animationsEnabled);
   drawClosingSurfaces(ctx.canvas, ctx.surfaceRenderState, frameTime);
+  if (auto overlay = ctx.wayland.screenshotSelectionOverlay()) {
+    drawScreenshotSelectionOverlay(ctx.canvas, ctx.wayland, *overlay);
+  }
   atomicFrameProfile.closingMs = profileMs(phaseStart);
   ctx.frameProfile.closingMs += atomicFrameProfile.closingMs;
   drawCompositorCursor(ctx.wayland,
@@ -204,6 +286,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                        ctx.appliedConfig.config.cursorTheme,
                        ctx.appliedConfig.config.cursorSize,
                        ctx.appliedConfig.config.hardwareCursorEnabled && ctx.hardwareCursorAvailable);
+  drawScreenshotFlash(ctx.canvas, ctx.wayland, ctx.screenshotFlashOpacity);
   atomicFrameProfile.cursorMs = profileMs(phaseStart);
   ctx.frameProfile.cursorMs += atomicFrameProfile.cursorMs;
   pruneSurfaceRenderState(ctx.surfaceRenderState, liveSurfaceIds);

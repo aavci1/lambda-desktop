@@ -64,6 +64,14 @@ struct WaylandServer::Impl {
   struct DataSource;
   struct DataOffer;
   struct ActivationToken;
+  struct ScreenshotSelectionState {
+    bool active = false;
+    bool dragging = false;
+    float startX = 0.f;
+    float startY = 0.f;
+    float currentX = 0.f;
+    float currentY = 0.f;
+  };
 
   explicit Impl(WaylandOutputInfo output);
   ~Impl();
@@ -88,8 +96,9 @@ struct WaylandServer::Impl {
   void dispatchShellIpc();
   void flushClients();
   void requestShellOpenCommandLauncher();
-  void requestScreenshot();
-  [[nodiscard]] bool consumeScreenshotRequest();
+  void requestScreenshot(ScreenshotMode mode, std::uint32_t timeMs);
+  [[nodiscard]] std::optional<ScreenshotRequest> consumeScreenshotRequest();
+  [[nodiscard]] std::optional<ScreenshotSelectionOverlay> screenshotSelectionOverlay() const;
   void notifyShellStateChanged();
   void launchShellApp(std::string const& appId);
   bool focusShellApp(std::string const& appId, std::uint32_t timeMs);
@@ -268,7 +277,8 @@ struct WaylandServer::Impl {
   bool ctrlDown_ = false;
   bool altDown_ = false;
   bool shiftDown_ = false;
-  bool screenshotRequested_ = false;
+  std::optional<ScreenshotRequest> screenshotRequest_;
+  ScreenshotSelectionState screenshotSelection_;
   std::vector<ShortcutBinding> shortcutBindings_;
   ChromeConfig chromeConfig_;
   ChromeConfig chromeBaseConfig_;
