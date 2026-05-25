@@ -96,6 +96,40 @@ struct TerminalSelection {
   constexpr bool operator==(TerminalSelection const&) const = default;
 };
 
+enum class TerminalMouseButton : std::uint8_t {
+  Left,
+  Middle,
+  Right,
+  WheelUp,
+  WheelDown,
+};
+
+struct TerminalMouseEvent {
+  TerminalMouseButton button = TerminalMouseButton::Left;
+  bool pressed = true;
+  bool motion = false;
+  int column = 1;
+  int row = 1;
+  flux::Modifiers modifiers = flux::Modifiers::None;
+};
+
+struct TerminalSearchMatch {
+  int line = 0;
+  int column = 0;
+  int length = 0;
+
+  constexpr bool operator==(TerminalSearchMatch const&) const = default;
+};
+
+struct TerminalUrlMatch {
+  int line = 0;
+  int column = 0;
+  int length = 0;
+  std::string url;
+
+  bool operator==(TerminalUrlMatch const&) const = default;
+};
+
 class TerminalTextBuffer {
 public:
   explicit TerminalTextBuffer(int visibleRows = 24, int scrollbackLimit = 10'000);
@@ -134,9 +168,19 @@ private:
                                             TerminalInputMode mode = {});
 [[nodiscard]] std::string encodeTerminalKeypadKey(TerminalKeypadKey key, TerminalInputMode mode = {});
 [[nodiscard]] std::string encodeBracketedPaste(std::string_view text);
+[[nodiscard]] std::string encodeSgrMouseEvent(TerminalMouseEvent event);
+[[nodiscard]] TerminalBufferCoordinate terminalMouseCell(float x,
+                                                        float y,
+                                                        TerminalGridMetrics metrics = {});
 [[nodiscard]] TerminalGridSize terminalGridSize(float contentWidth,
                                                 float contentHeight,
                                                 TerminalGridMetrics metrics = {});
+[[nodiscard]] std::vector<TerminalSearchMatch> findTerminalText(TerminalTextBuffer const& buffer,
+                                                                std::string_view query,
+                                                                bool caseSensitive = false,
+                                                                std::size_t limit = 1'000);
+[[nodiscard]] std::vector<TerminalUrlMatch> findTerminalUrls(TerminalTextBuffer const& buffer,
+                                                            std::size_t limit = 1'000);
 [[nodiscard]] std::optional<std::uint32_t> decodeFirstUtf8Codepoint(std::string_view text,
                                                                     std::size_t& byteLength);
 [[nodiscard]] int terminalCodepointWidth(std::uint32_t codepoint);
@@ -148,5 +192,6 @@ private:
                                                                  TerminalAttributes attributes);
 [[nodiscard]] TerminalConfig defaultTerminalConfig();
 [[nodiscard]] TerminalConfig parseTerminalConfigToml(std::string_view tomlText);
+[[nodiscard]] std::string writeTerminalConfigToml(TerminalConfig const& config);
 
 } // namespace lambda_terminal

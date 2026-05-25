@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -122,6 +124,47 @@ using flux::Modifiers;
       static_cast<float>(channels[2]) / 255.f,
       static_cast<float>(channels[3]) / 255.f,
   };
+}
+
+[[nodiscard]] std::string lowerAscii(std::string_view value) {
+  std::string output(value);
+  std::transform(output.begin(), output.end(), output.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  return output;
+}
+
+[[nodiscard]] bool urlCharacter(char ch) {
+  unsigned char const c = static_cast<unsigned char>(ch);
+  return std::isalnum(c) || ch == ':' || ch == '/' || ch == '.' || ch == '?' || ch == '&' || ch == '=' ||
+         ch == '#' || ch == '%' || ch == '-' || ch == '_' || ch == '~' || ch == '+' || ch == '@' ||
+         ch == '!' || ch == '$' || ch == '\'' || ch == '*' || ch == ',' || ch == ';';
+}
+
+[[nodiscard]] bool trailingUrlPunctuation(char ch) {
+  return ch == '.' || ch == ',' || ch == ';' || ch == ')' || ch == ']' || ch == '}';
+}
+
+[[nodiscard]] std::string colorToHex(flux::Color color) {
+  auto channel = [](float value) {
+    return std::clamp(static_cast<int>(std::lround(value * 255.f)), 0, 255);
+  };
+  std::ostringstream out;
+  out << '#';
+  out << std::hex;
+  out.width(2);
+  out.fill('0');
+  out << channel(color.r);
+  out.width(2);
+  out.fill('0');
+  out << channel(color.g);
+  out.width(2);
+  out.fill('0');
+  out << channel(color.b);
+  out.width(2);
+  out.fill('0');
+  out << channel(color.a);
+  return out.str();
 }
 
 } // namespace
@@ -321,6 +364,37 @@ std::string encodeBracketedPaste(std::string_view text) {
   return encoded;
 }
 
+std::string encodeSgrMouseEvent(TerminalMouseEvent event) {
+  int button = 0;
+  switch (event.button) {
+  case TerminalMouseButton::Left: button = 0; break;
+  case TerminalMouseButton::Middle: button = 1; break;
+  case TerminalMouseButton::Right: button = 2; break;
+  case TerminalMouseButton::WheelUp: button = 64; break;
+  case TerminalMouseButton::WheelDown: button = 65; break;
+  }
+  if (event.motion && event.button != TerminalMouseButton::WheelUp && event.button != TerminalMouseButton::WheelDown) {
+    button += 32;
+  }
+  if (has(event.modifiers, Modifiers::Shift)) button += 4;
+  if (has(event.modifiers, Modifiers::Alt)) button += 8;
+  if (has(event.modifiers, Modifiers::Ctrl)) button += 16;
+
+  int const column = std::max(1, event.column);
+  int const row = std::max(1, event.row);
+  char const final = event.pressed || event.button == TerminalMouseButton::WheelUp ||
+                             event.button == TerminalMouseButton::WheelDown
+                         ? 'M'
+                         : 'm';
+  return "\x1b[<" + std::to_string(button) + ";" + std::to_string(column) + ";" + std::to_string(row) + final;
+}
+
+TerminalBufferCoordinate terminalMouseCell(float x, float y, TerminalGridMetrics metrics) {
+  int const column = std::max(1, static_cast<int>(std::floor((x - metrics.contentInset) / metrics.cellWidth)) + 1);
+  int const row = std::max(1, static_cast<int>(std::floor((y - metrics.contentInset) / metrics.lineHeight)) + 1);
+  return {.line = row, .column = column};
+}
+
 TerminalGridSize terminalGridSize(float contentWidth, float contentHeight, TerminalGridMetrics metrics) {
   float const usableWidth = std::max(0.f, contentWidth - metrics.contentInset * 2.f);
   float const usableHeight = std::max(0.f, contentHeight - metrics.contentInset * 2.f);
@@ -328,6 +402,61 @@ TerminalGridSize terminalGridSize(float contentWidth, float contentHeight, Termi
       .columns = std::max(metrics.minColumns, static_cast<int>(std::floor(usableWidth / metrics.cellWidth))),
       .rows = std::max(metrics.minRows, static_cast<int>(std::floor(usableHeight / metrics.lineHeight))),
   };
+}
+
+std::vector<TerminalSearchMatch> findTerminalText(TerminalTextBuffer const& buffer,
+                                                  std::string_view query,
+                                                  bool caseSensitive,
+                                                  std::size_t limit) {
+  std::vector<TerminalSearchMatch> matches;
+  if (query.empty() || limit == 0) return matches;
+  std::string const needle = caseSensitive ? std::string(query) : lowerAscii(query);
+  std::vector<std::string> const lines = buffer.logicalLines();
+  for (std::size_t line = 0; line < lines.size() && matches.size() < limit; ++line) {
+    std::string haystack = caseSensitive ? lines[line] : lowerAscii(lines[line]);
+    std::size_t column = 0;
+    while (matches.size() < limit) {
+      column = haystack.find(needle, column);
+      if (column == std::string::npos) break;
+      matches.push_back({
+          .line = static_cast<int>(line),
+          .column = static_cast<int>(column),
+          .length = static_cast<int>(needle.size()),
+      });
+      column += std::max<std::size_t>(1u, needle.size());
+    }
+  }
+  return matches;
+}
+
+std::vector<TerminalUrlMatch> findTerminalUrls(TerminalTextBuffer const& buffer, std::size_t limit) {
+  std::vector<TerminalUrlMatch> matches;
+  if (limit == 0) return matches;
+  std::vector<std::string> const lines = buffer.logicalLines();
+  for (std::size_t line = 0; line < lines.size() && matches.size() < limit; ++line) {
+    std::string const& text = lines[line];
+    std::size_t cursor = 0;
+    while (matches.size() < limit) {
+      std::size_t http = text.find("http://", cursor);
+      std::size_t https = text.find("https://", cursor);
+      std::size_t start = std::min(http == std::string::npos ? text.size() : http,
+                                   https == std::string::npos ? text.size() : https);
+      if (start >= text.size()) break;
+      std::size_t end = start;
+      while (end < text.size() && urlCharacter(text[end])) ++end;
+      while (end > start && trailingUrlPunctuation(text[end - 1u])) --end;
+      if (end > start) {
+        matches.push_back({
+            .line = static_cast<int>(line),
+            .column = static_cast<int>(start),
+            .length = static_cast<int>(end - start),
+            .url = text.substr(start, end - start),
+        });
+      }
+      cursor = std::max(end + 1u, start + 1u);
+    }
+  }
+  return matches;
 }
 
 std::optional<std::uint32_t> decodeFirstUtf8Codepoint(std::string_view text, std::size_t& byteLength) {
@@ -487,6 +616,21 @@ TerminalConfig parseTerminalConfigToml(std::string_view tomlText) {
     if (auto color = parseHexColor(*value)) config.blackGlassTint = *color;
   }
   return config;
+}
+
+std::string writeTerminalConfigToml(TerminalConfig const& config) {
+  toml::table table;
+  table.insert_or_assign("scrollback_limit", static_cast<std::int64_t>(config.scrollbackLimit));
+  table.insert_or_assign("font_size", static_cast<double>(config.fontSize));
+  table.insert_or_assign("cell_width", static_cast<double>(config.cellWidth));
+  table.insert_or_assign("line_height", static_cast<double>(config.lineHeight));
+  table.insert_or_assign("content_inset", static_cast<double>(config.contentInset));
+  table.insert_or_assign("bracketed_paste", config.bracketedPaste);
+  table.insert_or_assign("black_glass_background", config.blackGlassBackground);
+  table.insert_or_assign("black_glass_tint", colorToHex(config.blackGlassTint));
+  std::ostringstream out;
+  out << table;
+  return out.str();
 }
 
 } // namespace lambda_terminal

@@ -32,9 +32,40 @@ TEST_CASE("terminal bracketed paste wraps text without rewriting payload") {
   CHECK(encodeBracketedPaste("echo one\nsecond") == "\x1b[200~echo one\nsecond\x1b[201~");
 }
 
+TEST_CASE("terminal SGR mouse encoding maps buttons modifiers motion and wheel events") {
+  CHECK(encodeSgrMouseEvent({
+            .button = TerminalMouseButton::Left,
+            .pressed = true,
+            .column = 4,
+            .row = 7,
+        }) == "\x1b[<0;4;7M");
+  CHECK(encodeSgrMouseEvent({
+            .button = TerminalMouseButton::Left,
+            .pressed = false,
+            .column = 4,
+            .row = 7,
+        }) == "\x1b[<0;4;7m");
+  CHECK(encodeSgrMouseEvent({
+            .button = TerminalMouseButton::Right,
+            .pressed = true,
+            .motion = true,
+            .column = 2,
+            .row = 3,
+            .modifiers = flux::Modifiers::Shift | flux::Modifiers::Ctrl,
+        }) == "\x1b[<54;2;3M");
+  CHECK(encodeSgrMouseEvent({
+            .button = TerminalMouseButton::WheelDown,
+            .pressed = true,
+            .column = 1,
+            .row = 1,
+        }) == "\x1b[<65;1;1M");
+}
+
 TEST_CASE("terminal grid size calculation clamps to minimum") {
   CHECK(terminalGridSize(700.f, 460.f) == TerminalGridSize{.columns = 80, .rows = 24});
   CHECK(terminalGridSize(10.f, 10.f) == TerminalGridSize{.columns = 20, .rows = 6});
+  CHECK(terminalMouseCell(14.f, 14.f) == TerminalBufferCoordinate{.line = 1, .column = 1});
+  CHECK(terminalMouseCell(22.4f, 32.f) == TerminalBufferCoordinate{.line = 2, .column = 2});
 }
 
 TEST_CASE("terminal unicode width covers ascii combining wide emoji and invalid utf8") {
@@ -108,6 +139,9 @@ bracketed_paste = "sometimes"
 black_glass_tint = "#bad"
 )");
   CHECK(fallback == defaultTerminalConfig());
+
+  auto serialized = writeTerminalConfigToml(parsed);
+  CHECK(parseTerminalConfigToml(serialized) == parsed);
 }
 
 TEST_CASE("terminal text buffer enforces scrollback limit and viewport movement") {
@@ -193,4 +227,36 @@ TEST_CASE("terminal text buffer row resizing moves normal overflow into history"
   buffer.resizeRows(4);
   CHECK(buffer.visibleRows() == 4);
   CHECK(buffer.viewportLines() == std::vector<std::string>{"one", "two", "three", "four"});
+}
+
+TEST_CASE("terminal search scans visible rows and scrollback with limits") {
+  TerminalTextBuffer buffer{2, 10};
+  buffer.pushLine("Alpha one");
+  buffer.pushLine("beta two");
+  buffer.pushLine("alpha three");
+
+  auto matches = findTerminalText(buffer, "alpha");
+  REQUIRE(matches.size() == 2);
+  CHECK(matches[0] == TerminalSearchMatch{.line = 0, .column = 0, .length = 5});
+  CHECK(matches[1] == TerminalSearchMatch{.line = 2, .column = 0, .length = 5});
+
+  auto sensitive = findTerminalText(buffer, "alpha", true);
+  REQUIRE(sensitive.size() == 1);
+  CHECK(sensitive[0].line == 2);
+
+  auto limited = findTerminalText(buffer, "a", false, 1);
+  REQUIRE(limited.size() == 1);
+}
+
+TEST_CASE("terminal URL detection extracts common http links and trims trailing punctuation") {
+  TerminalTextBuffer buffer{3, 10};
+  buffer.pushLine("open https://example.com/path?q=1.");
+  buffer.pushLine("and http://localhost:8080/index.html)");
+  buffer.pushLine("ignore ftp://example.com");
+
+  auto urls = findTerminalUrls(buffer);
+  REQUIRE(urls.size() == 2);
+  CHECK(urls[0] == TerminalUrlMatch{.line = 0, .column = 5, .length = 28, .url = "https://example.com/path?q=1"});
+  CHECK(urls[1] ==
+        TerminalUrlMatch{.line = 1, .column = 4, .length = 32, .url = "http://localhost:8080/index.html"});
 }
