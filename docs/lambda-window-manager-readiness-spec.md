@@ -84,6 +84,61 @@ The Window Manager is ready for the next milestone when all of these are true:
 - The Window Manager exposes enough stable focus/restore behavior for the Shell milestone to build on.
 - The manual validation checklist is short, repeatable, and documented.
 
+## Baseline audit findings
+
+**Date:** 2026-05-25
+**Method:** Static audit of the current source tree against this spec. This pass did not run a live TTY hardware session.
+
+These are the concrete findings to resolve or validate before broad refactors.
+
+1. Flux Wayland clients do not fail closed when the Window Manager dies.
+
+   `src/Platform/Linux/WaylandWindow.cpp` polls the Wayland display fd for `POLLIN` only, ignores fatal `POLLHUP`/`POLLERR`, does not check `wl_display_flush`, `wl_display_read_events`, or `wl_display_dispatch_pending` failures, and does not use `wl_display_get_error()` to terminate the app. `src/UI/Application.cpp` then keeps polling each unique platform event fd. This matches the observed behavior where `lambda-terminal`, `lambda-settings`, and `lambda-files` spin after compositor death.
+
+2. Minimize does not actually mark a toplevel minimized.
+
+   `minimizeToplevel()` in `src/Compositor/Window/FocusStack.cpp` lowers the surface and changes focus, but never sets `surface->minimized = true`. Snapshot generation already skips minimized surfaces, and `focusSurface()` already clears `minimized`, so the intended state model exists but the minimize command is incomplete.
+
+3. Screenshot support is still full-output save only.
+
+   `requestScreenshot()` stores a boolean, and `CompositorRuntime` captures the next full rendered frame and writes a PNG through `Screenshot.cpp`. There is no active-window mode, region mode, compositor-drawn selection UI, cancel path, clipboard path, cursor inclusion policy, or documented shadow/border policy for active-window capture.
+
+4. Keyboard configuration is absent.
+
+   `CompositorConfig` has no keyboard layout/model/variant/options/repeat fields. The compositor server creates an xkb keymap from empty `xkb_rule_names`, KMS input uses `XkbState::createDefaultKeymap()`, and `wl_keyboard.repeat_info` is hard-coded to `25, 600`.
+
+5. Core surface protocol state is advertised but partly ignored.
+
+   `wl_surface.damage`, `damage_buffer`, `set_opaque_region`, `set_input_region`, `set_buffer_transform`, and `offset` are no-ops. This may be acceptable for a narrow client set only if explicitly documented, but protocol readiness requires either implementation or a clear limitation for each ignored request.
+
+6. Several xdg-shell toplevel requests are no-ops.
+
+   `set_window_geometry`, `set_parent`, `show_window_menu`, `set_min_size`, `set_max_size`, `set_fullscreen`, and `unset_fullscreen` are currently ignored. Real GTK/Qt/browser validation should decide which of these must be implemented for daily-driver use and which remain documented limitations.
+
+7. Output and scale support exists, but selector behavior needs test coverage.
+
+   Output listing, selector parsing, per-output scale, `wl_output`, xdg-output, and fractional-scale paths are present. The missing piece is deterministic tests for selector parsing and restart/hot-reload boundaries, especially invalid selectors and `secondary`.
+
+8. Idle and frame scheduling have the right structure but still need live validation.
+
+   The runtime has `contentSerial`, `atomicFrameDirty`, frame callback dispatch, idle skips, render-ahead, and CPU trace instrumentation. Static review did not show a single obvious redraw loop, but the acceptance criteria require a live idle run with shell, Files, Settings, Terminal, and at least one external app.
+
+9. Geometry tests cover pure geometry, not the full Window Manager state machine.
+
+   `CompositorWindowGeometryTests` covers snap, popup, restore-drag, and resize geometry helpers. There are no focused tests for `minimizeToplevel`, Shell IPC focus/restore, focus order after close/minimize, or minimized-window snapshot behavior.
+
+10. Real-app validation docs are incomplete.
+
+    `docs/compositor-testing.md` covers compositor demos and `foot`, but the readiness spec also requires Firefox or another browser, one GTK app, and one Qt app where available. The smoke doc should be expanded when those checks are run.
+
+11. Config contract is not ready for Settings.
+
+    Existing config parsing covers background, wallpaper, output, scale, cursor, animations, hardware cursor, idle blanking, chrome, keybindings, and popup grabs. It does not yet cover keyboard config, screenshot options, or a canonical hot-reload/applies-next-window/restart-required matrix for every key.
+
+12. Existing compositor docs contain stale sections, but no whole document is clearly obsolete.
+
+    `docs/roadmap.md` already flags stale sections in `docs/compositor.md`. Treat that as a documentation alignment task: update or retire stale sections in place when this milestone lands. Do not delete architecture docs unless the readiness index fully replaces their current purpose.
+
 ## Workstreams
 
 ### WM-1: Baseline idle and frame scheduling
