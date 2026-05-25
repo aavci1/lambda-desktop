@@ -65,6 +65,8 @@ These areas should be included in the Shell milestone:
 - Add accessibility and keyboard navigation pass for top bar, dock, and launcher.
 - Add focused Shell tests for model behavior, app discovery, ranking, IPC parsing, and config parsing.
 
+Status update 2026-05-26: the first Shell app-registry helper is in place. It covers deterministic `.desktop` parsing for common fields, visibility filtering for hidden/no-display/TryExec, Exec token and field-code handling, Lambda app-id alias matching, local `./examples/APP_NAME` executable precedence, installed/local registry merging, and icon theme lookup fallback. Dock model, launcher ranking, notification model, clipboard history, quick settings providers, Shell config, and structured IPC request IDs remain open.
+
 ## Goals
 
 1. Make `lambda-shell` usable as the primary launcher/focus surface for daily dogfooding.

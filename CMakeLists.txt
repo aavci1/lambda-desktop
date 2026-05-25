@@ -546,6 +546,7 @@ endif()
 target_link_libraries(flux PRIVATE libtess2)
 
 add_library(lambda-shell-ui STATIC
+  src/Shell/ShellAppRegistry.cpp
   src/Shell/ShellController.cpp
   src/Shell/ShellConnection.cpp
   src/Shell/ShellJson.cpp
@@ -910,6 +911,8 @@ if(FLUX_BUILD_TESTS)
     tests/RuntimeInputTests.cpp
     tests/RuntimeTests.cpp
     tests/ShowTests.cpp
+    src/Shell/ShellAppRegistry.cpp
+    tests/ShellAppRegistryTests.cpp
     tests/ShellIpcTests.cpp
     tests/SvgPathTests.cpp
     examples/lambda-terminal/TerminalCore.cpp
