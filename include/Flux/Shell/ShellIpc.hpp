@@ -52,6 +52,7 @@ struct ShellErrorMessage {
 
 struct ShellMessage {
   ShellMessageKind kind = ShellMessageKind::Unknown;
+  std::uint64_t requestId = 0;
   ShellHelloMessage hello{};
   ShellLaunchAppMessage launchApp{};
   ShellFocusAppMessage focusApp{};
@@ -70,14 +71,17 @@ std::string serialize(ShellMessage const& message);
 
 std::string serializeShellHello(int protocolVersion,
                                 std::string_view shellVersion,
-                                std::vector<std::string> const& capabilities);
-std::string serializeLaunchApp(std::string_view appId);
-std::string serializeFocusApp(std::string_view appId);
-std::string serializeFocusWindow(std::uint64_t windowId);
-std::string serializeClaimCommandLauncherModal();
-std::string serializeReleaseCommandLauncherModal();
-std::string serializeRefreshState();
-std::string serializeOpenCommandLauncher();
-std::string serializeWindowManagerError(std::string_view code, std::string_view message);
+                                std::vector<std::string> const& capabilities,
+                                std::uint64_t requestId = 0);
+std::string serializeLaunchApp(std::string_view appId, std::uint64_t requestId = 0);
+std::string serializeFocusApp(std::string_view appId, std::uint64_t requestId = 0);
+std::string serializeFocusWindow(std::uint64_t windowId, std::uint64_t requestId = 0);
+std::string serializeClaimCommandLauncherModal(std::uint64_t requestId = 0);
+std::string serializeReleaseCommandLauncherModal(std::uint64_t requestId = 0);
+std::string serializeRefreshState(std::uint64_t requestId = 0);
+std::string serializeOpenCommandLauncher(std::uint64_t requestId = 0);
+std::string serializeWindowManagerError(std::string_view code,
+                                        std::string_view message,
+                                        std::uint64_t requestId = 0);
 
 } // namespace flux::shell

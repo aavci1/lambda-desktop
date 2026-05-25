@@ -46,6 +46,11 @@ std::vector<std::string> parseCapabilities(std::string_view line) {
   return capabilities;
 }
 
+std::string requestIdJson(std::uint64_t requestId) {
+  if (requestId == 0) return {};
+  return ",\"requestId\":" + std::to_string(requestId);
+}
+
 } // namespace
 
 std::string escapeJson(std::string_view text) {
@@ -140,6 +145,7 @@ std::optional<ShellMessage> parseLine(std::string_view line) {
 
   ShellMessage message{};
   message.kind = kindForTypeField(type);
+  message.requestId = jsonUintField(line, "requestId");
   if (message.kind == ShellMessageKind::Unknown) {
     return std::nullopt;
   }
@@ -173,23 +179,24 @@ std::string serialize(ShellMessage const& message) {
   case ShellMessageKind::ShellHello:
     return serializeShellHello(message.hello.protocolVersion,
                                message.hello.shellVersion,
-                               message.hello.capabilities);
+                               message.hello.capabilities,
+                               message.requestId);
   case ShellMessageKind::ShellRefreshState:
-    return serializeRefreshState();
+    return serializeRefreshState(message.requestId);
   case ShellMessageKind::ShellOpenCommandLauncher:
-    return serializeOpenCommandLauncher();
+    return serializeOpenCommandLauncher(message.requestId);
   case ShellMessageKind::WindowManagerLaunchApp:
-    return serializeLaunchApp(message.launchApp.appId);
+    return serializeLaunchApp(message.launchApp.appId, message.requestId);
   case ShellMessageKind::WindowManagerFocusApp:
-    return serializeFocusApp(message.focusApp.appId);
+    return serializeFocusApp(message.focusApp.appId, message.requestId);
   case ShellMessageKind::WindowManagerFocusWindow:
-    return serializeFocusWindow(message.focusWindow.windowId);
+    return serializeFocusWindow(message.focusWindow.windowId, message.requestId);
   case ShellMessageKind::WindowManagerClaimCommandLauncherModal:
-    return serializeClaimCommandLauncherModal();
+    return serializeClaimCommandLauncherModal(message.requestId);
   case ShellMessageKind::WindowManagerReleaseCommandLauncherModal:
-    return serializeReleaseCommandLauncherModal();
+    return serializeReleaseCommandLauncherModal(message.requestId);
   case ShellMessageKind::WindowManagerError:
-    return serializeWindowManagerError(message.error.code, message.error.message);
+    return serializeWindowManagerError(message.error.code, message.error.message, message.requestId);
   default:
     return {};
   }
@@ -197,9 +204,11 @@ std::string serialize(ShellMessage const& message) {
 
 std::string serializeShellHello(int protocolVersion,
                                 std::string_view shellVersion,
-                                std::vector<std::string> const& capabilities) {
+                                std::vector<std::string> const& capabilities,
+                                std::uint64_t requestId) {
   std::string json = "{\"type\":\"lambda.shell.hello\",\"protocolVersion\":" + std::to_string(protocolVersion) +
-                     ",\"shellVersion\":\"" + escapeJson(shellVersion) + "\",\"capabilities\":[";
+                     ",\"shellVersion\":\"" + escapeJson(shellVersion) + "\"" + requestIdJson(requestId) +
+                     ",\"capabilities\":[";
   for (std::size_t i = 0; i < capabilities.size(); ++i) {
     if (i > 0) json.push_back(',');
     json += "\"";
@@ -210,37 +219,40 @@ std::string serializeShellHello(int protocolVersion,
   return json;
 }
 
-std::string serializeLaunchApp(std::string_view appId) {
-  return "{\"type\":\"lambda.windowManager.launchApp\",\"appId\":\"" + escapeJson(appId) + "\"}";
+std::string serializeLaunchApp(std::string_view appId, std::uint64_t requestId) {
+  return "{\"type\":\"lambda.windowManager.launchApp\",\"appId\":\"" + escapeJson(appId) + "\"" +
+         requestIdJson(requestId) + "}";
 }
 
-std::string serializeFocusApp(std::string_view appId) {
-  return "{\"type\":\"lambda.windowManager.focusApp\",\"appId\":\"" + escapeJson(appId) + "\"}";
+std::string serializeFocusApp(std::string_view appId, std::uint64_t requestId) {
+  return "{\"type\":\"lambda.windowManager.focusApp\",\"appId\":\"" + escapeJson(appId) + "\"" +
+         requestIdJson(requestId) + "}";
 }
 
-std::string serializeFocusWindow(std::uint64_t windowId) {
-  return "{\"type\":\"lambda.windowManager.focusWindow\",\"windowId\":" + std::to_string(windowId) + "}";
+std::string serializeFocusWindow(std::uint64_t windowId, std::uint64_t requestId) {
+  return "{\"type\":\"lambda.windowManager.focusWindow\",\"windowId\":" + std::to_string(windowId) +
+         requestIdJson(requestId) + "}";
 }
 
-std::string serializeClaimCommandLauncherModal() {
-  return "{\"type\":\"lambda.windowManager.claimCommandLauncherModal\"}";
+std::string serializeClaimCommandLauncherModal(std::uint64_t requestId) {
+  return "{\"type\":\"lambda.windowManager.claimCommandLauncherModal\"" + requestIdJson(requestId) + "}";
 }
 
-std::string serializeReleaseCommandLauncherModal() {
-  return "{\"type\":\"lambda.windowManager.releaseCommandLauncherModal\"}";
+std::string serializeReleaseCommandLauncherModal(std::uint64_t requestId) {
+  return "{\"type\":\"lambda.windowManager.releaseCommandLauncherModal\"" + requestIdJson(requestId) + "}";
 }
 
-std::string serializeRefreshState() {
-  return "{\"type\":\"lambda.shell.refreshState\"}";
+std::string serializeRefreshState(std::uint64_t requestId) {
+  return "{\"type\":\"lambda.shell.refreshState\"" + requestIdJson(requestId) + "}";
 }
 
-std::string serializeOpenCommandLauncher() {
-  return "{\"type\":\"lambda.shell.openCommandLauncher\"}";
+std::string serializeOpenCommandLauncher(std::uint64_t requestId) {
+  return "{\"type\":\"lambda.shell.openCommandLauncher\"" + requestIdJson(requestId) + "}";
 }
 
-std::string serializeWindowManagerError(std::string_view code, std::string_view message) {
+std::string serializeWindowManagerError(std::string_view code, std::string_view message, std::uint64_t requestId) {
   return "{\"type\":\"lambda.windowManager.error\",\"code\":\"" + escapeJson(code) + "\",\"message\":\"" +
-         escapeJson(message) + "\"}";
+         escapeJson(message) + "\"" + requestIdJson(requestId) + "}";
 }
 
 } // namespace flux::shell
