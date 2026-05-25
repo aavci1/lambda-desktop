@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <set>
+#include <sstream>
 
 namespace lambda_shell {
 namespace {
@@ -71,6 +73,52 @@ int queryScore(AppRegistryEntry const& app, std::string_view query) {
   if (containsCaseInsensitive(app.name, q) || containsCaseInsensitive(app.appId, q)) return 700;
   if (fuzzyMatch(app.name, q) || fuzzyMatch(app.appId, q)) return 600;
   return 0;
+}
+
+std::string trim(std::string_view value) {
+  std::size_t begin = 0;
+  while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin]))) ++begin;
+  std::size_t end = value.size();
+  while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1u]))) --end;
+  return std::string(value.substr(begin, end - begin));
+}
+
+bool parseBoolValue(std::string value, bool fallback) {
+  value = lowerAscii(trim(value));
+  if (value == "true" || value == "1" || value == "yes") return true;
+  if (value == "false" || value == "0" || value == "no") return false;
+  return fallback;
+}
+
+std::vector<std::string> parseStringArray(std::string_view value) {
+  std::vector<std::string> strings;
+  auto left = value.find('[');
+  auto right = value.rfind(']');
+  if (left == std::string_view::npos || right == std::string_view::npos || right <= left) return strings;
+  std::string current;
+  bool quoted = false;
+  bool escaped = false;
+  for (char ch : value.substr(left + 1u, right - left - 1u)) {
+    if (escaped) {
+      current.push_back(ch);
+      escaped = false;
+      continue;
+    }
+    if (ch == '\\') {
+      escaped = true;
+      continue;
+    }
+    if (ch == '"') {
+      if (quoted) {
+        strings.push_back(current);
+        current.clear();
+      }
+      quoted = !quoted;
+      continue;
+    }
+    if (quoted) current.push_back(ch);
+  }
+  return strings;
 }
 
 } // namespace
@@ -200,6 +248,57 @@ std::vector<LauncherRankedResult> rankLauncherApps(std::vector<AppRegistryEntry>
   });
   if (ranked.size() > limit) ranked.resize(limit);
   return ranked;
+}
+
+std::vector<QuickSettingState> quickSettingsSummary(std::vector<QuickSettingState> providers) {
+  std::stable_sort(providers.begin(), providers.end(), [](auto const& a, auto const& b) {
+    if (a.availability != b.availability) return a.availability > b.availability;
+    return a.id < b.id;
+  });
+  return providers;
+}
+
+ShellConfig defaultShellConfig() {
+  return ShellConfig{};
+}
+
+ShellConfig parseShellConfig(std::string_view tomlText) {
+  ShellConfig config = defaultShellConfig();
+  std::istringstream input{std::string(tomlText)};
+  std::string section;
+  std::string line;
+  while (std::getline(input, line)) {
+    std::string_view view(line);
+    if (auto comment = view.find('#'); comment != std::string_view::npos) view = view.substr(0, comment);
+    std::string stripped = trim(view);
+    if (stripped.empty()) continue;
+    if (stripped.front() == '[' && stripped.back() == ']') {
+      section = stripped.substr(1u, stripped.size() - 2u);
+      continue;
+    }
+    auto equals = stripped.find('=');
+    if (equals == std::string::npos) continue;
+    std::string key = trim(std::string_view(stripped).substr(0, equals));
+    std::string value = trim(std::string_view(stripped).substr(equals + 1u));
+    std::string fullKey = section.empty() ? key : section + "." + key;
+    if (fullKey == "dock.pins") {
+      auto pins = parseStringArray(value);
+      if (!pins.empty()) config.dockPins = std::move(pins);
+    } else if (fullKey == "clipboard.enabled") {
+      config.clipboardHistoryEnabled = parseBoolValue(value, config.clipboardHistoryEnabled);
+    } else if (fullKey == "clipboard.history_limit") {
+      if (auto parsed = std::strtoll(value.c_str(), nullptr, 10); parsed > 0 && parsed <= 1000) {
+        config.clipboardHistoryLimit = static_cast<std::size_t>(parsed);
+      }
+    } else if (fullKey == "notifications.do_not_disturb") {
+      config.doNotDisturb = parseBoolValue(value, config.doNotDisturb);
+    } else if (fullKey == "notifications.history_limit") {
+      if (auto parsed = std::strtoll(value.c_str(), nullptr, 10); parsed > 0 && parsed <= 1000) {
+        config.notificationHistoryLimit = static_cast<std::size_t>(parsed);
+      }
+    }
+  }
+  return config;
 }
 
 } // namespace lambda_shell

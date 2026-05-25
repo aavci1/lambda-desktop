@@ -62,6 +62,30 @@ struct Notification {
   bool operator==(Notification const&) const = default;
 };
 
+enum class QuickSettingAvailability : std::uint8_t {
+  Unavailable,
+  Available,
+};
+
+struct QuickSettingState {
+  std::string id;
+  std::string label;
+  QuickSettingAvailability availability = QuickSettingAvailability::Unavailable;
+  bool enabled = false;
+
+  bool operator==(QuickSettingState const&) const = default;
+};
+
+struct ShellConfig {
+  std::vector<std::string> dockPins{"files", "browser", "terminal", "settings"};
+  bool clipboardHistoryEnabled = true;
+  std::size_t clipboardHistoryLimit = 20;
+  bool doNotDisturb = false;
+  std::size_t notificationHistoryLimit = 50;
+
+  bool operator==(ShellConfig const&) const = default;
+};
+
 class NotificationCenterModel {
 public:
   explicit NotificationCenterModel(std::size_t historyLimit = 50);
@@ -107,5 +131,8 @@ private:
                                                                  std::vector<std::string> const& recentAppIds,
                                                                  std::string_view query,
                                                                  std::size_t limit = 8);
+[[nodiscard]] std::vector<QuickSettingState> quickSettingsSummary(std::vector<QuickSettingState> providers);
+[[nodiscard]] ShellConfig defaultShellConfig();
+[[nodiscard]] ShellConfig parseShellConfig(std::string_view tomlText);
 
 } // namespace lambda_shell

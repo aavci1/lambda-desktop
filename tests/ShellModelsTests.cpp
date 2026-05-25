@@ -100,3 +100,51 @@ TEST_CASE("Shell clipboard history dedupes respects limits and disabled state") 
   clipboard.clear();
   CHECK(clipboard.entries().empty());
 }
+
+TEST_CASE("Shell quick settings summary orders available providers first") {
+  std::vector<lambda_shell::QuickSettingState> providers{
+      {.id = "bluetooth", .label = "Bluetooth"},
+      {.id = "wifi", .label = "Wi-Fi", .availability = lambda_shell::QuickSettingAvailability::Available,
+       .enabled = true},
+      {.id = "audio", .label = "Audio", .availability = lambda_shell::QuickSettingAvailability::Available},
+  };
+  auto summary = lambda_shell::quickSettingsSummary(std::move(providers));
+  REQUIRE(summary.size() == 3);
+  CHECK(summary[0].id == "audio");
+  CHECK(summary[1].id == "wifi");
+  CHECK(summary[2].id == "bluetooth");
+}
+
+TEST_CASE("Shell config parses defaults and invalid fallback") {
+  auto defaults = lambda_shell::defaultShellConfig();
+  CHECK(defaults.dockPins == std::vector<std::string>{"files", "browser", "terminal", "settings"});
+  CHECK(defaults.clipboardHistoryEnabled);
+  CHECK(defaults.notificationHistoryLimit == 50);
+
+  auto parsed = lambda_shell::parseShellConfig(R"(
+[dock]
+pins = ["terminal", "files"]
+[clipboard]
+enabled = false
+history_limit = 5
+[notifications]
+do_not_disturb = true
+history_limit = 7
+)");
+  CHECK(parsed.dockPins == std::vector<std::string>{"terminal", "files"});
+  CHECK_FALSE(parsed.clipboardHistoryEnabled);
+  CHECK(parsed.clipboardHistoryLimit == 5);
+  CHECK(parsed.doNotDisturb);
+  CHECK(parsed.notificationHistoryLimit == 7);
+
+  auto fallback = lambda_shell::parseShellConfig(R"(
+[dock]
+pins = []
+[clipboard]
+enabled = maybe
+history_limit = -1
+[notifications]
+history_limit = 2000
+)");
+  CHECK(fallback == defaults);
+}
