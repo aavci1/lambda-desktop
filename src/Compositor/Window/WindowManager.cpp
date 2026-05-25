@@ -21,7 +21,9 @@
 #include <cstdio>
 #include <ctime>
 #include <chrono>
+#include <filesystem>
 #include <optional>
+#include <string>
 #include <vector>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
@@ -388,11 +390,54 @@ void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std
 }
 namespace {
 
+std::string shellQuote(std::string const& value) {
+  std::string quoted{"'"};
+  for (char c : value) {
+    if (c == '\'') {
+      quoted += "'\\''";
+    } else {
+      quoted.push_back(c);
+    }
+  }
+  quoted.push_back('\'');
+  return quoted;
+}
+
+bool executableFile(std::filesystem::path const& path) {
+  std::error_code ec;
+  if (!std::filesystem::is_regular_file(path, ec)) {
+    return false;
+  }
+  return access(path.c_str(), X_OK) == 0;
+}
+
+std::optional<std::string> commandFromExamples(std::string const& appName) {
+  std::vector<std::filesystem::path> const candidates{
+      std::filesystem::path{"examples"} / appName,
+      std::filesystem::path{"build-examples"} / "examples" / appName,
+      std::filesystem::path{"build-p2"} / "examples" / appName / appName,
+  };
+  for (std::filesystem::path const& candidate : candidates) {
+    if (executableFile(candidate)) {
+      return shellQuote(candidate.string());
+    }
+  }
+  return std::nullopt;
+}
+
+std::string exampleCommandOrFallback(std::string const& appName, std::string fallback) {
+  if (std::optional<std::string> command = commandFromExamples(appName)) {
+    return *command;
+  }
+  return fallback;
+}
+
 std::optional<std::string> commandForAppId(std::string const& appId) {
-  if (appId == "terminal" || appId == "foot") return "foot";
+  if (appId == "terminal") return exampleCommandOrFallback("lambda-terminal", "lambda-terminal");
+  if (appId == "foot") return "foot";
   if (appId == "browser" || appId == "firefox") return "firefox";
-  if (appId == "files") return "lambda-files";
-  if (appId == "settings") return "lambda-settings";
+  if (appId == "files") return exampleCommandOrFallback("lambda-files", "lambda-files");
+  if (appId == "settings") return exampleCommandOrFallback("lambda-settings", "lambda-settings");
   if (appId == "calendar") return "gnome-calendar";
   if (appId == "mail") return "thunderbird";
   if (appId == "music") return "rhythmbox";
@@ -401,7 +446,7 @@ std::optional<std::string> commandForAppId(std::string const& appId) {
 
 bool shellAppIdMatches(std::string const& requested, std::string const& actual) {
   if (requested == actual) return true;
-  if (requested == "terminal" && actual == "foot") return true;
+  if (requested == "terminal" && (actual == "lambda-terminal" || actual == "foot")) return true;
   if (requested == "browser" && actual == "firefox") return true;
   if (requested == "files" &&
       (actual == "files" || actual == "lambda-files" || actual == "org.gnome.Nautilus" ||
