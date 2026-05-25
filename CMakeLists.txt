@@ -913,6 +913,7 @@ if(FLUX_BUILD_TESTS)
     tests/SvgPathTests.cpp
     examples/lambda-terminal/TerminalCore.cpp
     tests/TerminalCoreTests.cpp
+    tests/TerminalPtySmokeTests.cpp
     tests/ThemeReactivityTests.cpp
   )
   if(FLUX_PLATFORM_MACOS)
@@ -963,6 +964,7 @@ if(FLUX_BUILD_TESTS)
       PkgConfig::VULKAN
       PkgConfig::LIBDRM
       PkgConfig::ZLIB
+      util
     )
     if(FLUX_PLATFORM_LINUX_KMS OR LAMBDA_BUILD_WINDOW_MANAGER)
       target_link_libraries(flux_tests PRIVATE PkgConfig::WAYLAND_SERVER)
