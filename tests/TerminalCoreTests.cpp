@@ -4,7 +4,47 @@
 
 #include <doctest/doctest.h>
 
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <unistd.h>
+
 using namespace lambda_terminal;
+
+namespace {
+
+struct ScopedEnv {
+  explicit ScopedEnv(char const* name)
+      : name(name) {
+    if (char const* value = std::getenv(name); value) {
+      hadOriginal = true;
+      original = value;
+    }
+  }
+
+  ~ScopedEnv() {
+    if (!hadOriginal) {
+      unsetenv(name);
+    } else {
+      setenv(name, original.c_str(), 1);
+    }
+  }
+
+  char const* name;
+  bool hadOriginal = false;
+  std::string original;
+};
+
+std::filesystem::path tempRoot(char const* name) {
+  auto path = std::filesystem::temp_directory_path() /
+              (std::string(name) + "-" + std::to_string(static_cast<unsigned long long>(getpid())));
+  std::filesystem::remove_all(path);
+  std::filesystem::create_directories(path);
+  return path;
+}
+
+} // namespace
 
 TEST_CASE("terminal input encoder handles control alt navigation and functions") {
   using namespace flux::keys;
@@ -142,6 +182,93 @@ black_glass_tint = "#bad"
 
   auto serialized = writeTerminalConfigToml(parsed);
   CHECK(parseTerminalConfigToml(serialized) == parsed);
+}
+
+TEST_CASE("terminal preferences parse profiles and select the active profile") {
+  auto preferences = parseTerminalPreferencesToml(R"(
+default_profile = "work"
+
+[profile.default]
+shell = "/bin/sh"
+working_directory = "/tmp"
+environment = ["TERM=xterm-256color", "COLORTERM=truecolor"]
+scrollback_limit = 2000
+
+[profile.default.font]
+size = 13.5
+cell_width = 8.0
+line_height = 17.0
+content_inset = 10.0
+
+[profile.default.background]
+kind = "solid"
+tint = "#101112ff"
+
+[profile.default.copy_paste]
+bracketed_paste = false
+
+[profile.work]
+shell = "/bin/zsh"
+scrollback_limit = 5000
+
+[profile.work.background]
+kind = "glass"
+tint = "#000000cc"
+)");
+
+  CHECK(preferences.defaultProfile == "work");
+  REQUIRE(preferences.profiles.size() == 2);
+  auto active = activeTerminalProfile(preferences);
+  CHECK(active.name == "work");
+  CHECK(active.shell == "/bin/zsh");
+  CHECK(active.config.scrollbackLimit == 5000);
+  CHECK(active.config.blackGlassBackground);
+  CHECK(active.config.blackGlassTint.a == doctest::Approx(204.f / 255.f));
+
+  auto fallback = activeTerminalProfile(TerminalPreferences{.defaultProfile = "missing", .profiles = preferences.profiles});
+  CHECK(fallback.name == "default");
+  CHECK_FALSE(fallback.config.blackGlassBackground);
+  CHECK_FALSE(fallback.config.bracketedPaste);
+  CHECK(fallback.config.fontSize == doctest::Approx(13.5f));
+
+  auto serialized = writeTerminalPreferencesToml(preferences);
+  CHECK(parseTerminalPreferencesToml(serialized) == preferences);
+  CHECK(parseTerminalConfigToml(serialized) == active.config);
+}
+
+TEST_CASE("terminal preferences load creates default config and respects explicit config path") {
+  ScopedEnv configEnv("LAMBDA_TERMINAL_CONFIG");
+  ScopedEnv xdgEnv("XDG_CONFIG_HOME");
+  ScopedEnv homeEnv("HOME");
+  auto root = tempRoot("lambda-terminal-config-test");
+  auto configPath = root / "config.toml";
+  setenv("LAMBDA_TERMINAL_CONFIG", configPath.c_str(), 1);
+
+  CHECK(terminalConfigPath() == configPath);
+  auto created = loadTerminalPreferences();
+  CHECK(created.path == configPath);
+  CHECK(created.createdDefault);
+  CHECK(created.error.empty());
+  CHECK(std::filesystem::exists(configPath));
+  CHECK(activeTerminalProfile(created.preferences).name == "default");
+
+  {
+    std::ofstream(configPath) << R"(
+default_profile = "alt"
+[profile.alt]
+shell = "/bin/fish"
+[profile.alt.background]
+kind = "solid"
+tint = "#222222ff"
+)";
+  }
+  auto loaded = loadTerminalPreferences();
+  CHECK(loaded.loaded);
+  CHECK_FALSE(loaded.createdDefault);
+  CHECK(activeTerminalProfile(loaded.preferences).shell == "/bin/fish");
+  CHECK_FALSE(activeTerminalProfile(loaded.preferences).config.blackGlassBackground);
+
+  std::filesystem::remove_all(root);
 }
 
 TEST_CASE("terminal text buffer enforces scrollback limit and viewport movement") {

@@ -4,6 +4,7 @@
 #include <Flux/UI/Input.hpp>
 
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -80,6 +81,33 @@ struct TerminalConfig {
   flux::Color blackGlassTint{0.f, 0.f, 0.f, 0.58f};
 
   constexpr bool operator==(TerminalConfig const&) const = default;
+};
+
+struct TerminalProfile {
+  std::string name = "default";
+  std::string shell;
+  std::string workingDirectory;
+  std::vector<std::string> environment;
+  TerminalConfig config;
+
+  bool operator==(TerminalProfile const&) const = default;
+};
+
+struct TerminalPreferences {
+  std::string defaultProfile = "default";
+  std::vector<TerminalProfile> profiles;
+
+  bool operator==(TerminalPreferences const&) const = default;
+};
+
+struct TerminalPreferencesLoadResult {
+  TerminalPreferences preferences;
+  std::filesystem::path path;
+  std::string error;
+  bool loaded = false;
+  bool createdDefault = false;
+
+  bool operator==(TerminalPreferencesLoadResult const&) const = default;
 };
 
 struct TerminalBufferCoordinate {
@@ -193,5 +221,11 @@ private:
 [[nodiscard]] TerminalConfig defaultTerminalConfig();
 [[nodiscard]] TerminalConfig parseTerminalConfigToml(std::string_view tomlText);
 [[nodiscard]] std::string writeTerminalConfigToml(TerminalConfig const& config);
+[[nodiscard]] TerminalPreferences defaultTerminalPreferences();
+[[nodiscard]] TerminalPreferences parseTerminalPreferencesToml(std::string_view tomlText);
+[[nodiscard]] std::string writeTerminalPreferencesToml(TerminalPreferences const& preferences);
+[[nodiscard]] TerminalProfile activeTerminalProfile(TerminalPreferences const& preferences);
+[[nodiscard]] std::filesystem::path terminalConfigPath();
+[[nodiscard]] TerminalPreferencesLoadResult loadTerminalPreferences(std::filesystem::path path = {});
 
 } // namespace lambda_terminal

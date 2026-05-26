@@ -8,6 +8,8 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -165,6 +167,93 @@ using flux::Modifiers;
   out.fill('0');
   out << channel(color.a);
   return out.str();
+}
+
+void parseIntField(toml::table const& table, char const* key, std::int32_t min, std::int32_t max, std::int32_t& out) {
+  if (!table.contains(key)) return;
+  if (auto value = table[key].value<std::int64_t>(); value && *value >= min && *value <= max) {
+    out = static_cast<std::int32_t>(*value);
+  }
+}
+
+void parseFloatField(toml::table const& table, char const* key, float min, float max, float& out) {
+  if (!table.contains(key)) return;
+  std::optional<double> value = table[key].value<double>();
+  if (!value) {
+    if (auto intValue = table[key].value<std::int64_t>()) value = static_cast<double>(*intValue);
+  }
+  if (value && *value >= min && *value <= max) {
+    out = static_cast<float>(*value);
+  }
+}
+
+void parseBoolField(toml::table const& table, char const* key, bool& out) {
+  if (!table.contains(key)) return;
+  if (auto value = table[key].value<bool>()) out = *value;
+}
+
+std::vector<std::string> parseStringArray(toml::node_view<toml::node const> node) {
+  std::vector<std::string> values;
+  if (auto* array = node.as_array()) {
+    for (auto const& item : *array) {
+      if (auto value = item.value<std::string>()) values.push_back(*value);
+    }
+  }
+  return values;
+}
+
+toml::array stringArrayToml(std::vector<std::string> const& values) {
+  toml::array array;
+  for (auto const& value : values) array.push_back(value);
+  return array;
+}
+
+void parseTerminalConfigFields(toml::table const& table, TerminalConfig& config) {
+  parseIntField(table, "scrollback_limit", 0, 1'000'000, config.scrollbackLimit);
+  parseFloatField(table, "font_size", 6.f, 40.f, config.fontSize);
+  parseFloatField(table, "cell_width", 3.f, 40.f, config.cellWidth);
+  parseFloatField(table, "line_height", 6.f, 80.f, config.lineHeight);
+  parseFloatField(table, "content_inset", 0.f, 80.f, config.contentInset);
+  parseBoolField(table, "bracketed_paste", config.bracketedPaste);
+  parseBoolField(table, "black_glass_background", config.blackGlassBackground);
+  if (auto value = table["black_glass_tint"].value<std::string>()) {
+    if (auto color = parseHexColor(*value)) config.blackGlassTint = *color;
+  }
+}
+
+TerminalProfile parseTerminalProfile(std::string name, toml::table const& table) {
+  TerminalProfile profile;
+  profile.name = std::move(name);
+  profile.config = defaultTerminalConfig();
+
+  if (auto value = table["shell"].value<std::string>()) profile.shell = *value;
+  if (auto value = table["working_directory"].value<std::string>()) profile.workingDirectory = *value;
+  profile.environment = parseStringArray(table["environment"]);
+  parseTerminalConfigFields(table, profile.config);
+
+  if (auto* font = table["font"].as_table()) {
+    parseFloatField(*font, "size", 6.f, 40.f, profile.config.fontSize);
+    parseFloatField(*font, "cell_width", 3.f, 40.f, profile.config.cellWidth);
+    parseFloatField(*font, "line_height", 6.f, 80.f, profile.config.lineHeight);
+    parseFloatField(*font, "content_inset", 0.f, 80.f, profile.config.contentInset);
+  }
+  if (auto* background = table["background"].as_table()) {
+    if (auto kind = (*background)["kind"].value<std::string>()) {
+      std::string const lower = lowerAscii(*kind);
+      if (lower == "glass") profile.config.blackGlassBackground = true;
+      if (lower == "solid") profile.config.blackGlassBackground = false;
+    }
+    if (auto tint = (*background)["tint"].value<std::string>()) {
+      if (auto color = parseHexColor(*tint)) profile.config.blackGlassTint = *color;
+    }
+    if (auto tint = (*background)["black_glass_tint"].value<std::string>()) {
+      if (auto color = parseHexColor(*tint)) profile.config.blackGlassTint = *color;
+    }
+  }
+  if (auto* copyPaste = table["copy_paste"].as_table()) {
+    parseBoolField(*copyPaste, "bracketed_paste", profile.config.bracketedPaste);
+  }
+  return profile;
 }
 
 } // namespace
@@ -576,45 +665,19 @@ TerminalConfig defaultTerminalConfig() {
 }
 
 TerminalConfig parseTerminalConfigToml(std::string_view tomlText) {
-  TerminalConfig config = defaultTerminalConfig();
   toml::table table;
   try {
     table = toml::parse(std::string(tomlText));
   } catch (...) {
-    return config;
+    return defaultTerminalConfig();
   }
 
-  auto parseInt = [&](char const* key, std::int32_t min, std::int32_t max, std::int32_t& out) {
-    if (!table.contains(key)) return;
-    if (auto value = table[key].value<std::int64_t>(); value && *value >= min && *value <= max) {
-      out = static_cast<std::int32_t>(*value);
-    }
-  };
-  auto parseFloat = [&](char const* key, float min, float max, float& out) {
-    if (!table.contains(key)) return;
-    std::optional<double> value = table[key].value<double>();
-    if (!value) {
-      if (auto intValue = table[key].value<std::int64_t>()) value = static_cast<double>(*intValue);
-    }
-    if (value && *value >= min && *value <= max) {
-      out = static_cast<float>(*value);
-    }
-  };
-  auto parseBool = [&](char const* key, bool& out) {
-    if (!table.contains(key)) return;
-    if (auto value = table[key].value<bool>()) out = *value;
-  };
-
-  parseInt("scrollback_limit", 0, 1'000'000, config.scrollbackLimit);
-  parseFloat("font_size", 6.f, 40.f, config.fontSize);
-  parseFloat("cell_width", 3.f, 40.f, config.cellWidth);
-  parseFloat("line_height", 6.f, 80.f, config.lineHeight);
-  parseFloat("content_inset", 0.f, 80.f, config.contentInset);
-  parseBool("bracketed_paste", config.bracketedPaste);
-  parseBool("black_glass_background", config.blackGlassBackground);
-  if (auto value = table["black_glass_tint"].value<std::string>()) {
-    if (auto color = parseHexColor(*value)) config.blackGlassTint = *color;
+  if (table["profile"].as_table()) {
+    return activeTerminalProfile(parseTerminalPreferencesToml(tomlText)).config;
   }
+
+  TerminalConfig config = defaultTerminalConfig();
+  parseTerminalConfigFields(table, config);
   return config;
 }
 
@@ -631,6 +694,145 @@ std::string writeTerminalConfigToml(TerminalConfig const& config) {
   std::ostringstream out;
   out << table;
   return out.str();
+}
+
+TerminalPreferences defaultTerminalPreferences() {
+  TerminalPreferences preferences;
+  preferences.defaultProfile = "default";
+  preferences.profiles.push_back(TerminalProfile{
+      .name = "default",
+      .config = defaultTerminalConfig(),
+  });
+  return preferences;
+}
+
+TerminalPreferences parseTerminalPreferencesToml(std::string_view tomlText) {
+  TerminalPreferences preferences = defaultTerminalPreferences();
+  toml::table table;
+  try {
+    table = toml::parse(std::string(tomlText));
+  } catch (...) {
+    return preferences;
+  }
+
+  if (auto defaultProfile = table["default_profile"].value<std::string>(); defaultProfile && !defaultProfile->empty()) {
+    preferences.defaultProfile = *defaultProfile;
+  }
+
+  auto* profiles = table["profile"].as_table();
+  if (!profiles) {
+    preferences.profiles[0].config = parseTerminalConfigToml(tomlText);
+    return preferences;
+  }
+
+  std::vector<TerminalProfile> parsed;
+  for (auto&& [key, node] : *profiles) {
+    auto* profileTable = node.as_table();
+    if (!profileTable) continue;
+    parsed.push_back(parseTerminalProfile(std::string(key.str()), *profileTable));
+  }
+  if (!parsed.empty()) {
+    std::stable_sort(parsed.begin(), parsed.end(), [](auto const& a, auto const& b) {
+      return a.name < b.name;
+    });
+    preferences.profiles = std::move(parsed);
+  }
+  return preferences;
+}
+
+std::string writeTerminalPreferencesToml(TerminalPreferences const& preferences) {
+  toml::table table;
+  table.insert_or_assign("default_profile", preferences.defaultProfile.empty() ? "default" : preferences.defaultProfile);
+  toml::table profiles;
+  std::vector<TerminalProfile> profilesToWrite =
+      preferences.profiles.empty() ? defaultTerminalPreferences().profiles : preferences.profiles;
+  for (auto const& profile : profilesToWrite) {
+    toml::table profileTable;
+    profileTable.insert_or_assign("shell", profile.shell);
+    profileTable.insert_or_assign("working_directory", profile.workingDirectory);
+    profileTable.insert_or_assign("environment", stringArrayToml(profile.environment));
+    profileTable.insert_or_assign("scrollback_limit", static_cast<std::int64_t>(profile.config.scrollbackLimit));
+
+    toml::table font;
+    font.insert_or_assign("size", static_cast<double>(profile.config.fontSize));
+    font.insert_or_assign("cell_width", static_cast<double>(profile.config.cellWidth));
+    font.insert_or_assign("line_height", static_cast<double>(profile.config.lineHeight));
+    font.insert_or_assign("content_inset", static_cast<double>(profile.config.contentInset));
+    profileTable.insert_or_assign("font", std::move(font));
+
+    toml::table background;
+    background.insert_or_assign("kind", profile.config.blackGlassBackground ? "glass" : "solid");
+    background.insert_or_assign("tint", colorToHex(profile.config.blackGlassTint));
+    profileTable.insert_or_assign("background", std::move(background));
+
+    toml::table copyPaste;
+    copyPaste.insert_or_assign("bracketed_paste", profile.config.bracketedPaste);
+    profileTable.insert_or_assign("copy_paste", std::move(copyPaste));
+
+    profiles.insert_or_assign(profile.name.empty() ? "default" : profile.name, std::move(profileTable));
+  }
+  table.insert_or_assign("profile", std::move(profiles));
+  std::ostringstream out;
+  out << table;
+  return out.str();
+}
+
+TerminalProfile activeTerminalProfile(TerminalPreferences const& preferences) {
+  for (auto const& profile : preferences.profiles) {
+    if (profile.name == preferences.defaultProfile) return profile;
+  }
+  if (!preferences.profiles.empty()) return preferences.profiles.front();
+  return defaultTerminalPreferences().profiles.front();
+}
+
+std::filesystem::path terminalConfigPath() {
+  if (char const* path = std::getenv("LAMBDA_TERMINAL_CONFIG"); path && *path) {
+    return std::filesystem::path(path);
+  }
+  if (char const* configHome = std::getenv("XDG_CONFIG_HOME"); configHome && *configHome) {
+    return std::filesystem::path(configHome) / "lambda-terminal" / "config.toml";
+  }
+  if (char const* home = std::getenv("HOME"); home && *home) {
+    return std::filesystem::path(home) / ".config" / "lambda-terminal" / "config.toml";
+  }
+  return std::filesystem::current_path() / "lambda-terminal.toml";
+}
+
+TerminalPreferencesLoadResult loadTerminalPreferences(std::filesystem::path path) {
+  if (path.empty()) path = terminalConfigPath();
+  TerminalPreferencesLoadResult result{
+      .preferences = defaultTerminalPreferences(),
+      .path = path,
+  };
+
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec) || ec) {
+    if (!path.parent_path().empty()) {
+      std::filesystem::create_directories(path.parent_path(), ec);
+      if (ec) {
+        result.error = ec.message();
+        return result;
+      }
+    }
+    std::ofstream out(path);
+    if (!out) {
+      result.error = "Could not create terminal config.";
+      return result;
+    }
+    out << writeTerminalPreferencesToml(result.preferences);
+    result.createdDefault = true;
+    return result;
+  }
+
+  std::ifstream in(path);
+  if (!in) {
+    result.error = "Could not read terminal config.";
+    return result;
+  }
+  std::string const contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  result.preferences = parseTerminalPreferencesToml(contents);
+  result.loaded = true;
+  return result;
 }
 
 } // namespace lambda_terminal
