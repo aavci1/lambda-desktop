@@ -34,6 +34,26 @@ enum class FileClipboardIntent {
   Cut,
 };
 
+enum class FileOperationKind {
+  Refresh,
+  CreateFolder,
+  CreateFile,
+  Rename,
+  Copy,
+  Move,
+  Duplicate,
+  Trash,
+  Restore,
+};
+
+enum class FileOperationStatus {
+  Idle,
+  Running,
+  Succeeded,
+  Failed,
+  Cancelled,
+};
+
 struct FileEntry {
   std::string name;
   std::filesystem::path path;
@@ -79,6 +99,30 @@ struct FileOperationResult {
   std::string error;
 };
 
+struct FileOperationError {
+  std::filesystem::path path;
+  std::string message;
+
+  bool operator==(FileOperationError const&) const = default;
+};
+
+struct FileOperationProgress {
+  std::uint64_t id = 0;
+  FileOperationKind kind = FileOperationKind::Refresh;
+  FileOperationStatus status = FileOperationStatus::Idle;
+  std::filesystem::path currentPath;
+  std::size_t completedItems = 0;
+  std::size_t totalItems = 0;
+  bool cancellable = false;
+  bool cancelRequested = false;
+  std::vector<FileOperationError> errors;
+
+  [[nodiscard]] bool active() const noexcept { return status == FileOperationStatus::Running; }
+  [[nodiscard]] double fractionComplete() const noexcept;
+
+  bool operator==(FileOperationProgress const&) const = default;
+};
+
 struct FileClipboardState {
   FileClipboardIntent intent = FileClipboardIntent::Copy;
   std::vector<std::filesystem::path> paths;
@@ -109,6 +153,7 @@ enum class FileConflictDecision {
   KeepBoth,
   Replace,
   Skip,
+  Cancel,
 };
 
 enum class FileUndoKind {
@@ -156,6 +201,20 @@ struct FileIconLookup {
   bool fallback = false;
 };
 
+struct FilesModel {
+  NavigationHistory history;
+  std::vector<FileEntry> entries;
+  std::vector<FileEntry> visibleEntries;
+  FileSelectionState selection;
+  FilesPreferences preferences;
+  std::string query;
+  std::string error;
+  DirectoryChangeSet lastChanges;
+  FileOperationProgress operation;
+
+  bool operator==(FilesModel const&) const = default;
+};
+
 std::filesystem::path homeDirectory();
 std::filesystem::path trashFilesDirectory();
 std::filesystem::path trashInfoDirectory();
@@ -169,6 +228,14 @@ std::vector<FileEntry> sortedEntries(std::vector<FileEntry> entries,
                                      bool directoriesFirst = true);
 std::vector<FileEntry> filterEntries(std::vector<FileEntry> const& entries, std::string_view query);
 DirectoryChangeSet diffDirectoryEntries(std::vector<FileEntry> before, std::vector<FileEntry> after);
+FilesPreferences defaultFilesPreferences();
+FilesModel makeFilesModel(std::filesystem::path directory = {},
+                          FilesPreferences preferences = defaultFilesPreferences());
+FilesModel applyDirectoryListing(FilesModel model,
+                                 std::filesystem::path directory,
+                                 ListDirectoryResult listing);
+FilesModel setFilesModelQuery(FilesModel model, std::string query);
+FilesModel setFilesModelPreferences(FilesModel model, FilesPreferences preferences);
 std::vector<BreadcrumbCrumb> breadcrumbCrumbs(std::filesystem::path const& path);
 std::optional<std::filesystem::path> parentDirectory(std::filesystem::path const& path);
 FileVisualKind visualKindForEntry(std::filesystem::path const& path, bool isDirectory);
@@ -204,6 +271,18 @@ std::optional<TrashInfo> parseTrashInfo(std::filesystem::path const& infoPath);
 std::filesystem::path resolveConflictPath(std::filesystem::path const& destination,
                                           FileConflictDecision decision);
 FileOperationResult undoFileOperation(FileUndoAction const& action);
+FileOperationProgress beginFileOperation(FileOperationKind kind,
+                                         std::size_t totalItems,
+                                         bool cancellable,
+                                         std::uint64_t id = 1);
+FileOperationProgress advanceFileOperation(FileOperationProgress progress,
+                                           std::filesystem::path currentPath = {},
+                                           std::size_t completedDelta = 1);
+FileOperationProgress failFileOperation(FileOperationProgress progress,
+                                        std::filesystem::path path,
+                                        std::string message);
+FileOperationProgress requestCancelFileOperation(FileOperationProgress progress);
+FileOperationProgress completeFileOperation(FileOperationProgress progress);
 FileClipboardState makeFileClipboard(std::vector<std::filesystem::path> paths, FileClipboardIntent intent);
 std::vector<FileOperationResult> pasteFileClipboard(FileClipboardState const& clipboard,
                                                     std::filesystem::path const& destinationDirectory);
@@ -223,7 +302,6 @@ FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
                               std::filesystem::path const& path,
                               bool isDirectory,
                               int preferredSize = 48);
-FilesPreferences defaultFilesPreferences();
 FilesPreferences parseFilesPreferencesToml(std::string_view tomlText);
 std::string writeFilesPreferencesToml(FilesPreferences const& preferences);
 

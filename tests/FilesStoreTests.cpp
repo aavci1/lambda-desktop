@@ -180,6 +180,84 @@ TEST_CASE("FilesStore filters entries and computes directory refresh diffs") {
   CHECK(changes.modified == std::vector<std::filesystem::path>{"/tmp/alpha.txt"});
 }
 
+TEST_CASE("FilesStore model owns directory state filtering errors and refresh diffs") {
+  using lambda_files::FileEntry;
+  using lambda_files::FileSortKey;
+  auto now = std::filesystem::file_time_type::clock::now();
+  auto root = tempRoot("lambda-files-model-test");
+  auto first = root / "first";
+  auto second = root / "second";
+  std::filesystem::create_directories(first);
+  std::filesystem::create_directories(second);
+
+  lambda_files::FilesPreferences preferences;
+  preferences.sortKey = FileSortKey::Size;
+  preferences.sortAscending = false;
+  auto model = lambda_files::makeFilesModel(first, preferences);
+  CHECK(model.history.current == lambda_files::normalizeDirectoryPath(first));
+
+  model = lambda_files::applyDirectoryListing(model, first, {
+      .entries = {
+          FileEntry{.name = "small.txt", .path = first / "small.txt", .size = 1, .modifiedAt = now},
+          FileEntry{.name = "large.txt", .path = first / "large.txt", .size = 20, .modifiedAt = now},
+      },
+  });
+  REQUIRE(model.visibleEntries.size() == 2);
+  CHECK(model.visibleEntries[0].name == "large.txt");
+  CHECK(model.operation.status == lambda_files::FileOperationStatus::Succeeded);
+
+  model = lambda_files::setFilesModelQuery(model, "small");
+  REQUIRE(model.visibleEntries.size() == 1);
+  CHECK(model.visibleEntries[0].name == "small.txt");
+
+  model = lambda_files::applyDirectoryListing(model, second, {
+      .entries = {
+          FileEntry{.name = "small.txt", .path = second / "small.txt", .size = 2, .modifiedAt = now},
+          FileEntry{.name = "new.txt", .path = second / "new.txt", .size = 5, .modifiedAt = now},
+      },
+  });
+  CHECK(model.history.current == lambda_files::normalizeDirectoryPath(second));
+  CHECK(model.history.back == std::vector<std::string>{lambda_files::normalizeDirectoryPath(first)});
+  CHECK(model.lastChanges.added == std::vector<std::filesystem::path>{second / "new.txt", second / "small.txt"});
+  CHECK(model.lastChanges.removed == std::vector<std::filesystem::path>{first / "large.txt", first / "small.txt"});
+  CHECK(model.visibleEntries.size() == 1);
+
+  model = lambda_files::applyDirectoryListing(model, second, {.error = "permission denied"});
+  CHECK(model.error == "permission denied");
+  CHECK(model.operation.status == lambda_files::FileOperationStatus::Failed);
+  REQUIRE(model.operation.errors.size() == 1);
+  CHECK(model.operation.errors[0].path == second);
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("FilesStore operation progress supports completion failure and cancellation") {
+  auto progress = lambda_files::beginFileOperation(lambda_files::FileOperationKind::Copy, 3, true, 42);
+  CHECK(progress.active());
+  CHECK(progress.id == 42);
+  CHECK(progress.fractionComplete() == doctest::Approx(0.0));
+
+  progress = lambda_files::advanceFileOperation(progress, "/tmp/a", 1);
+  CHECK(progress.completedItems == 1);
+  CHECK(progress.currentPath == "/tmp/a");
+  CHECK(progress.fractionComplete() == doctest::Approx(1.0 / 3.0));
+
+  auto failed = lambda_files::failFileOperation(progress, "/tmp/b", "copy failed");
+  CHECK(failed.status == lambda_files::FileOperationStatus::Failed);
+  REQUIRE(failed.errors.size() == 1);
+  CHECK(failed.errors[0] == lambda_files::FileOperationError{.path = "/tmp/b", .message = "copy failed"});
+  CHECK(lambda_files::completeFileOperation(failed).status == lambda_files::FileOperationStatus::Failed);
+
+  auto cancelled = lambda_files::requestCancelFileOperation(progress);
+  CHECK(cancelled.status == lambda_files::FileOperationStatus::Cancelled);
+  CHECK(cancelled.cancelRequested);
+  CHECK(lambda_files::completeFileOperation(cancelled).status == lambda_files::FileOperationStatus::Cancelled);
+
+  auto done = lambda_files::advanceFileOperation(progress, "/tmp/c", 2);
+  CHECK(done.status == lambda_files::FileOperationStatus::Succeeded);
+  CHECK(done.fractionComplete() == doctest::Approx(1.0));
+}
+
 TEST_CASE("FilesStore selection supports single toggle range and clear") {
   std::vector<lambda_files::FileEntry> entries{
       {.name = "a", .path = "/tmp/a"},
@@ -396,6 +474,7 @@ TEST_CASE("FilesStore resolves conflicts and undoes safe operations") {
   CHECK(lambda_files::resolveConflictPath(root / "taken.txt", lambda_files::FileConflictDecision::Replace) ==
         root / "taken.txt");
   CHECK(lambda_files::resolveConflictPath(root / "taken.txt", lambda_files::FileConflictDecision::Skip).empty());
+  CHECK(lambda_files::resolveConflictPath(root / "taken.txt", lambda_files::FileConflictDecision::Cancel).empty());
 
   auto created = lambda_files::createFile(root, "created.txt");
   REQUIRE(created.ok);

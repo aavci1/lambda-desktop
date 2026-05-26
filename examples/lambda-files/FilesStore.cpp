@@ -627,6 +627,64 @@ DirectoryChangeSet diffDirectoryEntries(std::vector<FileEntry> before, std::vect
   return changes;
 }
 
+double FileOperationProgress::fractionComplete() const noexcept {
+  if (totalItems == 0) {
+    return status == FileOperationStatus::Succeeded ? 1.0 : 0.0;
+  }
+  double fraction = static_cast<double>(completedItems) / static_cast<double>(totalItems);
+  if (fraction < 0.0) return 0.0;
+  if (fraction > 1.0) return 1.0;
+  return fraction;
+}
+
+FilesModel makeFilesModel(std::filesystem::path directory, FilesPreferences preferences) {
+  if (directory.empty()) directory = homeDirectory();
+  FilesModel model;
+  model.history.current = normalizeDirectoryPath(directory);
+  model.preferences = std::move(preferences);
+  return model;
+}
+
+FilesModel setFilesModelQuery(FilesModel model, std::string query) {
+  model.query = std::move(query);
+  model.visibleEntries = filterEntries(
+      sortedEntries(model.entries, model.preferences.sortKey, model.preferences.sortAscending),
+      model.query);
+  return model;
+}
+
+FilesModel setFilesModelPreferences(FilesModel model, FilesPreferences preferences) {
+  model.preferences = std::move(preferences);
+  model.visibleEntries = filterEntries(
+      sortedEntries(model.entries, model.preferences.sortKey, model.preferences.sortAscending),
+      model.query);
+  return model;
+}
+
+FilesModel applyDirectoryListing(FilesModel model,
+                                 std::filesystem::path directory,
+                                 ListDirectoryResult listing) {
+  if (!listing.error.empty()) {
+    model.error = std::move(listing.error);
+    model.operation = failFileOperation(beginFileOperation(FileOperationKind::Refresh, 1, false),
+                                        directory,
+                                        model.error);
+    return model;
+  }
+
+  std::vector<FileEntry> sorted = sortedEntries(std::move(listing.entries),
+                                                model.preferences.sortKey,
+                                                model.preferences.sortAscending);
+  model.lastChanges = diffDirectoryEntries(model.entries, sorted);
+  model.entries = std::move(sorted);
+  model.visibleEntries = filterEntries(model.entries, model.query);
+  model.history = navigateTo(std::move(model.history), directory);
+  model.selection = clearSelection(std::move(model.selection));
+  model.error.clear();
+  model.operation = completeFileOperation(beginFileOperation(FileOperationKind::Refresh, 1, false));
+  return model;
+}
+
 std::vector<BreadcrumbCrumb> breadcrumbCrumbs(std::filesystem::path const& path) {
   std::vector<BreadcrumbCrumb> crumbs;
   std::error_code ec;
@@ -999,8 +1057,67 @@ std::filesystem::path resolveConflictPath(std::filesystem::path const& destinati
     return destination;
   case FileConflictDecision::Skip:
     return {};
+  case FileConflictDecision::Cancel:
+    return {};
   }
   return {};
+}
+
+FileOperationProgress beginFileOperation(FileOperationKind kind,
+                                         std::size_t totalItems,
+                                         bool cancellable,
+                                         std::uint64_t id) {
+  return {
+      .id = id,
+      .kind = kind,
+      .status = FileOperationStatus::Running,
+      .totalItems = totalItems,
+      .cancellable = cancellable,
+  };
+}
+
+FileOperationProgress advanceFileOperation(FileOperationProgress progress,
+                                           std::filesystem::path currentPath,
+                                           std::size_t completedDelta) {
+  if (progress.status != FileOperationStatus::Running) return progress;
+  progress.currentPath = std::move(currentPath);
+  progress.completedItems = std::min(progress.totalItems, progress.completedItems + completedDelta);
+  if (progress.totalItems > 0 && progress.completedItems >= progress.totalItems && progress.errors.empty()) {
+    progress.status = FileOperationStatus::Succeeded;
+  }
+  return progress;
+}
+
+FileOperationProgress failFileOperation(FileOperationProgress progress,
+                                        std::filesystem::path path,
+                                        std::string message) {
+  progress.currentPath = path;
+  progress.errors.push_back({
+      .path = std::move(path),
+      .message = std::move(message),
+  });
+  progress.status = FileOperationStatus::Failed;
+  return progress;
+}
+
+FileOperationProgress requestCancelFileOperation(FileOperationProgress progress) {
+  if (!progress.cancellable || progress.status != FileOperationStatus::Running) return progress;
+  progress.cancelRequested = true;
+  progress.status = FileOperationStatus::Cancelled;
+  return progress;
+}
+
+FileOperationProgress completeFileOperation(FileOperationProgress progress) {
+  if (progress.status == FileOperationStatus::Cancelled || progress.status == FileOperationStatus::Failed) {
+    return progress;
+  }
+  if (!progress.errors.empty()) {
+    progress.status = FileOperationStatus::Failed;
+    return progress;
+  }
+  progress.completedItems = progress.totalItems;
+  progress.status = FileOperationStatus::Succeeded;
+  return progress;
 }
 
 FileOperationResult undoFileOperation(FileUndoAction const& action) {
