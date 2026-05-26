@@ -447,6 +447,46 @@ TEST_CASE("FilesStore keyboard selection moves extends and selects all") {
   CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/e"});
 }
 
+TEST_CASE("FilesStore context menu commands reflect selection and clipboard state") {
+  std::vector<lambda_files::FileEntry> entries{
+      {.name = "a", .path = "/tmp/a"},
+      {.name = "b", .path = "/tmp/b"},
+  };
+  lambda_files::FileClipboardState emptyClipboard;
+
+  auto background = lambda_files::contextMenuCommands(entries, {}, emptyClipboard, true);
+  REQUIRE(background.size() == 4);
+  CHECK(background[0] == lambda_files::FileContextCommand{
+                             .kind = lambda_files::FileContextCommandKind::NewFolder,
+                             .label = "New Folder",
+                             .enabled = true,
+                         });
+  CHECK(background[2].kind == lambda_files::FileContextCommandKind::Paste);
+  CHECK_FALSE(background[2].enabled);
+  CHECK(background[3].kind == lambda_files::FileContextCommandKind::SelectAll);
+  CHECK(background[3].enabled);
+
+  auto clipboard = lambda_files::makeFileClipboard({"/tmp/a"}, lambda_files::FileClipboardIntent::Copy);
+  auto pasteEnabled = lambda_files::contextMenuCommands(entries, {}, clipboard, true);
+  CHECK(pasteEnabled[2].enabled);
+
+  auto single = lambda_files::contextMenuCommands(entries, lambda_files::selectOnly(entries, 0), emptyClipboard, false);
+  REQUIRE(single.size() == 6);
+  CHECK(single[0].kind == lambda_files::FileContextCommandKind::Open);
+  CHECK(single[0].enabled);
+  CHECK(single[1].kind == lambda_files::FileContextCommandKind::Reveal);
+  CHECK(single[1].enabled);
+  CHECK(single[5].kind == lambda_files::FileContextCommandKind::Trash);
+  CHECK(single[5].destructive);
+
+  auto multiSelection = lambda_files::rangeSelection(lambda_files::selectOnly(entries, 0), entries, 1);
+  auto selected = lambda_files::selectedEntries(entries, multiSelection);
+  CHECK(selected.size() == 2);
+  auto multi = lambda_files::contextMenuCommands(entries, multiSelection, emptyClipboard, false);
+  CHECK_FALSE(multi[0].enabled);
+  CHECK(multi[2].enabled);
+}
+
 TEST_CASE("FilesStore creates folders and files with collision-free names") {
   auto root = tempRoot("lambda-files-create-test");
   REQUIRE(lambda_files::createFolder(root, "New Folder").ok);

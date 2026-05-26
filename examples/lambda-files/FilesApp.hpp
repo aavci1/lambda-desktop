@@ -474,6 +474,7 @@ struct FilesAppRoot {
     auto activePlaceId = useState(std::string{"home"});
     auto selectedPath = useState(std::string{});
     auto selection = useState(FileSelectionState{});
+    auto clipboard = useState(FileClipboardState{});
     auto scrollOffset = useState(Point{});
     auto preferences = useState(loadFilesPreferences().preferences);
     auto showHiddenFiles = useState(preferences().showHidden);
@@ -568,6 +569,99 @@ struct FilesAppRoot {
       (void)openEntry(entry, error);
     };
 
+    auto showMenu = usePopupMenu();
+    auto pathsForSelection = [](std::vector<FileEntry> const& selected) {
+      std::vector<std::filesystem::path> paths;
+      paths.reserve(selected.size());
+      for (auto const& entry : selected) paths.push_back(entry.path);
+      return paths;
+    };
+    auto executeContextCommand =
+        [history, entries, clipboard, listError, activateEntry, applySelection, syncListing, pathsForSelection](
+            FileContextCommandKind kind,
+            FileSelectionState targetSelection) {
+          std::vector<FileEntry> const selected = selectedEntries(entries(), targetSelection);
+          auto const selectedPaths = pathsForSelection(selected);
+          std::filesystem::path const current{history().current};
+          auto recordResult = [listError](FileOperationResult const& result) {
+            if (!result.ok) {
+              listError.set(result.error.empty() ? "File operation failed." : result.error);
+            }
+          };
+
+          switch (kind) {
+          case FileContextCommandKind::Open:
+            if (!selected.empty()) activateEntry(selected.front());
+            return;
+          case FileContextCommandKind::Reveal: {
+            if (selected.empty()) return;
+            std::string error;
+            if (!revealEntryInSystem(selected.front(), error)) listError.set(error);
+            return;
+          }
+          case FileContextCommandKind::Copy:
+            clipboard.set(makeFileClipboard(selectedPaths, FileClipboardIntent::Copy));
+            return;
+          case FileContextCommandKind::Cut:
+            clipboard.set(makeFileClipboard(selectedPaths, FileClipboardIntent::Cut));
+            return;
+          case FileContextCommandKind::Paste: {
+            auto results = pasteFileClipboard(clipboard(), current);
+            for (auto const& result : results) recordResult(result);
+            syncListing();
+            return;
+          }
+          case FileContextCommandKind::Duplicate:
+            for (auto const& path : selectedPaths) recordResult(duplicatePath(path));
+            syncListing();
+            return;
+          case FileContextCommandKind::Trash:
+            for (auto const& path : selectedPaths) recordResult(trashPath(path));
+            applySelection(FileSelectionState{});
+            syncListing();
+            return;
+          case FileContextCommandKind::NewFolder:
+            recordResult(createFolder(current));
+            syncListing();
+            return;
+          case FileContextCommandKind::NewFile:
+            recordResult(createFile(current));
+            syncListing();
+            return;
+          case FileContextCommandKind::SelectAll:
+            applySelection(selectAllEntries(entries()));
+            return;
+          }
+        };
+    auto showEntryContextMenu =
+        [entries, selection, clipboard, applySelection, executeContextCommand, showMenu](FileEntry const& entry) {
+          FileSelectionState targetSelection = selection();
+          if (!targetSelection.contains(entry.path)) {
+            for (std::size_t i = 0; i < entries().size(); ++i) {
+              if (entries()[i].path == entry.path) {
+                targetSelection = selectOnly(entries(), static_cast<int>(i));
+                break;
+              }
+            }
+          }
+          applySelection(targetSelection);
+
+          std::vector<MenuItem> items;
+          for (auto const& command : contextMenuCommands(entries(), targetSelection, clipboard(), false)) {
+            MenuItem item;
+            item.label = command.label;
+            item.actionName = command.label;
+            item.isEnabled = [enabled = command.enabled] { return enabled; };
+            if (command.enabled) {
+              item.handler = [executeContextCommand, kind = command.kind, targetSelection] {
+                executeContextCommand(kind, targetSelection);
+              };
+            }
+            items.push_back(std::move(item));
+          }
+          showMenu(PopupMenu{.items = std::move(items)});
+        };
+
     Reactive::Bindable<bool> const canGoBack{[history] { return history().canGoBack(); }};
     Reactive::Bindable<bool> const canGoForward{[history] { return history().canGoForward(); }};
 
@@ -587,6 +681,7 @@ struct FilesAppRoot {
         .iconThemeRoots = iconThemeRoots(),
         .iconSize = preferences().iconSize,
         .activateEntry = activateEntry,
+        .showEntryContextMenu = showEntryContextMenu,
     };
     Element root = VStack{
         .spacing = 0.f,

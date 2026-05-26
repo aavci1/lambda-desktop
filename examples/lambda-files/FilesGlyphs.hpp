@@ -109,6 +109,7 @@ struct FileItemTile {
   std::string iconPath;
   flux::Reactive::Bindable<bool> selected{false};
   std::function<void()> onActivate;
+  std::function<void()> onContextMenu;
 
   flux::Element body() const {
     using namespace flux;
@@ -170,9 +171,16 @@ struct FileItemTile {
                .stroke(tileStroke)
                .cornerRadius(9.f)
                .clipContent(true);
-    if (onActivate) {
-      auto handler = onActivate;
-      tile = std::move(tile).onTap([handler] { handler(); });
+    if (onActivate || onContextMenu) {
+      auto activate = onActivate;
+      auto contextMenu = onContextMenu;
+      tile = std::move(tile).onTap([activate, contextMenu](flux::MouseButton button) {
+        if (button == flux::MouseButton::Left && activate) {
+          activate();
+        } else if (button == flux::MouseButton::Right && contextMenu) {
+          contextMenu();
+        }
+      });
     }
     return tile;
   }

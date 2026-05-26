@@ -1038,6 +1038,44 @@ FileSelectionState moveSelectionByOffset(FileSelectionState state,
   return moveSelectionToIndex(std::move(state), entries, focused, extend);
 }
 
+std::vector<FileEntry> selectedEntries(std::vector<FileEntry> const& entries, FileSelectionState const& selection) {
+  std::vector<FileEntry> selected;
+  selected.reserve(selection.selected.size());
+  for (auto const& entry : entries) {
+    if (selection.contains(entry.path)) selected.push_back(entry);
+  }
+  return selected;
+}
+
+std::vector<FileContextCommand> contextMenuCommands(std::vector<FileEntry> const& entries,
+                                                    FileSelectionState const& selection,
+                                                    FileClipboardState const& clipboard,
+                                                    bool backgroundMenu) {
+  std::size_t const selectionCount = selectedEntries(entries, selection).size();
+  bool const hasSelection = selectionCount > 0;
+  bool const singleSelection = selectionCount == 1;
+  bool const hasEntries = !entries.empty();
+  bool const canPaste = !clipboard.empty();
+
+  if (backgroundMenu || !hasSelection) {
+    return {
+        {.kind = FileContextCommandKind::NewFolder, .label = "New Folder", .enabled = true},
+        {.kind = FileContextCommandKind::NewFile, .label = "New File", .enabled = true},
+        {.kind = FileContextCommandKind::Paste, .label = "Paste", .enabled = canPaste},
+        {.kind = FileContextCommandKind::SelectAll, .label = "Select All", .enabled = hasEntries},
+    };
+  }
+
+  return {
+      {.kind = FileContextCommandKind::Open, .label = "Open", .enabled = singleSelection},
+      {.kind = FileContextCommandKind::Reveal, .label = "Reveal in Folder", .enabled = singleSelection},
+      {.kind = FileContextCommandKind::Copy, .label = "Copy", .enabled = hasSelection},
+      {.kind = FileContextCommandKind::Cut, .label = "Cut", .enabled = hasSelection},
+      {.kind = FileContextCommandKind::Duplicate, .label = "Duplicate", .enabled = hasSelection},
+      {.kind = FileContextCommandKind::Trash, .label = "Move to Trash", .enabled = hasSelection, .destructive = true},
+  };
+}
+
 std::filesystem::path collisionFreePath(std::filesystem::path const& directory, std::string const& preferredName) {
   std::filesystem::path preferred = directory / preferredName;
   if (!std::filesystem::exists(preferred)) return preferred;

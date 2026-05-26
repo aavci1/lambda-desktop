@@ -190,6 +190,28 @@ struct FileUndoAction {
   bool removeCopiedItem = false;
 };
 
+enum class FileContextCommandKind {
+  Open,
+  Reveal,
+  Copy,
+  Cut,
+  Paste,
+  Duplicate,
+  Trash,
+  NewFolder,
+  NewFile,
+  SelectAll,
+};
+
+struct FileContextCommand {
+  FileContextCommandKind kind = FileContextCommandKind::Open;
+  std::string label;
+  bool enabled = false;
+  bool destructive = false;
+
+  bool operator==(FileContextCommand const&) const = default;
+};
+
 struct FileSelectionState {
   std::vector<std::filesystem::path> selected;
   int anchorIndex = -1;
@@ -298,6 +320,11 @@ FileSelectionState moveSelectionByOffset(FileSelectionState state,
                                          std::vector<FileEntry> const& entries,
                                          int offset,
                                          bool extend);
+std::vector<FileEntry> selectedEntries(std::vector<FileEntry> const& entries, FileSelectionState const& selection);
+std::vector<FileContextCommand> contextMenuCommands(std::vector<FileEntry> const& entries,
+                                                    FileSelectionState const& selection,
+                                                    FileClipboardState const& clipboard,
+                                                    bool backgroundMenu);
 
 std::filesystem::path collisionFreePath(std::filesystem::path const& directory, std::string const& preferredName);
 FileOperationResult createFolder(std::filesystem::path const& directory, std::string preferredName = "New Folder");

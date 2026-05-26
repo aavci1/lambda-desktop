@@ -133,6 +133,7 @@ struct FilesFlowGrid {
   std::vector<std::filesystem::path> iconThemeRoots;
   int iconSize = 48;
   std::function<void(FileEntry const&)> activateEntry;
+  std::function<void(FileEntry const&)> showEntryContextMenu;
 
   float cellWidth = FilesTheme::kGridMinCell;
   float cellHeight = FilesTheme::kGridTileH;
@@ -189,6 +190,7 @@ inline flux::Element FilesFlowGrid::body() const {
   std::vector<std::filesystem::path> const roots = iconThemeRoots;
   int const preferredIconSize = iconSize;
   auto const activate = activateEntry;
+  auto const contextMenu = showEntryContextMenu;
   float const tileW = cellWidth;
   float const tileH = cellHeight;
   float const gapH = horizontalSpacing;
@@ -219,7 +221,7 @@ inline flux::Element FilesFlowGrid::body() const {
       [](detail::RowDescriptor const& row) {
         return row.key;
       },
-      [selectedPathSignal, selectionSignal, roots, preferredIconSize, activate, tileW, tileH, gapH](
+      [selectedPathSignal, selectionSignal, roots, preferredIconSize, activate, contextMenu, tileW, tileH, gapH](
           detail::RowDescriptor const& row,
           Signal<std::size_t> const&) {
         int const colCount = std::max(1, row.columns);
@@ -241,6 +243,11 @@ inline flux::Element FilesFlowGrid::body() const {
                                       .onActivate = [activate, entry] {
                                         if (activate) {
                                           activate(entry);
+                                        }
+                                      },
+                                      .onContextMenu = [contextMenu, entry] {
+                                        if (contextMenu) {
+                                          contextMenu(entry);
                                         }
                                       },
                                   }}
