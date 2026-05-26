@@ -980,7 +980,7 @@ Add focused automated tests where behavior is deterministic:
 - [ ] Basic drag/drop works or unsupported portions are clearly documented.
 - [x] Current folder refreshes after external changes.
 - [x] Operation progress/errors/cancel states exist.
-- [ ] Grid and list/detail views exist.
+- [x] Grid and list/detail views exist.
 - [x] Sorting and current-folder search work.
 - [x] Open-with uses shared app/MIME registry.
 - [x] Icons use shared icon theme provider with fallback.

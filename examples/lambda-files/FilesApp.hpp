@@ -2,6 +2,7 @@
 
 #include "FilesFlowGrid.hpp"
 #include "FilesGlyphs.hpp"
+#include "FilesListView.hpp"
 #include "FilesStore.hpp"
 #include "FilesTheme.hpp"
 
@@ -385,14 +386,36 @@ struct BreadcrumbBar {
 
 struct FilesOptionsMenu {
   Reactive::Signal<bool> showHiddenFiles;
+  Reactive::Signal<std::string> viewMode;
   std::function<void()> onToggleHiddenFiles;
+  std::function<void(std::string)> onSetViewMode;
 
   Element body() const {
     auto showMenu = usePopupMenu();
     Reactive::Signal<bool> const hiddenSignal = showHiddenFiles;
+    Reactive::Signal<std::string> const viewModeSignal = viewMode;
     auto const toggle = onToggleHiddenFiles;
+    auto const setViewMode = onSetViewMode;
 
-    auto openMenu = [showMenu, hiddenSignal, toggle] {
+    auto openMenu = [showMenu, hiddenSignal, viewModeSignal, toggle, setViewMode] {
+      MenuItem gridView;
+      gridView.label = "Grid View";
+      gridView.checked = viewModeSignal() != "list";
+      gridView.handler = [setViewMode] {
+        if (setViewMode) {
+          setViewMode("grid");
+        }
+      };
+
+      MenuItem listView;
+      listView.label = "List View";
+      listView.checked = viewModeSignal() == "list";
+      listView.handler = [setViewMode] {
+        if (setViewMode) {
+          setViewMode("list");
+        }
+      };
+
       MenuItem showHidden;
       showHidden.label = "Show Hidden Files";
       showHidden.checked = hiddenSignal();
@@ -401,7 +424,10 @@ struct FilesOptionsMenu {
           toggle();
         }
       };
-      showMenu(PopupMenu{.items = {std::move(showHidden)}});
+      showMenu(PopupMenu{.items = {std::move(gridView),
+                                   std::move(listView),
+                                   MenuItem::separator(),
+                                   std::move(showHidden)}});
     };
 
     return IconToolButton{
@@ -431,7 +457,9 @@ Element filesTitlebar(Window* window,
                       std::function<void(std::filesystem::path)> navigateToPath,
                       std::function<void(std::filesystem::path)> showPathContextMenu,
                       Reactive::Signal<bool> showHiddenFiles,
-                      std::function<void()> toggleHiddenFiles) {
+                      std::function<void()> toggleHiddenFiles,
+                      Reactive::Signal<std::string> viewMode,
+                      std::function<void(std::string)> setViewMode) {
   ChromeInsets const reserved = chromeInsets(chrome);
   std::vector<Element> row;
 
@@ -457,7 +485,9 @@ Element filesTitlebar(Window* window,
               .flex(1.f, 1.f, 0.f),
           Element{FilesOptionsMenu{
               .showHiddenFiles = showHiddenFiles,
+              .viewMode = viewMode,
               .onToggleHiddenFiles = toggleHiddenFiles,
+              .onSetViewMode = setViewMode,
           }})}
       .flex(1.f, 1.f, 0.f));
 
@@ -509,6 +539,7 @@ struct FilesAppRoot {
     auto scrollOffset = useState(Point{});
     auto preferences = useState(loadFilesPreferences().preferences);
     auto showHiddenFiles = useState(preferences().showHidden);
+    auto viewMode = useState(preferences().viewMode);
     auto iconThemeRoots = useState(lambda_shell::defaultIconThemeRoots(""));
 
     auto places = useState(sidebarPlaces());
@@ -634,6 +665,21 @@ struct FilesAppRoot {
       selectedPath.set(std::string{});
       selection.set(FileSelectionState{});
       syncListing();
+      scrollOffset.set(Point{});
+    };
+
+    auto setViewMode = [preferences, viewMode, scrollOffset](std::string nextMode) {
+      if (nextMode != "list") {
+        nextMode = "grid";
+      }
+      if (viewMode() == nextMode) {
+        return;
+      }
+      FilesPreferences next = preferences();
+      next.viewMode = nextMode;
+      preferences.set(next);
+      viewMode.set(next.viewMode);
+      (void)saveFilesPreferences(next);
       scrollOffset.set(Point{});
     };
 
@@ -876,12 +922,23 @@ struct FilesAppRoot {
         .tapEntry = tapEntry,
         .showEntryContextMenu = showEntryContextMenu,
     };
+    FilesListView filesList{
+        .entries = entries,
+        .selectedPath = selectedPath,
+        .selection = selection,
+        .iconThemeRoots = iconThemeRoots(),
+        .iconSize = preferences().iconSize,
+        .activateEntry = activateEntry,
+        .tapEntry = tapEntry,
+        .showEntryContextMenu = showEntryContextMenu,
+    };
     Element root = VStack{
         .spacing = 0.f,
         .alignment = Alignment::Stretch,
         .children = children(
             filesTitlebar(window, metrics, canGoBack, canGoForward, goBackNav, goForwardNav, crumbs,
-                          navigateToPath, showPathContextMenu, showHiddenFiles, toggleHiddenFiles),
+                          navigateToPath, showPathContextMenu, showHiddenFiles, toggleHiddenFiles,
+                          viewMode, setViewMode),
             Rectangle{}.height(1.f).fill(FilesTheme::line),
             HStack{
                 .spacing = 0.f,
@@ -933,10 +990,19 @@ struct FilesAppRoot {
                                       .padding(FilesTheme::kContentPadV, FilesTheme::kContentPadH,
                                                FilesTheme::kContentPadV, FilesTheme::kContentPadH);
                                 },
-                                [filesGrid] {
-                                  return Element{filesGrid}
-                                      .padding(FilesTheme::kContentPadV, FilesTheme::kContentPadH,
-                                               FilesTheme::kContentPadV, FilesTheme::kContentPadH);
+                                [filesGrid, filesList, viewMode] {
+                                  return Show(
+                                      [viewMode] { return viewMode() == "list"; },
+                                      [filesList] {
+                                        return Element{filesList}
+                                            .padding(FilesTheme::kContentPadV, FilesTheme::kContentPadH,
+                                                     FilesTheme::kContentPadV, FilesTheme::kContentPadH);
+                                      },
+                                      [filesGrid] {
+                                        return Element{filesGrid}
+                                            .padding(FilesTheme::kContentPadV, FilesTheme::kContentPadH,
+                                                     FilesTheme::kContentPadV, FilesTheme::kContentPadH);
+                                      });
                                 }))}
                         .flex(1.f, 1.f, 0.f))}
                 .flex(1.f, 1.f, 0.f)),
@@ -944,11 +1010,12 @@ struct FilesAppRoot {
 
     root = std::move(root).onKeyDown(
         [goBackNav, goForwardNav, goUpNav, selectedPath, selection, entries, activateEntry, applySelection,
-         gridColumns](
+         gridColumns, viewMode](
             KeyCode key, Modifiers modifiers) {
           using namespace flux::keys;
           bool const extend = any(modifiers & Modifiers::Shift);
           bool const command = any(modifiers & Modifiers::Meta) || any(modifiers & Modifiers::Ctrl);
+          int const verticalStep = viewMode() == "list" ? 1 : gridColumns;
           if (key == Delete && any(modifiers & Modifiers::Meta)) {
             goUpNav();
             return;
@@ -978,11 +1045,11 @@ struct FilesAppRoot {
             return;
           }
           if (key == UpArrow) {
-            applySelection(moveSelectionByOffset(selection(), entries(), -gridColumns, extend));
+            applySelection(moveSelectionByOffset(selection(), entries(), -verticalStep, extend));
             return;
           }
           if (key == DownArrow) {
-            applySelection(moveSelectionByOffset(selection(), entries(), gridColumns, extend));
+            applySelection(moveSelectionByOffset(selection(), entries(), verticalStep, extend));
             return;
           }
           if (key == Home) {

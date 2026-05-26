@@ -43,6 +43,10 @@ struct FilesTheme {
   static constexpr float kGridGapH = 16.f;
   static constexpr float kGridGapV = 14.f;
   static constexpr float kGridTileH = 118.f;
+  static constexpr float kListHeaderHeight = 28.f;
+  static constexpr float kListRowHeight = 46.f;
+  static constexpr float kListRowGap = 2.f;
+  static constexpr float kListRowRadius = 7.f;
   static constexpr float kContentPadH = 20.f;
   static constexpr float kContentPadV = 16.f;
   static constexpr float kSidePad = 10.f;

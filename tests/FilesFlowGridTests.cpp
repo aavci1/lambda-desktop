@@ -21,6 +21,7 @@
 #include "FilesFlowGrid.hpp"
 #include "FilesApp.hpp"
 #include "FilesFlowGridLayout.hpp"
+#include "FilesListView.hpp"
 #include "FilesStore.hpp"
 #include "FilesTheme.hpp"
 
@@ -261,6 +262,93 @@ TEST_CASE("FilesFlowGrid has no extent before it receives a real width") {
 
   CHECK(measured.width == doctest::Approx(0.f));
   CHECK(measured.height == doctest::Approx(0.f));
+}
+
+TEST_CASE("FilesListView measures rows with header and viewport width") {
+  Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(3)};
+  Reactive::Signal<std::string> selectedPath{};
+
+  FilesListView list{
+      .entries = entries,
+      .selectedPath = selectedPath,
+  };
+
+  LayoutConstraints constraints{
+      .maxWidth = 640.f,
+      .maxHeight = std::numeric_limits<float>::infinity(),
+      .minWidth = 0.f,
+      .minHeight = 0.f,
+  };
+
+  Size const measured = measureFilesListView(list, constraints);
+  CHECK(measured.width == doctest::Approx(640.f));
+  CHECK(measured.height == doctest::Approx(FilesTheme::kListHeaderHeight +
+                                           3.f * FilesTheme::kListRowHeight +
+                                           3.f * FilesTheme::kListRowGap));
+}
+
+TEST_CASE("FilesListView expands in a flex scroll viewport and preserves pointer modifiers") {
+  struct Root {
+    Reactive::Signal<std::vector<FileEntry>> entries;
+    std::shared_ptr<int> activations;
+    std::shared_ptr<std::vector<Modifiers>> activationModifiers;
+
+    Element body() const {
+      return HStack{
+          .spacing = 0.f,
+          .alignment = Alignment::Stretch,
+          .children = children(
+              Rectangle{}.width(220.f),
+              Element{ScrollView{
+                  .axis = ScrollAxis::Vertical,
+                  .children = children(Element{FilesListView{
+                      .entries = entries,
+                      .selectedPath = Reactive::Signal<std::string>{},
+                      .tapEntry = [activations = activations,
+                                   activationModifiers = activationModifiers](
+                                      FileEntry const&, Modifiers modifiers) {
+                        ++*activations;
+                        activationModifiers->push_back(modifiers);
+                      },
+                  }}),
+              }}.flex(1.f, 1.f, 0.f)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  Reactive::Signal<std::vector<FileEntry>> entries{makeEntries(10)};
+  auto activations = std::make_shared<int>(0);
+  auto activationModifiers = std::make_shared<std::vector<Modifiers>>();
+  scenegraph::SceneGraph sceneGraph;
+  MountRoot root{std::make_unique<TypedRootHolder<Root>>(
+                     std::in_place, Root{entries, activations, activationModifiers}),
+                 textSystem,
+                 testEnvironment(),
+                 Size{820.f, 320.f}};
+
+  root.mount(sceneGraph);
+  root.resize(Size{820.f, 320.f}, sceneGraph);
+
+  scenegraph::SceneNode const* viewport = findClippingViewport(sceneGraph.root());
+  REQUIRE(viewport != nullptr);
+  scenegraph::SceneNode const* content = scrollContentGroup(*viewport);
+  REQUIRE(content->children().size() == 1);
+  scenegraph::SceneNode const& listRoot = *content->children()[0];
+  CHECK(listRoot.size().width == doctest::Approx(600.f).epsilon(0.01f));
+  CHECK(listRoot.size().height == doctest::Approx(FilesTheme::kListHeaderHeight +
+                                                  10.f * FilesTheme::kListRowHeight +
+                                                  10.f * FilesTheme::kListRowGap).epsilon(0.01f));
+
+  std::optional<scenegraph::InteractionHitResult> hit =
+      scenegraph::hitTestInteraction(sceneGraph, Point{230.f, 52.f}, [](scenegraph::Interaction const& interaction) {
+        return hasTapInteraction(interaction);
+      });
+  REQUIRE(hit.has_value());
+  dispatchTap(*hit->interaction, MouseButton::Left, Modifiers::Ctrl | Modifiers::Shift);
+  CHECK(*activations == 1);
+  REQUIRE(activationModifiers->size() == 1);
+  CHECK(activationModifiers->front() == (Modifiers::Ctrl | Modifiers::Shift));
 }
 
 TEST_CASE("ScrollView viewport taps carry pointer modifiers") {
