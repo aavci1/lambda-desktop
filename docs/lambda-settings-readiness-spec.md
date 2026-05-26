@@ -797,6 +797,8 @@ Expected:
 - Invalid config is reported without crashing.
 - Write errors are shown and do not lose user changes.
 
+Current status: Settings has no separate app-specific preferences that require their own generated config file. It reads and writes the Window Manager and Shell owner configs directly; both owner config files are generated with defaults by the Settings backend when missing.
+
 ## Test additions
 
 Add focused automated tests where behavior is deterministic:
@@ -819,7 +821,7 @@ Add focused automated tests where behavior is deterministic:
 
 - [x] Settings backend loads Window Manager config.
 - [x] Settings backend loads Shell config.
-- [ ] Settings app has generated/default config support if app-specific preferences are needed.
+- [x] Settings app has generated/default config support if app-specific preferences are needed.
 - [x] Schema metadata exists for every displayed real setting.
 - [x] Config writes are atomic and validated.
 - [x] Unknown config keys are preserved where practical.
