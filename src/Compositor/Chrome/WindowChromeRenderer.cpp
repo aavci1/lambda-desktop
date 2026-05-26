@@ -53,8 +53,17 @@ bool backgroundEffectCoversContent(CommittedSurfaceSnapshot const& surface) {
   });
 }
 
+bool backgroundEffectCoversCommittedContent(CommittedSurfaceSnapshot const& surface) {
+  int const width = surface.committedWidth > 0 ? surface.committedWidth : surface.width;
+  int const height = surface.committedHeight > 0 ? surface.committedHeight : surface.height;
+  return std::ranges::any_of(surface.backgroundBlurRects, [&](CommittedSurfaceSnapshot::RegionRect const& rect) {
+    return rect.x == 0 && rect.y == 0 && rect.width >= width && rect.height >= height;
+  });
+}
+
 bool materialCoversTitlebar(CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
   return backgroundEffectCoversContent(surface) ||
+         (surface.geometryAnimationGrowing && backgroundEffectCoversCommittedContent(surface)) ||
          (chrome.windowGlassEnabled && surface.defaultGlassEligible);
 }
 
@@ -172,12 +181,14 @@ void drawDefaultChrome(Canvas& canvas,
   float const separatorY = windowY - 0.5f;
   canvas.drawLine({windowX, separatorY}, {windowX + windowWidth, separatorY},
                   StrokeStyle::solid(chrome.borderLineColor, 0.5f));
-  float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
-  float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
-  if (chrome.insetHighlightColor.a > 0.f && topInsetRight > topInsetLeft) {
-    canvas.drawLine({topInsetLeft, titleTop + 0.5f},
-                    {topInsetRight, titleTop + 0.5f},
-                    StrokeStyle::solid(chrome.insetHighlightColor, 1.f));
+  if (!titlebarCoveredBySurfaceMaterial) {
+    float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
+    float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
+    if (chrome.insetHighlightColor.a > 0.f && topInsetRight > topInsetLeft) {
+      canvas.drawLine({topInsetLeft, titleTop + 0.5f},
+                      {topInsetRight, titleTop + 0.5f},
+                      StrokeStyle::solid(chrome.insetHighlightColor, 1.f));
+    }
   }
 
   float const controlsWidth = chromeControlsMetrics(chrome, titleBarHeight).controlsWidth;

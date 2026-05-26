@@ -82,6 +82,23 @@ bool sameRect(Rect const& a, Rect const& b) {
          reachesEdge(a.y + a.height, b.y + b.height);
 }
 
+bool regionCoversSurfaceContent(CommittedSurfaceSnapshot::RegionRect const& region,
+                                int width,
+                                int height) {
+  return region.x == 0 &&
+         region.y == 0 &&
+         region.width >= width &&
+         region.height >= height;
+}
+
+bool backgroundEffectCoversCommittedContent(CommittedSurfaceSnapshot const& surface) {
+  int const width = surface.committedWidth > 0 ? surface.committedWidth : surface.width;
+  int const height = surface.committedHeight > 0 ? surface.committedHeight : surface.height;
+  return std::ranges::any_of(surface.backgroundBlurRects, [&](CommittedSurfaceSnapshot::RegionRect const& rect) {
+    return regionCoversSurfaceContent(rect, width, height);
+  });
+}
+
 std::optional<Rect> reservedWindowClip(CommittedSurfaceSnapshot const& surface) {
   float top = -100000.f;
   float bottom = 100000.f;
@@ -192,6 +209,14 @@ bool materialShouldCoverFrame(CommittedSurfaceSnapshot const& surface,
          sameRect(rect, fullContentRect);
 }
 
+bool materialShouldCoverAnimatedSurface(CommittedSurfaceSnapshot const& surface,
+                                        ResolvedGlassMaterial const& material) {
+  return material.enabled &&
+         material.usesSurfaceRegions &&
+         surface.geometryAnimationGrowing &&
+         backgroundEffectCoversCommittedContent(surface);
+}
+
 std::span<CommittedSurfaceSnapshot::RegionRect const> glassMaterialRegions(
     CommittedSurfaceSnapshot const& surface,
     ResolvedGlassMaterial const& material,
@@ -218,6 +243,45 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
   };
   std::span<CommittedSurfaceSnapshot::RegionRect const> regions = glassMaterialRegions(surface, material, defaultRegion);
 
+  auto drawMaterialRect = [&](Rect const& rect, CornerRadius const& corners) {
+    canvas.drawBackdropBlur(rect, material.blurRadius, Colors::transparent, corners);
+    if (material.baseColor.a > 0.f) {
+      canvas.drawRect(rect,
+                      corners,
+                      FillStyle::solid(material.baseColor),
+                      StrokeStyle::none(),
+                      ShadowStyle::none());
+    }
+    if (material.tintColor.a > 0.f) {
+      canvas.drawRect(rect,
+                      corners,
+                      FillStyle::solid(material.tintColor),
+                      StrokeStyle::none(),
+                      ShadowStyle::none());
+    }
+  };
+
+  auto drawFrameMaterial = [&] {
+    Rect const frameRect = Rect::sharp(static_cast<float>(surface.x),
+                                      static_cast<float>(surface.y - surface.titleBarHeight),
+                                      static_cast<float>(surface.width),
+                                      static_cast<float>(surface.height + surface.titleBarHeight));
+    CornerRadius const frameCorners = material.cornerRadiusSet
+                                          ? material.cornerRadius
+                                          : windowCorners;
+    drawMaterialRect(frameRect, frameCorners);
+  };
+
+  if (materialShouldCoverAnimatedSurface(surface, material)) {
+    if (surface.serverSideDecorated && surface.titleBarHeight > 0) {
+      drawFrameMaterial();
+    } else {
+      CornerRadius const corners = material.cornerRadiusSet ? material.cornerRadius : contentCorners;
+      drawMaterialRect(fullContentRect, corners);
+    }
+    return;
+  }
+
   for (auto const& region : regions) {
     Rect const requested = Rect::sharp(static_cast<float>(surface.x + region.x),
                                       static_cast<float>(surface.y + region.y),
@@ -230,28 +294,7 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
                                      ? effectCorners
                                      : cornerRadiusForPiece(fullContentRect, rect, effectCorners);
     if (materialShouldCoverFrame(surface, material, rect, fullContentRect)) {
-      Rect const frameRect = Rect::sharp(static_cast<float>(surface.x),
-                                        static_cast<float>(surface.y - surface.titleBarHeight),
-                                        static_cast<float>(surface.width),
-                                        static_cast<float>(surface.height + surface.titleBarHeight));
-      CornerRadius const frameCorners = material.cornerRadiusSet
-                                            ? material.cornerRadius
-                                            : windowCorners;
-      canvas.drawBackdropBlur(frameRect, material.blurRadius, Colors::transparent, frameCorners);
-      if (material.baseColor.a > 0.f) {
-        canvas.drawRect(frameRect,
-                        frameCorners,
-                        FillStyle::solid(material.baseColor),
-                        StrokeStyle::none(),
-                        ShadowStyle::none());
-      }
-      if (material.tintColor.a > 0.f) {
-        canvas.drawRect(frameRect,
-                        frameCorners,
-                        FillStyle::solid(material.tintColor),
-                        StrokeStyle::none(),
-                        ShadowStyle::none());
-      }
+      drawFrameMaterial();
       continue;
     }
     canvas.drawBackdropBlur(rect, material.blurRadius, Colors::transparent, corners);
@@ -414,12 +457,12 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
       (surface.committedWidth != surface.width ||
        surface.committedHeight != surface.height);
   float const contentWidth = geometryAnimationContentSizeMismatch
-                                 ? std::min(windowWidth, static_cast<float>(surface.committedWidth))
+                                 ? static_cast<float>(surface.committedWidth)
                                  : clientContentSmallerThanFrame
                                        ? static_cast<float>(surface.destinationWidth)
                                        : windowWidth;
   float const contentHeight = geometryAnimationContentSizeMismatch
-                                  ? std::min(windowHeight, static_cast<float>(surface.committedHeight))
+                                  ? static_cast<float>(surface.committedHeight)
                                   : clientContentSmallerThanFrame
                                         ? static_cast<float>(surface.destinationHeight)
                                         : windowHeight;
@@ -428,7 +471,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   drawWindowFrameShadow(canvas, surface, chrome);
   if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   canvas.save();
-  canvas.clipRect(fullContentRect);
+  canvas.clipRect(fullContentRect, contentCorners, true);
   drawClientSurfacePiece(canvas,
                          clientImage,
                          Rect::sharp(surface.sourceX,
