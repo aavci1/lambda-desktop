@@ -1467,6 +1467,11 @@ FilesPreferences defaultFilesPreferences() {
   return FilesPreferences{};
 }
 
+std::filesystem::path filesPreferencesPath() {
+  if (auto env = pathFromEnv("LAMBDA_FILES_CONFIG"); !env.empty()) return env;
+  return configHomeDirectory() / "lambda-files" / "config.toml";
+}
+
 FilesPreferences parseFilesPreferencesToml(std::string_view tomlText) {
   FilesPreferences preferences = defaultFilesPreferences();
   std::istringstream input{std::string(tomlText)};
@@ -1529,6 +1534,64 @@ std::string writeFilesPreferencesToml(FilesPreferences const& preferences) {
   out << "icon_size = " << preferences.iconSize << "\n";
   out << "show_trash = " << (preferences.showTrash ? "true" : "false") << "\n";
   return out.str();
+}
+
+FileOperationResult saveFilesPreferences(FilesPreferences const& preferences, std::filesystem::path path) {
+  std::error_code ec;
+  if (path.empty()) path = filesPreferencesPath();
+  if (!path.parent_path().empty()) {
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec) return {.ok = false, .path = path, .error = "Failed to create config directory: " + ec.message()};
+  }
+
+  std::filesystem::path const temp =
+      path.parent_path().empty() ? std::filesystem::path{"." + path.filename().string() + ".tmp"}
+                                 : path.parent_path() / ("." + path.filename().string() + ".tmp");
+  {
+    std::ofstream out(temp, std::ios::trunc);
+    if (!out) return {.ok = false, .path = path, .error = "Failed to open temporary config file."};
+    out << writeFilesPreferencesToml(preferences);
+    if (!out) {
+      std::filesystem::remove(temp, ec);
+      return {.ok = false, .path = path, .error = "Failed to write temporary config file."};
+    }
+  }
+
+  std::filesystem::rename(temp, path, ec);
+  if (ec) {
+    std::filesystem::remove(temp, ec);
+    return {.ok = false, .path = path, .error = "Failed to replace config file: " + ec.message()};
+  }
+  return {.ok = true, .path = path};
+}
+
+FilesPreferencesLoadResult loadFilesPreferences(std::filesystem::path path) {
+  if (path.empty()) path = filesPreferencesPath();
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec)) {
+    auto saved = saveFilesPreferences(defaultFilesPreferences(), path);
+    return {
+        .preferences = defaultFilesPreferences(),
+        .path = path,
+        .error = saved.ok ? std::string{} : saved.error,
+        .created = saved.ok,
+    };
+  }
+
+  std::ifstream in(path);
+  if (!in) {
+    return {
+        .preferences = defaultFilesPreferences(),
+        .path = path,
+        .error = "Failed to read config file.",
+    };
+  }
+  std::ostringstream contents;
+  contents << in.rdbuf();
+  return {
+      .preferences = parseFilesPreferencesToml(contents.str()),
+      .path = path,
+  };
 }
 
 std::string serializeUriList(std::vector<std::filesystem::path> const& paths) {

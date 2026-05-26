@@ -842,4 +842,28 @@ sort_key = "random"
 icon_size = 4
 )");
   CHECK(fallback == lambda_files::defaultFilesPreferences());
+
+  ScopedEnv configEnv("LAMBDA_FILES_CONFIG");
+  auto root = tempRoot("lambda-files-preferences-persist-test");
+  auto configPath = root / "lambda-files" / "config.toml";
+  auto const configPathString = configPath.string();
+  setenv("LAMBDA_FILES_CONFIG", configPathString.c_str(), 1);
+
+  auto created = lambda_files::loadFilesPreferences();
+  CHECK(created.created);
+  CHECK(created.path == configPath);
+  CHECK(created.preferences == lambda_files::defaultFilesPreferences());
+  CHECK(std::filesystem::exists(configPath));
+
+  preferences.showHidden = true;
+  preferences.viewMode = "list";
+  preferences.sortKey = lambda_files::FileSortKey::Size;
+  preferences.sortAscending = false;
+  auto saved = lambda_files::saveFilesPreferences(preferences);
+  REQUIRE(saved.ok);
+  auto loaded = lambda_files::loadFilesPreferences();
+  CHECK_FALSE(loaded.created);
+  CHECK(loaded.preferences == preferences);
+
+  std::filesystem::remove_all(root);
 }

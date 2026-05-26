@@ -474,7 +474,8 @@ struct FilesAppRoot {
     auto activePlaceId = useState(std::string{"home"});
     auto selectedPath = useState(std::string{});
     auto scrollOffset = useState(Point{});
-    auto showHiddenFiles = useState(false);
+    auto preferences = useState(loadFilesPreferences().preferences);
+    auto showHiddenFiles = useState(preferences().showHidden);
 
     auto places = useState(sidebarPlaces());
 
@@ -525,8 +526,12 @@ struct FilesAppRoot {
       applyHistory(goUp(history()));
     };
 
-    auto toggleHiddenFiles = [showHiddenFiles, selectedPath, scrollOffset, syncListing] {
-      showHiddenFiles.set(!showHiddenFiles());
+    auto toggleHiddenFiles = [preferences, showHiddenFiles, selectedPath, scrollOffset, syncListing] {
+      FilesPreferences next = preferences();
+      next.showHidden = !showHiddenFiles();
+      preferences.set(next);
+      showHiddenFiles.set(next.showHidden);
+      (void)saveFilesPreferences(next);
       selectedPath.set(std::string{});
       syncListing();
       scrollOffset.set(Point{});

@@ -159,6 +159,15 @@ struct FilesPreferences {
   bool operator==(FilesPreferences const&) const = default;
 };
 
+struct FilesPreferencesLoadResult {
+  FilesPreferences preferences;
+  std::filesystem::path path;
+  std::string error;
+  bool created = false;
+
+  bool operator==(FilesPreferencesLoadResult const&) const = default;
+};
+
 enum class FileConflictDecision {
   KeepBoth,
   Replace,
@@ -332,6 +341,10 @@ FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
                               int preferredSize = 48);
 FilesPreferences parseFilesPreferencesToml(std::string_view tomlText);
 std::string writeFilesPreferencesToml(FilesPreferences const& preferences);
+std::filesystem::path filesPreferencesPath();
+FilesPreferencesLoadResult loadFilesPreferences(std::filesystem::path path = filesPreferencesPath());
+FileOperationResult saveFilesPreferences(FilesPreferences const& preferences,
+                                         std::filesystem::path path = filesPreferencesPath());
 
 std::string serializeUriList(std::vector<std::filesystem::path> const& paths);
 std::vector<std::filesystem::path> parseUriList(std::string_view text);
