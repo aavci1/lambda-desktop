@@ -3,7 +3,7 @@
 **Last updated:** 2026-05-26
 **Purpose:** Single place for current project status, active work, and archived milestone notes.  
 **Architecture reference:** [compositor.md](compositor.md) (compositor design and framework log). Current Window Manager readiness work is tracked in [lambda-window-manager-readiness-spec.md](lambda-window-manager-readiness-spec.md).
-**How to run:** [compositor-user-guide.md](compositor-user-guide.md), [compositor-testing.md](compositor-testing.md), [linux-development.md](linux-development.md).
+**How to run:** [compositor-user-guide.md](compositor-user-guide.md), [linux-development.md](linux-development.md).
 
 ---
 
@@ -15,7 +15,7 @@
 | **App platforms** | macOS (Metal), Linux Wayland (Vulkan), Linux KMS (Vulkan). |
 | **Examples** | 28+ demo targets; build with `-DFLUX_BUILD_EXAMPLES=ON`. |
 | **Linux compositor** | `lambda-window-manager` — KMS + Wayland server + Vulkan paint. Roadmap P0–P3 largely implemented; hardware validation continues. |
-| **Desktop shell** | `lambda-shell` + `lambda-shell-preview` — layer-shell UI, shared `Flux::Shell::ShellIpc`, compositor-backed background effects. |
+| **Desktop shell** | `lambda-shell` — layer-shell UI, shared `Flux::Shell::ShellIpc`, compositor-backed background effects. |
 
 Build the compositor with `-DLAMBDA_BUILD_WINDOW_MANAGER=ON` (Linux only). See [conventions.md](conventions.md) for CMake layout.
 
@@ -87,7 +87,7 @@ Process model: `lambda-window-manager` + `lambda-shell` (reconnect if WM restart
 | `lambda.dock` | Dock (layer overlay) |
 | `lambda.command-launcher` | Modal launcher |
 
-Shell UI uses Flux v5 reactive views (`ShellModel` signals, no remount loop). Preview app (`lambda-shell-preview`) runs in a normal window for Mac/Linux dev without the compositor. Layer chrome uses `LayerShellChromeOptions` + `BackdropBlur` aligned with production (**P1.5** done).
+Shell UI uses Flux v5 reactive views (`ShellModel` signals, no remount loop). Layer chrome uses `LayerShellChromeOptions` + `BackdropBlur` aligned with production (**P1.5** done).
 
 ---
 
@@ -133,7 +133,7 @@ Principles and prioritized work items (**P0–P3**). Update the tracking table a
 1. **Enrich Flux first** when a capability is reusable (blur regions, layer-shell chrome, IPC helpers, capability flags on `Window`). Applications declare intent; the compositor interprets generic protocol state.
 2. **Backend parity where it makes sense.** Graphics APIs (`Canvas`, `Image`) stay Metal/Vulkan aligned. Linux-only compositor paths (DMABUF, KMS) are explicitly Linux-only with no silent Mac no-ops.
 3. **Honest protocols.** Do not advertise `wl_seat` capabilities, globals, or client APIs that are empty stubs.
-4. **One source of truth for visuals.** Preview (`lambda-shell-preview`) and production (layer-shell on the compositor) must use the same framework chrome/blur path—not parallel color constants in the shell repo and the WM.
+4. **One source of truth for visuals.** Shell layer surfaces and compositor chrome should share the same framework chrome/blur path instead of parallel color constants in the shell repo and the WM.
 
 ---
 
@@ -169,7 +169,7 @@ Work items below are numbered **`P0.x` … `P3.x`** for tracking. Dependencies a
   - On dismiss / destroy: release grab to parent popup or toplevel per xdg-shell rules.
   - Reject nested grabs that violate spec (post `xdg_popup.error` as today for other errors).
 - Wire `WindowManager` dismissal (`Super+Q`, click-outside) to consult **popup-first** hit test, then grab owner.
-- Add `lambda-window-manager-popup-grab-demo` (minimal menu + submenu) and document in [compositor-testing.md](compositor-testing.md).
+- Validate popup grabs against real toolkit menus before enabling them by default.
 - Land behind flag first; enable by default only after CachyOS smoke + one real app (e.g. foot context menu if available).
 
 **Key points.**
@@ -272,7 +272,7 @@ Work items below are numbered **`P0.x` … `P3.x`** for tracking. Dependencies a
 **Acceptance.**
 
 - Table in docs matches runtime queries.
-- `lambda-shell-preview` does not rely on ignored fields without comment.
+- `lambda-shell` does not rely on ignored fields without comment.
 
 **Depends on.** None.
 
@@ -324,7 +324,7 @@ struct LayerShellChromeOptions {
 
 **Acceptance.**
 
-- `lambda-shell` top bar and dock look the same on compositor and `lambda-shell-preview` (within GPU blur variance).
+- `lambda-shell` top bar and dock render consistently across configured outputs and scales.
 - Third-party layer-shell client can request blur/tint/border/corner radii without `lambda.*` namespace.
 - No `shellGlassSurface` in `WaylandTypes.hpp` after migration (or deprecated one release).
 
@@ -448,7 +448,7 @@ struct LayerShellChromeOptions {
 **Key points.**
 
 - Preview is allowed to differ in *layout container* (one window vs three surfaces) but not in *chrome math*.
-- Run `lambda-shell-preview` on Mac to validate Metal blur path.
+- Validate the shared shell chrome/material path through real shell surfaces.
 
 **Acceptance.**
 
@@ -808,7 +808,7 @@ Ordered by impact. These are the live backlog items after P0–P3 landed in tree
 ### 1. Hardware-validate popup grabs (P0.1 follow-up)
 
 - Set `[input] popup_grabs = true` in compositor config.
-- Run `lambda-window-manager-popup-grab-demo` and at least one real toolkit menu (GTK/Qt/browser) per [compositor-testing.md](compositor-testing.md).
+- Validate popup grabs against at least one real toolkit menu (GTK/Qt/browser).
 - If stable on CachyOS hardware, flip default to `true` and document in [compositor-user-guide.md](compositor-user-guide.md).
 
 ### 2. Real-application validation
@@ -837,4 +837,4 @@ Ordered by impact. These are the live backlog items after P0–P3 landed in tree
 - IOSurface import on Metal remains optional (`Image::fromDmabuf` is Linux-only by design).
 - Continue logging framework changes in [compositor.md](compositor.md) §12.1 with real commit SHAs.
 
-**Related docs:** [compositor.md](compositor.md) · [lambda-shell-spec.md](lambda-shell-spec.md) · [compositor-testing.md](compositor-testing.md) · [compositor-user-guide.md](compositor-user-guide.md)
+**Related docs:** [compositor.md](compositor.md) · [lambda-shell-spec.md](lambda-shell-spec.md) · [compositor-user-guide.md](compositor-user-guide.md)

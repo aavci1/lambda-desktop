@@ -71,7 +71,7 @@ Windows stack. Click-to-focus. Drag title bar to move. Drag corner to resize. Sn
 
 The compositor supports three window-chrome tiers. Clients that do not bind `xdg_decoration_v1` keep client-side decoration and receive no compositor title bar. Clients that accept server-side decoration get compositor chrome above the client buffer. Clients that accept server-side decoration and bind `xx_cutouts_v1` render their own title-bar content inside the surface while the compositor overlays only the reserved close/minimize controls cutout.
 
-See `docs/compositor-window-chrome.md` for the cutout convention, input routing, and chrome config keys.
+Chrome cutouts, input routing, and chrome config keys are now covered by the Window Manager readiness spec and the compositor user guide.
 
 ### 1.9 Repository layout
 
@@ -175,7 +175,7 @@ Phase 2+ : iteration cycle starts to matter. A Wayland client test app needs to 
 
 ### 3.6 Logging
 
-The compositor writes logs to stderr. Run as `lambda-window-manager 2>&1 | tee compositor.log` to capture sessions. Additional runtime instrumentation is controlled by the environment variables documented in [`compositor-testing.md`](compositor-testing.md#instrumentation-environment), including `LAMBDA_WINDOW_MANAGER_CPU_TRACE`, `LAMBDA_WINDOW_MANAGER_PACING_TRACE`, and `FLUX_RESIZE_TRACE`.
+The compositor writes logs to stderr. Run as `lambda-window-manager 2>&1 | tee compositor.log` to capture sessions. Additional runtime instrumentation is controlled by environment variables such as `LAMBDA_WINDOW_MANAGER_CPU_TRACE`, `LAMBDA_WINDOW_MANAGER_PACING_TRACE`, and `FLUX_RESIZE_TRACE`.
 
 Avoid log spam in hot paths unless it is guarded by one of the instrumentation variables.
 
@@ -438,13 +438,12 @@ This single-threaded model holds through phase 3. Phase 4 may surface a need for
 ### 5.6 Acceptance criteria
 
 - ✓ `lambda-window-manager` accepts Wayland client connections through the scaffolded server.
-- ✓ `wl_subcompositor` is exposed and basic `wl_subsurface` children render relative to their parent surface, covered by `lambda-window-manager-popup-demo`.
+- ✓ `wl_subcompositor` is exposed and basic `wl_subsurface` children render relative to their parent surface.
 - ✓ Flux test apps configured to use Wayland can connect and create toplevels through the implemented xdg-shell path.
-- ✓ SHM-backed window content is copied into Flux images and drawn on screen, verified with `lambda-window-manager-shm-demo`.
-- ✓ `lambda-window-manager-shm-demo` provides a purpose-built SHM client smoke test. Start `lambda-window-manager`, note the logged Wayland display name, then run `WAYLAND_DISPLAY=<name> ./build/lambda-window-manager-shm-demo` from another shell/TTY.
+- ✓ SHM-backed window content is copied into Flux images and drawn on screen.
 - ✓ `xdg-decoration` is exposed and server-side decoration mode is accepted/configured for clients that request it.
 - ✓ `wl_surface.frame` callbacks are completed after compositor presentation rather than immediately at request time.
-- ✓ `lambda-window-manager-dmabuf-demo` creates a GBM buffer, fills it with a pattern, sends it to the compositor as a dma-buf, and appears on screen through the readable linear-buffer path.
+- ✓ DMABUF buffer submission works through the readable linear-buffer path.
 - ✓ Resizing clients no longer crashes the compositor in the tested paths.
 - ✓ Closing clients removes surfaces from the draw list and prunes cached client images.
 - ✓ DMABUF-based buffer submission works in the purpose-built demo.
@@ -496,7 +495,7 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 - xdg_decoration_v1 for server-side decoration negotiation.
 - Window chrome drawn via Flux Canvas: title bar with app name, left-side close button, rounded corners, and soft shadow.
 - Compositor shortcuts: Super+Q to close focused window; Super+Tab to cycle focus; Super+Left/Super+Right to snap; Super+Up to maximize; Super+Down to restore snapped/maximized windows; Ctrl+Alt+Backspace to terminate the compositor.
-- xdg_popup support (right-click menus, dropdown menus in apps need this). First-stage popup creation, positioning, configure, rendering, reposition, non-grabbing `grab` acknowledgement, outside-click dismissal, and Escape dismissal are implemented and covered by `lambda-window-manager-popup-demo`. `wl_subcompositor` is also exposed because real clients such as `foot` require it before popup/menu testing can proceed. Full input-grab semantics remain intentionally deferred until the non-grab path is hardware-smoked.
+- xdg_popup support (right-click menus, dropdown menus in apps need this). First-stage popup creation, positioning, configure, rendering, reposition, non-grabbing `grab` acknowledgement, outside-click dismissal, and Escape dismissal are implemented. `wl_subcompositor` is also exposed because real clients such as `foot` require it before popup/menu testing can proceed. Full input-grab semantics remain intentionally deferred until the non-grab path is hardware-smoked.
 
 ### 6.3 Out of scope for phase 3
 
@@ -583,15 +582,15 @@ Real-world Wayland apps work. Implements the protocols that typical Linux apps (
 
 Protocols to implement, in rough priority order:
 
-- **`zwlr_layer_shell_v1`**: required for panels, status bars, on-screen displays, notification daemons. Even if the compositor doesn't have a panel yet, this protocol's existence is what makes future panel work possible. Layer-shell clients render at fixed Z-order positions (background, bottom, top, overlay). Implemented with basic size/configure/anchor/margin handling and a purpose-built `lambda-window-manager-layer-shell-demo`.
-- **`wp_viewporter`**: lets clients specify a source-region and destination-size for their surface, used heavily by video players and apps doing pixel-level scaling. Implemented, with a purpose-built `lambda-window-manager-viewport-demo` smoke client.
+- **`zwlr_layer_shell_v1`**: required for panels, status bars, on-screen displays, notification daemons. Even if the compositor doesn't have a panel yet, this protocol's existence is what makes future panel work possible. Layer-shell clients render at fixed Z-order positions (background, bottom, top, overlay). Implemented with basic size/configure/anchor/margin handling.
+- **`wp_viewporter`**: lets clients specify a source-region and destination-size for their surface, used heavily by video players and apps doing pixel-level scaling. Implemented.
 - **`xdg_output_v1`**: gives clients logical output information (position, scale). Needed by apps that care about screen geometry. Implemented for the current single-output layout.
 - **`wp_presentation_time`**: gives clients vblank-timing information for frame pacing. Used by video players and games for smooth playback. The compositor exposes the global, announces `CLOCK_MONOTONIC`, and sends one-shot presented/discarded feedback after compositor presentation. Feedback includes `sync_output` for the single active output. The default GBM/atomic-KMS presentation path uses DRM page-flip completion events with refresh intervals, sequence counters, and `VSYNC`/`HW_CLOCK`/`HW_COMPLETION` flags. The legacy Vulkan-display path can still use DRM vblank timing and optional `VK_GOOGLE_display_timing` completion records.
-- **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window. Relative pointer motion is implemented and smoke-tested with `lambda-window-manager-relative-pointer-demo`; pointer constraints are implemented with focus-driven lock/confine activation and smoke-tested with `lambda-window-manager-pointer-constraints-demo`.
+- **`zwp_relative_pointer_v1`** + **`zwp_pointer_constraints_v1`**: required for games and 3D apps that need raw mouse deltas with pointer locked to a window. Relative pointer motion is implemented; pointer constraints are implemented with focus-driven lock/confine activation.
 - **`wp_cursor_shape_v1`**: lets clients request a system cursor by name rather than supplying a buffer. Newer protocol; modern toolkits use it. Implemented for pointer devices with compositor-drawn Xcursor theme images.
-- **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard, drag-and-drop, and middle-click-paste support. Primary selection is implemented for focused clients and smoke-tested with `lambda-window-manager-primary-selection-demo`; regular clipboard selection is implemented for focused clients and smoke-tested with `lambda-window-manager-clipboard-demo`; drag-and-drop is implemented for UTF-8 text payloads with source/target action negotiation and smoke-tested with `lambda-window-manager-dnd-demo`.
+- **`zwp_primary_selection_v1`** + clipboard (`wl_data_device_manager`): clipboard, drag-and-drop, and middle-click-paste support. Primary selection is implemented for focused clients; regular clipboard selection is implemented for focused clients; drag-and-drop is implemented for UTF-8 text payloads with source/target action negotiation.
 - **`zwp_idle_inhibit_manager_v1`**: lets video players prevent the screen from blanking. Implemented with protocol/state tracking and compositor-side software idle blanking; active inhibitors suppress blanking. DPMS/panel power-off is not implemented yet.
-- **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.). Implemented with simple token generation and a repeated-activation guard to avoid focus loops, with `lambda-window-manager-activation-demo` as the smoke client.
+- **`xdg_activation_v1`**: lets apps focus a specific window programmatically (used by browser "open link in existing tab" etc.). Implemented with simple token generation and a repeated-activation guard to avoid focus loops.
 - **`wp_fractional_scale_v1`**: HiDPI scaling for displays that aren't integer-multiple scales. Implemented as protocol negotiation from the compositor config scale, including fractional values, with `wl_output` integer scale fallback for clients that do not bind the fractional-scale protocol.
 
 ### 7.3 Out of scope for phase 4
@@ -771,7 +770,7 @@ This section is updated as work progresses. Entries record completion of each ph
 | Phase 1: First pixels | Atomic KMS backend compiling | 2026-05-16 | - | Blue background, VT switching, and explicit compositor termination were verified on the earlier Vulkan-display path. The compositor now defaults to GBM scanout buffers plus atomic KMS page flips; hardware smoke validation is pending. Ctrl+C is ignored by the compositor so terminal clients can use it, while kernel-log, CPU-idle, and kill-path checks remain pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_subcompositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, basic subsurface drawing, dma-buf demo drawing, and Flux app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
 | Phase 3: Input + window management | Stacking WM active | 2026-05-16 | - | Focus, chrome, move/resize, snap, shortcuts, popup-first hit testing, and config-gated xdg-popup grabs (`popup_grabs`, default off) are in tree. Hardware validation of grabs on real apps remains. |
-| Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed with smoke demos where useful. Current Wayland globals, including core surfaces and xdg-shell/decoration, live in `src/Compositor/Wayland/Globals/`; window/input-management lives in `src/Compositor/Window/WindowManager.cpp`; server lifecycle, snapshots, frame scheduling, and destroy cleanup live in dedicated `src/Compositor/Wayland/` files. |
+| Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed. Current Wayland globals, including core surfaces and xdg-shell/decoration, live in `src/Compositor/Wayland/Globals/`; window/input-management lives in `src/Compositor/Window/WindowManager.cpp`; server lifecycle, snapshots, frame scheduling, and destroy cleanup live in dedicated `src/Compositor/Wayland/` files. |
 | Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge/corner shows an animated snap preview after a short dwell, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, cursor theme/size, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme with no built-in cursor artwork, compatible cursor images use a KMS cursor plane, the compositor default presentation path uses GBM/atomic KMS with page-flip completion events, and user/testing docs exist; adaptive sync/triple buffering and install/session docs remain pending. |
 
 ### 12.1 Framework changes log
@@ -787,19 +786,16 @@ Updated each time a Flux change lands in service of compositor work:
 | 2026-05-16 | local working tree | Added initial compositor-side Wayland server scaffold and checked-in xdg-shell server bindings. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-16 | local working tree | Added checked-in linux-dmabuf server bindings and a compositor-side buffer-parameter lifetime scaffold. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-16 | local working tree | Added `Image::fromRgbaPixels(...)` and used it to draw SHM-backed Wayland surface snapshots. | Implemented for Vulkan and Metal. |
-| 2026-05-16 | local working tree | Added `lambda-window-manager-shm-demo`, a tiny Wayland SHM client for first-client smoke testing. | Linux-only compositor test utility; no Metal API involved. |
 | 2026-05-16 | local working tree | Added checked-in xdg-decoration bindings and a server-side-decoration negotiation scaffold. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-16 | local working tree | Moved Wayland frame callbacks to the compositor present loop. | Linux compositor-only event-loop behavior; no Metal API involved. |
 | 2026-05-16 | local working tree | Added a first `Image::fromDmabuf(...)` Vulkan path and compositor-side dmabuf surface import wiring. | Vulkan/Linux-only path; Metal parity still deferred to IOSurface import when needed. |
-| 2026-05-16 | local working tree | Added `lambda-window-manager-dmabuf-demo`, a tiny GBM-backed Wayland client for the first dma-buf hardware smoke test. | Linux-only compositor test utility; no Metal API involved. |
 | 2026-05-16 | local working tree | Added compositor-owned server-side title bars and left-button move-drag handling. | Linux compositor-only window-management behavior; no Metal API involved. |
 | 2026-05-16 | local working tree | Added `wl_pointer.set_cursor` handling so client cursor surfaces draw as the pointer image instead of as separate windows. | Linux compositor-only pointer behavior; no Metal API involved. |
 | 2026-05-17 | local working tree | Added compositor window resizing, half-screen snap/drag-unsnap behavior, keyboard shortcuts, keyboard modifier forwarding, titlebar titles, and close-on-click-release handling. | Linux compositor-only window-management behavior; no Metal API involved. |
 | 2026-05-17 | local working tree | Added `xdg-output-unstable-v1` protocol bindings and exposed `zxdg_output_manager_v1` for single-output logical geometry. | Linux compositor-only protocol integration; no Metal API involved. |
-| 2026-05-17 | local working tree | Added stable `wp_viewporter` protocol bindings, compositor-side viewport state, and a viewport smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
-| 2026-05-17 | local working tree | Added `wp_cursor_shape_v1` protocol bindings, pointer cursor-shape handling, compositor-side cursor rendering, and a cursor-shape smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
-| 2026-05-17 | local working tree | Added `zwp_idle_inhibit_manager_v1` protocol bindings, compositor-side inhibitor tracking, and an idle-inhibit smoke demo. | Linux compositor-only protocol integration; no Metal API involved. |
-| 2026-05-17 | local working tree | Added a shared compositor demo-client support header so smoke clients connect to the compositor-published display socket and time out instead of silently guessing `wayland-0` or blocking indefinitely. | Linux-only compositor test utility support; no Metal API involved. |
+| 2026-05-17 | local working tree | Added stable `wp_viewporter` protocol bindings and compositor-side viewport state. | Linux compositor-only protocol integration; no Metal API involved. |
+| 2026-05-17 | local working tree | Added `wp_cursor_shape_v1` protocol bindings, pointer cursor-shape handling, and compositor-side cursor rendering. | Linux compositor-only protocol integration; no Metal API involved. |
+| 2026-05-17 | local working tree | Added `zwp_idle_inhibit_manager_v1` protocol bindings and compositor-side inhibitor tracking. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-18 | c2c3e59..f84b263 | Stabilized live resize: compositor resize geometry state, stale-content clipping, Vulkan swapchain reuse with size headroom, `wp_viewporter` client integration in `WaylandWindow`, and compositor-side viewport commit handling. | Mac unaffected: `CAMetalLayer` manages drawable size natively and has no Vulkan-style swapchain recreation per resize. No Metal API required. |
 | 2026-05-18 | compositor-cleanup-spec commit 1 | Unified resize tracing into `flux::detail::resizeTrace`, using `FLUX_RESIZE_TRACE` and `FLUX_RESIZE_TRACE_LOG` across Vulkan, Wayland-window, and compositor resize paths. | No Metal API surface; tracing exists for Vulkan/Linux resize behavior and is a framework-internal utility. |
 | 2026-05-18 | compositor-cleanup-spec implementation | Added header-only tomlplusplus as the compositor config parser and removed the hand-rolled line scanner from `CompositorConfig.cpp`. | Header-only dependency is platform-neutral; no backend API surface. |

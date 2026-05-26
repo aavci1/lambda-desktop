@@ -147,9 +147,9 @@ These are the concrete findings to resolve or validate before broad refactors.
 
 10. Real-app validation docs are incomplete.
 
-    `docs/compositor-testing.md` covers compositor demos and `foot`, but the readiness spec also requires Firefox or another browser, one GTK app, and one Qt app where available. The smoke doc should be expanded when those checks are run.
+    The readiness spec requires Firefox or another browser, one GTK app, and one Qt app where available. Real-app validation should be kept in this spec and the user guide rather than old purpose-built demo docs.
 
-    Status: documentation checklist expanded on 2026-05-26. `docs/compositor-testing.md` now includes real-app smoke coverage for browser, GTK, Qt, cross-app clipboard, and common window-management actions. The actual real-app matrix still requires live validation on the target desktop session.
+    Status: documentation checklist expanded on 2026-05-26. This spec now includes real-app smoke coverage for browser, GTK, Qt, cross-app clipboard, and common window-management actions. The actual real-app matrix still requires live validation on the target desktop session.
 
 11. Config contract is not ready for Settings.
 
@@ -499,12 +499,12 @@ Scope:
 Acceptance:
 
 - Every advertised global has at least one smoke path or explicit documented limitation.
-- In-tree protocol demos still pass the visual checks in `docs/compositor-testing.md`.
+- Real Wayland apps cover each advertised protocol through at least one smoke path or an explicit documented limitation.
 - Real apps can open menus/popups without freezing the Window Manager.
 - Clipboard copy/paste works between at least two mature Wayland clients.
 - Primary selection works where clients support it.
-- Drag and drop demo still works.
-- Presentation-time feedback demo reports presented feedback.
+- Drag and drop works in at least one real client path.
+- Presentation-time feedback remains available to clients.
 - Layer-shell shell surfaces reserve and overlay correctly.
 - Background effect protocol remains the only path for client-requested blur/glass.
 - Cutouts continue to work for integrated titlebar controls.
@@ -644,7 +644,7 @@ Implementation notes:
 
 7. Protocol and real-app smoke.
 
-   Run the in-tree demos and a small real-app matrix.
+   Run a small real-app matrix that exercises the advertised protocols.
 
 8. Documentation update.
 
@@ -678,34 +678,26 @@ Expected:
 - Keyboard shortcuts work.
 - `Ctrl+Alt+Backspace` exits.
 
-### Core demos
+### Protocol smoke checks
 
-Run the existing compositor demos:
+Exercise the advertised protocols with real clients:
 
-- `scripts/run-compositor-demos.sh` can run the demo clients sequentially against a live Window Manager session, collect per-demo logs, and prompt for the interactive checks.
-- SHM
-- DMABUF
-- Viewporter
-- Fractional scale
-- Cursor shape
-- Layer shell
-- Presentation time
-- Idle inhibit
-- Relative pointer
-- Pointer constraints
-- Clipboard
-- Primary selection
-- Drag and drop
-- Popup
-- Popup grab if enabled
-- Activation
+- SHM and DMABUF surface paths.
+- Viewporter and fractional scale.
+- Cursor shape.
+- Layer shell through `lambda-shell`.
+- Presentation timing under normal app rendering.
+- Idle inhibit with a supporting app.
+- Relative pointer and pointer constraints with a supporting app or game.
+- Clipboard and primary selection.
+- Drag and drop.
+- Popups and popup grabs if enabled.
+- Activation.
 
 Expected:
 
-- Each demo behaves as described in `docs/compositor-testing.md`.
-- No demo leaves focus, pointer, presentation, or rendering in a broken state after exit.
-
-Status: implemented and manually verified on 2026-05-26. The demo runner builds/runs the in-tree protocol clients and collects per-demo logs; visual behavior was accepted on the target session.
+- No client leaves focus, pointer, presentation, or rendering in a broken state after exit.
+- Any advertised protocol without a real-app smoke path has an explicit documented limitation.
 
 ### Lambda app checks
 
