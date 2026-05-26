@@ -446,13 +446,14 @@ Acceptance:
 - Clipboard state survives selection changes.
 - Files can consume `text/uri-list` from compatible external clients.
 - Files can provide `text/uri-list` to compatible external clients.
-- Dragging selected items onto a folder moves them by default within the same filesystem and copies them when modifier policy says copy.
-- Dropping external files into a folder imports/copies them where protocol support allows.
-- Unsupported drops are rejected visibly.
+- Drag/drop remains explicitly unsupported in `lambda-files` until Flux exposes an app-level file DnD source/target API.
+- While drag/drop is unsupported, Files must not advertise drop targets or silently treat pointer drags as file operations.
+- Users can perform the same basic transfer operations through copy/cut/paste context-menu commands and URI-list clipboard interop.
 
 Implementation notes:
 
-- The first implementation can keep drag/drop simple and local if Wayland toolkit support needs more framework work.
+- Current status: clipboard copy/cut/paste is implemented with internal operation state plus `text/uri-list` text on the desktop clipboard. This covers internal Files transfers and compatible external URI-list clipboard producers.
+- Current status: drag/drop protocol support exists in the compositor demos, but `lambda-files` does not yet have Flux-level file drag source/target widgets. Files drag/drop is therefore deferred rather than partially implemented.
 - Clipboard operations must not require Shell involvement except for shared MIME/app metadata.
 
 ### FI-7: Context menus and commands
@@ -894,13 +895,13 @@ Validate:
 - cut/paste to another folder
 - copy from external app if supported
 - paste into external app if supported
-- drag file onto folder
-- drag external file into current folder if supported
+- drag file onto folder is currently unsupported in Files
+- drag external file into current folder is currently unsupported in Files
 
 Expected:
 
 - Operations match clipboard/drop intent.
-- Unsupported paths are rejected visibly.
+- Unsupported drag/drop is documented and not advertised as available UI.
 
 ### Open-with checks
 
@@ -977,7 +978,7 @@ Add focused automated tests where behavior is deterministic:
 - [x] Undo works for supported safe operations.
 - [x] Context menus expose real commands.
 - [x] Clipboard file operations work internally and with compatible clients.
-- [ ] Basic drag/drop works or unsupported portions are clearly documented.
+- [x] Basic drag/drop works or unsupported portions are clearly documented.
 - [x] Current folder refreshes after external changes.
 - [x] Operation progress/errors/cancel states exist.
 - [x] Grid and list/detail views exist.
