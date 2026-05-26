@@ -1,5 +1,7 @@
 #include "TerminalCore.hpp"
 
+#include "Shell/ShellAppRegistry.hpp"
+
 #include <Flux/UI/KeyCodes.hpp>
 
 #include <doctest/doctest.h>
@@ -416,4 +418,22 @@ TEST_CASE("terminal URL detection extracts common http links and trims trailing 
   CHECK(urls[0] == TerminalUrlMatch{.line = 0, .column = 5, .length = 28, .url = "https://example.com/path?q=1"});
   CHECK(urls[1] ==
         TerminalUrlMatch{.line = 1, .column = 4, .length = 32, .url = "http://localhost:8080/index.html"});
+}
+
+TEST_CASE("terminal URL open command uses shared app registry browser entries") {
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "org.mozilla.firefox", .name = "Firefox", .command = "firefox --new-tab %u"},
+  };
+  auto command = terminalUrlOpenCommand("https://example.com/docs", apps);
+  REQUIRE(command);
+  CHECK(*command == std::vector<std::string>{"firefox", "--new-tab", "https://example.com/docs"});
+
+  std::vector<lambda_shell::AppRegistryEntry> noFieldApps{
+      {.appId = "browser", .name = "Browser", .command = "browser"},
+  };
+  auto appended = terminalUrlOpenCommand("https://example.com/docs", noFieldApps);
+  REQUIRE(appended);
+  CHECK(*appended == std::vector<std::string>{"browser", "https://example.com/docs"});
+
+  CHECK_FALSE(terminalUrlOpenCommand("ftp://example.com/file", apps));
 }

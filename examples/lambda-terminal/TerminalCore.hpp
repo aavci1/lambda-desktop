@@ -10,6 +10,10 @@
 #include <string_view>
 #include <vector>
 
+namespace lambda_shell {
+struct AppRegistryEntry;
+}
+
 namespace lambda_terminal {
 
 struct TerminalInputMode {
@@ -213,6 +217,9 @@ private:
                                                                 std::size_t limit = 1'000);
 [[nodiscard]] std::vector<TerminalUrlMatch> findTerminalUrls(TerminalTextBuffer const& buffer,
                                                             std::size_t limit = 1'000);
+[[nodiscard]] std::optional<std::vector<std::string>> terminalUrlOpenCommand(
+    std::string_view url,
+    std::vector<lambda_shell::AppRegistryEntry> const& apps);
 [[nodiscard]] std::optional<std::uint32_t> decodeFirstUtf8Codepoint(std::string_view text,
                                                                     std::size_t& byteLength);
 [[nodiscard]] int terminalCodepointWidth(std::uint32_t codepoint);

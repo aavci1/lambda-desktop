@@ -104,7 +104,8 @@ target_include_directories(libvterm_static PUBLIC "${libvterm_SOURCE_DIR}/includ
 target_compile_features(libvterm_static PRIVATE c_std_99)
 target_compile_options(libvterm_static PRIVATE -Wall -Wpedantic)
 
-flux_add_example(lambda-terminal lambda-terminal/main.cpp lambda-terminal/TerminalCore.cpp)
+flux_add_example(lambda-terminal lambda-terminal/main.cpp lambda-terminal/TerminalCore.cpp ${CMAKE_SOURCE_DIR}/src/Shell/ShellAppRegistry.cpp)
+target_include_directories(lambda-terminal PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(lambda-terminal PRIVATE libvterm_static tomlplusplus::tomlplusplus util)
 
 flux_add_example(layout-demo layout-demo/main.cpp)

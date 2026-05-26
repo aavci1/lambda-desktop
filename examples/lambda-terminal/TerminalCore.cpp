@@ -1,5 +1,7 @@
 #include "TerminalCore.hpp"
 
+#include "Shell/ShellAppRegistry.hpp"
+
 #include <Flux/UI/KeyCodes.hpp>
 
 #include <toml++/toml.hpp>
@@ -145,6 +147,19 @@ using flux::Modifiers;
 
 [[nodiscard]] bool trailingUrlPunctuation(char ch) {
   return ch == '.' || ch == ',' || ch == ';' || ch == ')' || ch == ']' || ch == '}';
+}
+
+[[nodiscard]] bool urlSchemeSupported(std::string_view url) {
+  return url.starts_with("http://") || url.starts_with("https://");
+}
+
+[[nodiscard]] bool desktopExecHasTargetField(std::string_view command) {
+  for (std::size_t i = 0; i + 1u < command.size(); ++i) {
+    if (command[i] != '%') continue;
+    char const code = command[++i];
+    if (code == 'f' || code == 'F' || code == 'u' || code == 'U') return true;
+  }
+  return false;
 }
 
 [[nodiscard]] std::string colorToHex(flux::Color color) {
@@ -556,6 +571,35 @@ std::vector<TerminalUrlMatch> findTerminalUrls(TerminalTextBuffer const& buffer,
     }
   }
   return matches;
+}
+
+std::optional<std::vector<std::string>> terminalUrlOpenCommand(
+    std::string_view url,
+    std::vector<lambda_shell::AppRegistryEntry> const& apps) {
+  if (!urlSchemeSupported(url)) return std::nullopt;
+  std::vector<lambda_shell::AppRegistryEntry> candidates = apps;
+  for (auto fallback : lambda_shell::builtinFallbackAppEntries()) {
+    bool const exists = std::any_of(candidates.begin(), candidates.end(), [&](auto const& app) {
+      return lambda_shell::shellAppIdMatches("browser", app.appId) ||
+             lambda_shell::shellAppIdMatches(app.appId, "browser");
+    });
+    if (!exists && lambda_shell::shellAppIdMatches("browser", fallback.appId)) {
+      candidates.push_back(std::move(fallback));
+    }
+  }
+
+  for (auto const& app : candidates) {
+    if (app.hidden || app.noDisplay || app.command.empty()) continue;
+    if (!lambda_shell::shellAppIdMatches("browser", app.appId) &&
+        !lambda_shell::shellAppIdMatches(app.appId, "browser")) {
+      continue;
+    }
+    std::vector<std::string> args = lambda_shell::parseDesktopExec(app.command, std::filesystem::path{std::string(url)});
+    if (args.empty()) continue;
+    if (!desktopExecHasTargetField(app.command)) args.push_back(std::string(url));
+    return args;
+  }
+  return std::nullopt;
 }
 
 std::optional<std::uint32_t> decodeFirstUtf8Codepoint(std::string_view text, std::size_t& byteLength) {
