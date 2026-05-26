@@ -12,6 +12,7 @@
 #include <Flux/UI/Views/ZStack.hpp>
 
 #include <optional>
+#include <functional>
 #include <vector>
 
 namespace flux {
@@ -36,6 +37,8 @@ struct ScrollView : ViewModifiers<ScrollView> {
     Signal<Size> contentSize {};
     /// Enables pointer drag-to-scroll in addition to wheel / trackpad scrolling.
     bool dragScrollEnabled = true;
+    /// Optional tap handler attached to the scroll viewport itself.
+    std::function<void(MouseButton, Modifiers)> onTap;
     /// Content children. Most callers pass a single layout container such as `VStack`.
     std::vector<Element> children;
 

@@ -407,6 +407,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   auto dragging = std::make_shared<bool>(false);
   auto downPoint = std::make_shared<Point>();
   bool const dragScroll = dragScrollEnabled;
+  interaction->onTapWithModifiers = onTap;
   interaction->onPointerDown = [dragScroll, dragging, downPoint, offsetState](Point point, MouseButton button) {
     if (!dragScroll || button != MouseButton::Left) {
       return;

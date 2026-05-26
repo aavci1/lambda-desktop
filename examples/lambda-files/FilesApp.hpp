@@ -197,6 +197,7 @@ struct SideItemRow {
   SidebarPlace place;
   Reactive::Bindable<bool> isActive{false};
   std::function<void()> onTap;
+  std::function<void()> onContextMenu;
 
   Element body() const {
     auto hover = useHover();
@@ -233,9 +234,16 @@ struct SideItemRow {
                    .padding(6.f, 10.f, 6.f, 10.f)
                    .fill(fill)
                    .cornerRadius(FilesTheme::kSideItemRadius);
-    if (onTap) {
+    if (onTap || onContextMenu) {
       auto handler = onTap;
-      row = std::move(row).onTap([handler] { handler(); });
+      auto contextMenu = onContextMenu;
+      row = std::move(row).onTap([handler, contextMenu](MouseButton button) {
+        if (button == MouseButton::Left && handler) {
+          handler();
+        } else if (button == MouseButton::Right && contextMenu) {
+          contextMenu();
+        }
+      });
     }
     return row;
   }
@@ -246,6 +254,7 @@ struct BreadcrumbCrumbView {
   bool showHomeIcon = false;
   Reactive::Bindable<bool> isLast{false};
   std::function<void()> onTap;
+  std::function<void()> onContextMenu;
 
   Element body() const {
     Reactive::Bindable<bool> const isLastBinding = isLast;
@@ -281,9 +290,16 @@ struct BreadcrumbCrumbView {
                      .alignment = Alignment::Center,
                      .children = std::move(parts)}
                      .padding(0.f, showHomeIcon ? 0.f : 2.f, 0.f, 2.f);
-    if (onTap) {
+    if (onTap || onContextMenu) {
       auto handler = onTap;
-      row = std::move(row).onTap([handler] { handler(); });
+      auto contextMenu = onContextMenu;
+      row = std::move(row).onTap([handler, contextMenu](MouseButton button) {
+        if (button == MouseButton::Left && handler) {
+          handler();
+        } else if (button == MouseButton::Right && contextMenu) {
+          contextMenu();
+        }
+      });
     }
     return row;
   }
@@ -298,10 +314,12 @@ struct BreadcrumbSeparatorView {
 struct BreadcrumbBar {
   Reactive::Signal<std::vector<BreadcrumbCrumb>> crumbs;
   std::function<void(std::filesystem::path)> navigateToPath;
+  std::function<void(std::filesystem::path)> showPathContextMenu;
 
   Element body() const {
     Reactive::Signal<std::vector<BreadcrumbCrumb>> const crumbsSignal = crumbs;
     auto const navigate = navigateToPath;
+    auto const contextMenu = showPathContextMenu;
 
     Reactive::Bindable<float> const barWidth{[] {
       Rect const bounds = useBounds();
@@ -311,7 +329,8 @@ struct BreadcrumbBar {
     Element trail = Element{For(
         crumbsSignal,
         [](BreadcrumbCrumb const& crumb) { return crumb.path.string(); },
-        [navigate, crumbsSignal](BreadcrumbCrumb const& crumb, Signal<std::size_t> const& indexSignal) {
+        [navigate, contextMenu, crumbsSignal](BreadcrumbCrumb const& crumb,
+                                              Signal<std::size_t> const& indexSignal) {
           Reactive::Bindable<bool> const isLast{[indexSignal, crumbsSignal] {
             return indexSignal() + 1 >= crumbsSignal().size();
           }};
@@ -324,6 +343,11 @@ struct BreadcrumbBar {
                       .showHomeIcon = indexSignal() == 0,
                       .isLast = isLast,
                       .onTap = [navigate, target = crumb.path] { navigate(target); },
+                      .onContextMenu = [contextMenu, target = crumb.path] {
+                        if (contextMenu) {
+                          contextMenu(target);
+                        }
+                      },
                   },
                   Show(
                       [isLast] { return !isLast.evaluate(); },
@@ -403,6 +427,7 @@ Element filesTitlebar(Window* window,
                       std::function<void()> goForwardNav,
                       Reactive::Signal<std::vector<BreadcrumbCrumb>> crumbs,
                       std::function<void(std::filesystem::path)> navigateToPath,
+                      std::function<void(std::filesystem::path)> showPathContextMenu,
                       Reactive::Signal<bool> showHiddenFiles,
                       std::function<void()> toggleHiddenFiles) {
   ChromeInsets const reserved = chromeInsets(chrome);
@@ -422,7 +447,11 @@ Element filesTitlebar(Window* window,
               .goBack = goBackNav,
               .goForward = goForwardNav,
           }},
-          Element{BreadcrumbBar{.crumbs = crumbs, .navigateToPath = navigateToPath}}
+          Element{BreadcrumbBar{
+              .crumbs = crumbs,
+              .navigateToPath = navigateToPath,
+              .showPathContextMenu = showPathContextMenu,
+          }}
               .flex(1.f, 1.f, 0.f),
           Element{FilesOptionsMenu{
               .showHiddenFiles = showHiddenFiles,
@@ -650,8 +679,28 @@ struct FilesAppRoot {
             return;
           }
         };
+
+    auto showCommandMenu = [showMenu, executeContextCommand](std::vector<FileContextCommand> commands,
+                                                             FileSelectionState targetSelection) {
+      std::vector<MenuItem> items;
+      items.reserve(commands.size());
+      for (auto const& command : commands) {
+        MenuItem item;
+        item.label = command.label;
+        item.actionName = command.label;
+        item.isEnabled = [enabled = command.enabled] { return enabled; };
+        if (command.enabled) {
+          item.handler = [executeContextCommand, kind = command.kind, targetSelection] {
+            executeContextCommand(kind, targetSelection);
+          };
+        }
+        items.push_back(std::move(item));
+      }
+      showMenu(PopupMenu{.items = std::move(items)});
+    };
+
     auto showEntryContextMenu =
-        [entries, selection, clipboard, applySelection, executeContextCommand, showMenu](FileEntry const& entry) {
+        [entries, selection, clipboard, applySelection, showCommandMenu](FileEntry const& entry) {
           FileSelectionState targetSelection = selection();
           if (!targetSelection.contains(entry.path)) {
             for (std::size_t i = 0; i < entries().size(); ++i) {
@@ -663,21 +712,56 @@ struct FilesAppRoot {
           }
           applySelection(targetSelection);
 
-          std::vector<MenuItem> items;
-          for (auto const& command : contextMenuCommands(entries(), targetSelection, clipboard(), false)) {
-            MenuItem item;
-            item.label = command.label;
-            item.actionName = command.label;
-            item.isEnabled = [enabled = command.enabled] { return enabled; };
-            if (command.enabled) {
-              item.handler = [executeContextCommand, kind = command.kind, targetSelection] {
-                executeContextCommand(kind, targetSelection);
-              };
-            }
-            items.push_back(std::move(item));
-          }
-          showMenu(PopupMenu{.items = std::move(items)});
+          showCommandMenu(contextMenuCommands(entries(), targetSelection, clipboard(), false),
+                          targetSelection);
         };
+
+    auto showBackgroundContextMenu =
+        [entries, clipboard, showCommandMenu](MouseButton button, Modifiers) {
+          if (button != MouseButton::Right) {
+            return;
+          }
+          FileSelectionState const targetSelection{};
+          showCommandMenu(contextMenuCommands(entries(), targetSelection, clipboard(), true),
+                          targetSelection);
+        };
+
+    auto showPathContextMenu = [navigateToPath, showMenu, listError](std::filesystem::path path) {
+      std::error_code ec;
+      bool const exists = std::filesystem::exists(path, ec) && !ec;
+      bool const isDirectory = exists && std::filesystem::is_directory(path, ec) && !ec;
+      auto makePathEntry = [path, isDirectory] {
+        return FileEntry{
+            .name = path.filename().empty() ? path.string() : path.filename().string(),
+            .path = path,
+            .isDirectory = isDirectory,
+            .visualKind = isDirectory ? FileVisualKind::Folder : visualKindForEntry(path, false),
+        };
+      };
+
+      MenuItem open;
+      open.label = "Open";
+      open.actionName = "Open";
+      open.isEnabled = [isDirectory] { return isDirectory; };
+      if (isDirectory) {
+        open.handler = [navigateToPath, path] { navigateToPath(path); };
+      }
+
+      MenuItem reveal;
+      reveal.label = "Reveal in Folder";
+      reveal.actionName = "Reveal in Folder";
+      reveal.isEnabled = [exists] { return exists; };
+      if (exists) {
+        reveal.handler = [makePathEntry, listError] {
+          std::string error;
+          if (!revealEntryInSystem(makePathEntry(), error)) {
+            listError.set(error);
+          }
+        };
+      }
+
+      showMenu(PopupMenu{.items = {std::move(open), std::move(reveal)}});
+    };
 
     Reactive::Bindable<bool> const canGoBack{[history] { return history().canGoBack(); }};
     Reactive::Bindable<bool> const canGoForward{[history] { return history().canGoForward(); }};
@@ -706,7 +790,7 @@ struct FilesAppRoot {
         .alignment = Alignment::Stretch,
         .children = children(
             filesTitlebar(window, metrics, canGoBack, canGoForward, goBackNav, goForwardNav, crumbs,
-                          navigateToPath, showHiddenFiles, toggleHiddenFiles),
+                          navigateToPath, showPathContextMenu, showHiddenFiles, toggleHiddenFiles),
             Rectangle{}.height(1.f).fill(FilesTheme::line),
             HStack{
                 .spacing = 0.f,
@@ -719,8 +803,8 @@ struct FilesAppRoot {
                             Element{For(
                                 places,
                                 [](SidebarPlace const& place) { return place.id; },
-                                [activePlaceId, navigateToPath](SidebarPlace const& place,
-                                                                  Signal<std::size_t> const&) {
+                                [activePlaceId, navigateToPath, showPathContextMenu](
+                                    SidebarPlace const& place, Signal<std::size_t> const&) {
                                   Reactive::Bindable<bool> active{
                                       [activePlaceId, id = place.id] { return activePlaceId() == id; }};
                                   return SideItemRow{
@@ -729,6 +813,9 @@ struct FilesAppRoot {
                                       .onTap = [navigateToPath, place, activePlaceId] {
                                         activePlaceId.set(place.id);
                                         navigateToPath(place.path);
+                                      },
+                                      .onContextMenu = [showPathContextMenu, path = place.path] {
+                                        showPathContextMenu(path);
                                       },
                                   };
                                 })},
@@ -741,6 +828,7 @@ struct FilesAppRoot {
                         .axis = ScrollAxis::Vertical,
                         .scrollOffset = scrollOffset,
                         .dragScrollEnabled = true,
+                        .onTap = showBackgroundContextMenu,
                         .children = children(
                             Show(
                                 [listError] { return !listError().empty(); },

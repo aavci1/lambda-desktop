@@ -263,6 +263,45 @@ TEST_CASE("FilesFlowGrid has no extent before it receives a real width") {
   CHECK(measured.height == doctest::Approx(0.f));
 }
 
+TEST_CASE("ScrollView viewport taps carry pointer modifiers") {
+  struct Root {
+    std::shared_ptr<std::vector<Modifiers>> seenModifiers;
+
+    Element body() const {
+      return ScrollView{
+          .axis = ScrollAxis::Vertical,
+          .onTap = [seen = seenModifiers](MouseButton button, Modifiers modifiers) {
+            if (button == MouseButton::Right) {
+              seen->push_back(modifiers);
+            }
+          },
+          .children = children(Rectangle{}.size(100.f, 40.f)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  auto seen = std::make_shared<std::vector<Modifiers>>();
+  scenegraph::SceneGraph sceneGraph;
+  MountRoot root{std::make_unique<TypedRootHolder<Root>>(
+                     std::in_place, Root{.seenModifiers = seen}),
+                 textSystem,
+                 testEnvironment(),
+                 Size{200.f, 120.f}};
+
+  root.mount(sceneGraph);
+
+  auto hit = scenegraph::hitTestInteraction(
+      sceneGraph, Point{20.f, 20.f}, [](scenegraph::Interaction const& interaction) {
+        return static_cast<bool>(interactionData(interaction).onTapWithModifiers);
+      });
+  REQUIRE(hit.has_value());
+  interactionData(*hit->interaction).onTapWithModifiers(MouseButton::Right, Modifiers::Alt);
+
+  REQUIRE(seen->size() == 1);
+  CHECK(seen->front() == Modifiers::Alt);
+}
+
 TEST_CASE("FilesFlowGrid mounted row count follows entry count") {
   struct Root {
     Reactive::Signal<std::vector<FileEntry>> entries;
