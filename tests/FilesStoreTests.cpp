@@ -653,6 +653,12 @@ TEST_CASE("FilesStore serializes and parses URI lists") {
 
   auto parsed = lambda_files::parseUriList("# comment\r\nfile:///tmp/alpha.txt\r\nfile:///tmp/space%20name.txt\r\n");
   CHECK(parsed == paths);
+
+  auto clipboard = lambda_files::makeFileClipboard(paths, lambda_files::FileClipboardIntent::Copy);
+  CHECK(lambda_files::serializeFileClipboardText(clipboard) == uriList);
+  auto imported = lambda_files::fileClipboardFromUriListText(uriList);
+  CHECK(imported.intent == lambda_files::FileClipboardIntent::Copy);
+  CHECK(imported.paths == paths);
 }
 
 TEST_CASE("FilesStore trashes and restores files with metadata") {

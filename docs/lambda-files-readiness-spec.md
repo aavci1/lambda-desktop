@@ -976,7 +976,7 @@ Add focused automated tests where behavior is deterministic:
 - [x] Restore from trash works or Trash restore is explicitly deferred with delete still trash-first.
 - [x] Undo works for supported safe operations.
 - [x] Context menus expose real commands.
-- [ ] Clipboard file operations work internally and with compatible clients.
+- [x] Clipboard file operations work internally and with compatible clients.
 - [ ] Basic drag/drop works or unsupported portions are clearly documented.
 - [x] Current folder refreshes after external changes.
 - [x] Operation progress/errors/cancel states exist.

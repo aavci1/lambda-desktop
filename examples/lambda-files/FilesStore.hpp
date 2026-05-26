@@ -369,6 +369,9 @@ FileOperationProgress failFileOperation(FileOperationProgress progress,
 FileOperationProgress requestCancelFileOperation(FileOperationProgress progress);
 FileOperationProgress completeFileOperation(FileOperationProgress progress);
 FileClipboardState makeFileClipboard(std::vector<std::filesystem::path> paths, FileClipboardIntent intent);
+std::string serializeFileClipboardText(FileClipboardState const& clipboard);
+FileClipboardState fileClipboardFromUriListText(std::string_view text,
+                                                FileClipboardIntent intent = FileClipboardIntent::Copy);
 std::vector<FileOperationResult> pasteFileClipboard(FileClipboardState const& clipboard,
                                                     std::filesystem::path const& destinationDirectory);
 

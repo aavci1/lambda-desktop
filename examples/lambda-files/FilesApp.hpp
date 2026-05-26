@@ -25,6 +25,7 @@
 #include <chrono>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -687,8 +688,25 @@ struct FilesAppRoot {
       for (auto const& entry : selected) paths.push_back(entry.path);
       return paths;
     };
+    auto publishClipboardText = [](FileClipboardState const& state) {
+      if (state.empty() || !Application::hasInstance()) {
+        return;
+      }
+      Application::instance().clipboard().writeText(serializeFileClipboardText(state));
+    };
+    auto clipboardForPaste = [clipboard] {
+      FileClipboardState state = clipboard();
+      if (!state.empty() || !Application::hasInstance()) {
+        return state;
+      }
+      if (std::optional<std::string> text = Application::instance().clipboard().readText()) {
+        return fileClipboardFromUriListText(*text);
+      }
+      return state;
+    };
     auto executeContextCommand =
-        [history, entries, clipboard, listError, activateEntry, applySelection, syncListing, pathsForSelection](
+        [history, entries, clipboard, clipboardForPaste, publishClipboardText, listError,
+         activateEntry, applySelection, syncListing, pathsForSelection](
             FileContextCommandKind kind,
             FileSelectionState targetSelection) {
           std::vector<FileEntry> const selected = selectedEntries(entries(), targetSelection);
@@ -711,13 +729,21 @@ struct FilesAppRoot {
             return;
           }
           case FileContextCommandKind::Copy:
-            clipboard.set(makeFileClipboard(selectedPaths, FileClipboardIntent::Copy));
+          {
+            FileClipboardState next = makeFileClipboard(selectedPaths, FileClipboardIntent::Copy);
+            clipboard.set(next);
+            publishClipboardText(next);
             return;
+          }
           case FileContextCommandKind::Cut:
-            clipboard.set(makeFileClipboard(selectedPaths, FileClipboardIntent::Cut));
+          {
+            FileClipboardState next = makeFileClipboard(selectedPaths, FileClipboardIntent::Cut);
+            clipboard.set(next);
+            publishClipboardText(next);
             return;
+          }
           case FileContextCommandKind::Paste: {
-            auto results = pasteFileClipboard(clipboard(), current);
+            auto results = pasteFileClipboard(clipboardForPaste(), current);
             for (auto const& result : results) recordResult(result);
             syncListing();
             return;
@@ -782,12 +808,12 @@ struct FilesAppRoot {
         };
 
     auto showBackgroundContextMenu =
-        [entries, clipboard, showCommandMenu](MouseButton button, Modifiers) {
+        [entries, clipboardForPaste, showCommandMenu](MouseButton button, Modifiers) {
           if (button != MouseButton::Right) {
             return;
           }
           FileSelectionState const targetSelection{};
-          showCommandMenu(contextMenuCommands(entries(), targetSelection, clipboard(), true),
+          showCommandMenu(contextMenuCommands(entries(), targetSelection, clipboardForPaste(), true),
                           targetSelection);
         };
 

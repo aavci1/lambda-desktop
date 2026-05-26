@@ -1398,6 +1398,14 @@ FileClipboardState makeFileClipboard(std::vector<std::filesystem::path> paths, F
   return {.intent = intent, .paths = std::move(paths)};
 }
 
+std::string serializeFileClipboardText(FileClipboardState const& clipboard) {
+  return serializeUriList(clipboard.paths);
+}
+
+FileClipboardState fileClipboardFromUriListText(std::string_view text, FileClipboardIntent intent) {
+  return makeFileClipboard(parseUriList(text), intent);
+}
+
 std::vector<FileOperationResult> pasteFileClipboard(FileClipboardState const& clipboard,
                                                     std::filesystem::path const& destinationDirectory) {
   std::vector<FileOperationResult> results;
