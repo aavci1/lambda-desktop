@@ -414,6 +414,39 @@ TEST_CASE("FilesStore selection supports single toggle range and clear") {
   CHECK(state.anchorIndex == -1);
 }
 
+TEST_CASE("FilesStore keyboard selection moves extends and selects all") {
+  std::vector<lambda_files::FileEntry> entries{
+      {.name = "a", .path = "/tmp/a"},
+      {.name = "b", .path = "/tmp/b"},
+      {.name = "c", .path = "/tmp/c"},
+      {.name = "d", .path = "/tmp/d"},
+      {.name = "e", .path = "/tmp/e"},
+  };
+
+  auto state = lambda_files::moveSelectionByOffset({}, entries, 1, false);
+  CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/a"});
+  CHECK(lambda_files::focusedSelectionIndex(state, entries) == 0);
+
+  state = lambda_files::moveSelectionByOffset(state, entries, 2, false);
+  CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/c"});
+  CHECK(state.anchorIndex == 2);
+
+  state = lambda_files::moveSelectionByOffset(state, entries, 2, true);
+  CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/c", "/tmp/d", "/tmp/e"});
+  CHECK(state.anchorIndex == 2);
+
+  state = lambda_files::moveSelectionToIndex(state, entries, 1, false);
+  CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/b"});
+  CHECK(state.anchorIndex == 1);
+
+  state = lambda_files::selectAllEntries(entries);
+  CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/a", "/tmp/b", "/tmp/c", "/tmp/d", "/tmp/e"});
+  CHECK(state.anchorIndex == 0);
+
+  state = lambda_files::moveSelectionToIndex(state, entries, 99, false);
+  CHECK(state.selected == std::vector<std::filesystem::path>{"/tmp/e"});
+}
+
 TEST_CASE("FilesStore creates folders and files with collision-free names") {
   auto root = tempRoot("lambda-files-create-test");
   REQUIRE(lambda_files::createFolder(root, "New Folder").ok);

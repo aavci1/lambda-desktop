@@ -980,6 +980,64 @@ FileSelectionState clearSelection(FileSelectionState state) {
   return state;
 }
 
+FileSelectionState selectAllEntries(std::vector<FileEntry> const& entries) {
+  FileSelectionState state;
+  state.selected.reserve(entries.size());
+  for (auto const& entry : entries) {
+    state.selected.push_back(entry.path);
+  }
+  state.anchorIndex = entries.empty() ? -1 : 0;
+  return state;
+}
+
+int focusedSelectionIndex(FileSelectionState const& state, std::vector<FileEntry> const& entries) {
+  auto indexOf = [&](std::filesystem::path const& path) -> int {
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+      if (entries[i].path == path) return static_cast<int>(i);
+    }
+    return -1;
+  };
+
+  if (state.anchorIndex >= 0 && state.anchorIndex < static_cast<int>(entries.size())) {
+    return state.anchorIndex;
+  }
+  for (auto it = state.selected.rbegin(); it != state.selected.rend(); ++it) {
+    int const index = indexOf(*it);
+    if (index >= 0) return index;
+  }
+  return -1;
+}
+
+FileSelectionState moveSelectionToIndex(FileSelectionState state,
+                                        std::vector<FileEntry> const& entries,
+                                        int index,
+                                        bool extend) {
+  if (entries.empty()) return clearSelection(std::move(state));
+  int const clamped = std::clamp(index, 0, static_cast<int>(entries.size()) - 1);
+  if (!extend) return selectOnly(entries, clamped);
+
+  if (state.anchorIndex < 0) {
+    int const focused = focusedSelectionIndex(state, entries);
+    state.anchorIndex = focused >= 0 ? focused : clamped;
+  }
+  return rangeSelection(std::move(state), entries, clamped);
+}
+
+FileSelectionState moveSelectionByOffset(FileSelectionState state,
+                                         std::vector<FileEntry> const& entries,
+                                         int offset,
+                                         bool extend) {
+  if (entries.empty()) return clearSelection(std::move(state));
+
+  int focused = focusedSelectionIndex(state, entries);
+  if (focused < 0) {
+    focused = offset < 0 ? static_cast<int>(entries.size()) - 1 : 0;
+  } else {
+    focused += offset;
+  }
+  return moveSelectionToIndex(std::move(state), entries, focused, extend);
+}
+
 std::filesystem::path collisionFreePath(std::filesystem::path const& directory, std::string const& preferredName) {
   std::filesystem::path preferred = directory / preferredName;
   if (!std::filesystem::exists(preferred)) return preferred;

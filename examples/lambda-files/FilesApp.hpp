@@ -473,6 +473,7 @@ struct FilesAppRoot {
     auto listError = useState(std::string{});
     auto activePlaceId = useState(std::string{"home"});
     auto selectedPath = useState(std::string{});
+    auto selection = useState(FileSelectionState{});
     auto scrollOffset = useState(Point{});
     auto preferences = useState(loadFilesPreferences().preferences);
     auto showHiddenFiles = useState(preferences().showHidden);
@@ -490,11 +491,12 @@ struct FilesAppRoot {
 
     syncListing();
 
-    auto applyHistory = [history, activePlaceId, selectedPath, scrollOffset, syncListing](
+    auto applyHistory = [history, activePlaceId, selectedPath, selection, scrollOffset, syncListing](
                             NavigationHistory next) {
       history.set(std::move(next));
       activePlaceId.set(std::string{});
       selectedPath.set(std::string{});
+      selection.set(FileSelectionState{});
       syncListing();
       scrollOffset.set(Point{});
     };
@@ -526,23 +528,41 @@ struct FilesAppRoot {
       applyHistory(goUp(history()));
     };
 
-    auto toggleHiddenFiles = [preferences, showHiddenFiles, selectedPath, scrollOffset, syncListing] {
+    auto toggleHiddenFiles = [preferences, showHiddenFiles, selectedPath, selection, scrollOffset, syncListing] {
       FilesPreferences next = preferences();
       next.showHidden = !showHiddenFiles();
       preferences.set(next);
       showHiddenFiles.set(next.showHidden);
       (void)saveFilesPreferences(next);
       selectedPath.set(std::string{});
+      selection.set(FileSelectionState{});
       syncListing();
       scrollOffset.set(Point{});
     };
 
-    auto activateEntry = [navigateToPath, selectedPath](FileEntry const& entry) {
+    auto applySelection = [entries, selectedPath, selection](FileSelectionState next) {
+      int const focused = focusedSelectionIndex(next, entries());
+      if (focused >= 0) {
+        selectedPath.set(entries()[static_cast<std::size_t>(focused)].path.string());
+      } else if (!next.selected.empty()) {
+        selectedPath.set(next.selected.back().string());
+      } else {
+        selectedPath.set(std::string{});
+      }
+      selection.set(std::move(next));
+    };
+
+    auto activateEntry = [entries, navigateToPath, applySelection](FileEntry const& entry) {
+      for (std::size_t i = 0; i < entries().size(); ++i) {
+        if (entries()[i].path == entry.path) {
+          applySelection(selectOnly(entries(), static_cast<int>(i)));
+          break;
+        }
+      }
       if (entry.isDirectory) {
         navigateToPath(entry.path);
         return;
       }
-      selectedPath.set(entry.path.string());
       std::string error;
       (void)openEntry(entry, error);
     };
@@ -552,11 +572,17 @@ struct FilesAppRoot {
 
     auto chrome = useEnvironment<WindowChromeMetricsKey>();
     WindowChromeMetrics const metrics = chrome();
+    Rect const bounds = useBounds();
+    float const gridWidth = std::max(0.f,
+                                     bounds.width - FilesTheme::kSidebarWidth - 1.f -
+                                         2.f * FilesTheme::kContentPadH);
+    int const gridColumns = std::max(1, FilesFlowGridLayout{}.columnCountForWidth(gridWidth));
 
     FilesFlowGrid filesGrid{
         .entries = entries,
         .listingKey = listingKey,
         .selectedPath = selectedPath,
+        .selection = selection,
         .activateEntry = activateEntry,
     };
     Element root = VStack{
@@ -622,9 +648,12 @@ struct FilesAppRoot {
     };
 
     root = std::move(root).onKeyDown(
-        [goBackNav, goForwardNav, goUpNav, selectedPath, entries, activateEntry](
+        [goBackNav, goForwardNav, goUpNav, selectedPath, selection, entries, activateEntry, applySelection,
+         gridColumns](
             KeyCode key, Modifiers modifiers) {
           using namespace flux::keys;
+          bool const extend = any(modifiers & Modifiers::Shift);
+          bool const command = any(modifiers & Modifiers::Meta) || any(modifiers & Modifiers::Ctrl);
           if (key == Delete && any(modifiers & Modifiers::Meta)) {
             goUpNav();
             return;
@@ -635,6 +664,38 @@ struct FilesAppRoot {
           }
           if (key == RightArrow && any(modifiers & Modifiers::Meta)) {
             goForwardNav();
+            return;
+          }
+          if (key == A && command) {
+            applySelection(selectAllEntries(entries()));
+            return;
+          }
+          if (key == Escape) {
+            applySelection(clearSelection(selection()));
+            return;
+          }
+          if (key == LeftArrow) {
+            applySelection(moveSelectionByOffset(selection(), entries(), -1, extend));
+            return;
+          }
+          if (key == RightArrow) {
+            applySelection(moveSelectionByOffset(selection(), entries(), 1, extend));
+            return;
+          }
+          if (key == UpArrow) {
+            applySelection(moveSelectionByOffset(selection(), entries(), -gridColumns, extend));
+            return;
+          }
+          if (key == DownArrow) {
+            applySelection(moveSelectionByOffset(selection(), entries(), gridColumns, extend));
+            return;
+          }
+          if (key == Home) {
+            applySelection(moveSelectionToIndex(selection(), entries(), 0, extend));
+            return;
+          }
+          if (key == End) {
+            applySelection(moveSelectionToIndex(selection(), entries(), static_cast<int>(entries().size()) - 1, extend));
             return;
           }
           if (key == Return) {

@@ -288,6 +288,16 @@ FileSelectionState selectOnly(std::vector<FileEntry> const& entries, int index);
 FileSelectionState toggleSelection(FileSelectionState state, std::vector<FileEntry> const& entries, int index);
 FileSelectionState rangeSelection(FileSelectionState state, std::vector<FileEntry> const& entries, int index);
 FileSelectionState clearSelection(FileSelectionState state);
+FileSelectionState selectAllEntries(std::vector<FileEntry> const& entries);
+int focusedSelectionIndex(FileSelectionState const& state, std::vector<FileEntry> const& entries);
+FileSelectionState moveSelectionToIndex(FileSelectionState state,
+                                        std::vector<FileEntry> const& entries,
+                                        int index,
+                                        bool extend);
+FileSelectionState moveSelectionByOffset(FileSelectionState state,
+                                         std::vector<FileEntry> const& entries,
+                                         int offset,
+                                         bool extend);
 
 std::filesystem::path collisionFreePath(std::filesystem::path const& directory, std::string const& preferredName);
 FileOperationResult createFolder(std::filesystem::path const& directory, std::string preferredName = "New Folder");

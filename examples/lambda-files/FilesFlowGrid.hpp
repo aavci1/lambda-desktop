@@ -129,6 +129,7 @@ struct FilesFlowGrid {
   flux::Reactive::Signal<std::vector<FileEntry>> entries;
   flux::Reactive::Signal<std::string> listingKey;
   flux::Reactive::Signal<std::string> selectedPath;
+  flux::Reactive::Signal<FileSelectionState> selection;
   std::function<void(FileEntry const&)> activateEntry;
 
   float cellWidth = FilesTheme::kGridMinCell;
@@ -182,6 +183,7 @@ inline flux::Element FilesFlowGrid::body() const {
   Reactive::Signal<std::vector<FileEntry>> const entriesSignal = entries;
   Reactive::Signal<std::string> const listingKeySignal = listingKey;
   Reactive::Signal<std::string> const selectedPathSignal = selectedPath;
+  Reactive::Signal<FileSelectionState> const selectionSignal = selection;
   auto const activate = activateEntry;
   float const tileW = cellWidth;
   float const tileH = cellHeight;
@@ -213,14 +215,16 @@ inline flux::Element FilesFlowGrid::body() const {
       [](detail::RowDescriptor const& row) {
         return row.key;
       },
-      [selectedPathSignal, activate, tileW, tileH, gapH](detail::RowDescriptor const& row,
-                                                         Signal<std::size_t> const&) {
+      [selectedPathSignal, selectionSignal, activate, tileW, tileH, gapH](detail::RowDescriptor const& row,
+                                                                          Signal<std::size_t> const&) {
         int const colCount = std::max(1, row.columns);
         std::vector<Element> cells;
         cells.reserve(static_cast<std::size_t>(colCount));
         for (FileEntry const& entry : row.entries) {
           Reactive::Bindable<bool> selected{
-              [selectedPathSignal, entry] {
+              [selectedPathSignal, selectionSignal, entry] {
+                FileSelectionState const current = selectionSignal();
+                if (!current.selected.empty()) return current.contains(entry.path);
                 return selectedPathSignal() == entry.path.string();
               }};
           cells.push_back(Element{FileItemTile{
