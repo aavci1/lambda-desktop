@@ -214,6 +214,21 @@ struct ShellConfig {
   bool operator==(ShellConfig const&) const = default;
 };
 
+enum class ClipboardHistorySource : std::uint8_t {
+  Clipboard,
+  PrimarySelection,
+};
+
+struct ClipboardHistoryPolicy {
+  bool enabled = true;
+  bool persist = false;
+  std::size_t maxEntries = 100;
+  std::size_t maxTextBytes = 1048576;
+  bool recordPrimarySelection = false;
+
+  bool operator==(ClipboardHistoryPolicy const&) const = default;
+};
+
 class NotificationCenterModel {
 public:
   explicit NotificationCenterModel(std::size_t historyLimit = 50);
@@ -238,16 +253,21 @@ private:
 class ClipboardHistoryModel {
 public:
   explicit ClipboardHistoryModel(std::size_t limit = 20);
+  explicit ClipboardHistoryModel(ClipboardHistoryPolicy policy);
 
-  void setEnabled(bool enabled) noexcept { enabled_ = enabled; }
-  [[nodiscard]] bool enabled() const noexcept { return enabled_; }
-  void addText(std::string text);
+  void setEnabled(bool enabled) noexcept { policy_.enabled = enabled; }
+  void setPolicy(ClipboardHistoryPolicy policy);
+  [[nodiscard]] bool enabled() const noexcept { return policy_.enabled; }
+  [[nodiscard]] bool persist() const noexcept { return policy_.persist; }
+  [[nodiscard]] bool recordPrimarySelection() const noexcept { return policy_.recordPrimarySelection; }
+  [[nodiscard]] std::size_t maxTextBytes() const noexcept { return policy_.maxTextBytes; }
+  void addText(std::string text, ClipboardHistorySource source = ClipboardHistorySource::Clipboard);
   void clear();
   [[nodiscard]] std::vector<std::string> const& entries() const noexcept { return entries_; }
+  [[nodiscard]] std::vector<std::string> entriesForPersistence() const;
 
 private:
-  std::size_t limit_ = 20;
-  bool enabled_ = true;
+  ClipboardHistoryPolicy policy_{.maxEntries = 20};
   std::vector<std::string> entries_;
 };
 
@@ -275,6 +295,7 @@ private:
     std::vector<std::string> const& moduleIds);
 [[nodiscard]] ShellDesktopSnapshot parseShellSnapshot(std::string_view json);
 [[nodiscard]] ShellConfig defaultShellConfig();
+[[nodiscard]] ClipboardHistoryPolicy clipboardHistoryPolicy(ShellConfig const& config);
 [[nodiscard]] ShellConfig parseShellConfig(std::string_view tomlText);
 [[nodiscard]] std::string writeShellConfigToml(ShellConfig const& config);
 

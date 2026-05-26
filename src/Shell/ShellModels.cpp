@@ -8,6 +8,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <utility>
 
 namespace lambda_shell {
 namespace {
@@ -276,17 +277,35 @@ int NotificationCenterModel::groupCount(std::string_view appId) const {
 }
 
 ClipboardHistoryModel::ClipboardHistoryModel(std::size_t limit)
-    : limit_(std::max<std::size_t>(1u, limit)) {}
+    : ClipboardHistoryModel(ClipboardHistoryPolicy{.maxEntries = limit}) {}
 
-void ClipboardHistoryModel::addText(std::string text) {
-  if (!enabled_ || text.empty()) return;
+ClipboardHistoryModel::ClipboardHistoryModel(ClipboardHistoryPolicy policy) {
+  setPolicy(std::move(policy));
+}
+
+void ClipboardHistoryModel::setPolicy(ClipboardHistoryPolicy policy) {
+  policy.maxEntries = std::max<std::size_t>(1u, policy.maxEntries);
+  policy.maxTextBytes = std::max<std::size_t>(1u, policy.maxTextBytes);
+  policy_ = std::move(policy);
+  if (entries_.size() > policy_.maxEntries) entries_.resize(policy_.maxEntries);
+}
+
+void ClipboardHistoryModel::addText(std::string text, ClipboardHistorySource source) {
+  if (!policy_.enabled || text.empty()) return;
+  if (source == ClipboardHistorySource::PrimarySelection && !policy_.recordPrimarySelection) return;
+  if (text.size() > policy_.maxTextBytes) return;
   entries_.erase(std::remove(entries_.begin(), entries_.end(), text), entries_.end());
   entries_.insert(entries_.begin(), std::move(text));
-  if (entries_.size() > limit_) entries_.resize(limit_);
+  if (entries_.size() > policy_.maxEntries) entries_.resize(policy_.maxEntries);
 }
 
 void ClipboardHistoryModel::clear() {
   entries_.clear();
+}
+
+std::vector<std::string> ClipboardHistoryModel::entriesForPersistence() const {
+  if (!policy_.enabled || !policy_.persist) return {};
+  return entries_;
 }
 
 std::vector<DockModelEntry> buildDockModel(std::vector<AppRegistryEntry> const& pinnedApps,
@@ -614,6 +633,16 @@ ShellDesktopSnapshot parseShellSnapshot(std::string_view json) {
 
 ShellConfig defaultShellConfig() {
   return ShellConfig{};
+}
+
+ClipboardHistoryPolicy clipboardHistoryPolicy(ShellConfig const& config) {
+  return ClipboardHistoryPolicy{
+      .enabled = config.clipboardHistoryEnabled,
+      .persist = config.clipboardHistoryPersist,
+      .maxEntries = config.clipboardHistoryMaxEntries,
+      .maxTextBytes = config.clipboardHistoryMaxTextBytes,
+      .recordPrimarySelection = config.clipboardHistoryRecordPrimarySelection,
+  };
 }
 
 ShellConfig parseShellConfig(std::string_view tomlText) {

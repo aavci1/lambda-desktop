@@ -170,6 +170,36 @@ TEST_CASE("Shell clipboard history dedupes respects limits and disabled state") 
   CHECK(clipboard.entries().empty());
 }
 
+TEST_CASE("Shell clipboard history applies privacy and persistence policy") {
+  lambda_shell::ShellConfig config = lambda_shell::defaultShellConfig();
+  config.clipboardHistoryMaxEntries = 2;
+  config.clipboardHistoryMaxTextBytes = 4;
+  config.clipboardHistoryPersist = false;
+  config.clipboardHistoryRecordPrimarySelection = false;
+
+  lambda_shell::ClipboardHistoryModel clipboard{lambda_shell::clipboardHistoryPolicy(config)};
+  clipboard.addText("keep");
+  clipboard.addText("large");
+  clipboard.addText("primary", lambda_shell::ClipboardHistorySource::PrimarySelection);
+  CHECK(clipboard.entries() == std::vector<std::string>{"keep"});
+  CHECK(clipboard.entriesForPersistence().empty());
+
+  config.clipboardHistoryPersist = true;
+  config.clipboardHistoryRecordPrimarySelection = true;
+  config.clipboardHistoryMaxTextBytes = 16;
+  clipboard.setPolicy(lambda_shell::clipboardHistoryPolicy(config));
+  clipboard.addText("primary", lambda_shell::ClipboardHistorySource::PrimarySelection);
+  clipboard.addText("next");
+  CHECK(clipboard.entries() == std::vector<std::string>{"next", "primary"});
+  CHECK(clipboard.entriesForPersistence() == clipboard.entries());
+
+  config.clipboardHistoryEnabled = false;
+  clipboard.setPolicy(lambda_shell::clipboardHistoryPolicy(config));
+  clipboard.addText("ignored");
+  CHECK(clipboard.entries() == std::vector<std::string>{"next", "primary"});
+  CHECK(clipboard.entriesForPersistence().empty());
+}
+
 TEST_CASE("Shell quick settings summary orders available providers first") {
   std::vector<lambda_shell::QuickSettingState> providers{
       {.id = "bluetooth", .label = "Bluetooth"},
@@ -283,7 +313,9 @@ modules = ["audio", "battery"]
 [clipboard_history]
 enabled = false
 max_entries = 5
+max_text_bytes = 4096
 persist = true
+record_primary_selection = true
 [notifications]
 do_not_disturb = true
 banner_timeout_seconds = 8
@@ -303,7 +335,9 @@ max_results = 4
   CHECK(parsed.quickSettingsModules == std::vector<std::string>{"audio", "battery"});
   CHECK_FALSE(parsed.clipboardHistoryEnabled);
   CHECK(parsed.clipboardHistoryMaxEntries == 5);
+  CHECK(parsed.clipboardHistoryMaxTextBytes == 4096);
   CHECK(parsed.clipboardHistoryPersist);
+  CHECK(parsed.clipboardHistoryRecordPrimarySelection);
   CHECK(parsed.notificationsDoNotDisturb);
   CHECK(parsed.notificationBannerTimeoutSeconds == 8);
   CHECK(parsed.notificationHistoryLimit == 7);
