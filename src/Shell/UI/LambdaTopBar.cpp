@@ -8,6 +8,36 @@
 using namespace flux;
 
 namespace lambda_shell {
+namespace {
+
+Color statusColor(TopBarStatusItem const& item) {
+  if (item.availability == StatusAvailability::Unavailable) return Color(1.f, 1.f, 1.f, 0.38f);
+  return item.active ? Color(1.f, 1.f, 1.f, 1.f) : Color(1.f, 1.f, 1.f, 0.62f);
+}
+
+Element statusElement(TopBarStatusItem const& item) {
+  std::vector<Element> children;
+  children.push_back(Icon{
+      .name = item.icon,
+      .size = 16.f,
+      .color = statusColor(item),
+  });
+  if (!item.label.empty()) {
+    children.push_back(Text{
+        .text = item.label,
+        .font = Font{.size = 12.f, .weight = 720.f},
+        .color = statusColor(item),
+        .verticalAlignment = VerticalAlignment::Center,
+    });
+  }
+  return HStack{
+      .spacing = 4.f,
+      .alignment = Alignment::Center,
+      .children = std::move(children),
+  }.height(static_cast<float>(kTopBarHeight));
+}
+
+} // namespace
 
 Element LambdaTopBar::body() const {
     Color const text = Color(1.f, 1.f, 1.f, 1.f);
@@ -31,14 +61,8 @@ Element LambdaTopBar::body() const {
     children.push_back(std::move(lambda));
     children.push_back(Spacer {});
 
-    for (IconName name : {IconName::Wifi, IconName::Bluetooth, IconName::VolumeUp, IconName::BatteryAndroid4}) {
-        children.push_back(
-            Icon {
-                .name = name,
-                .size = 16.f,
-                .color = text,
-            }
-        );
+    for (auto const& item : topBarStatusItems(props.system)) {
+        children.push_back(statusElement(item));
     }
 
     children.push_back(Text {

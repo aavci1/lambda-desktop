@@ -3,8 +3,10 @@
 #include <Flux/Core/Geometry.hpp>
 #include <Flux/Reactive/Bindable.hpp>
 #include <Flux/Reactive/Signal.hpp>
+#include <Flux/UI/IconName.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
@@ -83,6 +85,23 @@ struct SystemStatus {
 
   bool operator==(SystemStatus const& other) const = default;
 };
+
+enum class StatusAvailability : std::uint8_t {
+  Unavailable,
+  Available,
+};
+
+struct TopBarStatusItem {
+  std::string id;
+  flux::IconName icon = flux::IconName::Circle;
+  std::string label;
+  StatusAvailability availability = StatusAvailability::Unavailable;
+  bool active = false;
+
+  bool operator==(TopBarStatusItem const&) const = default;
+};
+
+std::vector<TopBarStatusItem> topBarStatusItems(SystemStatus const& status);
 
 struct TopBarProps {
   flux::Reactive::Bindable<std::string> title;

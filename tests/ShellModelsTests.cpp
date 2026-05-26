@@ -1,4 +1,5 @@
 #include "Shell/ShellModels.hpp"
+#include "Shell/UI/LambdaShellTypes.hpp"
 
 #include <doctest/doctest.h>
 
@@ -261,6 +262,34 @@ TEST_CASE("Shell status modules classify available unknown and unavailable value
   CHECK(modules[5].availability == lambda_shell::QuickSettingAvailability::Available);
   CHECK(modules[6].availability == lambda_shell::QuickSettingAvailability::Available);
   CHECK(modules[7].label == "custom");
+}
+
+TEST_CASE("Shell top bar status items expose real and unavailable states") {
+  auto unavailable = lambda_shell::topBarStatusItems({});
+  REQUIRE(unavailable.size() == 4);
+  CHECK(unavailable[0].id == "network");
+  CHECK(unavailable[0].availability == lambda_shell::StatusAvailability::Unavailable);
+  CHECK(unavailable[1].id == "bluetooth");
+  CHECK(unavailable[1].availability == lambda_shell::StatusAvailability::Unavailable);
+
+  lambda_shell::SystemStatus status{
+      .network = "online",
+      .wifi = "Lambda",
+      .bluetooth = "off",
+      .volume = "55%",
+      .battery = "88%",
+  };
+  auto items = lambda_shell::topBarStatusItems(status);
+  REQUIRE(items.size() == 4);
+  CHECK(items[0].id == "network");
+  CHECK(items[0].label == "Lambda");
+  CHECK(items[0].availability == lambda_shell::StatusAvailability::Available);
+  CHECK(items[0].active);
+  CHECK(items[1].id == "bluetooth");
+  CHECK(items[1].availability == lambda_shell::StatusAvailability::Available);
+  CHECK_FALSE(items[1].active);
+  CHECK(items[2].label == "55%");
+  CHECK(items[3].label == "88%");
 }
 
 TEST_CASE("Shell snapshot parser handles reordered fields and escaped strings") {
