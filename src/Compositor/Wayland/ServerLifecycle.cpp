@@ -188,7 +188,7 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
   activationGlobal_ = wl_global_create(display_, &xdg_activation_v1_interface, 1, this, bindActivation);
   cutoutsManagerGlobal_ = wl_global_create(display_, &xx_cutouts_manager_v1_interface, 1, this, bindCutoutsManager);
   backgroundEffectManagerGlobal_ =
-      wl_global_create(display_, &ext_background_effect_manager_v1_interface, 3, this, bindBackgroundEffectManager);
+      wl_global_create(display_, &ext_background_effect_manager_v1_interface, 4, this, bindBackgroundEffectManager);
   if (!compositorGlobal_ || !subcompositorGlobal_ || !shmGlobal_ || !outputGlobal_ || !seatGlobal_ ||
       !xdgWmBaseGlobal_ || !linuxDmabufGlobal_ || !xdgDecorationManagerGlobal_ || !xdgOutputManagerGlobal_ ||
       !viewporterGlobal_ || !fractionalScaleManagerGlobal_ || !cursorShapeManagerGlobal_ ||

@@ -143,13 +143,53 @@ void backgroundEffectSurfaceSetCornerRadii(wl_client*,
     effect->surface->pendingBackgroundEffectState = effect->surface->backgroundEffectState;
   }
   effect->surface->pendingBackgroundEffectState.cornerRadiusSet = true;
-  effect->surface->pendingBackgroundEffectState.usesDefaultMaterial = false;
   effect->surface->pendingBackgroundEffectState.cornerRadius = CornerRadius{
       std::max(0.f, static_cast<float>(wl_fixed_to_double(topLeft))),
       std::max(0.f, static_cast<float>(wl_fixed_to_double(topRight))),
       std::max(0.f, static_cast<float>(wl_fixed_to_double(bottomRight))),
       std::max(0.f, static_cast<float>(wl_fixed_to_double(bottomLeft))),
   };
+  effect->surface->backgroundEffectStatePending = true;
+}
+
+void backgroundEffectSurfaceSetShape(wl_client*,
+                                     wl_resource* resource,
+                                     std::uint32_t shape,
+                                     std::uint32_t placement,
+                                     std::int32_t arrowWidth,
+                                     std::int32_t arrowHeight) {
+  auto* effect = resourceData<WaylandServer::Impl::BackgroundEffect>(resource);
+  if (!effect || !effect->surface) {
+    wl_resource_post_error(resource,
+                           EXT_BACKGROUND_EFFECT_SURFACE_V1_ERROR_SURFACE_DESTROYED,
+                           "associated wl_surface has been destroyed");
+    return;
+  }
+
+  if (!effect->surface->backgroundEffectStatePending) {
+    effect->surface->pendingBackgroundEffectState = effect->surface->backgroundEffectState;
+  }
+  auto& state = effect->surface->pendingBackgroundEffectState;
+  state.shape = shape == EXT_BACKGROUND_EFFECT_SURFACE_V1_SHAPE_CALLOUT
+                    ? BackgroundEffectShape::Callout
+                    : BackgroundEffectShape::RoundedRect;
+  switch (placement) {
+  case EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_ABOVE:
+    state.calloutPlacement = BackgroundEffectCalloutPlacement::Above;
+    break;
+  case EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_END:
+    state.calloutPlacement = BackgroundEffectCalloutPlacement::End;
+    break;
+  case EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_START:
+    state.calloutPlacement = BackgroundEffectCalloutPlacement::Start;
+    break;
+  case EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_BELOW:
+  default:
+    state.calloutPlacement = BackgroundEffectCalloutPlacement::Below;
+    break;
+  }
+  state.arrowWidth = std::max(0.f, static_cast<float>(wl_fixed_to_double(arrowWidth)));
+  state.arrowHeight = std::max(0.f, static_cast<float>(wl_fixed_to_double(arrowHeight)));
   effect->surface->backgroundEffectStatePending = true;
 }
 
@@ -161,6 +201,7 @@ struct ext_background_effect_surface_v1_interface const backgroundEffectSurfaceI
     .set_border = backgroundEffectSurfaceSetBorder,
     .set_corner_radii = backgroundEffectSurfaceSetCornerRadii,
     .set_base_color = backgroundEffectSurfaceSetBaseColor,
+    .set_shape = backgroundEffectSurfaceSetShape,
 };
 
 void backgroundEffectManagerGetBackgroundEffect(wl_client* client,
@@ -208,7 +249,7 @@ struct ext_background_effect_manager_v1_interface const backgroundEffectManagerI
 
 void bindBackgroundEffectManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &ext_background_effect_manager_v1_interface, std::min(version, 3u), id);
+      wl_resource_create(client, &ext_background_effect_manager_v1_interface, std::min(version, 4u), id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;

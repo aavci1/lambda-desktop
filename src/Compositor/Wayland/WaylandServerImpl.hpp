@@ -104,6 +104,7 @@ struct WaylandServer::Impl {
   bool launchShellApp(std::string const& appId);
   bool focusShellApp(std::string const& appId, std::uint32_t timeMs);
   bool focusShellWindow(std::uint64_t windowId, std::uint32_t timeMs);
+  bool quitShellApp(std::string const& appId);
   bool claimCommandLauncherModal(std::uint32_t timeMs);
   void releaseCommandLauncherModal(std::uint32_t timeMs);
   void setShortcutBindings(std::vector<ShortcutBinding> bindings);

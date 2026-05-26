@@ -390,6 +390,10 @@ void Window::setLayerShellKeyboardInteractive(bool enabled) {
   d->platform_->setLayerShellKeyboardInteractive(enabled);
 }
 
+void Window::setLayerShellOptions(LayerShellOptions const& options) {
+  d->platform_->setLayerShellOptions(options);
+}
+
 unsigned int Window::handle() const {
   return d->platform_->handle();
 }

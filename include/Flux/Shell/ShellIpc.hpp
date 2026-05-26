@@ -22,6 +22,7 @@ enum class ShellMessageKind : std::uint8_t {
   WindowManagerLaunchApp,
   WindowManagerFocusApp,
   WindowManagerFocusWindow,
+  WindowManagerQuitApp,
   WindowManagerClaimCommandLauncherModal,
   WindowManagerReleaseCommandLauncherModal,
   WindowManagerError,
@@ -45,6 +46,10 @@ struct ShellFocusWindowMessage {
   std::uint64_t windowId = 0;
 };
 
+struct ShellQuitAppMessage {
+  std::string appId;
+};
+
 struct ShellErrorMessage {
   std::string code;
   std::string message;
@@ -57,6 +62,7 @@ struct ShellMessage {
   ShellLaunchAppMessage launchApp{};
   ShellFocusAppMessage focusApp{};
   ShellFocusWindowMessage focusWindow{};
+  ShellQuitAppMessage quitApp{};
   ShellErrorMessage error{};
 };
 
@@ -76,6 +82,7 @@ std::string serializeShellHello(int protocolVersion,
 std::string serializeLaunchApp(std::string_view appId, std::uint64_t requestId = 0);
 std::string serializeFocusApp(std::string_view appId, std::uint64_t requestId = 0);
 std::string serializeFocusWindow(std::uint64_t windowId, std::uint64_t requestId = 0);
+std::string serializeQuitApp(std::string_view appId, std::uint64_t requestId = 0);
 std::string serializeClaimCommandLauncherModal(std::uint64_t requestId = 0);
 std::string serializeReleaseCommandLauncherModal(std::uint64_t requestId = 0);
 std::string serializeRefreshState(std::uint64_t requestId = 0);

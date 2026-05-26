@@ -15,6 +15,7 @@ struct ShellDesktopView {
   ShellModel& model;
   std::function<void()> onOpenLauncher;
   std::function<void(DockItem const&)> onActivateItem;
+  std::function<void(DockItem const&)> onShowDockItemMenu;
   std::function<void(DockItem const&)> onActivateLauncherResult;
   std::function<void()> onDismissLauncher;
   std::function<void(flux::KeyCode, flux::Modifiers)> onLauncherKeyDown;
@@ -42,7 +43,12 @@ struct ShellDesktopView {
         width));
 
     layers.push_back(shell_preview::wrapDock(
-            flux::Element{ShellDockView{model, onOpenLauncher, onActivateItem}},
+            flux::Element{ShellDockView{
+                model,
+                onOpenLauncher,
+                onActivateItem,
+                onShowDockItemMenu,
+            }},
             static_cast<float>(dockW),
             dockH)
             .position(dockX, dockY));

@@ -464,4 +464,18 @@ bool WaylandServer::Impl::focusShellWindow(std::uint64_t windowId, std::uint32_t
   return true;
 }
 
+bool WaylandServer::Impl::quitShellApp(std::string const& appId) {
+  bool found = false;
+  for (auto const& surfacePtr : surfaces_) {
+    Surface* surface = surfacePtr.get();
+    if (!surface || !surfaceIsXdgToplevel(surface)) continue;
+    XdgToplevel* toplevel = toplevelForSurface(this, surface);
+    if (!toplevel || !toplevel->resource || !shellAppIdMatches(appId, toplevel->appId)) continue;
+    xdg_toplevel_send_close(toplevel->resource);
+    found = true;
+  }
+  if (found) flushClients();
+  return found;
+}
+
 } // namespace flux::compositor

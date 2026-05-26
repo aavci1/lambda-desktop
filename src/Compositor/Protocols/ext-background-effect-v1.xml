@@ -26,7 +26,7 @@
     DEALINGS IN THE SOFTWARE.
   </copyright>
 
-  <interface name="ext_background_effect_manager_v1" version="3">
+  <interface name="ext_background_effect_manager_v1" version="4">
     <description summary="background effect factory">
       This protocol provides a way to improve visuals of translucent surfaces
       by applying effects like blur to the background behind them.
@@ -80,7 +80,7 @@
     </request>
   </interface>
 
-  <interface name="ext_background_effect_surface_v1" version="3">
+  <interface name="ext_background_effect_surface_v1" version="4">
     <description summary="background effects for a surface">
       The background effect object provides a way to specify a region behind
       a surface that should have background effects like blur applied.
@@ -186,6 +186,33 @@
         the next wl_surface.commit.
       </description>
       <arg name="base_color" type="uint" summary="RGBA base material color"/>
+    </request>
+
+    <enum name="shape">
+      <entry name="rounded_rect" value="0" summary="rounded rectangle effect shape"/>
+      <entry name="callout" value="1" summary="rounded rectangle with an arrow"/>
+    </enum>
+
+    <enum name="callout_placement">
+      <entry name="below" value="0" summary="arrow above the card, content below anchor"/>
+      <entry name="above" value="1" summary="arrow below the card, content above anchor"/>
+      <entry name="end" value="2" summary="arrow on the leading edge, content after anchor"/>
+      <entry name="start" value="3" summary="arrow on the trailing edge, content before anchor"/>
+    </enum>
+
+    <request name="set_shape" since="4">
+      <description summary="set background effect shape">
+        This request sets the shape used to draw the background material and
+        border for the effect region. The default is rounded_rect. For callout,
+        placement describes which side of the card the arrow is attached to.
+
+        The shape is double-buffered state, and will be applied on the next
+        wl_surface.commit.
+      </description>
+      <arg name="shape" type="uint" enum="shape" summary="effect shape"/>
+      <arg name="placement" type="uint" enum="callout_placement" summary="callout placement"/>
+      <arg name="arrow_width" type="fixed" summary="callout arrow base width"/>
+      <arg name="arrow_height" type="fixed" summary="callout arrow depth"/>
     </request>
   </interface>
 </protocol>

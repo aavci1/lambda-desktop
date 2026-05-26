@@ -41,6 +41,7 @@ struct ShellDockView {
   ShellModel& model;
   std::function<void()> onOpenLauncher;
   std::function<void(DockItem const&)> onActivateItem;
+  std::function<void(DockItem const&)> onShowMenu;
 
   flux::Element body() const {
     auto const items = model.dockItemsSignal();
@@ -51,6 +52,33 @@ struct ShellDockView {
         .width = widthBinding,
         .onOpenLauncher = onOpenLauncher,
         .onActivateItem = onActivateItem,
+        .onShowMenu = onShowMenu,
+    }}};
+  }
+};
+
+struct ShellDockMenuView {
+  DockItem item;
+  float surfaceWidth = static_cast<float>(kDockMenuSurfaceWidth);
+  float surfaceHeight = static_cast<float>(kDockMenuSurfaceHeight);
+  float menuX = 0.f;
+  float menuY = 0.f;
+  std::function<void(DockItem const&)> onNewWindow;
+  std::function<void(DockItem const&)> onTogglePinned;
+  std::function<void(DockItem const&)> onQuitItem;
+  std::function<void()> onDismiss;
+
+  flux::Element body() const {
+    return flux::Element{LambdaDockMenu{DockMenuProps{
+        .item = item,
+        .surfaceWidth = surfaceWidth,
+        .surfaceHeight = surfaceHeight,
+        .menuX = menuX,
+        .menuY = menuY,
+        .onNewWindow = onNewWindow,
+        .onTogglePinned = onTogglePinned,
+        .onQuitItem = onQuitItem,
+        .onDismiss = onDismiss,
     }}};
   }
 };

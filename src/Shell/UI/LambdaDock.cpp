@@ -1,19 +1,21 @@
 #include "Shell/UI/LambdaDock.hpp"
 
 #include "Shell/ShellAppRegistry.hpp"
-
 #include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Image.hpp>
 #include <Flux/Graphics/ImageFillMode.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/IconName.hpp>
 #include <Flux/UI/Views/Image.hpp>
+#include <Flux/UI/Views/PopoverCalloutShape.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 
 using namespace flux;
 
@@ -84,11 +86,104 @@ IconName dockIconName(DockItem const& item) {
   return IconName::Apps;
 }
 
+bool hasDockItemMenu(DockItem const& item) {
+  return item.kind == "app" && !item.appId.empty() && !item.disabled;
+}
+
+struct DockMenuRow {
+  std::string label;
+  bool enabled = true;
+  std::function<void()> action;
+
+  Element body() const {
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
+    Color const textColor = enabled ? Color(0.10f, 0.12f, 0.15f, 0.84f) : Color(0.10f, 0.12f, 0.15f, 0.38f);
+    Reactive::Bindable<Color> const fill{[enabled = enabled, hovered, pressed] {
+      if (!enabled) {
+        return Color(0.f, 0.f, 0.f, 0.001f);
+      }
+      if (pressed()) {
+        return Color(0.f, 0.f, 0.f, 0.14f);
+      }
+      if (hovered()) {
+        return Color(0.f, 0.f, 0.f, 0.10f);
+      }
+      return Color(0.f, 0.f, 0.f, 0.001f);
+    }};
+
+    Element row = ZStack{
+        .horizontalAlignment = Alignment::Stretch,
+        .verticalAlignment = Alignment::Stretch,
+        .children = children(
+            Rectangle{}
+                .size(static_cast<float>(kDockMenuContentWidth), 32.f)
+                .cornerRadius(8.f)
+                .fill(fill),
+            Text{
+                .text = label,
+                .font = Font{.family = "", .size = 14.f, .weight = 520.f},
+                .color = textColor,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .verticalAlignment = VerticalAlignment::Center,
+            }.size(152.f, 32.f).position(12.f, 0.f)),
+    }.size(static_cast<float>(kDockMenuContentWidth), 32.f);
+    if (enabled && action) {
+      row = std::move(row).cursor(Cursor::Hand).onTap(action);
+    }
+    return row;
+  }
+};
+
+Element dockMenuRow(std::string label, bool enabled, std::function<void()> action) {
+  return Element{DockMenuRow{std::move(label), enabled, std::move(action)}};
+}
+
+Element dockMenuSeparator() {
+  return ZStack{
+      .horizontalAlignment = Alignment::Stretch,
+      .verticalAlignment = Alignment::Center,
+      .children = children(Rectangle{}
+                               .size(static_cast<float>(kDockMenuContentWidth - 24), 1.f)
+                               .position(12.f, 3.f)
+                               .fill(FillStyle::solid(Color(0.f, 0.f, 0.f, 0.10f)))),
+  }.size(static_cast<float>(kDockMenuContentWidth), 7.f);
+}
+
+Element dockItemMenu(DockItem item,
+                     std::function<void()> hidePopover,
+                     std::function<void(DockItem const&)> onNewWindow,
+                     std::function<void(DockItem const&)> onTogglePinned,
+                     std::function<void(DockItem const&)> onQuitItem) {
+  std::vector<Element> rows;
+  rows.push_back(dockMenuRow("New Window", static_cast<bool>(onNewWindow), [item, hidePopover, onNewWindow] {
+    hidePopover();
+    if (onNewWindow) onNewWindow(item);
+  }));
+  rows.push_back(dockMenuSeparator());
+  rows.push_back(dockMenuRow(item.pinned ? "Unpin" : "Pin",
+                            static_cast<bool>(onTogglePinned),
+                            [item, hidePopover, onTogglePinned] {
+                              hidePopover();
+                              if (onTogglePinned) onTogglePinned(item);
+                            }));
+  rows.push_back(dockMenuSeparator());
+  rows.push_back(dockMenuRow("Quit", item.running && static_cast<bool>(onQuitItem), [item, hidePopover, onQuitItem] {
+    hidePopover();
+    if (onQuitItem) onQuitItem(item);
+  }));
+  return VStack{
+      .spacing = 0.f,
+      .alignment = Alignment::Stretch,
+      .children = std::move(rows),
+  }.size(static_cast<float>(kDockMenuContentWidth), static_cast<float>(kDockMenuContentHeight));
+}
+
 Element dockIconAt(Reactive::Signal<std::size_t> indexSignal,
                    DockItem const& item,
                    Signal<std::vector<DockItem>> const& items,
                    bool hover,
-                   std::function<void()> onTap) {
+                   std::function<void(MouseButton, Modifiers)> onTap) {
   float const lift = hover ? -5.f : 0.f;
   Reactive::Bindable<bool> running{[items, indexSignal] {
     auto const& dockItems = items();
@@ -174,25 +269,37 @@ Element LambdaDock::body() const {
   auto const width = props.width;
   auto const onOpenLauncher = props.onOpenLauncher;
   auto const onActivateItem = props.onActivateItem;
+  auto const onShowMenu = props.onShowMenu;
   int const hoverIndex = props.hoverIndex;
 
   return Element{For(
       items,
       dockRowKey,
-      [items, onOpenLauncher, onActivateItem, hoverIndex](
+      [items, onOpenLauncher, onActivateItem, onShowMenu, hoverIndex](
           DockItem const& item, Reactive::Signal<std::size_t> const& indexSignal) {
         if (item.kind == "separator") {
           return dockSeparator();
         }
-        std::function<void()> onTap;
+        std::function<void(MouseButton, Modifiers)> onTap;
         if (item.kind == "launcher") {
-          onTap = onOpenLauncher;
+          onTap = [onOpenLauncher](MouseButton button, Modifiers) {
+            if (button == MouseButton::Left && onOpenLauncher) onOpenLauncher();
+          };
         } else if (onActivateItem) {
-          onTap = [items, indexSignal, callback = onActivateItem] {
+          onTap = [items,
+                   indexSignal,
+                   callback = onActivateItem,
+                   onShowMenu](MouseButton button, Modifiers) {
             auto const& currentItems = items();
             std::size_t const index = indexSignal();
-            if (index < currentItems.size()) {
-              callback(currentItems[index]);
+            if (index >= currentItems.size()) {
+              return;
+            }
+            DockItem const item = currentItems[index];
+            if (button == MouseButton::Right && hasDockItemMenu(item) && onShowMenu) {
+              onShowMenu(item);
+            } else if (button == MouseButton::Left) {
+              callback(item);
             }
           };
         }
@@ -205,6 +312,40 @@ Element LambdaDock::body() const {
       .padding(kDockPaddingTop, kDockPaddingX, kDockPaddingBottom, kDockPaddingX)
       .size(Reactive::Bindable<float>{[width] { return static_cast<float>(width.evaluate()); }},
             static_cast<float>(dockHeight()));
+}
+
+Element LambdaDockMenu::body() const {
+  Element content = dockItemMenu(props.item,
+                                 props.onDismiss ? props.onDismiss : [] {},
+                                 props.onNewWindow,
+                                 props.onTogglePinned,
+                                 props.onQuitItem);
+  Element backdrop = Rectangle{}
+      .size(std::max(1.f, props.surfaceWidth), std::max(1.f, props.surfaceHeight))
+      .fill(Colors::transparent);
+  if (props.onDismiss) {
+    backdrop = std::move(backdrop).onTap(props.onDismiss);
+  }
+
+  Element callout = Element{PopoverCalloutShape{
+      .placement = PopoverPlacement::Above,
+      .arrow = true,
+      .padding = static_cast<float>(kDockMenuPadding),
+      .cornerRadius = CornerRadius{14.f},
+      .backgroundColor = Colors::transparent,
+      .borderColor = Colors::transparent,
+      .borderWidth = 0.f,
+      .maxSize = Size{static_cast<float>(kDockMenuContentWidth), static_cast<float>(kDockMenuContentHeight)},
+      .content = std::move(content),
+  }};
+  return ZStack{
+      .horizontalAlignment = Alignment::Start,
+      .verticalAlignment = Alignment::Start,
+      .children = children(
+          std::move(backdrop),
+          std::move(callout).position(props.menuX + static_cast<float>(kDockMenuSurfaceInset),
+                                      props.menuY + static_cast<float>(kDockMenuSurfaceInset))),
+  }.size(std::max(1.f, props.surfaceWidth), std::max(1.f, props.surfaceHeight));
 }
 
 } // namespace lambda_shell

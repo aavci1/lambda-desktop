@@ -104,6 +104,10 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, surface.backgroundEffect.usesDefaultMaterial);
   hashValue(hash, surface.backgroundEffect.cornerRadiusSet);
   hashCornerRadius(hash, surface.backgroundEffect.cornerRadius);
+  hashValue(hash, static_cast<std::uint8_t>(surface.backgroundEffect.shape));
+  hashValue(hash, static_cast<std::uint8_t>(surface.backgroundEffect.calloutPlacement));
+  hashValue(hash, surface.backgroundEffect.arrowWidth);
+  hashValue(hash, surface.backgroundEffect.arrowHeight);
   hashValue(hash, surface.title.size());
   hashCombine(hash, surface.title.data(), surface.title.size());
   hashValue(hash, surface.backgroundBlurRects.size());

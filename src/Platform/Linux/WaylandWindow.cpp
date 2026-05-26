@@ -400,6 +400,30 @@ std::uint32_t colorToRgba(Color color) {
          channel(color.a);
 }
 
+std::uint32_t backgroundEffectShape(LayerShellBackgroundEffectShape shape) {
+  switch (shape) {
+  case LayerShellBackgroundEffectShape::Callout:
+    return EXT_BACKGROUND_EFFECT_SURFACE_V1_SHAPE_CALLOUT;
+  case LayerShellBackgroundEffectShape::RoundedRect:
+  default:
+    return EXT_BACKGROUND_EFFECT_SURFACE_V1_SHAPE_ROUNDED_RECT;
+  }
+}
+
+std::uint32_t backgroundEffectCalloutPlacement(LayerShellCalloutPlacement placement) {
+  switch (placement) {
+  case LayerShellCalloutPlacement::Above:
+    return EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_ABOVE;
+  case LayerShellCalloutPlacement::End:
+    return EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_END;
+  case LayerShellCalloutPlacement::Start:
+    return EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_START;
+  case LayerShellCalloutPlacement::Below:
+  default:
+    return EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_BELOW;
+  }
+}
+
 int createPopupSharedMemoryFile(char const* name, std::size_t size) {
   int fd = memfd_create(name, MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (fd < 0) {
@@ -907,6 +931,29 @@ public:
       return;
     }
     zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_, enabled ? 1u : 0u);
+    commitSurface();
+  }
+
+  void setLayerShellOptions(LayerShellOptions const& options) override {
+    layerShellConfig_ = options;
+    if (!layerSurface_) {
+      return;
+    }
+    zwlr_layer_surface_v1_set_anchor(layerSurface_, layerShellAnchor(layerShellConfig_));
+    zwlr_layer_surface_v1_set_margin(layerSurface_,
+                                     layerShellConfig_.marginTop,
+                                     layerShellConfig_.marginRight,
+                                     layerShellConfig_.marginBottom,
+                                     layerShellConfig_.marginLeft);
+    zwlr_layer_surface_v1_set_exclusive_zone(layerSurface_, layerShellConfig_.exclusiveZone);
+    zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_,
+                                                     layerShellConfig_.keyboardInteractive ? 1u : 0u);
+    zwlr_layer_surface_v1_set_size(layerSurface_,
+                                   static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.width)))),
+                                   static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.height)))));
+    updateBackgroundEffectRegion();
+    updateLayerShellInputRegion();
+    detachHiddenLayerShellBufferIfNeeded();
     commitSurface();
   }
 
@@ -2115,9 +2162,36 @@ private:
                                                                                  surface_);
     }
     wl_region* region = wl_compositor_create_region(shared_->compositor);
-    wl_region_add(region, 0, 0, width, height);
+    if (layerShellConfig_.backgroundEffectRegion) {
+      auto const& requested = *layerShellConfig_.backgroundEffectRegion;
+      int const x = std::clamp(requested.x, 0, width);
+      int const y = std::clamp(requested.y, 0, height);
+      int const right = std::clamp(requested.x + requested.width, x, width);
+      int const bottom = std::clamp(requested.y + requested.height, y, height);
+      if (right > x && bottom > y) {
+        wl_region_add(region, x, y, right - x, bottom - y);
+      }
+    } else {
+      wl_region_add(region, 0, 0, width, height);
+    }
     ext_background_effect_surface_v1_set_blur_region(backgroundEffect_, region);
     wl_region_destroy(region);
+    if (ext_background_effect_surface_v1_get_version(backgroundEffect_) >= 4) {
+      if (layerShellConfig_.backgroundEffectRegion) {
+        auto const& requested = *layerShellConfig_.backgroundEffectRegion;
+        ext_background_effect_surface_v1_set_shape(backgroundEffect_,
+                                                   backgroundEffectShape(requested.shape),
+                                                   backgroundEffectCalloutPlacement(requested.calloutPlacement),
+                                                   wl_fixed_from_double(requested.arrowWidth),
+                                                   wl_fixed_from_double(requested.arrowHeight));
+      } else {
+        ext_background_effect_surface_v1_set_shape(backgroundEffect_,
+                                                   EXT_BACKGROUND_EFFECT_SURFACE_V1_SHAPE_ROUNDED_RECT,
+                                                   EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_BELOW,
+                                                   wl_fixed_from_double(0.f),
+                                                   wl_fixed_from_double(0.f));
+      }
+    }
     if (wantsGlass) {
       if (!background_.glassUsesDefaultMaterial) {
         float const opacity = std::clamp(background_.glass.opacity, 0.f, 1.f);
@@ -2157,6 +2231,43 @@ private:
     }
   }
 
+  void updateLayerShellInputRegion() {
+    if (!layerSurface_ || !shared_ || !shared_->compositor || !surface_ || !canSendWaylandRequests(shared_)) {
+      return;
+    }
+    if (!layerShellConfig_.inputRegion) {
+      wl_surface_set_input_region(surface_, nullptr);
+      return;
+    }
+
+    auto const& requested = *layerShellConfig_.inputRegion;
+    wl_region* region = wl_compositor_create_region(shared_->compositor);
+    if (requested.width > 0 && requested.height > 0) {
+      wl_region_add(region, requested.x, requested.y, requested.width, requested.height);
+    }
+    wl_surface_set_input_region(surface_, region);
+    wl_region_destroy(region);
+  }
+
+  void detachHiddenLayerShellBufferIfNeeded() {
+    if (!layerSurface_ || !surface_ || !canSendWaylandRequests(shared_)) {
+      return;
+    }
+    bool const emptyInputRegion = layerShellConfig_.inputRegion &&
+                                  layerShellConfig_.inputRegion->width <= 0 &&
+                                  layerShellConfig_.inputRegion->height <= 0;
+    bool const hiddenLayerShellSurface = emptyInputRegion &&
+                                         !layerShellConfig_.backgroundBlur &&
+                                         layerShellConfig_.chrome.style == LayerShellChromeStyle::None &&
+                                         background_.kind == WindowBackgroundKind::Transparent &&
+                                         size_.width <= 1.f &&
+                                         size_.height <= 1.f;
+    if (!hiddenLayerShellSurface) {
+      return;
+    }
+    wl_surface_attach(surface_, nullptr, 0, 0);
+  }
+
   bool wantsTransparentSurface() const {
     return background_.kind == WindowBackgroundKind::Glass ||
            background_.kind == WindowBackgroundKind::Transparent;
@@ -2186,6 +2297,7 @@ private:
     zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_,
                                                      layerShellConfig_.keyboardInteractive ? 1u : 0u);
     updateBackgroundEffectRegion();
+    updateLayerShellInputRegion();
   }
 
   void requestCutouts() {
@@ -2572,7 +2684,7 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
 	        wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 1));
 	  } else if (std::strcmp(interface, ext_background_effect_manager_v1_interface.name) == 0) {
 	    shared->backgroundEffectManager = static_cast<ext_background_effect_manager_v1*>(
-	        wl_registry_bind(registry, name, &ext_background_effect_manager_v1_interface, std::min(version, 3u)));
+	        wl_registry_bind(registry, name, &ext_background_effect_manager_v1_interface, std::min(version, 4u)));
 	  } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
     auto output = std::make_unique<SharedWaylandConnection::Output>();
     output->name = name;

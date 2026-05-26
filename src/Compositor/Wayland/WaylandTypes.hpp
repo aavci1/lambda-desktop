@@ -13,6 +13,18 @@
 
 namespace flux::compositor {
 
+enum class BackgroundEffectShape : std::uint8_t {
+  RoundedRect,
+  Callout,
+};
+
+enum class BackgroundEffectCalloutPlacement : std::uint8_t {
+  Below,
+  Above,
+  End,
+  Start,
+};
+
 struct SurfaceBackgroundEffectSnapshot {
   float blurRadius = 46.f;
   Color baseColor{0.f, 0.f, 0.f, 0.f};
@@ -21,6 +33,10 @@ struct SurfaceBackgroundEffectSnapshot {
   bool usesDefaultMaterial = true;
   bool cornerRadiusSet = false;
   CornerRadius cornerRadius{};
+  BackgroundEffectShape shape = BackgroundEffectShape::RoundedRect;
+  BackgroundEffectCalloutPlacement calloutPlacement = BackgroundEffectCalloutPlacement::Below;
+  float arrowWidth = 16.f;
+  float arrowHeight = 8.f;
 };
 
 enum class CursorShape : std::uint8_t {

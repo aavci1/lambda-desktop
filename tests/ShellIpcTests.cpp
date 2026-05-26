@@ -44,6 +44,16 @@ TEST_CASE("shell IPC focusWindow parses numeric id") {
   REQUIRE(message->focusWindow.windowId == 42u);
 }
 
+TEST_CASE("shell IPC quitApp roundtrip") {
+  std::string const line = flux::shell::serializeQuitApp("lambda-files", 91);
+  auto message = flux::shell::parseLine(line);
+  REQUIRE(message.has_value());
+  REQUIRE(message->kind == flux::shell::ShellMessageKind::WindowManagerQuitApp);
+  REQUIRE(message->requestId == 91);
+  REQUIRE(message->quitApp.appId == "lambda-files");
+  REQUIRE(flux::shell::serialize(*message) == line);
+}
+
 TEST_CASE("shell IPC serialize helpers match parseLine") {
   std::string const claim = flux::shell::serializeClaimCommandLauncherModal();
   auto claimMessage = flux::shell::parseLine(claim);

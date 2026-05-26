@@ -153,6 +153,13 @@ void handleShellLine(WaylandServer::Impl* server, std::string_view line) {
                flux::shell::serializeWindowManagerError("not-found", "window not found", message->requestId));
     }
     return;
+  case flux::shell::ShellMessageKind::WindowManagerQuitApp:
+    if (!server->quitShellApp(message->quitApp.appId)) {
+      sendLine(server->shellClientFd_,
+               flux::shell::serializeWindowManagerError(
+                   "not-found", "app has no running windows", message->requestId));
+    }
+    return;
   case flux::shell::ShellMessageKind::WindowManagerClaimCommandLauncherModal:
     server->claimCommandLauncherModal(0);
     return;

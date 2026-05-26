@@ -4,6 +4,8 @@
 #include "Compositor/Chrome/WindowChromeRenderer.hpp"
 #include "Detail/ResizeTrace.hpp"
 
+#include <Flux/UI/Views/PopoverCalloutPath.hpp>
+
 #if FLUX_VULKAN
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #endif
@@ -156,6 +158,10 @@ struct ResolvedGlassMaterial {
   Color borderColor{};
   CornerRadius cornerRadius{};
   bool cornerRadiusSet = false;
+  BackgroundEffectShape shape = BackgroundEffectShape::RoundedRect;
+  BackgroundEffectCalloutPlacement calloutPlacement = BackgroundEffectCalloutPlacement::Below;
+  float arrowWidth = 16.f;
+  float arrowHeight = 8.f;
 };
 
 ResolvedGlassMaterial resolvedGlassMaterial(CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
@@ -172,6 +178,12 @@ ResolvedGlassMaterial resolvedGlassMaterial(CommittedSurfaceSnapshot const& surf
           .baseColor = withOpacity(chrome.glass.baseColor, chrome.glass.opacity),
           .tintColor = withOpacity(chrome.glass.tintColor, chrome.glass.opacity),
           .borderColor = chrome.glass.borderColor,
+          .cornerRadius = surface.backgroundEffect.cornerRadius,
+          .cornerRadiusSet = surface.backgroundEffect.cornerRadiusSet,
+          .shape = surface.backgroundEffect.shape,
+          .calloutPlacement = surface.backgroundEffect.calloutPlacement,
+          .arrowWidth = surface.backgroundEffect.arrowWidth,
+          .arrowHeight = surface.backgroundEffect.arrowHeight,
       };
     }
     return ResolvedGlassMaterial{
@@ -184,6 +196,10 @@ ResolvedGlassMaterial resolvedGlassMaterial(CommittedSurfaceSnapshot const& surf
         .borderColor = surface.backgroundEffect.borderColor,
         .cornerRadius = surface.backgroundEffect.cornerRadius,
         .cornerRadiusSet = surface.backgroundEffect.cornerRadiusSet,
+        .shape = surface.backgroundEffect.shape,
+        .calloutPlacement = surface.backgroundEffect.calloutPlacement,
+        .arrowWidth = surface.backgroundEffect.arrowWidth,
+        .arrowHeight = surface.backgroundEffect.arrowHeight,
     };
   }
   if (!chrome.windowGlassEnabled || !surface.defaultGlassEligible || chrome.glass.blurRadius <= 0.f) {
@@ -226,6 +242,112 @@ std::span<CommittedSurfaceSnapshot::RegionRect const> glassMaterialRegions(
   return std::span<CommittedSurfaceSnapshot::RegionRect const>(&defaultRegion, 1);
 }
 
+PopoverPlacement popoverPlacement(BackgroundEffectCalloutPlacement placement) {
+  switch (placement) {
+  case BackgroundEffectCalloutPlacement::Above:
+    return PopoverPlacement::Above;
+  case BackgroundEffectCalloutPlacement::End:
+    return PopoverPlacement::End;
+  case BackgroundEffectCalloutPlacement::Start:
+    return PopoverPlacement::Start;
+  case BackgroundEffectCalloutPlacement::Below:
+  default:
+    return PopoverPlacement::Below;
+  }
+}
+
+Path translatedPath(Path const& source, float dx, float dy) {
+  Path result{};
+  for (std::size_t i = 0; i < source.commandCount(); ++i) {
+    Path::CommandView const command = source.command(i);
+    switch (command.type) {
+    case Path::CommandType::MoveTo:
+      if (command.dataCount >= 2) result.moveTo({command.data[0] + dx, command.data[1] + dy});
+      break;
+    case Path::CommandType::LineTo:
+      if (command.dataCount >= 2) result.lineTo({command.data[0] + dx, command.data[1] + dy});
+      break;
+    case Path::CommandType::QuadTo:
+      if (command.dataCount >= 4) {
+        result.quadTo({command.data[0] + dx, command.data[1] + dy},
+                      {command.data[2] + dx, command.data[3] + dy});
+      }
+      break;
+    case Path::CommandType::BezierTo:
+      if (command.dataCount >= 6) {
+        result.bezierTo({command.data[0] + dx, command.data[1] + dy},
+                        {command.data[2] + dx, command.data[3] + dy},
+                        {command.data[4] + dx, command.data[5] + dy});
+      }
+      break;
+    case Path::CommandType::Rect:
+      if (command.dataCount >= 8) {
+        result.rect(Rect::sharp(command.data[0] + dx, command.data[1] + dy, command.data[2], command.data[3]),
+                    CornerRadius{command.data[4], command.data[5], command.data[6], command.data[7]});
+      }
+      break;
+    case Path::CommandType::Close:
+      result.close();
+      break;
+    default:
+      break;
+    }
+  }
+  return result;
+}
+
+Rect calloutCardRect(Rect const& bounds, ResolvedGlassMaterial const& material) {
+  float const arrow = std::clamp(material.arrowHeight,
+                                 0.f,
+                                 material.calloutPlacement == BackgroundEffectCalloutPlacement::Start ||
+                                         material.calloutPlacement == BackgroundEffectCalloutPlacement::End
+                                     ? bounds.width
+                                     : bounds.height);
+  switch (material.calloutPlacement) {
+  case BackgroundEffectCalloutPlacement::Below:
+    return Rect::sharp(bounds.x, bounds.y + arrow, bounds.width, std::max(0.f, bounds.height - arrow));
+  case BackgroundEffectCalloutPlacement::Above:
+    return Rect::sharp(bounds.x, bounds.y, bounds.width, std::max(0.f, bounds.height - arrow));
+  case BackgroundEffectCalloutPlacement::End:
+    return Rect::sharp(bounds.x + arrow, bounds.y, std::max(0.f, bounds.width - arrow), bounds.height);
+  case BackgroundEffectCalloutPlacement::Start:
+    return Rect::sharp(bounds.x, bounds.y, std::max(0.f, bounds.width - arrow), bounds.height);
+  }
+  return bounds;
+}
+
+Path materialPath(Rect const& rect, CornerRadius const& corners, ResolvedGlassMaterial const& material) {
+  if (material.shape != BackgroundEffectShape::Callout) {
+    Path path{};
+    path.rect(rect, corners);
+    return path;
+  }
+
+  float const arrowWidth = std::max(0.f, material.arrowWidth);
+  float const arrowHeight = std::max(0.f, material.arrowHeight);
+  Rect const localCard = [&] {
+    switch (material.calloutPlacement) {
+    case BackgroundEffectCalloutPlacement::Below:
+      return Rect::sharp(0.f, arrowHeight, rect.width, std::max(0.f, rect.height - arrowHeight));
+    case BackgroundEffectCalloutPlacement::Above:
+      return Rect::sharp(0.f, 0.f, rect.width, std::max(0.f, rect.height - arrowHeight));
+    case BackgroundEffectCalloutPlacement::End:
+      return Rect::sharp(arrowHeight, 0.f, std::max(0.f, rect.width - arrowHeight), rect.height);
+    case BackgroundEffectCalloutPlacement::Start:
+      return Rect::sharp(0.f, 0.f, std::max(0.f, rect.width - arrowHeight), rect.height);
+    }
+    return Rect::sharp(0.f, 0.f, rect.width, rect.height);
+  }();
+  Path local = buildPopoverCalloutPath(popoverPlacement(material.calloutPlacement),
+                                       corners,
+                                       true,
+                                       arrowWidth,
+                                       arrowHeight,
+                                       localCard,
+                                       Size{rect.width, rect.height});
+  return translatedPath(local, rect.x, rect.y);
+}
+
 void drawSurfaceBackgroundBlur(Canvas& canvas,
                                CommittedSurfaceSnapshot const& surface,
                                ChromeConfig const& chrome,
@@ -244,20 +366,14 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
   std::span<CommittedSurfaceSnapshot::RegionRect const> regions = glassMaterialRegions(surface, material, defaultRegion);
 
   auto drawMaterialRect = [&](Rect const& rect, CornerRadius const& corners) {
-    canvas.drawBackdropBlur(rect, material.blurRadius, Colors::transparent, corners);
+    Rect const blurRect = material.shape == BackgroundEffectShape::Callout ? calloutCardRect(rect, material) : rect;
+    canvas.drawBackdropBlur(blurRect, material.blurRadius, Colors::transparent, corners);
+    Path const path = materialPath(rect, corners, material);
     if (material.baseColor.a > 0.f) {
-      canvas.drawRect(rect,
-                      corners,
-                      FillStyle::solid(material.baseColor),
-                      StrokeStyle::none(),
-                      ShadowStyle::none());
+      canvas.drawPath(path, FillStyle::solid(material.baseColor), StrokeStyle::none(), ShadowStyle::none());
     }
     if (material.tintColor.a > 0.f) {
-      canvas.drawRect(rect,
-                      corners,
-                      FillStyle::solid(material.tintColor),
-                      StrokeStyle::none(),
-                      ShadowStyle::none());
+      canvas.drawPath(path, FillStyle::solid(material.tintColor), StrokeStyle::none(), ShadowStyle::none());
     }
   };
 
@@ -287,28 +403,16 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
     Rect const rect = intersectRect(requested, fullContentRect);
     if (rect.width <= 0.f || rect.height <= 0.f) continue;
     CornerRadius const effectCorners = material.cornerRadiusSet ? material.cornerRadius : contentCorners;
-    CornerRadius const corners = sameRect(rect, fullContentRect)
+    CornerRadius const corners = material.cornerRadiusSet
                                      ? effectCorners
-                                     : cornerRadiusForPiece(fullContentRect, rect, effectCorners);
+                                     : sameRect(rect, fullContentRect)
+                                           ? effectCorners
+                                           : cornerRadiusForPiece(fullContentRect, rect, effectCorners);
     if (materialShouldCoverFrame(surface, material, rect, fullContentRect)) {
       drawFrameMaterial();
       continue;
     }
-    canvas.drawBackdropBlur(rect, material.blurRadius, Colors::transparent, corners);
-    if (material.baseColor.a > 0.f) {
-      canvas.drawRect(rect,
-                      corners,
-                      FillStyle::solid(material.baseColor),
-                      StrokeStyle::none(),
-                      ShadowStyle::none());
-    }
-    if (material.tintColor.a > 0.f) {
-      canvas.drawRect(rect,
-                      corners,
-                      FillStyle::solid(material.tintColor),
-                      StrokeStyle::none(),
-                      ShadowStyle::none());
-    }
+    drawMaterialRect(rect, corners);
   }
 }
 
@@ -347,14 +451,13 @@ void drawSurfaceMaterialBorder(Canvas& canvas,
     CornerRadius const effectCorners = material.cornerRadiusSet
                                            ? material.cornerRadius
                                            : contentCorners;
-    CornerRadius const corners = sameRect(rect, fullContentRect)
+    CornerRadius const corners = material.cornerRadiusSet
                                      ? effectCorners
-                                     : cornerRadiusForPiece(fullContentRect, rect, effectCorners);
-    canvas.drawRect(rect,
-                    corners,
-                    FillStyle::none(),
-                    StrokeStyle::solid(material.borderColor, 1.f),
-                    ShadowStyle::none());
+                                     : sameRect(rect, fullContentRect)
+                                           ? effectCorners
+                                           : cornerRadiusForPiece(fullContentRect, rect, effectCorners);
+    Path const path = materialPath(rect, corners, material);
+    canvas.drawPath(path, FillStyle::none(), StrokeStyle::solid(material.borderColor, 1.f), ShadowStyle::none());
   }
 }
 

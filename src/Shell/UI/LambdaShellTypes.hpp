@@ -30,6 +30,16 @@ inline constexpr float kDockPaddingTop = 5.f;
 inline constexpr float kDockPaddingBottom = 5.f;
 inline constexpr int kDockGap = 6;
 inline constexpr int kDockSeparatorWidth = 1;
+inline constexpr int kDockMenuContentWidth = 176;
+inline constexpr int kDockMenuContentHeight = 110;
+inline constexpr int kDockMenuPadding = 6;
+inline constexpr int kDockMenuArrowHeight = 8;
+inline constexpr int kDockMenuSurfaceInset = 2;
+inline constexpr int kDockMenuCalloutWidth = kDockMenuContentWidth + kDockMenuPadding * 2;
+inline constexpr int kDockMenuCalloutHeight =
+    kDockMenuContentHeight + kDockMenuPadding * 2 + kDockMenuArrowHeight;
+inline constexpr int kDockMenuSurfaceWidth = kDockMenuCalloutWidth + kDockMenuSurfaceInset * 2;
+inline constexpr int kDockMenuSurfaceHeight = kDockMenuCalloutHeight + kDockMenuSurfaceInset * 2;
 
 struct DockItem {
   std::string id;
@@ -118,6 +128,19 @@ struct DockProps {
   flux::Reactive::Bindable<int> width{1};
   std::function<void()> onOpenLauncher;
   std::function<void(DockItem const&)> onActivateItem;
+  std::function<void(DockItem const&)> onShowMenu;
+};
+
+struct DockMenuProps {
+  DockItem item;
+  float surfaceWidth = static_cast<float>(kDockMenuSurfaceWidth);
+  float surfaceHeight = static_cast<float>(kDockMenuSurfaceHeight);
+  float menuX = 0.f;
+  float menuY = 0.f;
+  std::function<void(DockItem const&)> onNewWindow;
+  std::function<void(DockItem const&)> onTogglePinned;
+  std::function<void(DockItem const&)> onQuitItem;
+  std::function<void()> onDismiss;
 };
 
 struct CommandLauncherProps {

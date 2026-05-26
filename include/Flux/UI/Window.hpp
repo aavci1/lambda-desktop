@@ -84,6 +84,18 @@ enum class LayerShellChromeStyle : std::uint8_t {
   BlurPanelBorder,
 };
 
+enum class LayerShellBackgroundEffectShape : std::uint8_t {
+  RoundedRect,
+  Callout,
+};
+
+enum class LayerShellCalloutPlacement : std::uint8_t {
+  Below,
+  Above,
+  End,
+  Start,
+};
+
 struct GlassEffectOptions {
   /// Preferred blur radius for platforms that expose a tunable backdrop blur.
   /// Some backends map this to the nearest native material instead.
@@ -102,6 +114,24 @@ struct LayerShellChromeOptions {
   CornerRadius cornerRadius{16.f};
 };
 
+struct LayerShellBackgroundEffectRegion {
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+  LayerShellBackgroundEffectShape shape = LayerShellBackgroundEffectShape::RoundedRect;
+  LayerShellCalloutPlacement calloutPlacement = LayerShellCalloutPlacement::Below;
+  float arrowWidth = 16.f;
+  float arrowHeight = 8.f;
+};
+
+struct LayerShellInputRegion {
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+};
+
 struct LayerShellOptions {
   bool enabled = false;
   LayerShellLayer layer = LayerShellLayer::Top;
@@ -118,6 +148,10 @@ struct LayerShellOptions {
   bool keyboardInteractive = false;
   /// When supported by the compositor, apply a blurred background effect to the full surface region.
   bool backgroundBlur = false;
+  /// Optional surface-local region for the background effect. When omitted, the full surface is used.
+  std::optional<LayerShellBackgroundEffectRegion> backgroundEffectRegion{};
+  /// Optional surface-local input region. An empty region makes the surface pointer-transparent.
+  std::optional<LayerShellInputRegion> inputRegion{};
   LayerShellChromeOptions chrome{};
 };
 
@@ -192,6 +226,8 @@ public:
   void dismissPopover(PopoverSurfaceId id);
   /// Layer-shell windows only. Updates keyboard focus routing on the compositor.
   void setLayerShellKeyboardInteractive(bool enabled);
+  /// Layer-shell windows only. Updates layer, anchors, margins, exclusive zone and chrome.
+  void setLayerShellOptions(LayerShellOptions const& options);
   unsigned int handle() const;
 
   /// Lazily creates the backing canvas on first use.

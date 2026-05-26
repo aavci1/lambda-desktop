@@ -16,6 +16,7 @@ ShellMessageKind kindForTypeField(std::string_view type) {
   if (type == "lambda.windowManager.launchApp") return ShellMessageKind::WindowManagerLaunchApp;
   if (type == "lambda.windowManager.focusApp") return ShellMessageKind::WindowManagerFocusApp;
   if (type == "lambda.windowManager.focusWindow") return ShellMessageKind::WindowManagerFocusWindow;
+  if (type == "lambda.windowManager.quitApp") return ShellMessageKind::WindowManagerQuitApp;
   if (type == "lambda.windowManager.claimCommandLauncherModal") {
     return ShellMessageKind::WindowManagerClaimCommandLauncherModal;
   }
@@ -164,6 +165,9 @@ std::optional<ShellMessage> parseLine(std::string_view line) {
   case ShellMessageKind::WindowManagerFocusWindow:
     message.focusWindow.windowId = jsonUintField(line, "windowId");
     break;
+  case ShellMessageKind::WindowManagerQuitApp:
+    message.quitApp.appId = jsonStringField(line, "appId");
+    break;
   case ShellMessageKind::WindowManagerError:
     message.error.code = jsonStringField(line, "code");
     message.error.message = jsonStringField(line, "message");
@@ -191,6 +195,8 @@ std::string serialize(ShellMessage const& message) {
     return serializeFocusApp(message.focusApp.appId, message.requestId);
   case ShellMessageKind::WindowManagerFocusWindow:
     return serializeFocusWindow(message.focusWindow.windowId, message.requestId);
+  case ShellMessageKind::WindowManagerQuitApp:
+    return serializeQuitApp(message.quitApp.appId, message.requestId);
   case ShellMessageKind::WindowManagerClaimCommandLauncherModal:
     return serializeClaimCommandLauncherModal(message.requestId);
   case ShellMessageKind::WindowManagerReleaseCommandLauncherModal:
@@ -231,6 +237,11 @@ std::string serializeFocusApp(std::string_view appId, std::uint64_t requestId) {
 
 std::string serializeFocusWindow(std::uint64_t windowId, std::uint64_t requestId) {
   return "{\"type\":\"lambda.windowManager.focusWindow\",\"windowId\":" + std::to_string(windowId) +
+         requestIdJson(requestId) + "}";
+}
+
+std::string serializeQuitApp(std::string_view appId, std::uint64_t requestId) {
+  return "{\"type\":\"lambda.windowManager.quitApp\",\"appId\":\"" + escapeJson(appId) + "\"" +
          requestIdJson(requestId) + "}";
 }
 
