@@ -11,6 +11,9 @@
 
 namespace lambda_shell {
 
+struct AppRegistryEntry;
+struct ShellConfig;
+
 class ShellModel {
 public:
   struct SnapshotChanges {
@@ -50,6 +53,7 @@ public:
   static std::string formatTimeText();
 
   void resetDockItems();
+  void setDockItems(std::vector<AppRegistryEntry> const& apps, ShellConfig const& config);
   void setPreviewFocus(std::string_view appId);
   [[nodiscard]] SnapshotChanges applySnapshot(std::string_view json);
   [[nodiscard]] bool refreshTimeText();

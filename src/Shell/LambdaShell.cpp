@@ -1,5 +1,7 @@
 #include "Shell/ShellController.hpp"
+#include "Shell/ShellAppRegistry.hpp"
 #include "Shell/ShellConnection.hpp"
+#include "Shell/ShellModels.hpp"
 
 #include <Flux/UI/Application.hpp>
 
@@ -16,6 +18,11 @@ int main(int argc, char* argv[]) {
   app.setName("lambda-shell");
 
   lambda_shell::ShellModel model;
+  auto const shellConfig = lambda_shell::loadShellConfig();
+  auto const appRegistry = lambda_shell::buildDefaultAppRegistry(
+      "examples", lambda_shell::defaultXdgApplicationDirs(), lambda_shell::executableInPath);
+  model.setDockItems(appRegistry, shellConfig.config);
+
   lambda_shell::ShellController controller(app, model);
   if (!controller.connectIpc()) {
     throw std::runtime_error("failed to connect lambda-window-manager shell IPC");

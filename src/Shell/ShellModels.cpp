@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -790,6 +792,53 @@ std::string writeShellConfigToml(ShellConfig const& config) {
   out << "max_results = " << config.launcherMaxResults << "\n";
   out << "show_categories = " << (config.launcherShowCategories ? "true" : "false") << "\n";
   return out.str();
+}
+
+std::filesystem::path shellConfigPath() {
+  if (char const* explicitPath = std::getenv("LAMBDA_SHELL_CONFIG"); explicitPath && *explicitPath) {
+    return explicitPath;
+  }
+  if (char const* configHome = std::getenv("XDG_CONFIG_HOME"); configHome && *configHome) {
+    return std::filesystem::path(configHome) / "lambda-shell" / "config.toml";
+  }
+  if (char const* home = std::getenv("HOME"); home && *home) {
+    return std::filesystem::path(home) / ".config" / "lambda-shell" / "config.toml";
+  }
+  return std::filesystem::temp_directory_path() / "lambda-shell" / "config.toml";
+}
+
+ShellConfigLoadResult loadShellConfig(std::filesystem::path path) {
+  if (path.empty()) path = shellConfigPath();
+  ShellConfigLoadResult result;
+  result.config = defaultShellConfig();
+  result.path = path;
+
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec)) {
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec) {
+      result.error = "Could not create shell config directory.";
+      return result;
+    }
+    std::ofstream out(path);
+    if (!out) {
+      result.error = "Could not create shell config.";
+      return result;
+    }
+    out << writeShellConfigToml(result.config);
+    result.created = true;
+    return result;
+  }
+
+  std::ifstream in(path);
+  if (!in) {
+    result.error = "Could not read shell config.";
+    return result;
+  }
+  std::ostringstream contents;
+  contents << in.rdbuf();
+  result.config = parseShellConfig(contents.str());
+  return result;
 }
 
 } // namespace lambda_shell

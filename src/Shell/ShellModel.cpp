@@ -8,8 +8,37 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <set>
+#include <utility>
 
 namespace lambda_shell {
+namespace {
+
+AppRegistryEntry appEntry(std::string appId, std::string name, std::string icon, std::string command) {
+  AppRegistryEntry app;
+  app.appId = std::move(appId);
+  app.name = std::move(name);
+  app.icon = std::move(icon);
+  app.command = std::move(command);
+  return app;
+}
+
+std::vector<AppRegistryEntry> defaultDockRegistry() {
+  auto apps = std::vector<AppRegistryEntry>{
+      appEntry("lambda-files", "Files", "lambda-files", "lambda-files"),
+      appEntry("lambda-terminal", "Terminal", "lambda-terminal", "lambda-terminal"),
+      appEntry("lambda-settings", "Settings", "lambda-settings", "lambda-settings"),
+  };
+  auto fallbacks = builtinFallbackAppEntries();
+  apps.insert(apps.end(), fallbacks.begin(), fallbacks.end());
+  return apps;
+}
+
+bool appMatchesPin(AppRegistryEntry const& app, std::string_view pin) {
+  return shellAppIdMatches(pin, app.appId) || shellAppIdMatches(app.appId, pin);
+}
+
+} // namespace
 
 std::string ShellModel::formatTimeText() {
   char buffer[64]{};
@@ -44,19 +73,32 @@ void ShellModel::setPreviewFocus(std::string_view appId) {
 }
 
 void ShellModel::resetDockItems() {
-  dockItems_.set({
+  setDockItems(defaultDockRegistry(), defaultShellConfig());
+}
+
+void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellConfig const& config) {
+  std::vector<DockItem> items{
       {"launcher", "launcher", "Launcher", {}, false, false, false},
       {"sep1", "separator", "", {}, false, false, false},
-      {"files", "app", "Files", "files", false, false, false},
-      {"browser", "app", "Browser", "browser", false, false, false},
-      {"terminal", "app", "Terminal", "terminal", false, false, false},
-      {"settings", "app", "Settings", "settings", false, false, false},
-      {"calendar", "app", "Calendar", "calendar", false, false, false},
-      {"mail", "app", "Mail", "mail", false, false, false},
-      {"music", "app", "Music", "music", false, false, false},
-      {"sep2", "separator", "", {}, false, false, false},
-      {"trash", "trash", "Trash", "trash", false, false, true},
-  });
+  };
+  std::set<std::string> added;
+  for (auto const& pin : config.dockPinned) {
+    auto found = std::find_if(apps.begin(), apps.end(), [&](AppRegistryEntry const& app) {
+      return !app.hidden && !app.noDisplay && !app.command.empty() && appMatchesPin(app, pin);
+    });
+    if (found == apps.end()) continue;
+    std::string appId = found->appId.empty() ? pin : found->appId;
+    if (!added.insert(appId).second) continue;
+    items.push_back({
+        .id = appId,
+        .kind = "app",
+        .label = found->name.empty() ? appId : found->name,
+        .appId = appId,
+    });
+  }
+  items.push_back({"sep2", "separator", "", {}, false, false, false});
+  items.push_back({"trash", "trash", "Trash", "trash", false, false, true});
+  dockItems_.set(std::move(items));
   refreshLauncherResults();
 }
 

@@ -1,5 +1,7 @@
 #include "Shell/UI/LambdaCommandLauncher.hpp"
 
+#include "Shell/ShellAppRegistry.hpp"
+
 #include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/IconName.hpp>
@@ -43,10 +45,10 @@ std::string icon(flux::IconName name) {
 }
 
 flux::IconName dockIconName(DockItem const& item) {
-  if (item.appId == "files") return flux::IconName::FolderOpen;
-  if (item.appId == "browser") return flux::IconName::Globe;
-  if (item.appId == "terminal") return flux::IconName::Terminal;
-  if (item.appId == "settings") return flux::IconName::Tune;
+  if (shellAppIdMatches("files", item.appId)) return flux::IconName::FolderOpen;
+  if (shellAppIdMatches("browser", item.appId)) return flux::IconName::Globe;
+  if (shellAppIdMatches("terminal", item.appId)) return flux::IconName::Terminal;
+  if (shellAppIdMatches("settings", item.appId)) return flux::IconName::Tune;
   if (item.appId == "calendar") return flux::IconName::CalendarToday;
   if (item.appId == "mail") return flux::IconName::Mail;
   if (item.appId == "music") return flux::IconName::LibraryMusic;

@@ -1,5 +1,7 @@
 #include "Shell/UI/LambdaDock.hpp"
 
+#include "Shell/ShellAppRegistry.hpp"
+
 #include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/IconName.hpp>
@@ -44,10 +46,10 @@ struct IconPalette {
 
 IconPalette iconPalette(DockItem const& item) {
   if (item.kind == "launcher") return {Color(0.96f, 0.97f, 0.99f, 1.f), Color(0.80f, 0.84f, 0.92f, 1.f), Color(0.13f, 0.20f, 0.33f, 1.f)};
-  if (item.appId == "files") return {Color(0.43f, 0.65f, 1.f, 1.f), Color(0.16f, 0.50f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
-  if (item.appId == "browser") return {Color(0.37f, 0.72f, 1.f, 1.f), Color(0.16f, 0.53f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
-  if (item.appId == "terminal") return {Color(0.16f, 0.18f, 0.27f, 1.f), Color(0.05f, 0.07f, 0.14f, 1.f), Color(0.75f, 0.90f, 1.f, 1.f)};
-  if (item.appId == "settings") return {Color(0.58f, 0.63f, 0.72f, 1.f), Color(0.31f, 0.35f, 0.45f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
+  if (shellAppIdMatches("files", item.appId)) return {Color(0.43f, 0.65f, 1.f, 1.f), Color(0.16f, 0.50f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
+  if (shellAppIdMatches("browser", item.appId)) return {Color(0.37f, 0.72f, 1.f, 1.f), Color(0.16f, 0.53f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
+  if (shellAppIdMatches("terminal", item.appId)) return {Color(0.16f, 0.18f, 0.27f, 1.f), Color(0.05f, 0.07f, 0.14f, 1.f), Color(0.75f, 0.90f, 1.f, 1.f)};
+  if (shellAppIdMatches("settings", item.appId)) return {Color(0.58f, 0.63f, 0.72f, 1.f), Color(0.31f, 0.35f, 0.45f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
   if (item.appId == "calendar") return {Color(1.f, 1.f, 1.f, 1.f), Color(0.92f, 0.94f, 0.98f, 1.f), Color(0.90f, 0.29f, 0.24f, 1.f)};
   if (item.appId == "mail") return {Color(0.44f, 0.71f, 1.f, 1.f), Color(0.16f, 0.53f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
   if (item.appId == "music") return {Color(0.79f, 0.50f, 0.90f, 1.f), Color(0.48f, 0.25f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f)};
@@ -57,10 +59,10 @@ IconPalette iconPalette(DockItem const& item) {
 
 IconName dockIconName(DockItem const& item) {
   if (item.kind == "launcher") return IconName::Dashboard;
-  if (item.appId == "files") return IconName::FolderOpen;
-  if (item.appId == "browser") return IconName::Globe;
-  if (item.appId == "terminal") return IconName::Terminal;
-  if (item.appId == "settings") return IconName::Tune;
+  if (shellAppIdMatches("files", item.appId)) return IconName::FolderOpen;
+  if (shellAppIdMatches("browser", item.appId)) return IconName::Globe;
+  if (shellAppIdMatches("terminal", item.appId)) return IconName::Terminal;
+  if (shellAppIdMatches("settings", item.appId)) return IconName::Tune;
   if (item.appId == "calendar") return IconName::CalendarToday;
   if (item.appId == "mail") return IconName::Mail;
   if (item.appId == "music") return IconName::LibraryMusic;

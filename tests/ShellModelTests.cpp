@@ -1,4 +1,5 @@
 #include "Shell/ShellModel.hpp"
+#include "Shell/ShellModels.hpp"
 
 #include <Flux/Shell/ShellIpc.hpp>
 
@@ -21,7 +22,7 @@ TEST_CASE("Shell model launcher keyboard state is deterministic") {
   CHECK(model.query() == "ter");
   CHECK(model.queryCursor() == 3);
   REQUIRE_FALSE(model.launcherResults().empty());
-  CHECK(model.launcherResults()[0].appId == "terminal");
+  CHECK(model.launcherResults()[0].appId == "lambda-terminal");
 
   model.moveHighlight(100);
   CHECK(model.highlighted() == static_cast<int>(model.launcherResults().size()) - 1);
@@ -91,15 +92,15 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
   bool filesFocused = false;
   bool terminalRunning = false;
   for (auto const& item : model.dockItems()) {
-    if (item.appId == "files") filesFocused = item.running && item.focused;
-    if (item.appId == "terminal") terminalRunning = item.running && !item.focused;
+    if (item.appId == "lambda-files") filesFocused = item.running && item.focused;
+    if (item.appId == "lambda-terminal") terminalRunning = item.running && !item.focused;
   }
   CHECK(filesFocused);
   CHECK(terminalRunning);
 
   std::vector<std::string> sent;
   for (auto const& item : model.dockItems()) {
-    if (item.appId == "terminal") {
+    if (item.appId == "lambda-terminal") {
       model.activateItem(item, [&](std::string const& line) { sent.push_back(line); });
     }
   }
@@ -107,5 +108,33 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
   auto message = flux::shell::parseLine(sent[0]);
   REQUIRE(message);
   CHECK(message->kind == flux::shell::ShellMessageKind::WindowManagerFocusApp);
-  CHECK(message->focusApp.appId == "terminal");
+  CHECK(message->focusApp.appId == "lambda-terminal");
+}
+
+TEST_CASE("Shell model dock items come from config pins and app registry") {
+  lambda_shell::ShellModel model;
+  lambda_shell::ShellConfig config = lambda_shell::defaultShellConfig();
+  config.dockPinned = {"lambda-terminal", "missing-app", "firefox", "lambda-files"};
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "lambda-files", .name = "Files", .icon = "lambda-files", .command = "lambda-files"},
+      {.appId = "lambda-terminal", .name = "Terminal", .icon = "lambda-terminal", .command = "lambda-terminal"},
+      {.appId = "browser", .name = "Browser", .icon = "browser", .command = "firefox"},
+      {.appId = "org.example.Hidden", .name = "Hidden", .command = "hidden", .hidden = true},
+  };
+
+  model.setDockItems(apps, config);
+  std::vector<std::string> appIds;
+  for (auto const& item : model.dockItems()) {
+    if (item.kind == "app") appIds.push_back(item.appId);
+  }
+  CHECK(appIds == std::vector<std::string>{"lambda-terminal", "browser", "lambda-files"});
+  CHECK(model.dockItems().back().kind == "trash");
+  CHECK(model.dockItems().back().disabled);
+
+  model.resetDockItems();
+  for (auto const& item : model.dockItems()) {
+    CHECK(item.appId != "calendar");
+    CHECK(item.appId != "mail");
+    CHECK(item.appId != "music");
+  }
 }

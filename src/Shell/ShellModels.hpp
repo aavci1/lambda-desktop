@@ -3,6 +3,7 @@
 #include "Shell/ShellAppRegistry.hpp"
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -214,6 +215,15 @@ struct ShellConfig {
   bool operator==(ShellConfig const&) const = default;
 };
 
+struct ShellConfigLoadResult {
+  ShellConfig config;
+  std::filesystem::path path;
+  std::string error;
+  bool created = false;
+
+  bool operator==(ShellConfigLoadResult const&) const = default;
+};
+
 enum class ClipboardHistorySource : std::uint8_t {
   Clipboard,
   PrimarySelection,
@@ -298,5 +308,7 @@ private:
 [[nodiscard]] ClipboardHistoryPolicy clipboardHistoryPolicy(ShellConfig const& config);
 [[nodiscard]] ShellConfig parseShellConfig(std::string_view tomlText);
 [[nodiscard]] std::string writeShellConfigToml(ShellConfig const& config);
+[[nodiscard]] std::filesystem::path shellConfigPath();
+[[nodiscard]] ShellConfigLoadResult loadShellConfig(std::filesystem::path path = {});
 
 } // namespace lambda_shell

@@ -2,6 +2,24 @@
 
 #include <doctest/doctest.h>
 
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <unistd.h>
+
+namespace {
+
+std::filesystem::path tempRoot(char const* name) {
+  auto path = std::filesystem::temp_directory_path() /
+              (std::string(name) + "-" + std::to_string(static_cast<unsigned long long>(getpid())));
+  std::filesystem::remove_all(path);
+  std::filesystem::create_directories(path);
+  return path;
+}
+
+} // namespace
+
 TEST_CASE("Shell dock model combines pinned apps and running windows") {
   std::vector<lambda_shell::AppRegistryEntry> pinned{
       {.appId = "files", .name = "Files", .icon = "files"},
@@ -362,4 +380,31 @@ max_results = 1000
   CHECK(fallback == defaults);
 
   CHECK(lambda_shell::parseShellConfig(lambda_shell::writeShellConfigToml(parsed)) == parsed);
+}
+
+TEST_CASE("Shell config load creates defaults and reads configured pins") {
+  auto root = tempRoot("lambda-shell-config-load-test");
+  auto configPath = root / "lambda-shell" / "config.toml";
+
+  auto created = lambda_shell::loadShellConfig(configPath);
+  CHECK(created.path == configPath);
+  CHECK(created.created);
+  CHECK(created.error.empty());
+  CHECK(std::filesystem::exists(configPath));
+  std::ifstream defaultFile(configPath);
+  std::ostringstream defaultContents;
+  defaultContents << defaultFile.rdbuf();
+  CHECK(lambda_shell::parseShellConfig(defaultContents.str()) == lambda_shell::defaultShellConfig());
+
+  {
+    std::ofstream(configPath) << R"(
+[dock]
+pinned = ["lambda-terminal", "lambda-files"]
+)";
+  }
+  auto loaded = lambda_shell::loadShellConfig(configPath);
+  CHECK_FALSE(loaded.created);
+  CHECK(loaded.config.dockPinned == std::vector<std::string>{"lambda-terminal", "lambda-files"});
+
+  std::filesystem::remove_all(root);
 }

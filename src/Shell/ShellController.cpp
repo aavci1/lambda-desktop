@@ -78,7 +78,7 @@ flux::WindowConfig launcherWindowConfig() {
 }
 
 ShellController::ShellController(flux::Application& app, ShellModel& model) : app_(app), model_(model) {
-  model_.resetDockItems();
+  if (model_.dockItems().empty()) model_.resetDockItems();
   lastDockWidth_ = dockWidth(model_.dockItems());
 
   app_.eventQueue().on<flux::WindowEvent>([this](flux::WindowEvent const& event) {
