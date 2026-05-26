@@ -20,39 +20,28 @@ Implemented today:
 - `lambda-files` is a native Flux app under `examples/lambda-files`.
 - It opens a resizable window with an integrated titlebar and glass background.
 - It has a sidebar with Home, Desktop, Documents, and Downloads when present.
-- It lists the current directory with folders first and case-insensitive sorting.
-- It has a responsive grid view.
-- It has visual file kinds for folders, generic files, PDFs, images, presentations, and Sketch files.
-- It supports selection of one item.
+- It lists the current directory with folders first and stable sorting by name, kind, size, or modified time in the model.
+- It has responsive grid and list/detail views, selected from the titlebar options menu.
+- It uses icon-theme lookups for file/folder/MIME icons with built-in visual fallbacks.
+- It supports pointer, keyboard, multi-select, range-select, and select-all.
 - It supports breadcrumbs, back, forward, and up navigation.
-- It supports a hidden-file toggle.
+- It supports a persisted hidden-file toggle and persisted view mode.
+- It refreshes the current folder periodically when external changes are detected.
+- It supports context menus for entries, selected sets, empty directory background, sidebar places, and breadcrumbs.
+- It supports create folder/file, duplicate, copy, cut, paste, move, trash-first delete, restore helpers, and safe undo helpers in the operation/model layer.
+- It writes and consumes `text/uri-list` clipboard text for file copy/cut/paste interop with compatible clients.
 - It resolves file-open commands through MIME/default-app data and the shared app registry.
-- It has basic keyboard shortcuts for back, forward, up, and activate selected.
+- It has keyboard shortcuts for back, forward, up, select-all, clear selection, directional selection, range extension, and activate selected.
 
 Important limitations:
 
-- No create folder or create file.
-- No rename.
-- No trash.
-- No permanent delete confirmation path.
-- No copy, cut, paste, duplicate, or move.
-- No undo.
-- No multi-select or range selection.
-- No keyboard selection model beyond activating an already selected item.
-- No context menus for files, background, sidebar, or breadcrumbs.
-- No drag and drop.
-- No clipboard integration.
-- No list/detail view.
-- No sort controls.
-- No search.
-- No path entry.
-- No filesystem watcher.
-- No operation progress UI.
-- No robust error model.
+- Drag/drop is explicitly unsupported in the Files UI until Flux exposes app-level file drag source/target APIs.
+- Rename, trash restore, undo, operation progress/cancel, open-with, and search/sort are represented in the model and tests, but not all of those controls have full polished live UI yet.
+- Current-folder refresh is polling-based rather than a native filesystem watcher.
 - No mounted volumes/removable devices.
-- No icon theme integration for file and MIME icons.
 - No thumbnail cache.
-- Open-with/default-app UI is not fully wired yet, but the model/service path no longer depends on direct `xdg-open` file launching.
+- Permanent delete is intentionally not exposed as the normal delete path.
+- Open-with/default-app UI is not fully wired yet, but the model/service path uses shared app/MIME metadata instead of direct `xdg-open` file launching.
 
 ## Additional Files work identified
 
@@ -964,6 +953,30 @@ Add focused automated tests where behavior is deterministic:
 - Open-with lookup using fixture app registry and MIME data.
 - File icon lookup fallback using fixture icon theme data.
 
+## Current user guide
+
+Launch `lambda-files` from the Shell dock, launcher, or `./build/examples/lambda-files`. The app starts in the home directory and shows the available sidebar places. Use the titlebar navigation controls for back/forward, the breadcrumbs for direct parent navigation, and the titlebar options menu to switch between grid and list view or toggle hidden files.
+
+Selection behavior:
+
+- Click an item to select it and open it on normal activation.
+- Use `Ctrl`/`Meta` click to toggle an item in the current selection.
+- Use `Shift` click or `Shift` plus arrow keys to extend a range.
+- Use `Meta+A` or `Ctrl+A` to select all, `Escape` to clear selection, and `Return` to open the focused item.
+
+File operations:
+
+- Right-click selected entries for Open, Reveal, Copy, Cut, Duplicate, Trash, and Select All where applicable.
+- Right-click the empty content area for New Folder, New File, Paste, and Select All.
+- Copy/cut stores URI-list text on the desktop clipboard; Paste uses the internal Files clipboard first and otherwise imports compatible `file://` URI-list clipboard text.
+- Delete/trash behavior is trash-first. Permanent delete is not a normal action in the current UI.
+
+Current limitations visible to users:
+
+- Drag/drop is not supported in the Files UI yet.
+- Folder refresh is periodic, so external filesystem changes can take up to the refresh interval to appear.
+- Advanced open-with/default-app editing, thumbnails, mounted volumes, tabs, split panes, and indexed search are deferred.
+
 ## Done checklist
 
 - [x] Files has a testable model outside the view body.
@@ -987,7 +1000,7 @@ Add focused automated tests where behavior is deterministic:
 - [x] Icons use shared icon theme provider with fallback.
 - [x] Files preferences persist.
 - [x] Tests cover model, operations, trash, selection, and open-with fixtures.
-- [ ] User guide and app docs match actual behavior.
+- [x] User guide and app docs match actual behavior.
 
 ## Deferred to later milestones
 
