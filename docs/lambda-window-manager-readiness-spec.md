@@ -819,7 +819,7 @@ Add focused automated tests where behavior is deterministic:
 
 Do not require GPU screenshot comparison in this milestone unless it is straightforward to add using existing render fixtures.
 
-Current deterministic validation: unit tests cover single-output selector aliases/indexes, per-output scale overrides and fallback scale, cursor theme/size parsing plus invalid-value fallback, keyboard layout/model/options/repeat parsing plus invalid-value fallback, screenshot mode request policy, region normalization, logical-to-framebuffer conversion, filename collision handling, and PNG writing. Live screenshot capture and visual compositor behavior still require manual validation on target hardware.
+Current deterministic validation: unit tests cover single-output selector aliases/indexes, per-output scale overrides and fallback scale, cursor theme/size parsing plus invalid-value fallback, keyboard layout/model/options/repeat parsing plus invalid-value fallback, screenshot mode request policy, region normalization, logical-to-framebuffer conversion, filename collision handling, PNG writing, window frame geometry, shadow expansion geometry, and a Vulkan render-target check that default glass samples match between the system-titlebar and integrated-titlebar material paths. Live screenshot capture and visual compositor behavior still require manual validation on target hardware.
 
 ## Done checklist
 

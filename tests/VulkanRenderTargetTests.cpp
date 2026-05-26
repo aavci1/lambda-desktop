@@ -787,6 +787,121 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
   CHECK(capturedChannel(pixels, width, 40, 32, 2) < 180);
 }
 
+TEST_CASE("Compositor default glass material matches system and integrated titlebar paths") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  constexpr std::uint32_t width = 180;
+  constexpr std::uint32_t height = 96;
+  VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(flux::VulkanRenderTargetSpec{
+      .image = targetImage.image,
+      .view = targetImage.view,
+      .format = targetImage.format,
+      .width = width,
+      .height = height,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+  },
+                                                                  textSystem);
+  REQUIRE(canvas);
+
+  constexpr int clientWidth = 56;
+  constexpr int clientHeight = 40;
+  std::vector<std::uint8_t> transparent(static_cast<std::size_t>(clientWidth) * clientHeight * 4u, 0u);
+  std::shared_ptr<Image> clientImage =
+      Image::fromRgbaPixels(clientWidth, clientHeight, transparent, canvas->gpuDevice());
+  REQUIRE(clientImage);
+
+  flux::compositor::ChromeConfig chrome{};
+  chrome.windowGlassEnabled = true;
+  chrome.glass.blurRadius = 18.f;
+  chrome.glass.opacity = 1.f;
+  chrome.glass.baseColor = Color{1.f, 1.f, 1.f, 0.42f};
+  chrome.glass.tintColor = Color{0.78f, 0.90f, 1.f, 0.34f};
+  chrome.glass.borderColor = Colors::transparent;
+  chrome.windowBorderColor = Colors::transparent;
+  chrome.borderLineColor = Colors::transparent;
+  chrome.focusedShadowColor = Colors::transparent;
+  chrome.unfocusedShadowColor = Colors::transparent;
+
+  flux::compositor::CommittedSurfaceSnapshot systemTitlebar{
+      .id = 1,
+      .x = 16,
+      .y = 40,
+      .width = clientWidth,
+      .height = clientHeight,
+      .bufferWidth = clientWidth,
+      .bufferHeight = clientHeight,
+      .sourceX = 0.f,
+      .sourceY = 0.f,
+      .sourceWidth = static_cast<float>(clientWidth),
+      .sourceHeight = static_cast<float>(clientHeight),
+      .destinationWidth = clientWidth,
+      .destinationHeight = clientHeight,
+      .titleBarHeight = chrome.titleBarHeight,
+      .serverSideDecorated = true,
+      .focused = true,
+      .backgroundEffect = flux::compositor::SurfaceBackgroundEffectSnapshot{
+          .usesDefaultMaterial = true,
+      },
+      .serial = 1,
+      .backgroundBlurRects = {flux::compositor::CommittedSurfaceSnapshot::RegionRect{
+          .x = 0,
+          .y = 0,
+          .width = clientWidth,
+          .height = clientHeight,
+      }},
+  };
+
+  flux::compositor::CommittedSurfaceSnapshot integratedTitlebar = systemTitlebar;
+  integratedTitlebar.id = 2;
+  integratedTitlebar.x = 108;
+  integratedTitlebar.y = 28;
+  integratedTitlebar.titleBarHeight = 0;
+  integratedTitlebar.cutoutsBound = true;
+  integratedTitlebar.serial = 2;
+
+  flux::compositor::SurfaceVisualState systemVisual{};
+  flux::compositor::SurfaceVisualState integratedVisual{};
+
+  canvas->resize(static_cast<int>(width), static_cast<int>(height));
+  canvas->updateDpiScale(1.f, 1.f);
+  canvas->beginFrame();
+  canvas->clear(Color{0.18f, 0.20f, 0.24f, 1.f});
+  flux::compositor::drawCommittedSurfaceSnapshot(*canvas,
+                                                 textSystem,
+                                                 systemTitlebar,
+                                                 systemVisual,
+                                                 *clientImage,
+                                                 std::chrono::steady_clock::now(),
+                                                 chrome,
+                                                 false);
+  flux::compositor::drawCommittedSurfaceSnapshot(*canvas,
+                                                 textSystem,
+                                                 integratedTitlebar,
+                                                 integratedVisual,
+                                                 *clientImage,
+                                                 std::chrono::steady_clock::now(),
+                                                 chrome,
+                                                 false);
+  canvas->present();
+
+  VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
+  VulkanCopyContext copy{vk.device(), vk.queue(), vk.queueFamily()};
+  copy.copyImageToBuffer(targetImage.image, readback.buffer, width, height);
+
+  std::vector<std::uint8_t> pixels(width * height * 4u);
+  void* mapped = nullptr;
+  vkCheck(vkMapMemory(vk.device(), readback.memory, 0, readback.size, 0, &mapped), "vkMapMemory");
+  std::memcpy(pixels.data(), mapped, pixels.size());
+  vkUnmapMemory(vk.device(), readback.memory);
+
+  CHECK(colorDelta(pixels, width, 44, 30, 44, 58) <= 6);
+  CHECK(colorDelta(pixels, width, 44, 58, 136, 48) <= 6);
+}
+
 TEST_CASE("Vulkan RenderTarget renders multiple stress frames") {
   auto& vk = VulkanContext::instance();
   vk.ensureInitialized();
