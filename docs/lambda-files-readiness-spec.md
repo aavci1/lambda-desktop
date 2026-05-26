@@ -26,7 +26,7 @@ Implemented today:
 - It supports selection of one item.
 - It supports breadcrumbs, back, forward, and up navigation.
 - It supports a hidden-file toggle.
-- It opens files with `xdg-open` on Linux and `open` on macOS.
+- It resolves file-open commands through MIME/default-app data and the shared app registry.
 - It has basic keyboard shortcuts for back, forward, up, and activate selected.
 
 Important limitations:
@@ -52,7 +52,7 @@ Important limitations:
 - No mounted volumes/removable devices.
 - No icon theme integration for file and MIME icons.
 - No thumbnail cache.
-- No open-with/default-app integration. `xdg-open` is a useful bootstrap, but it is not a Lambda desktop service.
+- Open-with/default-app UI is not fully wired yet, but the model/service path no longer depends on direct `xdg-open` file launching.
 
 ## Additional Files work identified
 
@@ -74,7 +74,7 @@ These areas should be included in the Files milestone:
 - Add basic Files preferences through Settings later, but keep defaults usable now.
 - Add deterministic tests for path handling, operations, trash, selection, and model behavior.
 
-Status update 2026-05-26: `FilesStore` now has deterministic XDG user-directory parsing, home fallback coverage, path normalization and navigation-history coverage, breadcrumb generation for home/root/outside-home paths, validated directory navigation that keeps the previous directory on missing/non-folder paths, explicit stable sorting by name/kind/size/modified time, current-folder search/filtering, directory listing tests that cover hidden-file filtering plus modified-time capture, directory refresh diff helpers, a non-UI `FilesModel` for directory/visible-entry/error/refresh state, refresh selection preservation for paths that still exist, selection/range-selection helpers, collision-free folder/file creation, rename validation, copy/move/duplicate operations with symlink-preserving recursive copy behavior, internal copy/cut clipboard operation state, URI-list clipboard parsing/serialization, trash metadata generation, trash collision handling, restore-from-trash collision handling, conflict decisions including cancel, deterministic operation progress/failure/cancel state, safe undo helpers for create/rename/move/trash/copy, MIME/default-app fixture parsing, open-with choice resolution, icon-theme fallback lookup through the shared app registry helpers, and preference parse/serialize helpers. Live UI wiring for undo/open-with/icons/preferences, real watcher integration, progress/cancel UX, and external clipboard/DnD interop remain open.
+Status update 2026-05-26: `FilesStore` now has deterministic XDG user-directory parsing, home fallback coverage, path normalization and navigation-history coverage, breadcrumb generation for home/root/outside-home paths, validated directory navigation that keeps the previous directory on missing/non-folder paths, explicit stable sorting by name/kind/size/modified time, current-folder search/filtering, directory listing tests that cover hidden-file filtering plus modified-time capture, directory refresh diff helpers, a non-UI `FilesModel` for directory/visible-entry/error/refresh state, refresh selection preservation for paths that still exist, selection/range-selection helpers, collision-free folder/file creation, rename validation, copy/move/duplicate operations with symlink-preserving recursive copy behavior, internal copy/cut clipboard operation state, URI-list clipboard parsing/serialization, trash metadata generation, trash collision handling, restore-from-trash collision handling, conflict decisions including cancel, deterministic operation progress/failure/cancel state, safe undo helpers for create/rename/move/trash/copy, MIME/default-app fixture parsing, open-with choice resolution and open-command planning, mimeapps-list loading/merging, icon-theme fallback lookup through the shared app registry helpers, and preference parse/serialize helpers. The default file-open path now uses the shared app registry plus MIME/default-app data instead of directly shelling out to `xdg-open`. Live UI wiring for undo/open-with/icons/preferences, real watcher integration, progress/cancel UX, and external clipboard/DnD interop remain open.
 
 ## Goals
 

@@ -38,6 +38,11 @@ std::filesystem::path dataHomeDirectory() {
   return homeDirectory() / ".local" / "share";
 }
 
+std::filesystem::path configHomeDirectory() {
+  if (auto env = pathFromEnv("XDG_CONFIG_HOME"); !env.empty()) return env;
+  return homeDirectory() / ".config";
+}
+
 bool ciLess(std::string const& a, std::string const& b) {
   return std::lexicographical_compare(
       a.begin(), a.end(), b.begin(), b.end(), [](unsigned char lhs, unsigned char rhs) {
@@ -231,6 +236,16 @@ int runShellCommand(std::string const& command) {
     return -1;
   }
   return std::system(command.c_str());
+}
+
+std::string shellCommandFromArgs(std::vector<std::string> const& args) {
+  std::string command;
+  for (auto const& arg : args) {
+    if (arg.empty()) continue;
+    if (!command.empty()) command.push_back(' ');
+    command += shellQuote(arg);
+  }
+  return command;
 }
 
 std::size_t utf8ScalarByteLength(unsigned char lead) {
@@ -804,17 +819,23 @@ std::string formatSidebarFooter(std::filesystem::path const& path) {
 }
 
 bool openEntry(FileEntry const& entry, std::string& error) {
-  if (entry.isDirectory) {
-    error = "Use navigation for folders.";
+  auto apps = lambda_shell::buildDefaultAppRegistry(
+      "examples", lambda_shell::defaultXdgApplicationDirs(), lambda_shell::executableInPath);
+  return openEntryWithApps(entry, apps, loadMimeAppsList(), error);
+}
+
+bool openEntryWithApps(FileEntry const& entry,
+                       std::vector<lambda_shell::AppRegistryEntry> const& apps,
+                       MimeAppsList const& mimeApps,
+                       std::string& error) {
+  OpenEntryPlan const plan = openEntryPlan(entry, apps, mimeApps);
+  if (!plan.ok) {
+    error = plan.error;
     return false;
   }
-#if defined(__APPLE__)
-  int const code = runShellCommand("open " + shellQuote(entry.path.string()));
-#else
-  int const code = runShellCommand("xdg-open " + shellQuote(entry.path.string()));
-#endif
+  int const code = runShellCommand(shellCommandFromArgs(plan.command));
   if (code != 0) {
-    error = "Could not open this item with the system handler.";
+    error = "Could not open this item with the registered application.";
     return false;
   }
   return true;
@@ -1284,6 +1305,50 @@ MimeAppsList parseMimeAppsList(std::string_view text) {
   return parsed;
 }
 
+std::vector<std::filesystem::path> defaultMimeAppsListPaths() {
+  std::vector<std::filesystem::path> paths;
+  paths.push_back(configHomeDirectory() / "mimeapps.list");
+  paths.push_back(dataHomeDirectory() / "applications" / "mimeapps.list");
+
+  char const* xdgDataDirs = std::getenv("XDG_DATA_DIRS");
+  std::string_view dataDirs = xdgDataDirs && *xdgDataDirs ? std::string_view{xdgDataDirs}
+                                                          : std::string_view{"/usr/local/share:/usr/share"};
+  std::size_t start = 0;
+  while (start <= dataDirs.size()) {
+    std::size_t const end = dataDirs.find(':', start);
+    std::string dir(dataDirs.substr(start, end == std::string_view::npos ? dataDirs.size() - start : end - start));
+    if (!dir.empty()) paths.push_back(std::filesystem::path(dir) / "applications" / "mimeapps.list");
+    if (end == std::string_view::npos) break;
+    start = end + 1u;
+  }
+  return paths;
+}
+
+MimeAppsList loadMimeAppsList(std::vector<std::filesystem::path> const& paths) {
+  MimeAppsList merged;
+  auto mergeIds = [](std::vector<std::string>& destination, std::vector<std::string> const& source) {
+    for (auto const& id : source) {
+      if (std::find(destination.begin(), destination.end(), id) == destination.end()) destination.push_back(id);
+    }
+  };
+
+  for (auto const& path : paths) {
+    std::ifstream file(path);
+    if (!file) continue;
+    std::ostringstream contents;
+    contents << file.rdbuf();
+    MimeAppsList parsed = parseMimeAppsList(contents.str());
+    for (auto const& [mime, ids] : parsed.defaults) {
+      auto [it, inserted] = merged.defaults.emplace(mime, ids);
+      if (!inserted) mergeIds(it->second, ids);
+    }
+    for (auto const& [mime, ids] : parsed.associations) {
+      mergeIds(merged.associations[mime], ids);
+    }
+  }
+  return merged;
+}
+
 std::vector<OpenWithChoice> openWithChoices(std::filesystem::path const& path,
                                             bool isDirectory,
                                             std::vector<lambda_shell::AppRegistryEntry> const& apps,
@@ -1336,6 +1401,23 @@ std::optional<OpenWithChoice> defaultOpenWithChoice(std::filesystem::path const&
 
 std::vector<std::string> openCommandForChoice(OpenWithChoice const& choice, std::filesystem::path const& path) {
   return lambda_shell::parseDesktopExec(choice.app.command, path);
+}
+
+OpenEntryPlan openEntryPlan(FileEntry const& entry,
+                            std::vector<lambda_shell::AppRegistryEntry> const& apps,
+                            MimeAppsList const& mimeApps) {
+  if (entry.isDirectory) {
+    return {.ok = false, .error = "Use navigation for folders."};
+  }
+  auto choice = defaultOpenWithChoice(entry.path, false, apps, mimeApps);
+  if (!choice) {
+    return {.ok = false, .error = "No application is registered for this file type."};
+  }
+  auto command = openCommandForChoice(*choice, entry.path);
+  if (command.empty()) {
+    return {.ok = false, .error = "Registered application has no launch command."};
+  }
+  return {.ok = true, .command = std::move(command)};
 }
 
 FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,

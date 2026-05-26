@@ -205,6 +205,14 @@ struct OpenWithChoice {
   bool isDefault = false;
 };
 
+struct OpenEntryPlan {
+  bool ok = false;
+  std::vector<std::string> command;
+  std::string error;
+
+  bool operator==(OpenEntryPlan const&) const = default;
+};
+
 struct FileIconLookup {
   std::string iconName;
   std::filesystem::path themePath;
@@ -254,6 +262,10 @@ std::string gridDisplayName(std::string name);
 std::string formatSidebarFooter(std::filesystem::path const& path);
 
 bool openEntry(FileEntry const& entry, std::string& error);
+bool openEntryWithApps(FileEntry const& entry,
+                       std::vector<lambda_shell::AppRegistryEntry> const& apps,
+                       MimeAppsList const& mimeApps,
+                       std::string& error);
 bool revealEntryInSystem(FileEntry const& entry, std::string& error);
 
 std::string normalizeDirectoryPath(std::filesystem::path path);
@@ -300,6 +312,8 @@ std::vector<FileOperationResult> pasteFileClipboard(FileClipboardState const& cl
 
 std::string mimeTypeForPath(std::filesystem::path const& path, bool isDirectory);
 MimeAppsList parseMimeAppsList(std::string_view text);
+std::vector<std::filesystem::path> defaultMimeAppsListPaths();
+MimeAppsList loadMimeAppsList(std::vector<std::filesystem::path> const& paths = defaultMimeAppsListPaths());
 std::vector<OpenWithChoice> openWithChoices(std::filesystem::path const& path,
                                             bool isDirectory,
                                             std::vector<lambda_shell::AppRegistryEntry> const& apps,
@@ -309,6 +323,9 @@ std::optional<OpenWithChoice> defaultOpenWithChoice(std::filesystem::path const&
                                                     std::vector<lambda_shell::AppRegistryEntry> const& apps,
                                                     MimeAppsList const& mimeApps);
 std::vector<std::string> openCommandForChoice(OpenWithChoice const& choice, std::filesystem::path const& path);
+OpenEntryPlan openEntryPlan(FileEntry const& entry,
+                            std::vector<lambda_shell::AppRegistryEntry> const& apps,
+                            MimeAppsList const& mimeApps);
 FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
                               std::filesystem::path const& path,
                               bool isDirectory,

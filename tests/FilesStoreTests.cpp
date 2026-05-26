@@ -724,6 +724,15 @@ image/png=org.example.ImageViewer.desktop;
   CHECK(lambda_files::openCommandForChoice(textChoices[0], "/tmp/readme.txt") ==
         std::vector<std::string>{"text-editor", "--open", "/tmp/readme.txt"});
 
+  lambda_files::FileEntry textEntry{
+      .name = "readme.txt",
+      .path = "/tmp/readme.txt",
+      .isDirectory = false,
+  };
+  auto textPlan = lambda_files::openEntryPlan(textEntry, apps, mimeApps);
+  REQUIRE(textPlan.ok);
+  CHECK(textPlan.command == std::vector<std::string>{"text-editor", "--open", "/tmp/readme.txt"});
+
   auto imageDefault = lambda_files::defaultOpenWithChoice("/tmp/photo.png", false, apps, mimeApps);
   REQUIRE(imageDefault);
   CHECK(imageDefault->app.appId == "org.example.ImageViewer");
@@ -733,6 +742,39 @@ image/png=org.example.ImageViewer.desktop;
   REQUIRE(directoryDefault);
   CHECK(directoryDefault->app.appId == "lambda-files");
   CHECK(directoryDefault->isDefault);
+
+  auto missingPlan = lambda_files::openEntryPlan({.name = "archive.bin", .path = "/tmp/archive.bin"}, apps, mimeApps);
+  CHECK_FALSE(missingPlan.ok);
+  CHECK(missingPlan.error == "No application is registered for this file type.");
+}
+
+TEST_CASE("FilesStore loads mimeapps lists with deterministic precedence") {
+  auto root = tempRoot("lambda-files-mimeapps-load-test");
+  auto user = root / "user-mimeapps.list";
+  auto system = root / "system-mimeapps.list";
+  {
+    std::ofstream(user) << R"(
+[Default Applications]
+text/plain=org.example.User.desktop;
+[Added Associations]
+text/plain=org.example.User.desktop;
+)";
+    std::ofstream(system) << R"(
+[Default Applications]
+text/plain=org.example.System.desktop;
+image/png=org.example.Image.desktop;
+[Added Associations]
+text/plain=org.example.System.desktop;
+)";
+  }
+
+  auto mimeApps = lambda_files::loadMimeAppsList({user, system});
+  CHECK(mimeApps.defaults["text/plain"] == std::vector<std::string>{"org.example.User", "org.example.System"});
+  CHECK(mimeApps.defaults["image/png"] == std::vector<std::string>{"org.example.Image"});
+  CHECK(mimeApps.associations["text/plain"] ==
+        std::vector<std::string>{"org.example.User", "org.example.System"});
+
+  std::filesystem::remove_all(root);
 }
 
 TEST_CASE("FilesStore looks up file icons through icon theme fallback data") {
