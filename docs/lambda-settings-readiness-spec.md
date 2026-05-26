@@ -57,7 +57,9 @@ These areas should be included in the Settings milestone:
 - Add apply/revert/error UX that is explicit enough to prevent silent config corruption.
 - Add tests for config read/write, validation, schema metadata, and settings model behavior.
 
-Status update 2026-05-26: a first `SettingsBackend` is in place with deterministic schema descriptors, apply-mode metadata, default extraction, validation for color/number/enum/path/shortcut values, dirty/revert/reset/save model state, Window Manager TOML load/write while preserving unknown keys, Shell TOML load/write for the current Shell config contract while preserving unknown keys, atomic file writes including write-failure preservation tests, shortcut conflict detection, wallpaper path normalization, theme discovery plus missing-theme fallback status, fixture-based system-info parsing/formatting, and About-page system rows that show real kernel/architecture/memory data plus explicit unavailable states instead of fake CPU/storage/display values. Full UI binding and richer provider discovery remain open.
+Status update 2026-05-26: a first `SettingsBackend` is in place with deterministic schema descriptors, apply-mode metadata, default extraction, validation for color/number/enum/path/shortcut values, dirty/revert/reset/save model state, Window Manager TOML load/write while preserving unknown keys, Shell TOML load/write for the current Shell config contract while preserving unknown keys, atomic file writes including write-failure preservation tests, shortcut conflict detection, wallpaper path normalization, theme discovery plus missing-theme fallback status, fixture-based system-info parsing/formatting, and About-page system rows that show real kernel/architecture/memory data plus explicit unavailable states instead of fake CPU/storage/display values.
+
+Status update 2026-05-26: the Settings UI now binds the primary pages to real owner config values instead of local mock state. Appearance, Display, Keyboard, Desktop, Dock & Panel, and Notifications edit Window Manager and Shell schema entries through text controls; Save writes both owner configs atomically after validation; Revert restores the last loaded values; Reset stages schema defaults; and every row displays its apply boundary. Hot-reloadable rows are saved to the owner config, but direct live-apply IPC from Settings to the owner process remains open unless the owner already watches its config.
 
 ## Goals
 
@@ -799,6 +801,12 @@ Expected:
 
 Current status: Settings has no separate app-specific preferences that require their own generated config file. It reads and writes the Window Manager and Shell owner configs directly; both owner config files are generated with defaults by the Settings backend when missing.
 
+## Current user guide
+
+`lambda-settings` opens as a system-titlebar Flux app with a sidebar of real owner-backed pages. General shows the Window Manager and Shell config paths. Appearance edits the Window Manager background, wallpaper, wallpaper mode, default window glass flag, Shell icon themes, Shell icon size, and Shell reduced-motion setting. Display edits the selected Window Manager output and scale. Keyboard edits the Window Manager keyboard layout, repeat settings, close shortcut, and screenshot shortcuts. Desktop edits Window Manager animations, hardware cursor, cursor theme, cursor size, idle blank timeout, and screenshot shortcuts. Dock & Panel edits Shell dock, top-bar, and quick-settings values. Notifications edits Shell notification and clipboard-history config. About displays real system data where available and explicit unavailable rows for providers that are not implemented yet.
+
+The action bar at the top is the persistence boundary. Editing a field stages the value and shows unsaved state. Save validates the staged values and writes the Window Manager and Shell config files. Revert discards staged edits and restores the last loaded/saved values. Reset stages schema defaults for both owner configs; it does not write them until Save is pressed. Rows marked `Restart required` need the owning process restarted. Rows marked `Applies after Save` are written immediately on Save and only apply live when the owning process already supports reloading that config.
+
 ## Test additions
 
 Add focused automated tests where behavior is deterministic:
@@ -825,17 +833,17 @@ Add focused automated tests where behavior is deterministic:
 - [x] Schema metadata exists for every displayed real setting.
 - [x] Config writes are atomic and validated.
 - [x] Unknown config keys are preserved where practical.
-- [ ] Appearance page edits real config.
-- [ ] Display page edits real selected-output/scale config.
-- [ ] Keyboard page edits real keyboard and shortcut config.
-- [ ] Dock & Panel page edits real Shell config.
-- [ ] Desktop page edits real animations/idle/screenshot-supported config.
+- [x] Appearance page edits real config.
+- [x] Display page edits real selected-output/scale config.
+- [x] Keyboard page edits real keyboard and shortcut config.
+- [x] Dock & Panel page edits real Shell config.
+- [x] Desktop page edits real animations/idle/screenshot-supported config.
 - [x] About/System pages show real or unavailable values, not fake values.
-- [ ] Save/revert/reset/error UX is implemented.
-- [ ] Restart-required changes are visible.
+- [x] Save/revert/reset/error UX is implemented.
+- [x] Restart-required changes are visible.
 - [ ] Hot-reloadable changes apply live where supported.
 - [x] Tests cover schema, config, validation, model state, and system provider fixtures.
-- [ ] User guide and Settings docs are updated to match actual behavior.
+- [x] User guide and Settings docs are updated to match actual behavior.
 
 ## Deferred to later milestones
 

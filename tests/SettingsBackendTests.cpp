@@ -53,6 +53,7 @@ TEST_CASE("Settings schema descriptors are unique and expose apply modes") {
   auto defaults = lambda_settings::schemaDefaults(schema);
   CHECK(defaults.at("background") == "#3380f2");
   CHECK(defaults.at("keybindings.close") == "super+q");
+  CHECK(defaults.at("keybindings.screenshot") == "super+shift+3");
 
   auto output = std::find_if(schema.begin(), schema.end(), [](auto const& item) {
     return item.id == "output";
@@ -106,21 +107,29 @@ scale = 2.0
 layout = "us"
 [keybindings]
 close = "super+q"
+screenshot = "super+shift+3"
+screenshot_region = "super+shift+4"
+screenshot_active_window = "super+shift+5"
 )";
   auto loaded = lambda_settings::loadWindowManagerSettings(input);
   CHECK(loaded.values.at("scale").starts_with("2"));
   CHECK(loaded.values.at("input.keyboard.layout") == "us");
   CHECK(loaded.values.at("keybindings.close") == "super+q");
+  CHECK(loaded.values.at("keybindings.screenshot") == "super+shift+3");
+  CHECK(loaded.values.at("keybindings.screenshot_region") == "super+shift+4");
+  CHECK(loaded.values.at("keybindings.screenshot_active_window") == "super+shift+5");
 
   std::string output = lambda_settings::writeWindowManagerSettings(input, {
       {"scale", "1.5"},
       {"input.keyboard.layout", "tr"},
       {"keybindings.close", "super+w"},
+      {"keybindings.screenshot", "super+shift+s"},
   });
   CHECK(output.find("unknown_key") != std::string::npos);
   CHECK(output.find("1.5") != std::string::npos);
   CHECK(output.find("tr") != std::string::npos);
   CHECK(output.find("super+w") != std::string::npos);
+  CHECK(output.find("super+shift+s") != std::string::npos);
 }
 
 TEST_CASE("Settings Shell config round trip preserves unknown keys") {
@@ -243,6 +252,10 @@ TEST_CASE("Settings file helpers resolve create load and save owner configs") {
   CHECK(loadedWm.document.values.at("scale").find("1.5") == 0);
   CHECK(loadedWm.document.values.at("input.keyboard.repeat_rate") == "42");
 
+  auto invalidWm = lambda_settings::saveWindowManagerSettingsFile({{"scale", "not-a-number"}});
+  CHECK_FALSE(invalidWm.ok);
+  CHECK(invalidWm.error.find("Scale") != std::string::npos);
+
   auto createdShell = lambda_settings::loadShellSettingsFile();
   CHECK(createdShell.createdDefault);
   CHECK(createdShell.path == shellPath);
@@ -259,6 +272,10 @@ TEST_CASE("Settings file helpers resolve create load and save owner configs") {
   CHECK(loadedShell.loaded);
   CHECK(loadedShell.document.values.at("dock.show_running_unpinned") == "false");
   CHECK(loadedShell.document.values.at("launcher.max_results") == "8");
+
+  auto invalidShell = lambda_settings::saveShellSettingsFile({{"dock.position", "floating"}});
+  CHECK_FALSE(invalidShell.ok);
+  CHECK(invalidShell.error.find("Dock position") != std::string::npos);
 
   std::filesystem::remove_all(root);
 }

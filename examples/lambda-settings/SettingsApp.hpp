@@ -4,8 +4,10 @@
 #include "SettingsTheme.hpp"
 
 #include <Flux.hpp>
+#include <Flux/Reactive/Effect.hpp>
 #include <Flux/UI/EnvironmentKeys.hpp>
 #include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -15,6 +17,7 @@
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Switch.hpp>
 #include <Flux/UI/Views/Text.hpp>
+#include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/Toggle.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
@@ -23,6 +26,8 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -36,12 +41,11 @@ using namespace flux;
 enum class SettingsSection {
   General,
   Appearance,
+  Display,
+  Keyboard,
   Desktop,
   DockPanel,
-  Workspaces,
-  Privacy,
   Notifications,
-  Power,
   About,
 };
 
@@ -77,18 +81,17 @@ std::vector<SidebarItem> sidebarItems() {
   return {
       {SettingsSection::General, "General", IconName::Settings},
       {SettingsSection::Appearance, "Appearance", IconName::Palette},
+      {SettingsSection::Display, "Display", IconName::Computer},
+      {SettingsSection::Keyboard, "Keyboard", IconName::Keyboard},
       {SettingsSection::Desktop, "Desktop", IconName::Computer},
       {SettingsSection::DockPanel, "Dock & Panel", IconName::Dock},
-      {SettingsSection::Workspaces, "Workspaces", IconName::Layers},
-      {SettingsSection::Privacy, "Privacy", IconName::Lock},
       {SettingsSection::Notifications, "Notifications", IconName::Notifications},
-      {SettingsSection::Power, "Power", IconName::PowerSettingsNew},
       {SettingsSection::About, "About", IconName::Info},
   };
 }
 
 bool hasGroupGapBefore(SettingsSection section) {
-  return section == SettingsSection::Privacy;
+  return section == SettingsSection::Notifications;
 }
 
 Color accentColor(int index) {
@@ -262,6 +265,187 @@ Element valueText(std::string value) {
       .color = SettingsTheme::text2,
       .verticalAlignment = VerticalAlignment::Center,
   };
+}
+
+Element settingsRow(std::string label, std::string sublabel, Element control);
+Element rowsList(std::vector<Element> rows);
+
+enum class SettingsSource {
+  WindowManager,
+  Shell,
+};
+
+struct BoundSetting {
+  SettingsSource source = SettingsSource::WindowManager;
+  SettingSchema schema;
+};
+
+std::string applyModeText(ApplyMode mode) {
+  switch (mode) {
+  case ApplyMode::HotReload:
+    return "Applies after Save";
+  case ApplyMode::NextWindow:
+    return "Applies to new windows";
+  case ApplyMode::RestartRequired:
+    return "Restart required";
+  }
+  return "Applies after Save";
+}
+
+std::string settingValue(std::map<std::string, std::string> const& values, SettingSchema const& schema) {
+  auto found = values.find(schema.id);
+  if (found != values.end()) return found->second;
+  return schema.defaultValue;
+}
+
+std::optional<SettingSchema> findSchema(std::vector<SettingSchema> const& schema, std::string const& id) {
+  auto found = std::find_if(schema.begin(), schema.end(), [&](SettingSchema const& item) {
+    return item.id == id;
+  });
+  if (found == schema.end()) return std::nullopt;
+  return *found;
+}
+
+BoundSetting bindSetting(SettingsSource source, std::vector<SettingSchema> const& schema, std::string const& id) {
+  auto found = findSchema(schema, id);
+  return BoundSetting{.source = source,
+                      .schema = found ? *found : SettingSchema{.id = id, .label = id}};
+}
+
+void setSettingValue(Reactive::Signal<std::map<std::string, std::string>> values,
+                     std::string id,
+                     std::string value) {
+  auto next = values.peek();
+  next[std::move(id)] = std::move(value);
+  values.set(std::move(next));
+}
+
+struct SettingEditorRow {
+  BoundSetting setting;
+  Reactive::Signal<std::map<std::string, std::string>> wmValues;
+  Reactive::Signal<std::map<std::string, std::string>> shellValues;
+  std::function<void(SettingsSource, std::string, std::string)> setValue;
+
+  Element body() const {
+    Reactive::Signal<std::map<std::string, std::string>> const valuesSignal =
+        setting.source == SettingsSource::WindowManager ? wmValues : shellValues;
+    SettingSchema const schema = setting.schema;
+    auto localValue = useState(settingValue(valuesSignal.peek(), schema));
+    Reactive::Effect([valuesSignal, localValue, schema] {
+      std::string const next = settingValue(valuesSignal(), schema);
+      if (localValue.peek() != next) {
+        localValue.set(next);
+      }
+    });
+
+    TextInput::Style inputStyle;
+    inputStyle.font = Font{.size = 12.f, .weight = 450.f};
+    inputStyle.textColor = SettingsTheme::text;
+    inputStyle.placeholderColor = SettingsTheme::text3;
+    inputStyle.backgroundColor = SettingsTheme::glassSoft;
+    inputStyle.borderColor = SettingsTheme::line;
+    inputStyle.borderFocusColor = SettingsTheme::accent;
+    inputStyle.caretColor = SettingsTheme::accent;
+    inputStyle.selectionColor = SettingsTheme::selectFill;
+    inputStyle.cornerRadius = 7.f;
+    inputStyle.paddingH = 10.f;
+    inputStyle.paddingV = 5.f;
+    inputStyle.height = 32.f;
+
+    return settingsRow(
+        schema.label,
+        applyModeText(schema.applyMode),
+        TextInput{
+            .value = localValue,
+            .placeholder = schema.defaultValue,
+            .validationColor = [schema](std::string_view text) {
+              return validateSettingValue(schema, std::string{text}) ? SettingsTheme::accent
+                                                                     : Color::warning();
+            },
+            .style = inputStyle,
+            .onChange = [localValue, schema, source = setting.source, set = setValue](
+                            std::string const& next) {
+              localValue.set(next);
+              if (set) {
+                set(source, schema.id, next);
+              }
+            },
+        }.width(240.f));
+  }
+};
+
+Element settingsPage(std::string title,
+                     std::vector<BoundSetting> settings,
+                     Reactive::Signal<std::map<std::string, std::string>> wmValues,
+                     Reactive::Signal<std::map<std::string, std::string>> shellValues,
+                     std::function<void(SettingsSource, std::string, std::string)> setValue) {
+  std::vector<Element> rows;
+  rows.reserve(settings.size());
+  for (BoundSetting setting : settings) {
+    rows.push_back(Element{SettingEditorRow{
+        .setting = std::move(setting),
+        .wmValues = wmValues,
+        .shellValues = shellValues,
+        .setValue = setValue,
+    }});
+  }
+  return VStack{
+      .spacing = 16.f,
+      .alignment = Alignment::Stretch,
+      .children = children(sectionTitle(std::move(title)), rowsList(std::move(rows))),
+  };
+}
+
+Element settingsActionBar(Reactive::Signal<std::map<std::string, std::string>> wmValues,
+                          Reactive::Signal<std::map<std::string, std::string>> shellValues,
+                          Reactive::Signal<std::map<std::string, std::string>> savedWmValues,
+                          Reactive::Signal<std::map<std::string, std::string>> savedShellValues,
+                          Reactive::Signal<std::string> statusText,
+                          std::function<void()> save,
+                          std::function<void()> revert,
+                          std::function<void()> reset) {
+  Reactive::Bindable<bool> const dirty{[wmValues, shellValues, savedWmValues, savedShellValues] {
+    return wmValues() != savedWmValues() || shellValues() != savedShellValues();
+  }};
+  Reactive::Bindable<std::string> const status{[dirty, statusText] {
+    if (!statusText().empty()) return statusText();
+    return dirty.evaluate() ? std::string{"Unsaved changes"} : std::string{"Saved"};
+  }};
+
+  Button::Style buttonStyle;
+  buttonStyle.font = Font{.size = 12.f, .weight = 650.f};
+  buttonStyle.cornerRadius = 7.f;
+  buttonStyle.paddingH = 12.f;
+  buttonStyle.paddingV = 6.f;
+  buttonStyle.accentColor = SettingsTheme::accent;
+
+  return HStack{
+             .spacing = 8.f,
+             .alignment = Alignment::Center,
+             .children = children(
+                 Text{
+                     .text = status,
+                     .font = Font{.size = 12.f, .weight = 500.f},
+                     .color = SettingsTheme::text2,
+                     .verticalAlignment = VerticalAlignment::Center,
+                 }.flex(1.f, 1.f, 0.f),
+                 Button{.label = std::string{"Reset"},
+                        .variant = ButtonVariant::Secondary,
+                        .style = buttonStyle,
+                        .onTap = std::move(reset)},
+                 Button{.label = std::string{"Revert"},
+                        .variant = ButtonVariant::Secondary,
+                        .disabled = [dirty] { return !dirty.evaluate(); },
+                        .style = buttonStyle,
+                        .onTap = std::move(revert)},
+                 Button{.label = std::string{"Save"},
+                        .variant = ButtonVariant::Primary,
+                        .disabled = [dirty] { return !dirty.evaluate(); },
+                        .style = buttonStyle,
+                        .onTap = std::move(save)})}
+      .padding(8.f, SettingsTheme::kMainPadH, 8.f, SettingsTheme::kMainPadH)
+      .fill(Color{1.f, 1.f, 1.f, 0.18f})
+      .stroke(StrokeStyle::solid(SettingsTheme::line, 1.f));
 }
 
 Element settingsRow(std::string label, std::string sublabel, Element control) {
@@ -721,60 +905,99 @@ Element aboutPage() {
 }
 
 Element contentForSection(SettingsSection section,
-                          Reactive::Signal<int> themeMode,
-                          Reactive::Signal<int> accentIndex,
-                          Reactive::Signal<int> wallpaperIndex,
-                          Reactive::Signal<float> transparency,
-                          Reactive::Signal<float> radius,
-                          Reactive::Signal<bool> reduceMotion,
-                          Reactive::Signal<bool> highContrast) {
+                          Reactive::Signal<std::map<std::string, std::string>> wmValues,
+                          Reactive::Signal<std::map<std::string, std::string>> shellValues,
+                          std::function<void(SettingsSource, std::string, std::string)> setValue) {
+  auto const wmSchema = windowManagerSettingsSchema();
+  auto const shellSchema = shellSettingsSchema();
+  auto wm = [&](std::string const& id) {
+    return bindSetting(SettingsSource::WindowManager, wmSchema, id);
+  };
+  auto shell = [&](std::string const& id) {
+    return bindSetting(SettingsSource::Shell, shellSchema, id);
+  };
+
   switch (section) {
   case SettingsSection::General:
-    return genericPage("General", {{"Language", "English (US)"},
-                                   {"Region", "United States"},
-                                   {"Time zone", "Europe/Istanbul"},
-                                   {"Auto-update", "Daily at 3:00 AM"},
-                                   {"Hostname", "lambda-station"}});
+    return genericPage("General", {{"Window Manager config", windowManagerSettingsPath().string()},
+                                   {"Shell config", shellSettingsPath().string()},
+                                   {"Settings writes", "Owner config files"},
+                                   {"Unknown keys", "Preserved where practical"}});
+  case SettingsSection::Appearance:
+    return settingsPage("Appearance",
+                        {wm("background"),
+                         wm("window_glass"),
+                         wm("wallpaper"),
+                         wm("wallpaper_mode"),
+                         shell("appearance.icon_theme"),
+                         shell("appearance.symbolic_icon_theme"),
+                         shell("appearance.icon_size"),
+                         shell("appearance.reduced_motion")},
+                        wmValues,
+                        shellValues,
+                        setValue);
+  case SettingsSection::Display:
+    return settingsPage("Display",
+                        {wm("output"),
+                         wm("scale")},
+                        wmValues,
+                        shellValues,
+                        setValue);
+  case SettingsSection::Keyboard:
+    return settingsPage("Keyboard",
+                        {wm("input.keyboard.layout"),
+                         wm("input.keyboard.repeat_rate"),
+                         wm("input.keyboard.repeat_delay_ms"),
+                         wm("keybindings.close")},
+                        wmValues,
+                        shellValues,
+                        setValue);
   case SettingsSection::Desktop:
-    return genericPage("Desktop", {{"Wallpaper", "Leaves"},
-                                   {"Show widgets", "On"},
-                                   {"Icon arrangement", "Auto · Grid"},
-                                   {"Click behavior", "Single-click"},
-                                   {"Show hidden files", "Off"}});
+    return settingsPage("Desktop",
+                        {wm("animations"),
+                         wm("hardware_cursor"),
+                         wm("cursor_theme"),
+                         wm("cursor_size"),
+                         wm("idle_blank_timeout_seconds"),
+                         wm("keybindings.screenshot"),
+                         wm("keybindings.screenshot_region"),
+                         wm("keybindings.screenshot_active_window")},
+                        wmValues,
+                        shellValues,
+                        setValue);
   case SettingsSection::DockPanel:
-    return genericPage("Dock & Panel", {{"Dock position", "Bottom"},
-                                        {"Auto-hide dock", "Off"},
-                                        {"Icon size", "Medium"},
-                                        {"Top panel", "Always visible"},
-                                        {"Date format", "Sun 24 May, 14:42"}});
-  case SettingsSection::Workspaces:
-    return genericPage("Workspaces", {{"Active workspaces", "4"},
-                                      {"Workspace gesture", "Three-finger swipe"},
-                                      {"Per-display workspaces", "On"},
-                                      {"Show preview on hover", "On"}});
-  case SettingsSection::Privacy:
-    return genericPage("Privacy", {{"Location services", "Allowed for: Weather, Maps"},
-                                   {"Camera", "0 apps"},
-                                   {"Microphone", "0 apps"},
-                                   {"Analytics", "Off"},
-                                   {"Lock screen", "After 5 min idle"}});
+    return settingsPage("Dock & Panel",
+                        {shell("dock.position"),
+                         shell("dock.auto_hide"),
+                         shell("dock.show_running_unpinned"),
+                         shell("dock.show_tooltips"),
+                         shell("dock.pinned"),
+                         shell("top_bar.clock_format"),
+                         shell("top_bar.show_active_title"),
+                         shell("top_bar.modules"),
+                         shell("quick_settings.modules")},
+                        wmValues,
+                        shellValues,
+                        setValue);
   case SettingsSection::Notifications:
-    return genericPage("Notifications", {{"Show on lock screen", "On"},
-                                         {"Banner style", "Persistent"},
-                                         {"Notification grouping", "By app"},
-                                         {"Do not disturb schedule", "10 PM - 8 AM"}});
-  case SettingsSection::Power:
-    return genericPage("Power", {{"Battery", "82% · 4h 12m remaining"},
-                                 {"Power mode", "Balanced"},
-                                 {"Display sleep", "10 min"},
-                                 {"Computer sleep", "30 min"},
-                                 {"Show battery percentage", "On"}});
+    return settingsPage("Notifications",
+                        {shell("notifications.enabled"),
+                         shell("notifications.do_not_disturb"),
+                         shell("notifications.banner_timeout_seconds"),
+                         shell("notifications.history_limit"),
+                         shell("notifications.show_previews"),
+                         shell("clipboard_history.enabled"),
+                         shell("clipboard_history.persist"),
+                         shell("clipboard_history.max_entries"),
+                         shell("clipboard_history.max_text_bytes"),
+                         shell("clipboard_history.record_primary_selection")},
+                        wmValues,
+                        shellValues,
+                        setValue);
   case SettingsSection::About:
     return aboutPage();
-  case SettingsSection::Appearance:
   default:
-    return appearancePage(themeMode, accentIndex, wallpaperIndex, transparency, radius, reduceMotion,
-                          highContrast);
+    return aboutPage();
   }
 }
 
@@ -783,15 +1006,59 @@ Element contentForSection(SettingsSection section,
 struct SettingsAppRoot {
   Element body() const {
     auto activeSection = useState(SettingsSection::Appearance);
-    auto themeMode = useState(1);
-    auto accentIndex = useState(0);
-    auto wallpaperIndex = useState(0);
-    auto transparency = useState(80.f);
-    auto radius = useState(14.f);
-    auto reduceMotion = useState(false);
-    auto highContrast = useState(false);
+    auto wmLoad = useState(loadWindowManagerSettingsFile());
+    auto shellLoad = useState(loadShellSettingsFile());
+    auto wmValues = useState(wmLoad().document.values);
+    auto shellValues = useState(shellLoad().document.values);
+    auto savedWmValues = useState(wmLoad().document.values);
+    auto savedShellValues = useState(shellLoad().document.values);
+    auto statusText = useState([wmLoad, shellLoad] {
+      if (!wmLoad().error.empty()) return wmLoad().error;
+      if (!shellLoad().error.empty()) return shellLoad().error;
+      return std::string{};
+    }());
     auto chrome = useEnvironment<WindowChromeMetricsKey>();
     WindowChromeMetrics const metrics = chrome();
+
+    auto setValue = [wmValues, shellValues](SettingsSource source, std::string id, std::string value) {
+      if (source == SettingsSource::WindowManager) {
+        setSettingValue(wmValues, std::move(id), std::move(value));
+      } else {
+        setSettingValue(shellValues, std::move(id), std::move(value));
+      }
+    };
+
+    auto revert = [wmValues, shellValues, savedWmValues, savedShellValues, statusText] {
+      wmValues.set(savedWmValues());
+      shellValues.set(savedShellValues());
+      statusText.set(std::string{});
+    };
+
+    auto reset = [wmValues, shellValues, statusText] {
+      wmValues.set(schemaDefaults(windowManagerSettingsSchema()));
+      shellValues.set(schemaDefaults(shellSettingsSchema()));
+      statusText.set("Defaults staged");
+    };
+
+    auto save = [wmLoad, shellLoad, wmValues, shellValues, savedWmValues, savedShellValues, statusText] {
+      auto wmResult = saveWindowManagerSettingsFile(wmValues(), wmLoad().path);
+      auto shellResult = saveShellSettingsFile(shellValues(), shellLoad().path);
+      if (!wmResult.ok || !shellResult.ok) {
+        std::string error;
+        if (!wmResult.ok) {
+          error += "Window Manager: " + wmResult.error;
+        }
+        if (!shellResult.ok) {
+          if (!error.empty()) error += " ";
+          error += "Shell: " + shellResult.error;
+        }
+        statusText.set(error.empty() ? std::string{"Save failed"} : error);
+        return;
+      }
+      savedWmValues.set(wmValues());
+      savedShellValues.set(shellValues());
+      statusText.set("Saved");
+    };
 
     return VStack{
                .spacing = 0.f,
@@ -803,55 +1070,50 @@ struct SettingsAppRoot {
                        .children = children(
                            sidebar(activeSection, metrics),
                            Rectangle{}.width(1.f).fill(SettingsTheme::line),
-                           ScrollView{
-                               .axis = ScrollAxis::Vertical,
-                               .dragScrollEnabled = true,
-                               .children = children(Element{Switch(
-                                   [activeSection] { return activeSection(); },
-                                   {
-                                       Case(SettingsSection::General, [=] {
-                                         return contentForSection(SettingsSection::General, themeMode,
-                                                                  accentIndex, wallpaperIndex, transparency,
-                                                                  radius, reduceMotion, highContrast);
-                                       }),
-                                       Case(SettingsSection::Appearance, [=] {
-                                         return contentForSection(SettingsSection::Appearance, themeMode,
-                                                                  accentIndex, wallpaperIndex, transparency,
-                                                                  radius, reduceMotion, highContrast);
-                                       }),
-                                       Case(SettingsSection::Desktop, [=] {
-                                         return contentForSection(SettingsSection::Desktop, themeMode,
-                                                                  accentIndex, wallpaperIndex, transparency,
-                                                                  radius, reduceMotion, highContrast);
-                                       }),
-                                       Case(SettingsSection::DockPanel, [=] {
-                                         return contentForSection(SettingsSection::DockPanel, themeMode,
-                                                                  accentIndex, wallpaperIndex, transparency,
-                                                                  radius, reduceMotion, highContrast);
-                                       }),
-                                       Case(SettingsSection::Workspaces, [=] {
-                                         return contentForSection(SettingsSection::Workspaces, themeMode,
-                                                                  accentIndex, wallpaperIndex, transparency,
-                                                                  radius, reduceMotion, highContrast);
-                                       }),
-                                       Case(SettingsSection::Privacy, [=] {
-                                         return contentForSection(SettingsSection::Privacy, themeMode,
-                                                                  accentIndex, wallpaperIndex, transparency,
-                                                                  radius, reduceMotion, highContrast);
-                                       }),
-                                       Case(SettingsSection::Notifications, [=] {
-                                         return contentForSection(SettingsSection::Notifications, themeMode,
-                                                                  accentIndex, wallpaperIndex, transparency,
-                                                                  radius, reduceMotion, highContrast);
-                                       }),
-                                       Case(SettingsSection::Power, [=] {
-                                         return contentForSection(SettingsSection::Power, themeMode,
-                                                                  accentIndex, wallpaperIndex, transparency,
-                                                                  radius, reduceMotion, highContrast);
-                                       }),
-                                       Case(SettingsSection::About, [] { return aboutPage(); }),
-                                   })}.padding(SettingsTheme::kMainPadV, SettingsTheme::kMainPadH,
-                                               SettingsTheme::kMainPadV, SettingsTheme::kMainPadH))}
+                           VStack{
+                               .spacing = 0.f,
+                               .alignment = Alignment::Stretch,
+                               .children = children(
+                                   settingsActionBar(wmValues, shellValues, savedWmValues, savedShellValues,
+                                                     statusText, save, revert, reset),
+                                   ScrollView{
+                                       .axis = ScrollAxis::Vertical,
+                                       .dragScrollEnabled = true,
+                                       .children = children(Element{Switch(
+                                           [activeSection] { return activeSection(); },
+                                           {
+                                               Case(SettingsSection::General, [=] {
+                                                 return contentForSection(SettingsSection::General,
+                                                                          wmValues, shellValues, setValue);
+                                               }),
+                                               Case(SettingsSection::Appearance, [=] {
+                                                 return contentForSection(SettingsSection::Appearance,
+                                                                          wmValues, shellValues, setValue);
+                                               }),
+                                               Case(SettingsSection::Display, [=] {
+                                                 return contentForSection(SettingsSection::Display,
+                                                                          wmValues, shellValues, setValue);
+                                               }),
+                                               Case(SettingsSection::Keyboard, [=] {
+                                                 return contentForSection(SettingsSection::Keyboard,
+                                                                          wmValues, shellValues, setValue);
+                                               }),
+                                               Case(SettingsSection::Desktop, [=] {
+                                                 return contentForSection(SettingsSection::Desktop,
+                                                                          wmValues, shellValues, setValue);
+                                               }),
+                                               Case(SettingsSection::DockPanel, [=] {
+                                                 return contentForSection(SettingsSection::DockPanel,
+                                                                          wmValues, shellValues, setValue);
+                                               }),
+                                               Case(SettingsSection::Notifications, [=] {
+                                                 return contentForSection(SettingsSection::Notifications,
+                                                                          wmValues, shellValues, setValue);
+                                               }),
+                                               Case(SettingsSection::About, [] { return aboutPage(); }),
+                                           })}.padding(SettingsTheme::kMainPadV, SettingsTheme::kMainPadH,
+                                                       SettingsTheme::kMainPadV, SettingsTheme::kMainPadH))}
+                                       .flex(1.f, 1.f, 0.f))}
                                .flex(1.f, 1.f, 0.f))}
                        .flex(1.f, 1.f, 0.f))};
   }

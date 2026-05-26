@@ -224,6 +224,31 @@ std::string tomlBool(toml::table const& table, char const* key) {
   return {};
 }
 
+std::optional<std::string> validationError(std::map<std::string, std::string> const& updates,
+                                           std::vector<SettingSchema> const& schema) {
+  std::map<std::string, SettingSchema> schemaById;
+  for (auto const& setting : schema) {
+    schemaById.emplace(setting.id, setting);
+  }
+
+  std::map<std::string, std::string> shortcuts;
+  for (auto const& [id, value] : updates) {
+    auto found = schemaById.find(id);
+    if (found == schemaById.end()) continue;
+    if (!validateSettingValue(found->second, value)) {
+      return "Invalid value for " + found->second.label + ".";
+    }
+    if (found->second.type == SettingType::Shortcut) {
+      shortcuts.emplace(id, value);
+    }
+  }
+
+  if (shortcutConflicts(shortcuts)) {
+    return "Shortcut values must be unique.";
+  }
+  return std::nullopt;
+}
+
 } // namespace
 
 SettingsState::SettingsState(std::map<std::string, std::string> defaults)
@@ -285,6 +310,12 @@ std::vector<SettingSchema> windowManagerSettingsSchema() {
        .applyMode = ApplyMode::HotReload, .defaultValue = "600"},
       {.id = "keybindings.close", .label = "Close window", .type = SettingType::Shortcut,
        .applyMode = ApplyMode::HotReload, .defaultValue = "super+q"},
+      {.id = "keybindings.screenshot", .label = "Full screenshot shortcut", .type = SettingType::Shortcut,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "super+shift+3"},
+      {.id = "keybindings.screenshot_region", .label = "Region screenshot shortcut", .type = SettingType::Shortcut,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "super+shift+4"},
+      {.id = "keybindings.screenshot_active_window", .label = "Window screenshot shortcut",
+       .type = SettingType::Shortcut, .applyMode = ApplyMode::HotReload, .defaultValue = "super+shift+5"},
   };
 }
 
@@ -437,6 +468,9 @@ SettingsDocument loadWindowManagerSettings(std::string_view tomlText) {
   }
   if (auto* keybindings = table["keybindings"].as_table()) {
     setIf("keybindings.close", tomlString(*keybindings, "close"));
+    setIf("keybindings.screenshot", tomlString(*keybindings, "screenshot"));
+    setIf("keybindings.screenshot_region", tomlString(*keybindings, "screenshot_region"));
+    setIf("keybindings.screenshot_active_window", tomlString(*keybindings, "screenshot_active_window"));
   }
   return document;
 }
@@ -612,6 +646,9 @@ SettingsFileLoadResult loadShellSettingsFile(std::filesystem::path path) {
 SettingsFileSaveResult saveWindowManagerSettingsFile(std::map<std::string, std::string> const& updates,
                                                      std::filesystem::path path) {
   if (path.empty()) path = windowManagerSettingsPath();
+  if (auto error = validationError(updates, windowManagerSettingsSchema())) {
+    return {.path = path, .error = *error};
+  }
   SettingsFileLoadResult loaded = loadWindowManagerSettingsFile(path);
   if (!loaded.error.empty()) return {.path = path, .error = loaded.error};
   std::string error;
@@ -623,6 +660,9 @@ SettingsFileSaveResult saveWindowManagerSettingsFile(std::map<std::string, std::
 SettingsFileSaveResult saveShellSettingsFile(std::map<std::string, std::string> const& updates,
                                              std::filesystem::path path) {
   if (path.empty()) path = shellSettingsPath();
+  if (auto error = validationError(updates, shellSettingsSchema())) {
+    return {.path = path, .error = *error};
+  }
   SettingsFileLoadResult loaded = loadShellSettingsFile(path);
   if (!loaded.error.empty()) return {.path = path, .error = loaded.error};
   std::string error;
