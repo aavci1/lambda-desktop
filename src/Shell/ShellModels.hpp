@@ -153,6 +153,7 @@ struct Notification {
 
 enum class QuickSettingAvailability : std::uint8_t {
   Unavailable,
+  Unknown,
   Available,
 };
 
@@ -163,6 +164,15 @@ struct QuickSettingState {
   bool enabled = false;
 
   bool operator==(QuickSettingState const&) const = default;
+};
+
+struct ShellStatusModuleState {
+  std::string id;
+  std::string label;
+  std::string value;
+  QuickSettingAvailability availability = QuickSettingAvailability::Unavailable;
+
+  bool operator==(ShellStatusModuleState const&) const = default;
 };
 
 struct ShellConfig {
@@ -260,6 +270,9 @@ private:
     std::vector<LauncherProviderError> const& errors = {});
 [[nodiscard]] LauncherAction launcherActivationForResult(LauncherResult const& result);
 [[nodiscard]] std::vector<QuickSettingState> quickSettingsSummary(std::vector<QuickSettingState> providers);
+[[nodiscard]] std::vector<ShellStatusModuleState> shellStatusModules(
+    ShellSystemStatusSnapshot const& snapshot,
+    std::vector<std::string> const& moduleIds);
 [[nodiscard]] ShellDesktopSnapshot parseShellSnapshot(std::string_view json);
 [[nodiscard]] ShellConfig defaultShellConfig();
 [[nodiscard]] ShellConfig parseShellConfig(std::string_view tomlText);

@@ -173,15 +173,46 @@ TEST_CASE("Shell clipboard history dedupes respects limits and disabled state") 
 TEST_CASE("Shell quick settings summary orders available providers first") {
   std::vector<lambda_shell::QuickSettingState> providers{
       {.id = "bluetooth", .label = "Bluetooth"},
+      {.id = "battery", .label = "Battery", .availability = lambda_shell::QuickSettingAvailability::Unknown},
       {.id = "wifi", .label = "Wi-Fi", .availability = lambda_shell::QuickSettingAvailability::Available,
        .enabled = true},
       {.id = "audio", .label = "Audio", .availability = lambda_shell::QuickSettingAvailability::Available},
   };
   auto summary = lambda_shell::quickSettingsSummary(std::move(providers));
-  REQUIRE(summary.size() == 3);
+  REQUIRE(summary.size() == 4);
   CHECK(summary[0].id == "audio");
   CHECK(summary[1].id == "wifi");
-  CHECK(summary[2].id == "bluetooth");
+  CHECK(summary[2].id == "battery");
+  CHECK(summary[3].id == "bluetooth");
+}
+
+TEST_CASE("Shell status modules classify available unknown and unavailable values") {
+  lambda_shell::ShellSystemStatusSnapshot snapshot{
+      .network = "online",
+      .wifi = "unknown",
+      .bluetooth = "unavailable",
+      .volume = "44%",
+  };
+
+  auto modules = lambda_shell::shellStatusModules(snapshot, {
+      "network",
+      "wifi",
+      "bluetooth",
+      "volume",
+      "battery",
+      "notifications",
+      "clock",
+      "custom",
+  });
+  REQUIRE(modules.size() == 8);
+  CHECK(modules[0].availability == lambda_shell::QuickSettingAvailability::Available);
+  CHECK(modules[1].availability == lambda_shell::QuickSettingAvailability::Unknown);
+  CHECK(modules[2].availability == lambda_shell::QuickSettingAvailability::Unavailable);
+  CHECK(modules[3].value == "44%");
+  CHECK(modules[4].availability == lambda_shell::QuickSettingAvailability::Unavailable);
+  CHECK(modules[5].availability == lambda_shell::QuickSettingAvailability::Available);
+  CHECK(modules[6].availability == lambda_shell::QuickSettingAvailability::Available);
+  CHECK(modules[7].label == "custom");
 }
 
 TEST_CASE("Shell snapshot parser handles reordered fields and escaped strings") {

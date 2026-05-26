@@ -514,6 +514,70 @@ std::vector<QuickSettingState> quickSettingsSummary(std::vector<QuickSettingStat
   return providers;
 }
 
+std::vector<ShellStatusModuleState> shellStatusModules(ShellSystemStatusSnapshot const& snapshot,
+                                                       std::vector<std::string> const& moduleIds) {
+  auto availabilityFor = [](std::string const& value) {
+    std::string const lower = lowerAscii(value);
+    if (lower.empty() || lower == "unavailable") return QuickSettingAvailability::Unavailable;
+    if (lower == "unknown") return QuickSettingAvailability::Unknown;
+    return QuickSettingAvailability::Available;
+  };
+  auto make = [&](std::string const& id, std::string label, std::string value) {
+    QuickSettingAvailability const availability = availabilityFor(value);
+    return ShellStatusModuleState{
+        .id = id,
+        .label = std::move(label),
+        .value = std::move(value),
+        .availability = availability,
+    };
+  };
+
+  std::vector<ShellStatusModuleState> modules;
+  modules.reserve(moduleIds.size());
+  for (auto const& id : moduleIds) {
+    if (id == "network") {
+      modules.push_back(make(id, "Network", snapshot.network));
+    } else if (id == "wifi") {
+      modules.push_back(make(id, "Wi-Fi", snapshot.wifi));
+    } else if (id == "bluetooth") {
+      modules.push_back(make(id, "Bluetooth", snapshot.bluetooth));
+    } else if (id == "volume" || id == "audio") {
+      modules.push_back(make(id, "Volume", snapshot.volume));
+    } else if (id == "battery" || id == "power") {
+      modules.push_back(make(id, "Battery", snapshot.battery));
+    } else if (id == "notifications") {
+      modules.push_back({
+          .id = id,
+          .label = "Notifications",
+          .value = {},
+          .availability = QuickSettingAvailability::Available,
+      });
+    } else if (id == "clipboard") {
+      modules.push_back({
+          .id = id,
+          .label = "Clipboard",
+          .value = {},
+          .availability = QuickSettingAvailability::Available,
+      });
+    } else if (id == "clock") {
+      modules.push_back({
+          .id = id,
+          .label = "Clock",
+          .value = {},
+          .availability = QuickSettingAvailability::Available,
+      });
+    } else {
+      modules.push_back({
+          .id = id,
+          .label = id,
+          .value = {},
+          .availability = QuickSettingAvailability::Unavailable,
+      });
+    }
+  }
+  return modules;
+}
+
 ShellDesktopSnapshot parseShellSnapshot(std::string_view json) {
   ShellDesktopSnapshot snapshot;
 
