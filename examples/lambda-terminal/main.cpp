@@ -14,7 +14,6 @@
 #include <cerrno>
 #include <chrono>
 #include <cmath>
-#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -24,7 +23,6 @@
 #include <string_view>
 #include <sys/ioctl.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
 #include <fcntl.h>
@@ -162,10 +160,7 @@ public:
       close(ptyFd_);
     }
     if (childPid_ > 0) {
-      int status = 0;
-      if (waitpid(childPid_, &status, WNOHANG) == 0) {
-        kill(childPid_, SIGHUP);
-      }
+      (void)cleanupTerminalChildProcess(childPid_);
     }
     if (vterm_) {
       vterm_free(vterm_);

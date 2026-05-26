@@ -933,7 +933,7 @@ Add focused automated tests where behavior is deterministic:
 
 - [ ] Terminal implementation is split into testable components.
 - [x] Canonical app id is `lambda-terminal`.
-- [ ] Shell lifecycle and child cleanup are robust.
+- [x] Shell lifecycle and child cleanup are robust.
 - [x] Scrollback works with configurable limit.
 - [x] Normal and alternate screen behavior is correct.
 - [x] Selection works across visible screen and scrollback.

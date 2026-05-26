@@ -4,6 +4,7 @@
 
 #include <cerrno>
 #include <chrono>
+#include <csignal>
 #include <cstring>
 #include <fcntl.h>
 #include <pty.h>
@@ -77,4 +78,47 @@ TEST_CASE("terminal pty smoke feeds controlled child output into model") {
   CHECK(buffer.viewportLines() == std::vector<std::string>{"lambda-pty-ready"});
   CHECK(WIFEXITED(status));
   CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("terminal child cleanup reaps exited child") {
+  pid_t const child = fork();
+  REQUIRE(child >= 0);
+  if (child == 0) {
+    _exit(7);
+  }
+
+  std::this_thread::sleep_for(std::chrono::milliseconds{20});
+  auto result = lambda_terminal::cleanupTerminalChildProcess(child, std::chrono::milliseconds{20});
+  CHECK(result.reaped);
+  CHECK(result.exited);
+  CHECK(result.exitStatus == 7);
+  CHECK_FALSE(result.sentKill);
+}
+
+TEST_CASE("terminal child cleanup escalates when hangup is ignored") {
+  int readyPipe[2]{-1, -1};
+  REQUIRE(pipe(readyPipe) == 0);
+  pid_t const child = fork();
+  REQUIRE(child >= 0);
+  if (child == 0) {
+    close(readyPipe[0]);
+    std::signal(SIGHUP, SIG_IGN);
+    char const ready = '1';
+    (void)write(readyPipe[1], &ready, 1);
+    close(readyPipe[1]);
+    for (;;) {
+      pause();
+    }
+  }
+  close(readyPipe[1]);
+  char ready = 0;
+  REQUIRE(read(readyPipe[0], &ready, 1) == 1);
+  close(readyPipe[0]);
+
+  auto result = lambda_terminal::cleanupTerminalChildProcess(child, std::chrono::milliseconds{20});
+  CHECK(result.reaped);
+  CHECK(result.sentHangup);
+  CHECK(result.sentKill);
+  CHECK(result.signaled);
+  CHECK(result.termSignal == SIGKILL);
 }

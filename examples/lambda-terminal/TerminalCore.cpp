@@ -8,12 +8,17 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
+#include <chrono>
 #include <cctype>
 #include <cmath>
+#include <csignal>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <sys/wait.h>
+#include <thread>
 #include <utility>
 
 namespace lambda_terminal {
@@ -939,6 +944,67 @@ TerminalPreferencesLoadResult loadTerminalPreferences(std::filesystem::path path
   result.preferences = parseTerminalPreferencesToml(contents);
   result.loaded = true;
   return result;
+}
+
+TerminalChildCleanupResult cleanupTerminalChildProcess(pid_t pid, std::chrono::milliseconds hangupGrace) {
+  TerminalChildCleanupResult result;
+  if (pid <= 0) return result;
+
+  auto recordStatus = [&result](int status) {
+    result.reaped = true;
+    if (WIFEXITED(status)) {
+      result.exited = true;
+      result.exitStatus = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+      result.signaled = true;
+      result.termSignal = WTERMSIG(status);
+    }
+  };
+
+  auto tryReap = [&]() {
+    int status = 0;
+    pid_t const waited = waitpid(pid, &status, WNOHANG);
+    if (waited == pid) {
+      recordStatus(status);
+      return true;
+    }
+    if (waited < 0 && errno == ECHILD) {
+      result.reaped = true;
+      return true;
+    }
+    return false;
+  };
+
+  if (tryReap()) return result;
+
+  if (kill(pid, SIGHUP) == 0) {
+    result.sentHangup = true;
+  }
+
+  auto const deadline = std::chrono::steady_clock::now() + std::max(std::chrono::milliseconds{0}, hangupGrace);
+  while (std::chrono::steady_clock::now() < deadline) {
+    if (tryReap()) return result;
+    std::this_thread::sleep_for(std::chrono::milliseconds{10});
+  }
+  if (tryReap()) return result;
+
+  if (kill(pid, SIGKILL) == 0) {
+    result.sentKill = true;
+  }
+
+  int status = 0;
+  while (true) {
+    pid_t const waited = waitpid(pid, &status, 0);
+    if (waited == pid) {
+      recordStatus(status);
+      return result;
+    }
+    if (waited < 0 && errno == EINTR) continue;
+    if (waited < 0 && errno == ECHILD) {
+      result.reaped = true;
+    }
+    return result;
+  }
 }
 
 } // namespace lambda_terminal

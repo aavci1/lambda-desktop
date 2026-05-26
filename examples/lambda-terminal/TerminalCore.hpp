@@ -3,11 +3,13 @@
 #include <Flux/Core/Color.hpp>
 #include <Flux/UI/Input.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <sys/types.h>
 #include <vector>
 
 namespace lambda_shell {
@@ -121,6 +123,18 @@ struct TerminalPreferencesSaveResult {
   std::string error;
 
   bool operator==(TerminalPreferencesSaveResult const&) const = default;
+};
+
+struct TerminalChildCleanupResult {
+  bool reaped = false;
+  bool exited = false;
+  bool signaled = false;
+  int exitStatus = -1;
+  int termSignal = 0;
+  bool sentHangup = false;
+  bool sentKill = false;
+
+  constexpr bool operator==(TerminalChildCleanupResult const&) const = default;
 };
 
 struct TerminalBufferCoordinate {
@@ -250,5 +264,8 @@ private:
 [[nodiscard]] TerminalPreferencesLoadResult loadTerminalPreferences(std::filesystem::path path = {});
 [[nodiscard]] TerminalPreferencesSaveResult saveTerminalPreferences(TerminalPreferences const& preferences,
                                                                    std::filesystem::path path = {});
+[[nodiscard]] TerminalChildCleanupResult cleanupTerminalChildProcess(
+    pid_t pid,
+    std::chrono::milliseconds hangupGrace = std::chrono::milliseconds{200});
 
 } // namespace lambda_terminal
