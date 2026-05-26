@@ -27,6 +27,7 @@ public:
   float launcherWidth() const { return launcherWidth_.peek(); }
   float launcherHeight() const { return launcherHeight_.peek(); }
   std::string const& query() const { return query_.peek(); }
+  int queryCursor() const { return queryCursor_.peek(); }
   int highlighted() const { return highlighted_.peek(); }
   std::string const& activeTitle() const { return activeTitle_.peek(); }
   std::string const& timeText() const { return timeText_.peek(); }
@@ -39,6 +40,7 @@ public:
   flux::Signal<float>& launcherWidthSignal() { return launcherWidth_; }
   flux::Signal<float>& launcherHeightSignal() { return launcherHeight_; }
   flux::Signal<std::string>& querySignal() { return query_; }
+  flux::Signal<int>& queryCursorSignal() { return queryCursor_; }
   flux::Signal<int>& highlightedSignal() { return highlighted_; }
   flux::Signal<std::string>& activeTitleSignal() { return activeTitle_; }
   flux::Signal<std::string>& timeTextSignal() { return timeText_; }
@@ -60,6 +62,10 @@ public:
   void moveHighlight(int delta);
   void appendQueryText(std::string_view text);
   void backspaceQuery();
+  void deleteQueryForward();
+  void moveQueryCursor(int delta);
+  void moveQueryCursorToStart();
+  void moveQueryCursorToEnd();
 
   void activateItem(DockItem const& item, std::function<void(std::string const& line)> sendIpc);
 
@@ -75,6 +81,7 @@ private:
   flux::Signal<float> launcherWidth_{1.f};
   flux::Signal<float> launcherHeight_{1.f};
   flux::Signal<std::string> query_;
+  flux::Signal<int> queryCursor_{0};
   flux::Signal<int> highlighted_{0};
   flux::Signal<std::string> activeTitle_;
   flux::Signal<std::string> timeText_{formatTimeText()};

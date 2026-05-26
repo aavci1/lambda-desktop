@@ -140,6 +140,7 @@ void ShellModel::openLauncher() {
   launcherOpen_.set(true);
   launcherUiVisible_.set(false);
   query_.set(std::string{});
+  queryCursor_.set(0);
   highlighted_.set(0);
   refreshLauncherResults();
 }
@@ -151,6 +152,7 @@ void ShellModel::closeLauncher() {
   launcherWidth_.set(1.f);
   launcherHeight_.set(1.f);
   query_.set(std::string{});
+  queryCursor_.set(0);
   highlighted_.set(0);
   refreshLauncherResults();
 }
@@ -171,7 +173,9 @@ void ShellModel::setLauncherSize(float width, float height) {
 }
 
 void ShellModel::setQuery(std::string query) {
+  int const cursor = static_cast<int>(query.size());
   query_.set(std::move(query));
+  queryCursor_.set(cursor);
   highlighted_.set(0);
   refreshLauncherResults();
 }
@@ -189,17 +193,49 @@ void ShellModel::moveHighlight(int delta) {
 void ShellModel::appendQueryText(std::string_view text) {
   std::string next = query_.peek();
   if (next.size() >= 128u) return;
-  next.append(text);
+  std::size_t const insertAt = static_cast<std::size_t>(std::clamp(queryCursor_.peek(), 0, static_cast<int>(next.size())));
+  std::size_t const available = 128u - next.size();
+  std::string_view const inserted = text.substr(0, available);
+  next.insert(insertAt, inserted);
   query_.set(std::move(next));
+  queryCursor_.set(static_cast<int>(insertAt + inserted.size()));
   highlighted_.set(0);
   refreshLauncherResults();
 }
 
 void ShellModel::backspaceQuery() {
   std::string next = query_.peek();
-  if (!next.empty()) next.pop_back();
+  int const cursor = std::clamp(queryCursor_.peek(), 0, static_cast<int>(next.size()));
+  if (cursor > 0) {
+    next.erase(static_cast<std::size_t>(cursor - 1), 1u);
+    queryCursor_.set(cursor - 1);
+  }
   query_.set(std::move(next));
   refreshLauncherResults();
+}
+
+void ShellModel::deleteQueryForward() {
+  std::string next = query_.peek();
+  int const cursor = std::clamp(queryCursor_.peek(), 0, static_cast<int>(next.size()));
+  if (cursor < static_cast<int>(next.size())) {
+    next.erase(static_cast<std::size_t>(cursor), 1u);
+  }
+  query_.set(std::move(next));
+  queryCursor_.set(cursor);
+  refreshLauncherResults();
+}
+
+void ShellModel::moveQueryCursor(int delta) {
+  int const next = std::clamp(queryCursor_.peek() + delta, 0, static_cast<int>(query_.peek().size()));
+  queryCursor_.set(next);
+}
+
+void ShellModel::moveQueryCursorToStart() {
+  queryCursor_.set(0);
+}
+
+void ShellModel::moveQueryCursorToEnd() {
+  queryCursor_.set(static_cast<int>(query_.peek().size()));
 }
 
 void ShellModel::activateItem(DockItem const& item, std::function<void(std::string const& line)> sendIpc) {

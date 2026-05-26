@@ -306,6 +306,31 @@ void ShellController::handleLauncherKey(flux::InputEvent const& event) {
       requestLauncherRedraw();
       return;
     }
+    if (event.key == ForwardDelete) {
+      model_.deleteQueryForward();
+      requestLauncherRedraw();
+      return;
+    }
+    if (event.key == LeftArrow) {
+      model_.moveQueryCursor(-1);
+      requestLauncherRedraw();
+      return;
+    }
+    if (event.key == RightArrow) {
+      model_.moveQueryCursor(1);
+      requestLauncherRedraw();
+      return;
+    }
+    if (event.key == Home) {
+      model_.moveQueryCursorToStart();
+      requestLauncherRedraw();
+      return;
+    }
+    if (event.key == End) {
+      model_.moveQueryCursorToEnd();
+      requestLauncherRedraw();
+      return;
+    }
     if (event.key == DownArrow) {
       model_.moveHighlight(1);
       requestLauncherRedraw();
