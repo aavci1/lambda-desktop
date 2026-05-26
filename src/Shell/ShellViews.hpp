@@ -29,11 +29,12 @@ struct ShellTopBarView {
       }
       return 1.f;
     }};
+    auto const systemStatus = model.systemStatusSignal();
     return flux::Element{LambdaTopBar{TopBarProps{
         .title = flux::Reactive::Bindable<std::string>{[activeTitle] { return activeTitle(); }},
         .timeText = timeText,
         .width = barWidth,
-        .system = model.systemStatus(),
+        .system = flux::Reactive::Bindable<SystemStatus>{[systemStatus] { return systemStatus(); }},
         .onOpenLauncher = onOpenLauncher,
     }}}
         .width(barWidth)

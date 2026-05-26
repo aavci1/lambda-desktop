@@ -3,6 +3,7 @@
 #include <Flux/Core/Color.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/IconName.hpp>
+#include <Flux/UI/PopupMenu.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
 using namespace flux;
@@ -13,6 +14,53 @@ namespace {
 Color statusColor(TopBarStatusItem const& item) {
   if (item.availability == StatusAvailability::Unavailable) return Color(1.f, 1.f, 1.f, 0.38f);
   return item.active ? Color(1.f, 1.f, 1.f, 1.f) : Color(1.f, 1.f, 1.f, 0.62f);
+}
+
+std::string statusTitle(std::string const& id) {
+  if (id == "network") return "Network";
+  if (id == "bluetooth") return "Bluetooth";
+  if (id == "volume") return "Volume";
+  if (id == "battery") return "Battery";
+  return id;
+}
+
+std::string statusMenuLabel(TopBarStatusItem const& item) {
+  std::string label = statusTitle(item.id);
+  label += ": ";
+  if (item.availability == StatusAvailability::Unavailable) {
+    label += "unavailable";
+  } else if (!item.active) {
+    label += "off";
+  } else if (!item.label.empty()) {
+    label += item.label;
+  } else {
+    label += "on";
+  }
+  return label;
+}
+
+void showQuickStatusMenu(std::function<bool(PopupMenu)> const& showMenu,
+                         SystemStatus const& status) {
+  std::vector<MenuItem> items;
+  for (TopBarStatusItem const& statusItem : topBarStatusItems(status)) {
+    MenuItem item;
+    item.label = statusMenuLabel(statusItem);
+    item.actionName = statusItem.id;
+    item.isEnabled = [] { return false; };
+    items.push_back(std::move(item));
+  }
+
+  if (!items.empty()) {
+    items.push_back(MenuItem::separator());
+  }
+
+  MenuItem unavailable;
+  unavailable.label = "Provider controls unavailable";
+  unavailable.actionName = "quick-settings-unavailable";
+  unavailable.isEnabled = [] { return false; };
+  items.push_back(std::move(unavailable));
+
+  showMenu(PopupMenu{.items = std::move(items)});
 }
 
 Element statusElement(TopBarStatusItem const& item) {
@@ -41,6 +89,8 @@ Element statusElement(TopBarStatusItem const& item) {
 
 Element LambdaTopBar::body() const {
     Color const text = Color(1.f, 1.f, 1.f, 1.f);
+    SystemStatus const system = props.system.evaluate();
+    auto showMenu = usePopupMenu();
 
     std::vector<Element> children;
     children.reserve(7);
@@ -61,8 +111,17 @@ Element LambdaTopBar::body() const {
     children.push_back(std::move(lambda));
     children.push_back(Spacer {});
 
-    for (auto const& item : topBarStatusItems(props.system)) {
-        children.push_back(statusElement(item));
+    std::vector<Element> statusChildren;
+    for (auto const& item : topBarStatusItems(system)) {
+        statusChildren.push_back(statusElement(item));
+    }
+    if (!statusChildren.empty()) {
+        children.push_back(HStack {
+            .spacing = 10.f,
+            .alignment = Alignment::Center,
+            .children = std::move(statusChildren),
+        }.height(static_cast<float>(kTopBarHeight))
+         .onTap([showMenu, system] { showQuickStatusMenu(showMenu, system); }));
     }
 
     children.push_back(Text {

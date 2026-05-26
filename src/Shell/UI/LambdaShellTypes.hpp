@@ -107,7 +107,7 @@ struct TopBarProps {
   flux::Reactive::Bindable<std::string> title;
   flux::Reactive::Bindable<std::string> timeText;
   flux::Reactive::Bindable<float> width{1.f};
-  SystemStatus system{};
+  flux::Reactive::Bindable<SystemStatus> system{SystemStatus{}};
   std::function<void()> onOpenLauncher;
 };
 
