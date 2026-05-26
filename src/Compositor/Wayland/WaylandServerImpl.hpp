@@ -618,6 +618,9 @@ void establishPopupGrab(WaylandServer::Impl* server,
                         wl_resource* seat,
                         std::uint32_t serial);
 void releasePopupGrab(WaylandServer::Impl* server, WaylandServer::Impl::XdgPopup* popup, std::uint32_t timeMs);
+bool resetXdgPopupRole(WaylandServer::Impl* server,
+                       WaylandServer::Impl::XdgPopup* popup,
+                       bool sendPopupDone);
 bool surfaceInGrabSubtree(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void removeSurfaceFromFocusOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void activateMostRecentToplevel(WaylandServer::Impl* server, std::uint32_t timeMs);

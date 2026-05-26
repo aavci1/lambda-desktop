@@ -15,10 +15,121 @@
 
 namespace flux::compositor {
 
+bool resetXdgPopupRole(WaylandServer::Impl* server,
+                       WaylandServer::Impl::XdgPopup* popup,
+                       bool sendPopupDone) {
+  if (!server || !popup) return false;
+
+  WaylandServer::Impl::Surface* surface = popup->xdgSurface ? popup->xdgSurface->surface : nullptr;
+  while (surface) {
+    auto child = std::find_if(server->popups_.begin(),
+                              server->popups_.end(),
+                              [popup, surface](auto const& candidate) {
+                                return candidate && candidate.get() != popup &&
+                                       candidate->parentSurface == surface;
+                              });
+    if (child == server->popups_.end()) break;
+    resetXdgPopupRole(server, child->get(), true);
+  }
+
+  diagnostics::crashLog("xdg-popup-reset resource=%u surface=%llu send_done=%u",
+                        popup->resource ? wl_resource_get_id(popup->resource) : 0u,
+                        static_cast<unsigned long long>(surface ? surface->id : 0),
+                        sendPopupDone ? 1u : 0u);
+
+  if (server->grabPopup_ == popup) releasePopupGrab(server, popup, 0);
+  if (server->grabPopup_ == popup) {
+    server->grabPopup_ = nullptr;
+    popup->grabbed = false;
+  }
+  if (surface) {
+    if (server->pointerFocus_ == surface) server->pointerFocus_ = nullptr;
+    if (server->keyboardFocus_ == surface) server->keyboardFocus_ = nullptr;
+    if (surface->xdgPopup == popup) surface->xdgPopup = nullptr;
+    if (surfaceIsXdgPopup(surface)) surface->role = SurfaceRole::None;
+  }
+  for (auto& child : server->popups_) {
+    if (child && child->parentSurface == surface) child->parentSurface = nullptr;
+  }
+  if (popup->resource) {
+    if (sendPopupDone) xdg_popup_send_popup_done(popup->resource);
+    wl_resource_set_user_data(popup->resource, nullptr);
+  }
+  eraseResource(server->popups_, popup);
+  return true;
+}
+
+void resetSubsurfaceRole(WaylandServer::Impl* server, WaylandServer::Impl::Subsurface* subsurface) {
+  if (!server || !subsurface) return;
+  if (subsurface->surface && subsurface->surface->subsurfaceRole == subsurface) {
+    subsurface->surface->subsurfaceRole = nullptr;
+    if (surfaceIsSubsurface(subsurface->surface)) subsurface->surface->role = SurfaceRole::None;
+  }
+  if (subsurface->resource) wl_resource_set_user_data(subsurface->resource, nullptr);
+  eraseResource(server->subsurfaces_, subsurface);
+}
+
+void resetViewportRole(WaylandServer::Impl* server, WaylandServer::Impl::Viewport* viewport) {
+  if (!server || !viewport) return;
+  if (viewport->surface && viewport->surface->viewport == viewport) {
+    viewport->surface->viewport = nullptr;
+    viewport->surface->pendingSourceSet = false;
+    viewport->surface->pendingSourceX = 0.f;
+    viewport->surface->pendingSourceY = 0.f;
+    viewport->surface->pendingSourceWidth = 0.f;
+    viewport->surface->pendingSourceHeight = 0.f;
+    viewport->surface->pendingDestinationSet = false;
+    viewport->surface->pendingDestinationWidth = 0;
+    viewport->surface->pendingDestinationHeight = 0;
+  }
+  if (viewport->resource) wl_resource_set_user_data(viewport->resource, nullptr);
+  eraseResource(server->viewports_, viewport);
+}
+
+void resetFractionalScaleRole(WaylandServer::Impl* server, WaylandServer::Impl::FractionalScale* fractionalScale) {
+  if (!server || !fractionalScale) return;
+  if (fractionalScale->surface && fractionalScale->surface->fractionalScale == fractionalScale) {
+    fractionalScale->surface->fractionalScale = nullptr;
+  }
+  if (fractionalScale->resource) wl_resource_set_user_data(fractionalScale->resource, nullptr);
+  eraseResource(server->fractionalScales_, fractionalScale);
+}
+
+void resetLayerSurfaceRole(WaylandServer::Impl* server, WaylandServer::Impl::LayerSurface* layerSurface) {
+  if (!server || !layerSurface) return;
+  refreshShellReservedZones(server);
+  if (server->commandLauncherModalSurface_ == layerSurface->surface) {
+    server->commandLauncherModalSurface_ = nullptr;
+  }
+  if (layerSurface->surface && layerSurface->surface->layerSurface == layerSurface) {
+    layerSurface->surface->layerSurface = nullptr;
+    if (surfaceIsLayerSurface(layerSurface->surface)) layerSurface->surface->role = SurfaceRole::None;
+  }
+  if (layerSurface->resource) wl_resource_set_user_data(layerSurface->resource, nullptr);
+  eraseResource(server->layerSurfaces_, layerSurface);
+}
+
+void resetToplevelDecoration(WaylandServer::Impl* server, WaylandServer::Impl::ToplevelDecoration* decoration) {
+  if (!server || !decoration) return;
+  if (decoration->resource) wl_resource_set_user_data(decoration->resource, nullptr);
+  eraseResource(server->toplevelDecorations_, decoration);
+}
+
+void resetXxCutouts(WaylandServer::Impl* server, WaylandServer::Impl::XxCutouts* cutouts) {
+  if (!server || !cutouts) return;
+  if (cutouts->toplevel && cutouts->toplevel->cutouts == cutouts) {
+    cutouts->toplevel->cutouts = nullptr;
+    cutouts->toplevel->cutoutsRejected = false;
+  }
+  if (cutouts->resource) wl_resource_set_user_data(cutouts->resource, nullptr);
+  eraseResource(server->cutouts_, cutouts);
+}
+
 void WaylandServer::Impl::destroySurface(Surface* surface) {
   if (surface) {
-    diagnostics::crashLog("surface-destroy surface=%llu role=%u commits=%llu buffer=%dx%d frame=%dx%d",
+    diagnostics::crashLog("surface-destroy surface=%llu resource=%u role=%u commits=%llu buffer=%dx%d frame=%dx%d",
                           static_cast<unsigned long long>(surface->id),
+                          surface->resource ? wl_resource_get_id(surface->resource) : 0u,
                           static_cast<unsigned int>(surface->role),
                           static_cast<unsigned long long>(surface->commitCount),
                           surface->width,
@@ -30,15 +141,6 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   removeSurfaceFromFocusOrder(this, surface);
   if (pointerFocus_ == surface) pointerFocus_ = nullptr;
   if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
-  if (primarySelectionSource_ &&
-      wl_resource_get_client(primarySelectionSource_->resource) == wl_resource_get_client(surface->resource)) {
-    primarySelectionSource_ = nullptr;
-    sendPrimarySelectionForFocus(this);
-  }
-  if (selectionSource_ && wl_resource_get_client(selectionSource_->resource) == wl_resource_get_client(surface->resource)) {
-    selectionSource_ = nullptr;
-    sendSelectionForFocus(this);
-  }
   if (dragSurface_ == surface) {
     dragSurface_ = nullptr;
     dragSnapTarget_.reset();
@@ -63,12 +165,27 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   for (auto& token : activationTokens_) {
     if (token->surface == surface) token->surface = nullptr;
   }
-  for (auto& popup : popups_) {
-    if (popup->parentSurface == surface) popup->parentSurface = nullptr;
+
+  while (true) {
+    auto child = std::find_if(popups_.begin(), popups_.end(), [surface](auto const& popup) {
+      return popup && popup->parentSurface == surface;
+    });
+    if (child == popups_.end()) break;
+    resetXdgPopupRole(this, child->get(), true);
+  }
+  while (true) {
+    auto ownPopup = std::find_if(popups_.begin(), popups_.end(), [surface](auto const& popup) {
+      return popup && popup->xdgSurface && popup->xdgSurface->surface == surface;
+    });
+    if (ownPopup == popups_.end()) break;
+    resetXdgPopupRole(this, ownPopup->get(), false);
+  }
+  for (auto& xdgSurface : xdgSurfaces_) {
+    if (xdgSurface && xdgSurface->surface == surface) xdgSurface->surface = nullptr;
   }
   for (auto it = subsurfaces_.begin(); it != subsurfaces_.end();) {
     if ((*it)->surface == surface || (*it)->parent == surface) {
-      wl_resource_destroy((*it)->resource);
+      resetSubsurfaceRole(this, it->get());
       it = subsurfaces_.begin();
     } else {
       ++it;
@@ -80,10 +197,10 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
       device->pointer = nullptr;
     }
   }
-  if (surface->viewport) wl_resource_destroy(surface->viewport->resource);
-  if (surface->fractionalScale) wl_resource_destroy(surface->fractionalScale->resource);
-  if (surface->layerSurface) wl_resource_destroy(surface->layerSurface->resource);
-  if (surface->xdgPopup) wl_resource_destroy(surface->xdgPopup->resource);
+  if (surface->viewport) resetViewportRole(this, surface->viewport);
+  if (surface->fractionalScale) resetFractionalScaleRole(this, surface->fractionalScale);
+  if (surface->layerSurface) resetLayerSurfaceRole(this, surface->layerSurface);
+  surface->xdgPopup = nullptr;
   if (surface->backgroundEffect && surface->backgroundEffect->surface == surface) {
     surface->backgroundEffect->surface = nullptr;
     surface->backgroundEffect = nullptr;
@@ -134,14 +251,28 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
 }
 
 void WaylandServer::Impl::destroySubsurface(Subsurface* subsurface) {
-  if (subsurface && subsurface->surface && subsurface->surface->subsurfaceRole == subsurface) {
-    subsurface->surface->subsurfaceRole = nullptr;
-    if (surfaceIsSubsurface(subsurface->surface)) subsurface->surface->role = SurfaceRole::None;
-  }
-  eraseResource(subsurfaces_, subsurface);
+  resetSubsurfaceRole(this, subsurface);
 }
 
 void WaylandServer::Impl::destroyXdgSurface(XdgSurface* surface) {
+  if (surface) {
+    diagnostics::crashLog("xdg-surface-destroy resource=%u surface=%llu",
+                          surface->resource ? wl_resource_get_id(surface->resource) : 0u,
+                          static_cast<unsigned long long>(surface->surface ? surface->surface->id : 0));
+    while (true) {
+      auto popup = std::find_if(popups_.begin(), popups_.end(), [surface](auto const& candidate) {
+        return candidate && candidate->xdgSurface == surface;
+      });
+      if (popup == popups_.end()) break;
+      resetXdgPopupRole(this, popup->get(), false);
+    }
+    for (auto& toplevel : toplevels_) {
+      if (toplevel && toplevel->xdgSurface == surface) toplevel->xdgSurface = nullptr;
+    }
+    for (auto& popup : popups_) {
+      if (popup && popup->xdgSurface == surface) popup->xdgSurface = nullptr;
+    }
+  }
   eraseResource(xdgSurfaces_, surface);
 }
 
@@ -160,7 +291,7 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
     surface->role = SurfaceRole::None;
   }
   while (auto* decoration = decorationFor(this, toplevel)) {
-    wl_resource_destroy(decoration->resource);
+    resetToplevelDecoration(this, decoration);
   }
   while (auto* cutouts = cutoutsFor(this, toplevel)) {
     if (shouldReportDefunctCutoutsOnToplevelDestroy(cutouts->resource != nullptr)) {
@@ -168,7 +299,7 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
                              XX_CUTOUTS_MANAGER_V1_ERROR_DEFUNCT_CUTOUTS_OBJECT,
                              "xx_cutouts_v1 must be destroyed before its xdg_toplevel");
     }
-    wl_resource_destroy(cutouts->resource);
+    resetXxCutouts(this, cutouts);
   }
   for (auto& child : toplevels_) {
     if (child && child.get() != toplevel && child->parent == toplevel) {
@@ -183,14 +314,7 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
 }
 
 void WaylandServer::Impl::destroyXdgPopup(XdgPopup* popup) {
-  if (popup && popup->server && popup->server->grabPopup_ == popup) {
-    releasePopupGrab(popup->server, popup, 0);
-  }
-  if (popup && popup->xdgSurface && popup->xdgSurface->surface && popup->xdgSurface->surface->xdgPopup == popup) {
-    popup->xdgSurface->surface->xdgPopup = nullptr;
-    if (surfaceIsXdgPopup(popup->xdgSurface->surface)) popup->xdgSurface->surface->role = SurfaceRole::None;
-  }
-  eraseResource(popups_, popup);
+  resetXdgPopupRole(this, popup, false);
 }
 
 void WaylandServer::Impl::destroyShmPool(ShmPool* pool) {
@@ -269,15 +393,11 @@ void WaylandServer::Impl::destroyDmabufBuffer(DmabufBuffer* buffer) {
 }
 
 void WaylandServer::Impl::destroyToplevelDecoration(ToplevelDecoration* decoration) {
-  eraseResource(toplevelDecorations_, decoration);
+  resetToplevelDecoration(this, decoration);
 }
 
 void WaylandServer::Impl::destroyXxCutouts(XxCutouts* cutouts) {
-  if (cutouts && cutouts->toplevel && cutouts->toplevel->cutouts == cutouts) {
-    cutouts->toplevel->cutouts = nullptr;
-    cutouts->toplevel->cutoutsRejected = false;
-  }
-  eraseResource(cutouts_, cutouts);
+  resetXxCutouts(this, cutouts);
 }
 
 void WaylandServer::Impl::destroyRegion(Region* region) {
@@ -292,25 +412,11 @@ void WaylandServer::Impl::destroyBackgroundEffect(BackgroundEffect* effect) {
 }
 
 void WaylandServer::Impl::destroyViewport(Viewport* viewport) {
-  if (viewport->surface && viewport->surface->viewport == viewport) {
-    viewport->surface->viewport = nullptr;
-    viewport->surface->pendingSourceSet = false;
-    viewport->surface->pendingSourceX = 0.f;
-    viewport->surface->pendingSourceY = 0.f;
-    viewport->surface->pendingSourceWidth = 0.f;
-    viewport->surface->pendingSourceHeight = 0.f;
-    viewport->surface->pendingDestinationSet = false;
-    viewport->surface->pendingDestinationWidth = 0;
-    viewport->surface->pendingDestinationHeight = 0;
-  }
-  eraseResource(viewports_, viewport);
+  resetViewportRole(this, viewport);
 }
 
 void WaylandServer::Impl::destroyFractionalScale(FractionalScale* fractionalScale) {
-  if (fractionalScale->surface && fractionalScale->surface->fractionalScale == fractionalScale) {
-    fractionalScale->surface->fractionalScale = nullptr;
-  }
-  eraseResource(fractionalScales_, fractionalScale);
+  resetFractionalScaleRole(this, fractionalScale);
 }
 
 void WaylandServer::Impl::destroyCursorShapeDevice(CursorShapeDevice* device) {
@@ -323,17 +429,7 @@ void WaylandServer::Impl::destroyIdleInhibitor(IdleInhibitor* inhibitor) {
 }
 
 void WaylandServer::Impl::destroyLayerSurface(LayerSurface* layerSurface) {
-  if (layerSurface) {
-    refreshShellReservedZones(layerSurface->server);
-  }
-  if (layerSurface && commandLauncherModalSurface_ == layerSurface->surface) {
-    commandLauncherModalSurface_ = nullptr;
-  }
-  if (layerSurface && layerSurface->surface && layerSurface->surface->layerSurface == layerSurface) {
-    layerSurface->surface->layerSurface = nullptr;
-    if (surfaceIsLayerSurface(layerSurface->surface)) layerSurface->surface->role = SurfaceRole::None;
-  }
-  eraseResource(layerSurfaces_, layerSurface);
+  resetLayerSurfaceRole(this, layerSurface);
 }
 
 void WaylandServer::Impl::destroyPresentationFeedback(PresentationFeedback* feedback) {

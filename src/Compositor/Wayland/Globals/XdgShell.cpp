@@ -672,7 +672,8 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
                raw->configuredY,
                raw->configuredWidth,
                raw->configuredHeight);
-  diagnostics::crashLog("xdg-popup-create surface=%llu parent=%llu geometry=%d,%d %dx%d",
+  diagnostics::crashLog("xdg-popup-create resource=%u surface=%llu parent=%llu geometry=%d,%d %dx%d",
+                        popupResource ? wl_resource_get_id(popupResource) : 0u,
                         static_cast<unsigned long long>(xdgSurface->surface->id),
                         static_cast<unsigned long long>(raw->parentSurface ? raw->parentSurface->id : 0),
                         raw->configuredX,
@@ -870,8 +871,8 @@ void xdgToplevelMove(wl_client*, wl_resource* resource, wl_resource*, std::uint3
 
 void xdgToplevelSetMaximized(wl_client*, wl_resource* resource) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
-  if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
-  if (toplevel->xdgSurface->surface && toplevel->xdgSurface->surface->fullscreen) {
+  if (!toplevel || !toplevel->server || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
+  if (toplevel->xdgSurface->surface->fullscreen) {
     sendToplevelStateConfigure(toplevel->server, toplevel);
     return;
   }
@@ -880,8 +881,8 @@ void xdgToplevelSetMaximized(wl_client*, wl_resource* resource) {
 
 void xdgToplevelUnsetMaximized(wl_client*, wl_resource* resource) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
-  if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
-  if (toplevel->xdgSurface->surface && toplevel->xdgSurface->surface->fullscreen) {
+  if (!toplevel || !toplevel->server || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
+  if (toplevel->xdgSurface->surface->fullscreen) {
     sendToplevelStateConfigure(toplevel->server, toplevel);
     return;
   }
@@ -914,7 +915,7 @@ void xdgToplevelSetMinSize(wl_client*, wl_resource* resource, std::int32_t width
 
 void xdgToplevelSetFullscreen(wl_client*, wl_resource* resource, wl_resource*) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
-  if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
+  if (!toplevel || !toplevel->server || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
   wm::fullscreenToplevel(toplevel->server, toplevel->xdgSurface->surface);
 }
 
@@ -931,7 +932,7 @@ void xdgToplevelUnsetFullscreen(wl_client*, wl_resource* resource) {
 
 void xdgToplevelSetMinimized(wl_client*, wl_resource* resource) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
-  if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
+  if (!toplevel || !toplevel->server || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
   minimizeToplevel(toplevel->server, toplevel->xdgSurface->surface, monotonicMilliseconds());
 }
 

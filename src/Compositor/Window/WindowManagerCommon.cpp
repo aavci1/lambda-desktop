@@ -262,7 +262,7 @@ void popupTrace(char const* fmt, ...) {
 bool popupIsDescendantOf(WaylandServer::Impl* server,
                          WaylandServer::Impl::XdgPopup* popup,
                          WaylandServer::Impl::XdgPopup* ancestor) {
-  if (!popup || !ancestor) return false;
+  if (!popup || !ancestor || !ancestor->xdgSurface || !ancestor->xdgSurface->surface) return false;
   if (popup == ancestor) return true;
   WaylandServer::Impl::Surface* parent = popup->parentSurface;
   while (parent) {

@@ -452,25 +452,19 @@ namespace flux::compositor::wm {
 
 bool dismissPopup(WaylandServer::Impl::XdgPopup* popup) {
   if (!popup || popup->dismissed) return false;
+  auto* server = popup->server;
+  if (!server) return false;
   popupTrace("lambda-window-manager: xdg_popup dismissed surface=%llu\n",
              static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
                                                  ? popup->xdgSurface->surface->id
                                                  : 0));
-  if (popup->server->grabPopup_ == popup) {
-    releasePopupGrab(popup->server, popup, 0);
-  }
-  popup->dismissed = true;
   bool const restoreToplevelFocus = popup->xdgSurface &&
                                     popup->xdgSurface->surface &&
-                                    popup->server->keyboardFocus_ == popup->xdgSurface->surface;
-  if (popup->xdgSurface && popup->xdgSurface->surface) {
-    if (popup->server->pointerFocus_ == popup->xdgSurface->surface) popup->server->pointerFocus_ = nullptr;
-    if (popup->server->keyboardFocus_ == popup->xdgSurface->surface) popup->server->keyboardFocus_ = nullptr;
-  }
-  if (popup->resource) xdg_popup_send_popup_done(popup->resource);
-  if (restoreToplevelFocus) activateMostRecentToplevel(popup->server, 0);
-  popup->server->flushClients();
-  return true;
+                                    server->keyboardFocus_ == popup->xdgSurface->surface;
+  bool const reset = resetXdgPopupRole(server, popup, true);
+  if (restoreToplevelFocus) activateMostRecentToplevel(server, 0);
+  server->flushClients();
+  return reset;
 }
 
 } // namespace flux::compositor::wm

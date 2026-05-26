@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/Selection.hpp"
 
+#include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
@@ -17,6 +18,16 @@ namespace {
 
 extern struct zwp_primary_selection_offer_v1_interface const primarySelectionOfferImpl;
 extern struct wl_data_offer_interface const dataOfferImpl;
+
+std::uint32_t dataDeviceVersion(WaylandServer::Impl::DataDevice const* device) {
+  return device && device->resource
+             ? std::min<std::uint32_t>(static_cast<std::uint32_t>(wl_resource_get_version(device->resource)), 3u)
+             : 1u;
+}
+
+std::uint32_t resourceId(wl_resource* resource) {
+  return resource ? wl_resource_get_id(resource) : 0u;
+}
 
 void primarySelectionManagerDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -336,7 +347,7 @@ void sendSelectionToDataDevice(WaylandServer::Impl::DataDevice* device) {
   auto offer = std::make_unique<WaylandServer::Impl::DataOffer>();
   offer->server = server;
   offer->source = server->selectionSource_;
-  wl_resource* offerResource = wl_resource_create(deviceClient, &wl_data_offer_interface, 3, 0);
+  wl_resource* offerResource = wl_resource_create(deviceClient, &wl_data_offer_interface, dataDeviceVersion(device), 0);
   if (!offerResource) {
     wl_client_post_no_memory(deviceClient);
     return;
@@ -350,6 +361,11 @@ void sendSelectionToDataDevice(WaylandServer::Impl::DataDevice* device) {
     wl_data_offer_send_offer(offerResource, mimeType.c_str());
   }
   wl_data_device_send_selection(device->resource, offerResource);
+  diagnostics::crashLog("data-selection-send device=%u offer=%u source=%u mime_count=%zu",
+                        resourceId(device->resource),
+                        resourceId(offerResource),
+                        resourceId(raw->source ? raw->source->resource : nullptr),
+                        raw->source ? raw->source->mimeTypes.size() : 0u);
 }
 
 void sendSelectionForFocusImpl(WaylandServer::Impl* server) {
@@ -380,13 +396,15 @@ void clearDndImpl(WaylandServer::Impl* server, bool destroyOffer = true) {
   server->dndOffer_ = nullptr;
 }
 
-WaylandServer::Impl::DataOffer* createDndOffer(WaylandServer::Impl* server, wl_client* client) {
+WaylandServer::Impl::DataOffer* createDndOffer(WaylandServer::Impl* server,
+                                               wl_client* client,
+                                               std::uint32_t version) {
   if (!server->dndSource_ || server->dndSource_->mimeTypes.empty()) return nullptr;
   auto offer = std::make_unique<WaylandServer::Impl::DataOffer>();
   offer->server = server;
   offer->source = server->dndSource_;
   offer->dnd = true;
-  wl_resource* offerResource = wl_resource_create(client, &wl_data_offer_interface, 3, 0);
+  wl_resource* offerResource = wl_resource_create(client, &wl_data_offer_interface, version, 0);
   if (!offerResource) {
     wl_client_post_no_memory(client);
     return nullptr;
@@ -420,7 +438,7 @@ void updateDndTargetImpl(WaylandServer::Impl* server, WaylandServer::Impl::Surfa
       wl_client* targetClient = wl_resource_get_client(target->resource);
       WaylandServer::Impl::DataDevice* targetDevice = dataDeviceForClientImpl(server, targetClient);
       if (targetDevice) {
-        server->dndOffer_ = createDndOffer(server, targetClient);
+        server->dndOffer_ = createDndOffer(server, targetClient, dataDeviceVersion(targetDevice));
         wl_resource* offerResource = server->dndOffer_ ? server->dndOffer_->resource : nullptr;
         if (offerResource) {
           wl_data_device_send_data_offer(targetDevice->resource, offerResource);
@@ -472,6 +490,10 @@ void dataDeviceSetSelection(wl_client*, wl_resource* resource, wl_resource* sour
   if (!device) return;
   auto* server = device->server;
   auto* source = resourceData<WaylandServer::Impl::DataSource>(sourceResource);
+  diagnostics::crashLog("data-set-selection device=%u source=%u old_source=%u",
+                        resourceId(resource),
+                        resourceId(sourceResource),
+                        resourceId(server->selectionSource_ ? server->selectionSource_->resource : nullptr));
   if (server->selectionSource_ && server->selectionSource_ != source && server->selectionSource_->resource) {
     wl_data_source_send_cancelled(server->selectionSource_->resource);
   }
@@ -493,7 +515,9 @@ void dataDeviceManagerCreateDataSource(wl_client* client, wl_resource* resource,
   auto* server = serverFrom(resource);
   auto source = std::make_unique<WaylandServer::Impl::DataSource>();
   source->server = server;
-  wl_resource* sourceResource = wl_resource_create(client, &wl_data_source_interface, 3, id);
+  std::uint32_t const version =
+      std::min<std::uint32_t>(static_cast<std::uint32_t>(wl_resource_get_version(resource)), 3u);
+  wl_resource* sourceResource = wl_resource_create(client, &wl_data_source_interface, version, id);
   if (!sourceResource) {
     wl_client_post_no_memory(client);
     return;
@@ -509,7 +533,9 @@ void dataDeviceManagerGetDataDevice(wl_client* client, wl_resource* resource, st
   auto device = std::make_unique<WaylandServer::Impl::DataDevice>();
   device->server = server;
   device->seat = seat;
-  wl_resource* deviceResource = wl_resource_create(client, &wl_data_device_interface, 3, id);
+  std::uint32_t const version =
+      std::min<std::uint32_t>(static_cast<std::uint32_t>(wl_resource_get_version(resource)), 3u);
+  wl_resource* deviceResource = wl_resource_create(client, &wl_data_device_interface, version, id);
   if (!deviceResource) {
     wl_client_post_no_memory(client);
     return;
