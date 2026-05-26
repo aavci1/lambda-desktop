@@ -2,6 +2,7 @@
 
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Window/WindowManagerInternal.hpp"
 
 #include <sys/mman.h>
 #include <unistd.h>
@@ -129,6 +130,18 @@ void seatGetKeyboard(wl_client* client, wl_resource* resource, std::uint32_t id)
   }
   if (wl_resource_get_version(keyboard) >= WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION) {
     wl_keyboard_send_repeat_info(keyboard, server->keyboardRepeatRate_, server->keyboardRepeatDelayMs_);
+  }
+  if (server->keyboardFocus_ && server->keyboardFocus_->resource &&
+      wl_resource_get_client(server->keyboardFocus_->resource) == client) {
+    wl_array keys;
+    wl_array_init(&keys);
+    std::uint32_t const modifiers = wm::keyboardModifierMask(server);
+    wl_keyboard_send_enter(keyboard,
+                           server->nextInputSerial_++,
+                           server->keyboardFocus_->resource,
+                           &keys);
+    wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, modifiers, 0, 0, 0);
+    wl_array_release(&keys);
   }
 }
 

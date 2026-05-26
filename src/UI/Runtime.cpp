@@ -69,6 +69,7 @@ struct RuntimeInputState {
 };
 
 std::optional<Rect> windowRectForTarget(RuntimeTargetSnapshot const& target, Window& window);
+void focusSingleTargetOnWindowFocus(RuntimeInputState& input, Window& window);
 
 } // namespace
 
@@ -121,6 +122,7 @@ void Runtime::setRoot(std::unique_ptr<RootHolder> holder) {
   current_ = this;
   d->root->mount(d->window.sceneGraph());
   current_ = previous;
+  focusSingleTargetOnWindowFocus(d->input, d->window);
   d->window.requestRedraw();
 }
 
@@ -531,6 +533,7 @@ void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) 
 void setFocus(RuntimeInputState& input, std::optional<HitTarget> hit, bool notify = true,
               FocusInputKind kind = FocusInputKind::Pointer) {
   if (input.focusTarget && hit && sameTarget(*input.focusTarget, *hit)) {
+    setFocusActive(*input.focusTarget, true, kind);
     return;
   }
 
@@ -601,6 +604,17 @@ void cycleKeyboardFocusFromKey(RuntimeInputState& input, Window& window,
   }
 
   cycleKeyboardFocus(input, window, reverse);
+}
+
+void focusSingleTargetOnWindowFocus(RuntimeInputState& input, Window& window) {
+  if (input.focusTarget) {
+    return;
+  }
+
+  std::vector<HitTarget> targets = focusableTargets(window);
+  if (targets.size() == 1) {
+    setFocus(input, targets.front(), true, FocusInputKind::Keyboard);
+  }
 }
 
 ComponentKey focusedActionKey(RuntimeInputState const& input) {
@@ -890,6 +904,7 @@ void Runtime::handleWindowEvent(WindowEvent const& event) {
     resetTransientTargets(d->input, d->window);
     break;
   case WindowEvent::Kind::FocusGained:
+    focusSingleTargetOnWindowFocus(d->input, d->window);
     break;
   case WindowEvent::Kind::DpiChanged:
     if (invalidateRenderCaches(d->window)) {

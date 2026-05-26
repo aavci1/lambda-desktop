@@ -2699,11 +2699,17 @@ void sharedKeymap(void* data, wl_keyboard*, std::uint32_t format, int fd, std::u
 
 void sharedKeyboardEnter(void* data, wl_keyboard*, std::uint32_t, wl_surface* surface, wl_array*) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
-  shared->keyboardFocus = windowForSurface(shared, surface);
-  if (!shared->keyboardFocus) {
-    shared->keyboardFocus = windowForPopupSurface(shared, surface);
+  WaylandWindow* previousFocus = shared->keyboardFocus;
+  WaylandWindow* window = windowForSurface(shared, surface);
+  if (!window) {
+    window = windowForPopupSurface(shared, surface);
   }
-  shared->keyboardSurface = shared->keyboardFocus ? surface : nullptr;
+  shared->keyboardFocus = window;
+  shared->keyboardSurface = window ? surface : nullptr;
+  if (window && window != previousFocus) {
+    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::FocusGained,
+                                                          window->handle()});
+  }
 }
 void sharedKeyboardLeave(void* data, wl_keyboard*, std::uint32_t, wl_surface* surface) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
@@ -2712,9 +2718,14 @@ void sharedKeyboardLeave(void* data, wl_keyboard*, std::uint32_t, wl_surface* su
     window = windowForPopupSurface(shared, surface);
   }
   if (!surface || shared->keyboardFocus == window) {
+    WaylandWindow* previousFocus = shared->keyboardFocus;
     stopKeyboardRepeat(shared);
     shared->keyboardFocus = nullptr;
     shared->keyboardSurface = nullptr;
+    if (previousFocus) {
+      Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::FocusLost,
+                                                            previousFocus->handle()});
+    }
   }
 }
 void sharedKeyboardKey(void* data, wl_keyboard*, std::uint32_t, std::uint32_t, std::uint32_t key,

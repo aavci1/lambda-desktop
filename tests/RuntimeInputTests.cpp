@@ -109,6 +109,13 @@ struct RuntimeHarness {
     runtime.handleInput(event);
   }
 
+  void windowEvent(flux::WindowEvent::Kind kind) {
+    flux::WindowEvent event{};
+    event.kind = kind;
+    event.handle = window.handle();
+    runtime.handleWindowEvent(event);
+  }
+
   void scroll(flux::Point point, flux::Vec2 delta, bool precise = true) {
     flux::InputEvent event{};
     event.kind = flux::InputEvent::Kind::Scroll;
@@ -566,6 +573,42 @@ TEST_CASE("keyboard focus signal differs from pointer focus") {
   harness.keyDown(flux::keys::Tab);
   CHECK(focus.get());
   CHECK(keyboardFocus.get());
+}
+
+TEST_CASE("root mount selects the only focusable target") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<bool> focus;
+  flux::Reactive::Signal<bool> keyboardFocus;
+  harness.setRoot(SingleProbeRoot{.focus = &focus, .keyboardFocus = &keyboardFocus});
+
+  CHECK(focus.get());
+  CHECK(keyboardFocus.get());
+}
+
+TEST_CASE("window focus reselects the only focusable target") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<bool> focus;
+  flux::Reactive::Signal<bool> keyboardFocus;
+  harness.setRoot(SingleProbeRoot{.focus = &focus, .keyboardFocus = &keyboardFocus});
+
+  harness.windowEvent(flux::WindowEvent::Kind::FocusLost);
+  REQUIRE_FALSE(focus.get());
+  REQUIRE_FALSE(keyboardFocus.get());
+
+  harness.windowEvent(flux::WindowEvent::Kind::FocusGained);
+
+  CHECK(focus.get());
+  CHECK(keyboardFocus.get());
+}
+
+TEST_CASE("root mount does not select among multiple focusable targets") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<bool> firstFocus;
+  flux::Reactive::Signal<bool> secondFocus;
+  harness.setRoot(TwoProbeRoot{.firstFocus = &firstFocus, .secondFocus = &secondFocus});
+
+  CHECK_FALSE(firstFocus.get());
+  CHECK_FALSE(secondFocus.get());
 }
 
 TEST_CASE("text input participates in keyboard focus traversal") {
