@@ -29,6 +29,8 @@ struct ScreenshotRequest {
   ScreenshotMode mode = ScreenshotMode::FullOutput;
   std::optional<ScreenshotRegion> region;
   bool includeCursor = true;
+
+  constexpr bool operator==(ScreenshotRequest const&) const = default;
 };
 
 struct ScreenshotSelectionOverlay {
@@ -66,6 +68,8 @@ struct ScreenshotSaveResult {
                                                                          std::int32_t logicalHeight,
                                                                          std::uint32_t framebufferWidth,
                                                                          std::uint32_t framebufferHeight);
+[[nodiscard]] ScreenshotRequest makeScreenshotRequest(ScreenshotMode mode,
+                                                      std::optional<ScreenshotRegion> region = std::nullopt);
 [[nodiscard]] std::optional<ScreenshotImage> cropBgra(std::vector<std::uint8_t> const& bgra,
                                                       std::uint32_t width,
                                                       std::uint32_t height,

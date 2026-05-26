@@ -68,11 +68,7 @@ void finishScreenshotSelection(WaylandServer::Impl* server, std::uint32_t timeMs
   std::optional<ScreenshotRegion> region = selectedRegion(server);
   server->screenshotSelection_ = {};
   if (region) {
-    server->screenshotRequest_ = ScreenshotRequest{
-        .mode = ScreenshotMode::Region,
-        .region = *region,
-        .includeCursor = false,
-    };
+    server->screenshotRequest_ = makeScreenshotRequest(ScreenshotMode::Region, *region);
   }
   markScreenshotSelectionDirty(server);
   restorePointerRouting(server, timeMs);
@@ -109,11 +105,7 @@ void WaylandServer::Impl::requestScreenshot(ScreenshotMode mode, std::uint32_t t
   if (screenshotSelection_.active) {
     cancelScreenshotSelection(this, timeMs);
   }
-  screenshotRequest_ = ScreenshotRequest{
-      .mode = mode,
-      .region = std::nullopt,
-      .includeCursor = true,
-  };
+  screenshotRequest_ = makeScreenshotRequest(mode);
   ++contentSerial_;
 }
 

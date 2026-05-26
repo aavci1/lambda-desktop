@@ -234,6 +234,14 @@ std::optional<ScreenshotRegion> logicalRegionToFramebuffer(ScreenshotRegion regi
   return ScreenshotRegion{.x = x0, .y = y0, .width = x1 - x0, .height = y1 - y0};
 }
 
+ScreenshotRequest makeScreenshotRequest(ScreenshotMode mode, std::optional<ScreenshotRegion> region) {
+  return ScreenshotRequest{
+      .mode = mode,
+      .region = mode == ScreenshotMode::Region ? std::move(region) : std::nullopt,
+      .includeCursor = mode != ScreenshotMode::Region,
+  };
+}
+
 std::optional<ScreenshotImage> cropBgra(std::vector<std::uint8_t> const& bgra,
                                         std::uint32_t width,
                                         std::uint32_t height,

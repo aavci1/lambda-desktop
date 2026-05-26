@@ -107,7 +107,7 @@ These are the concrete findings to resolve or validate before broad refactors.
 
    Status: implemented in code on 2026-05-25 and pending manual UI verification. Full-output capture is bound to `PrintScreen`, `SysRq`, and `Super+Shift+3`; region capture is bound to `Super+Shift+4`; active-window capture is bound to `Super+Shift+5`, `Alt+PrintScreen`, and `Alt+SysRq`. The compositor owns region-selection UI and hides it before the captured frame, so the overlay should not appear in saved images. Full-output and active-window modes include the cursor by forcing software cursor rendering for the captured frame; region mode excludes the cursor. Active-window capture uses the focused toplevel frame, including server-side titlebar/content/border and transparent rounded corners, and excludes the shadow. A short compositor flash confirms successful saves. Clipboard copy and the larger mode/options overlay are still future work.
 
-   Status update: screenshot path generation, collision avoidance, explicit PNG file writing, region coordinate conversion, and selection-region normalization/minimum-size rejection are covered by deterministic tests as of 2026-05-26. The compositor-owned screenshot UI was manually accepted on the target session.
+   Status update: screenshot path generation, collision avoidance, explicit PNG file writing, mode-to-request cursor policy, region coordinate conversion, and selection-region normalization/minimum-size rejection are covered by deterministic tests as of 2026-05-26. The compositor-owned screenshot UI was manually accepted on the target session.
 
 4. Keyboard configuration and repeat need live validation.
 

@@ -91,6 +91,29 @@ TEST_CASE("screenshot selection regions normalize drag direction and reject tiny
   CHECK_FALSE(flux::compositor::screenshotSelectionRegion(120.f, 120.f, 140.f, 140.f, 100, 80));
 }
 
+TEST_CASE("screenshot request policy sets mode region and cursor inclusion") {
+  using flux::compositor::ScreenshotMode;
+  using flux::compositor::ScreenshotRegion;
+
+  auto full = flux::compositor::makeScreenshotRequest(ScreenshotMode::FullOutput);
+  CHECK(full.mode == ScreenshotMode::FullOutput);
+  CHECK_FALSE(full.region);
+  CHECK(full.includeCursor);
+
+  auto active = flux::compositor::makeScreenshotRequest(ScreenshotMode::ActiveWindow,
+                                                        ScreenshotRegion{.x = 1, .y = 2, .width = 3, .height = 4});
+  CHECK(active.mode == ScreenshotMode::ActiveWindow);
+  CHECK_FALSE(active.region);
+  CHECK(active.includeCursor);
+
+  auto region = flux::compositor::makeScreenshotRequest(ScreenshotMode::Region,
+                                                        ScreenshotRegion{.x = 5, .y = 6, .width = 7, .height = 8});
+  CHECK(region.mode == ScreenshotMode::Region);
+  REQUIRE(region.region);
+  CHECK(*region.region == ScreenshotRegion{.x = 5, .y = 6, .width = 7, .height = 8});
+  CHECK_FALSE(region.includeCursor);
+}
+
 TEST_CASE("screenshot BGRA crop preserves selected pixels") {
   using flux::compositor::ScreenshotRegion;
   std::vector<std::uint8_t> pixels(4u * 3u * 4u);
