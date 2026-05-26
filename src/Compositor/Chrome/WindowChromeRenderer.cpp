@@ -175,9 +175,12 @@ void drawDefaultChrome(Canvas& canvas,
     canvas.drawRect(titleRect, titleRadius, FillStyle::solid(titleTint), StrokeStyle::none(), ShadowStyle::none());
   }
 
-  float const separatorY = windowY - 0.5f;
-  canvas.drawLine({windowX, separatorY}, {windowX + windowWidth, separatorY},
-                  StrokeStyle::solid(chrome.borderLineColor, 0.5f));
+  float constexpr separatorHeight = 0.5f;
+  canvas.drawRect(Rect::sharp(windowX, windowY - separatorHeight, windowWidth, separatorHeight),
+                  CornerRadius{},
+                  FillStyle::solid(chrome.borderLineColor),
+                  StrokeStyle::none(),
+                  ShadowStyle::none());
   if (!titlebarCoveredBySurfaceMaterial) {
     float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
     float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
