@@ -64,9 +64,23 @@ bool layerSurfaceAboveWindows(WaylandServer::Impl::Surface const* surface) {
          surface->layerSurface->layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP;
 }
 
+bool hasVisibleFullscreenToplevel(WaylandServer::Impl const* server) {
+  if (!server) return false;
+  return std::any_of(server->surfaces_.begin(), server->surfaces_.end(), [](auto const& surface) {
+    return surface && surfaceIsXdgToplevel(surface.get()) && surface->fullscreen && !surface->minimized;
+  });
+}
+
+bool fullscreenHiddenShellPanel(WaylandServer::Impl::Surface const* surface) {
+  return surfaceIsLayerSurface(surface) && surface->layerSurface &&
+         (surface->layerSurface->nameSpace == "lambda.topbar" ||
+          surface->layerSurface->nameSpace == "lambda.dock");
+}
+
 WaylandServer::Impl::Surface* aboveWindowLayerAt(WaylandServer::Impl* server, float x, float y) {
   if (!server) return nullptr;
 
+  bool const fullscreenActive = hasVisibleFullscreenToplevel(server);
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
     if (!layerSurfaceAboveWindows(surface) || surface->minimized) continue;
@@ -76,6 +90,7 @@ WaylandServer::Impl::Surface* aboveWindowLayerAt(WaylandServer::Impl* server, fl
         surface->layerSurface->nameSpace == "lambda.command-launcher") {
       return surface;
     }
+    if (fullscreenActive && fullscreenHiddenShellPanel(surface)) continue;
   }
 
   for (std::uint32_t layer = ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY; layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP;
@@ -86,6 +101,7 @@ WaylandServer::Impl::Surface* aboveWindowLayerAt(WaylandServer::Impl* server, fl
       std::int32_t const height = displayHeight(surface);
       if (!layerSurfaceAboveWindows(surface) || surface->minimized || width <= 0 || height <= 0) continue;
       if (!surface->layerSurface || surface->layerSurface->layer != layer) continue;
+      if (fullscreenActive && fullscreenHiddenShellPanel(surface)) continue;
       float const left = static_cast<float>(surface->windowX);
       float const top = static_cast<float>(surface->windowY);
       if (containsPoint(x, y, left, top, left + static_cast<float>(width), top + static_cast<float>(height))) {

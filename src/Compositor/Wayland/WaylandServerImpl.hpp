@@ -304,6 +304,11 @@ struct WaylandServer::Impl {
   int keyboardRepeatDelayMs_ = 600;
   std::int32_t topBarExclusiveZone_ = 0;
   std::int32_t dockReservedZone_ = 0;
+  float shellPanelHideProgress_ = 0.f;
+  float shellPanelHideStartProgress_ = 0.f;
+  float shellPanelHideTargetProgress_ = 0.f;
+  std::uint32_t shellPanelHideAnimationStartedAtMs_ = 0;
+  bool shellPanelHideAnimationActive_ = false;
   Surface* lastActivationSurface_ = nullptr;
   std::uint32_t lastActivationTimeMs_ = 0;
 };
@@ -369,6 +374,12 @@ struct WaylandServer::Impl::Surface {
   bool maximized = false;
   bool fullscreen = false;
   bool minimized = false;
+  bool preFullscreenSnapped = false;
+  bool preFullscreenMaximized = false;
+  std::int32_t preFullscreenX = 0;
+  std::int32_t preFullscreenY = 0;
+  std::int32_t preFullscreenWidth = 0;
+  std::int32_t preFullscreenHeight = 0;
   std::int32_t geometryAnimationStartX = 0;
   std::int32_t geometryAnimationStartY = 0;
   std::int32_t geometryAnimationStartWidth = 0;

@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <optional>
@@ -169,6 +170,10 @@ bool cutoutsRejected(WaylandServer::Impl const* server, WaylandServer::Impl::Sur
   return toplevel && toplevel->cutoutsRejected;
 }
 
+bool fullscreenToplevel(WaylandServer::Impl::Surface const* surface) {
+  return surfaceIsXdgToplevel(surface) && surface->fullscreen;
+}
+
 bool hasClientSideGeometryMargins(WaylandServer::Impl::Surface const* surface) {
   if (!surface || !surface->xdgWindowGeometrySet) return false;
   return surface->xdgWindowGeometryX != 0 ||
@@ -239,6 +244,7 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
   std::int32_t const committedHeight = committedDisplayHeightForSurface(surface);
   bool const cropToWindowGeometry = canCropToXdgWindowGeometry(surface);
   std::int32_t const bufferScale = std::max(1, surface->scale);
+  bool const fullscreen = fullscreenToplevel(surface);
   float const sourceX = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryX * bufferScale)
                                              : surface->sourceSet ? surface->sourceX : 0.f;
   float const sourceY = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryY * bufferScale)
@@ -249,11 +255,12 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
   float const sourceHeight = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryHeight * bufferScale)
                                                   : surface->sourceSet ? surface->sourceHeight
                                                                        : static_cast<float>(surface->height);
-  std::int32_t const titleBarHeight = decorated && !cutoutMode ? server->chromeConfig_.titleBarHeight : 0;
-  std::int32_t const workTop = server ? server->topBarExclusiveZone_ : 0;
-  std::int32_t const workBottom = server
-                                      ? std::max(0, server->logicalOutputHeight() - server->dockReservedZone_)
-                                      : 0;
+  std::int32_t const titleBarHeight = decorated && !cutoutMode && !fullscreen ? server->chromeConfig_.titleBarHeight : 0;
+  std::int32_t const outputHeight = server ? server->logicalOutputHeight() : 0;
+  std::int32_t const workTop = server && !fullscreen ? server->topBarExclusiveZone_ : 0;
+  std::int32_t const workBottom = server && !fullscreen
+                                      ? std::max(0, outputHeight - server->dockReservedZone_)
+                                      : outputHeight;
   std::int32_t const frameTop = y - titleBarHeight;
   std::int32_t const frameBottom = y + height;
   std::int32_t const windowClipTop = xdgToplevel && workTop > frameTop ? workTop : 0;
@@ -280,8 +287,8 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .destinationWidth = surface->destinationSet ? surface->destinationWidth : width,
       .destinationHeight = surface->destinationSet ? surface->destinationHeight : height,
       .titleBarHeight = titleBarHeight,
-      .title = decorated && !cutoutMode ? titleForSurface(server, surface) : std::string{},
-      .serverSideDecorated = decorated,
+      .title = decorated && !cutoutMode && !fullscreen ? titleForSurface(server, surface) : std::string{},
+      .serverSideDecorated = decorated && !fullscreen,
       .cutoutsBound = bound,
       .cutoutsRejected = rejected,
       .closeButtonHovered = hovered == ChromeButton::Close,
@@ -297,13 +304,14 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .pacingSizing = server->resizeSurface_ == surface ||
                       surface->geometryAnimationActive,
       .geometryAnimationGrowing = geometryAnimationGrowing,
-      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface) &&
+      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface) && !fullscreen &&
                               !hasClientSideGeometryMargins(surface) &&
                               !surfaceContentFullyOpaque(surface),
-      .shadowClipTop = server ? server->topBarExclusiveZone_ : 0,
-      .shadowClipBottom = server
-                              ? std::max(0, server->logicalOutputHeight() - server->dockReservedZone_)
-                              : 0,
+      .shadowClipTop = fullscreen ? 0 : server ? server->topBarExclusiveZone_ : 0,
+      .shadowClipBottom = fullscreen ? outputHeight
+                                      : server
+                                            ? std::max(0, outputHeight - server->dockReservedZone_)
+                                            : 0,
       .windowClipTop = windowClipTop,
       .windowClipBottom = windowClipBottom,
       .backgroundEffect = surface->backgroundEffectState,
@@ -363,18 +371,49 @@ bool renderInPass(WaylandServer::Impl::Surface const* surface, bool aboveWindowL
   return layerSurfaceAboveWindows(surface) == aboveWindowLayers;
 }
 
+bool isTopBarLayer(WaylandServer::Impl::Surface const* surface) {
+  return surfaceIsLayerSurface(surface) && surface->layerSurface &&
+         surface->layerSurface->nameSpace == "lambda.topbar";
+}
+
+bool isDockLayer(WaylandServer::Impl::Surface const* surface) {
+  return surfaceIsLayerSurface(surface) && surface->layerSurface &&
+         surface->layerSurface->nameSpace == "lambda.dock";
+}
+
+std::int32_t panelHiddenY(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface) {
+  if (isTopBarLayer(surface)) {
+    return -displayHeight(surface) - (surface->layerSurface ? surface->layerSurface->marginTop : 0);
+  }
+  if (isDockLayer(surface)) {
+    return (server ? server->logicalOutputHeight() : surface->windowY + displayHeight(surface)) +
+           (surface->layerSurface ? surface->layerSurface->marginBottom : 0);
+  }
+  return surface ? surface->windowY : 0;
+}
+
+std::int32_t shellPanelPresentationOffsetY(WaylandServer::Impl const* server,
+                                           WaylandServer::Impl::Surface const* surface) {
+  if (!server || (!isTopBarLayer(surface) && !isDockLayer(surface))) return 0;
+  float const progress = std::clamp(server->shellPanelHideProgress_, 0.f, 1.f);
+  if (progress <= 0.f) return 0;
+  std::int32_t const hiddenY = panelHiddenY(server, surface);
+  return static_cast<std::int32_t>(std::lround(static_cast<float>(hiddenY - surface->windowY) * progress));
+}
+
 void appendRenderableSurface(WaylandServer::Impl const* server,
                              std::vector<CommittedSurfaceSnapshot>& snapshots,
                              WaylandServer::Impl::Surface const* surface) {
   if (!wm::surfaceEligibleForPresentation(surface)) return;
+  std::int32_t const presentationOffsetY = shellPanelPresentationOffsetY(server, surface);
   if (surfaceIsRenderable(surface)) {
-    snapshots.push_back(snapshotForSurface(server, surface, surface->windowX, surface->windowY, true));
+    snapshots.push_back(snapshotForSurface(server, surface, surface->windowX, surface->windowY + presentationOffsetY, true));
   }
   appendSubsurfaceSnapshots(server,
                             snapshots,
                             surface,
                             static_cast<std::int32_t>(wm::surfaceBufferOriginX(surface)),
-                            static_cast<std::int32_t>(wm::surfaceBufferOriginY(surface)));
+                            static_cast<std::int32_t>(wm::surfaceBufferOriginY(surface)) + presentationOffsetY);
 }
 
 } // namespace

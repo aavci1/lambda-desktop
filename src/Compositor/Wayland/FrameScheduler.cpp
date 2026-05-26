@@ -19,6 +19,7 @@ namespace {
 constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
 constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
+constexpr std::uint32_t kShellPanelAnimationMs = 180;
 constexpr std::uint32_t kPresentationCompletionFallbackMs = 500;
 
 float clamp01(float value) {
@@ -35,6 +36,42 @@ float easeInOutCubic(float value) {
 std::int32_t lerpInt(std::int32_t from, std::int32_t to, float t) {
   return static_cast<std::int32_t>(std::lround(static_cast<float>(from) +
                                                static_cast<float>(to - from) * t));
+}
+
+bool hasVisibleFullscreenToplevel(WaylandServer::Impl const& server) {
+  return std::any_of(server.surfaces_.begin(), server.surfaces_.end(), [](auto const& surface) {
+    return surface && surfaceIsXdgToplevel(surface.get()) && surface->fullscreen && !surface->minimized;
+  });
+}
+
+void updateShellPanelAnimation(WaylandServer::Impl& server, std::uint32_t timeMs, bool animationsEnabled) {
+  float const target = hasVisibleFullscreenToplevel(server) ? 1.f : 0.f;
+  if (std::fabs(target - server.shellPanelHideTargetProgress_) > 0.001f) {
+    server.shellPanelHideStartProgress_ = server.shellPanelHideProgress_;
+    server.shellPanelHideTargetProgress_ = target;
+    server.shellPanelHideAnimationStartedAtMs_ = timeMs;
+    server.shellPanelHideAnimationActive_ =
+        animationsEnabled && std::fabs(target - server.shellPanelHideProgress_) > 0.001f;
+    if (!server.shellPanelHideAnimationActive_) server.shellPanelHideProgress_ = target;
+    ++server.contentSerial_;
+  }
+
+  if (!server.shellPanelHideAnimationActive_) return;
+  float const linearProgress =
+      animationsEnabled
+          ? static_cast<float>(timeMs - server.shellPanelHideAnimationStartedAtMs_) /
+                static_cast<float>(kShellPanelAnimationMs)
+          : 1.f;
+  float const progress = easeInOutCubic(linearProgress);
+  float const oldProgress = server.shellPanelHideProgress_;
+  server.shellPanelHideProgress_ =
+      server.shellPanelHideStartProgress_ +
+      (server.shellPanelHideTargetProgress_ - server.shellPanelHideStartProgress_) * progress;
+  if (linearProgress >= 1.f) {
+    server.shellPanelHideProgress_ = server.shellPanelHideTargetProgress_;
+    server.shellPanelHideAnimationActive_ = false;
+  }
+  if (std::fabs(server.shellPanelHideProgress_ - oldProgress) > 0.001f) ++server.contentSerial_;
 }
 
 wl_resource* outputResourceForClient(WaylandServer::Impl const& server, wl_client* client) {
@@ -87,6 +124,8 @@ void sendPresentationFeedback(WaylandServer::Impl& server,
 } // namespace
 
 void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animationsEnabled) {
+  updateShellPanelAnimation(*this, timeMs, animationsEnabled);
+
   bool sentConfigure = false;
   for (auto const& surface : surfaces_) {
     if (!surface->geometryAnimationActive) continue;
@@ -141,7 +180,7 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
 }
 
 bool WaylandServer::Impl::hasActiveAnimations() const noexcept {
-  return std::any_of(surfaces_.begin(), surfaces_.end(), [](auto const& surface) {
+  return shellPanelHideAnimationActive_ || std::any_of(surfaces_.begin(), surfaces_.end(), [](auto const& surface) {
     return surface && surface->geometryAnimationActive;
   });
 }
