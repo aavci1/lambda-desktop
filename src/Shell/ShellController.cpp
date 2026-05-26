@@ -1,5 +1,6 @@
 #include "Shell/ShellController.hpp"
 
+#include "Shell/ShellAppRegistry.hpp"
 #include "Shell/ShellDesktopView.hpp"
 #include "Shell/ShellJson.hpp"
 
@@ -15,6 +16,8 @@
 
 #include <any>
 #include <chrono>
+#include <cstdio>
+#include <filesystem>
 
 namespace lambda_shell {
 
@@ -22,6 +25,14 @@ namespace {
 
 using namespace flux;
 using namespace flux::keys;
+
+std::optional<std::filesystem::file_time_type> configLastWriteTime(std::filesystem::path const& path) {
+  if (path.empty()) return std::nullopt;
+  std::error_code ec;
+  auto const time = std::filesystem::last_write_time(path, ec);
+  if (ec) return std::nullopt;
+  return time;
+}
 
 LayerShellOptions layerBase(LayerShellLayer layer, char const* nameSpace) {
   LayerShellOptions options{};
@@ -99,9 +110,14 @@ ShellController::ShellController(flux::Application& app, ShellModel& model) : ap
   });
 
   app_.eventQueue().on<flux::TimerEvent>([this](flux::TimerEvent const& event) {
-    if (clockTimerId_ == 0 || event.timerId != clockTimerId_) return;
-    if (model_.refreshTimeText()) {
-      requestTopBarRedraw();
+    if (clockTimerId_ != 0 && event.timerId == clockTimerId_) {
+      if (model_.refreshTimeText()) {
+        requestTopBarRedraw();
+      }
+      return;
+    }
+    if (configReloadTimerId_ != 0 && event.timerId == configReloadTimerId_) {
+      checkShellConfigReload();
     }
   });
 
@@ -121,6 +137,18 @@ ShellController::ShellController(flux::Application& app, ShellModel& model) : ap
       handleIpcLine(*line);
     }
   });
+}
+
+void ShellController::setConfigReloadSource(std::filesystem::path path,
+                                            std::vector<AppRegistryEntry> apps,
+                                            ShellConfig config) {
+  configPath_ = std::move(path);
+  appRegistry_ = std::move(apps);
+  shellConfig_ = std::move(config);
+  configLastWrite_ = configLastWriteTime(configPath_);
+  if (configReloadTimerId_ == 0) {
+    configReloadTimerId_ = app_.scheduleRepeatingTimer(std::chrono::milliseconds{750});
+  }
 }
 
 std::function<void(DockItem const&)> ShellController::makeActivateCallback() {
@@ -278,6 +306,7 @@ void ShellController::handleIpcLine(std::string_view line) {
     return;
   }
   if (message->kind == flux::shell::ShellMessageKind::WindowManagerSnapshot) {
+    lastSnapshotLine_ = std::string(line);
     auto const changes = model_.applySnapshot(line);
     if (previewHandle_) {
       if (changes.any()) {
@@ -300,6 +329,36 @@ void ShellController::handleIpcLine(std::string_view line) {
       requestLauncherRedraw();
     }
   }
+}
+
+void ShellController::checkShellConfigReload() {
+  if (configPath_.empty()) return;
+  auto const nextWrite = configLastWriteTime(configPath_);
+  if (!nextWrite || (configLastWrite_ && *configLastWrite_ == *nextWrite)) return;
+
+  ShellConfigLoadResult const loaded = loadShellConfig(configPath_);
+  if (!loaded.error.empty()) {
+    std::fprintf(stderr,
+                 "lambda-shell: ignoring shell config reload from %s: %s\n",
+                 configPath_.string().c_str(),
+                 loaded.error.c_str());
+    return;
+  }
+
+  configLastWrite_ = nextWrite;
+  shellConfig_ = loaded.config;
+  model_.setDockItems(appRegistry_, shellConfig_);
+  if (!lastSnapshotLine_.empty()) {
+    (void)model_.applySnapshot(lastSnapshotLine_);
+  }
+
+  int const width = dockWidth(model_.dockItems());
+  if (width != lastDockWidth_ && dockWindow_) {
+    lastDockWidth_ = width;
+    dockWindow_->resize({static_cast<float>(width), static_cast<float>(dockHeight())});
+  }
+  requestDockRedraw();
+  if (model_.launcherOpen()) requestLauncherRedraw();
 }
 
 void ShellController::handleLauncherKey(flux::InputEvent const& event) {

@@ -20,12 +20,13 @@ int main(int argc, char* argv[]) {
     app.setName("lambda-shell");
 
     lambda_shell::ShellModel model;
-    auto const shellConfig = lambda_shell::loadShellConfig();
-    auto const appRegistry = lambda_shell::buildDefaultAppRegistry(
+    auto shellConfig = lambda_shell::loadShellConfig();
+    auto appRegistry = lambda_shell::buildDefaultAppRegistry(
         "examples", lambda_shell::defaultXdgApplicationDirs(), lambda_shell::executableInPath);
     model.setDockItems(appRegistry, shellConfig.config);
 
     lambda_shell::ShellController controller(app, model);
+    controller.setConfigReloadSource(shellConfig.path, appRegistry, shellConfig.config);
     if (!controller.connectIpc()) {
       std::string const& detail = controller.ipc().lastErrorMessage();
       if (detail.empty()) {

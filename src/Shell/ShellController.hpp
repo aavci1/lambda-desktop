@@ -1,14 +1,18 @@
 #pragma once
 
 #include "Shell/ShellConnection.hpp"
+#include "Shell/ShellModels.hpp"
 #include "Shell/ShellModel.hpp"
 
 #include <Flux/UI/Application.hpp>
 #include <Flux/UI/Window.hpp>
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace lambda_shell {
 
@@ -17,6 +21,9 @@ public:
   ShellController(flux::Application& app, ShellModel& model);
 
   bool connectIpc();
+  void setConfigReloadSource(std::filesystem::path path,
+                             std::vector<AppRegistryEntry> apps,
+                             ShellConfig config);
   void createProductionWindows();
   void setupPreviewWindow(flux::Window& window, float width, float height);
 
@@ -34,6 +41,7 @@ private:
   void requestDockRedraw();
   void requestLauncherRedraw();
   void handleIpcLine(std::string_view line);
+  void checkShellConfigReload();
   void syncLauncherWindow();
   void handleLauncherKey(flux::InputEvent const& event);
   std::uint64_t nextRequestId();
@@ -57,7 +65,13 @@ private:
   int lastDockWidth_ = 0;
   std::uint64_t ipcPollId_ = 0;
   std::uint64_t clockTimerId_ = 0;
+  std::uint64_t configReloadTimerId_ = 0;
   std::uint64_t nextRequestId_ = 1;
+  std::filesystem::path configPath_;
+  std::optional<std::filesystem::file_time_type> configLastWrite_;
+  std::vector<AppRegistryEntry> appRegistry_;
+  ShellConfig shellConfig_;
+  std::string lastSnapshotLine_;
 };
 
 flux::WindowConfig topBarWindowConfig();
