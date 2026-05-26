@@ -89,6 +89,29 @@ WindowGeometry maximizedWindowGeometry(OutputGeometry output, std::int32_t topIn
   };
 }
 
+WindowGeometry centerSnappedWindowGeometry(WindowGeometry window,
+                                           OutputGeometry output,
+                                           std::int32_t topInset,
+                                           std::int32_t threshold) {
+  if (window.width <= 0 || window.height <= 0 || output.width <= 0 || output.height <= 0) return window;
+  topInset = std::max(0, topInset);
+  threshold = std::max(0, threshold);
+
+  std::int32_t const maxX = std::max(0, output.width - window.width);
+  std::int32_t const maxY = std::max(topInset, output.height - window.height);
+  window.x = std::clamp(window.x, 0, maxX);
+  window.y = std::clamp(window.y, topInset, maxY);
+
+  std::int32_t const centeredX = std::clamp((output.width - window.width) / 2, 0, maxX);
+  std::int32_t const availableHeight = std::max(0, output.height - topInset);
+  std::int32_t const centeredY = std::clamp(topInset + (availableHeight - window.height) / 2,
+                                            topInset,
+                                            maxY);
+  if (std::abs(window.x - centeredX) <= threshold) window.x = centeredX;
+  if (std::abs(window.y - centeredY) <= threshold) window.y = centeredY;
+  return window;
+}
+
 WindowGeometry restoredDragGeometry(RestoreDragGeometry const& geometry) {
   WindowGeometry restore = geometry.restoreWindow;
   restore.width = std::max(kCompositorMinWindowWidth, restore.width);

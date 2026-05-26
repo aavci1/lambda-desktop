@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <vector>
 #include <wayland-server-core.h>
 
 namespace flux::compositor {
@@ -152,21 +153,25 @@ void bindLayerShellImpl(wl_client* client, void* data, std::uint32_t version, st
 
 void refreshShellReservedZones(WaylandServer::Impl* server) {
   if (!server) return;
-  std::int32_t topBar = 0;
-  std::int32_t dock = 0;
+  std::vector<LayerShellReservedZoneInput> inputs;
+  inputs.reserve(server->layerSurfaces_.size());
   for (auto const& layerSurface : server->layerSurfaces_) {
     if (!layerSurface) continue;
-    std::int32_t const zone = std::max(0, layerSurface->exclusiveZone);
-    if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) != 0) {
-      topBar = std::max(topBar, zone);
-    }
-    if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM) != 0) {
-      dock = std::max(dock, zone);
-    }
+    std::int32_t const extent = layerSurface->surface && displayHeight(layerSurface->surface) > 0
+                                    ? displayHeight(layerSurface->surface)
+                                    : static_cast<std::int32_t>(layerSurface->height);
+    inputs.push_back({
+        .nameSpace = layerSurface->nameSpace.c_str(),
+        .exclusiveZone = layerSurface->exclusiveZone,
+        .anchor = layerSurface->anchor,
+        .marginBottom = layerSurface->marginBottom,
+        .extent = extent,
+    });
   }
-  if (topBar == server->topBarExclusiveZone_ && dock == server->dockReservedZone_) return;
-  server->topBarExclusiveZone_ = topBar;
-  server->dockReservedZone_ = dock;
+  LayerShellReservedZones const zones = aggregateLayerShellReservedZones(inputs);
+  if (zones.topBar == server->topBarExclusiveZone_ && zones.dock == server->dockReservedZone_) return;
+  server->topBarExclusiveZone_ = zones.topBar;
+  server->dockReservedZone_ = zones.dock;
   ++server->contentSerial_;
   server->notifyShellStateChanged();
 }

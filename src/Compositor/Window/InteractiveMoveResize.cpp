@@ -457,10 +457,15 @@ void updateDrag(WaylandServer::Impl* server) {
   std::int32_t const oldX = surface->windowX;
   std::int32_t const oldY = surface->windowY;
   std::int32_t const topInset = topInsetForSurface(server, surface);
-  int const maxX = std::max(0, server->logicalOutputWidth() - displayWidth(surface));
-  int const maxY = std::max(topInset, server->logicalOutputHeight() - displayHeight(surface));
-  surface->windowX = std::clamp(static_cast<int>(server->pointerX_ - server->dragOffsetX_), 0, maxX);
-  surface->windowY = std::clamp(static_cast<int>(server->pointerY_ - server->dragOffsetY_), topInset, maxY);
+  OutputGeometry const output = snapOutputGeometryFor(server);
+  WindowGeometry const next = centerSnappedWindowGeometry({
+      .x = static_cast<std::int32_t>(server->pointerX_ - server->dragOffsetX_),
+      .y = static_cast<std::int32_t>(server->pointerY_ - server->dragOffsetY_),
+      .width = displayWidth(surface),
+      .height = displayHeight(surface),
+  }, output, topInset);
+  surface->windowX = next.x;
+  surface->windowY = next.y;
   if (surface->windowX != oldX || surface->windowY != oldY) {
     ++server->contentSerial_;
   }

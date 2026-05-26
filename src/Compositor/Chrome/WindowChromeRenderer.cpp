@@ -293,29 +293,19 @@ void drawWindowFrameBorder(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
 }
 
 void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview, ChromeConfig const& chrome) {
-  Rect const previewRect = Rect::sharp(static_cast<float>(preview.x),
-                                      static_cast<float>(preview.y),
-                                      static_cast<float>(preview.width),
-                                      static_cast<float>(preview.height));
+  float constexpr strokeWidth = 5.f;
+  float constexpr strokeInset = strokeWidth * 0.5f;
+  Rect const previewRect = Rect::sharp(static_cast<float>(preview.x) + strokeInset,
+                                      static_cast<float>(preview.y) + strokeInset,
+                                      std::max(0.f, static_cast<float>(preview.width) - strokeWidth),
+                                      std::max(0.f, static_cast<float>(preview.height) - strokeWidth));
   CornerRadius const radius{10.f};
-  if (chrome.windowGlassEnabled && chrome.glass.blurRadius > 0.f) {
-    Rect const cacheRect = preview.cacheWidth > 0 && preview.cacheHeight > 0
-                               ? Rect::sharp(static_cast<float>(preview.cacheX),
-                                             static_cast<float>(preview.cacheY),
-                                             static_cast<float>(preview.cacheWidth),
-                                             static_cast<float>(preview.cacheHeight))
-                               : previewRect;
-    canvas.drawBackdropBlurCached(previewRect, cacheRect, chrome.glass.blurRadius, Colors::transparent, radius);
-  }
+  Color border = chrome.glass.borderColor;
+  border.a = std::max(border.a, 0.72f);
   canvas.drawRect(previewRect,
                   radius,
-                  FillStyle::solid(withOpacity(chrome.glass.baseColor, chrome.glass.opacity)),
-                  StrokeStyle::none(),
-                  ShadowStyle::none());
-  canvas.drawRect(previewRect,
-                  radius,
-                  FillStyle::solid(withOpacity(chrome.glass.tintColor, chrome.glass.opacity)),
-                  StrokeStyle::solid(chrome.glass.borderColor, 1.f),
+                  FillStyle::none(),
+                  StrokeStyle::solid(border, strokeWidth),
                   ShadowStyle::none());
 }
 

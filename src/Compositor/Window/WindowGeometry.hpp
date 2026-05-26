@@ -8,6 +8,7 @@ namespace flux::compositor {
 
 constexpr std::int32_t kCompositorTitleBarHeight = 28;
 constexpr std::int32_t kCompositorSnapEdgeThreshold = 8;
+constexpr std::int32_t kCompositorCenterSnapThreshold = 18;
 constexpr std::int32_t kCompositorMinWindowWidth = 160;
 constexpr std::int32_t kCompositorMinWindowHeight = 120;
 
@@ -131,6 +132,10 @@ struct PopupGeometry {
                                                   std::int32_t topInset = kCompositorTitleBarHeight);
 [[nodiscard]] WindowGeometry maximizedWindowGeometry(OutputGeometry output,
                                                     std::int32_t topInset = kCompositorTitleBarHeight);
+[[nodiscard]] WindowGeometry centerSnappedWindowGeometry(WindowGeometry window,
+                                                        OutputGeometry output,
+                                                        std::int32_t topInset = kCompositorTitleBarHeight,
+                                                        std::int32_t threshold = kCompositorCenterSnapThreshold);
 [[nodiscard]] WindowGeometry restoredDragGeometry(RestoreDragGeometry const& geometry);
 [[nodiscard]] WindowGeometry resizedWindowGeometry(ResizeDragGeometry const& geometry);
 [[nodiscard]] PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry);

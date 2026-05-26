@@ -71,12 +71,12 @@ std::optional<int> WaylandServer::Impl::snapPreviewWakeDelayMs() const {
   auto* server = const_cast<WaylandServer::Impl*>(this);
   std::uint32_t const now = monotonicMilliseconds();
   if (!dragSurface_) {
-    if (snapPreviewStartedAtMs_ > 0 && now - snapPreviewStartedAtMs_ <= kSnapPreviewAnimationMs) return 0;
+    if (snapPreviewStartedAtMs_ > 0) return 0;
     return std::nullopt;
   }
   auto const activeTarget = activeDragSnapTarget(server, dragSurface_, now);
   if (activeTarget) {
-    if (snapPreviewStartedAtMs_ > 0 && now - snapPreviewStartedAtMs_ <= kSnapPreviewAnimationMs) return 0;
+    if (snapPreviewStartedAtMs_ > 0) return 0;
     return std::nullopt;
   }
   if (!dragSnapTarget_) return std::nullopt;

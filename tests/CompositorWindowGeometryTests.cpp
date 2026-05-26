@@ -154,6 +154,44 @@ TEST_CASE("compositor maximized geometry uses the same top inset as snap") {
   CHECK(maximized.height == 740);
 }
 
+TEST_CASE("compositor snap geometry uses output work area with reserved dock already removed") {
+  flux::compositor::OutputGeometry const workArea{.width = 1920, .height = 1000};
+
+  auto maximized = flux::compositor::maximizedWindowGeometry(workArea, 40);
+  CHECK(maximized.x == 0);
+  CHECK(maximized.y == 40);
+  CHECK(maximized.width == 1920);
+  CHECK(maximized.height == 960);
+
+  auto bottomRight = flux::compositor::snapTargetGeometry(workArea,
+                                                         flux::compositor::SnapTarget::BottomRightQuarter,
+                                                         40);
+  CHECK(bottomRight.x == 960);
+  CHECK(bottomRight.y == 520);
+  CHECK(bottomRight.width == 960);
+  CHECK(bottomRight.height == 480);
+}
+
+TEST_CASE("compositor drag geometry softly snaps near the center of the work area") {
+  flux::compositor::OutputGeometry const workArea{.width = 1200, .height = 760};
+  flux::compositor::WindowGeometry const nearCenter{.x = 397, .y = 246, .width = 400, .height = 300};
+
+  auto centered = flux::compositor::centerSnappedWindowGeometry(nearCenter, workArea, 40);
+  CHECK(centered.x == 400);
+  CHECK(centered.y == 250);
+  CHECK(centered.width == 400);
+  CHECK(centered.height == 300);
+
+  auto outsideThreshold = flux::compositor::centerSnappedWindowGeometry({
+      .x = 360,
+      .y = 246,
+      .width = 400,
+      .height = 300,
+  }, workArea, 40);
+  CHECK(outsideThreshold.x == 360);
+  CHECK(outsideThreshold.y == 250);
+}
+
 TEST_CASE("compositor geometry stays valid on tiny outputs") {
   flux::compositor::OutputGeometry const output{.width = 120, .height = 80};
 
