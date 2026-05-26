@@ -815,7 +815,7 @@ Do not require GPU screenshot comparison in this milestone unless it is straight
 - [ ] System-titlebar and integrated-titlebar glass are visually consistent.
 - [ ] Shell panels do not flicker during nearby window animations.
 - [ ] Shadow, border, and corner radius behavior is consistent.
-- [ ] Shell focus requests restore minimized windows.
+- [x] Shell focus requests restore minimized windows.
 - [ ] Single-output selection and scale behavior are validated.
 - [ ] Cursor theme and size configuration are validated.
 - [ ] Keyboard layout and repeat configuration are validated.
