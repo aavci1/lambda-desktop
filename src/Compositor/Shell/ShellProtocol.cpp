@@ -1,5 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
+#include "Shell/ShellAppRegistry.hpp"
+
 #include <Flux/Shell/ShellIpc.hpp>
 
 #include <sys/socket.h>
@@ -43,7 +45,26 @@ void sendLine(int fd, std::string const& line) {
 }
 
 std::string appRegistryJson() {
-  return R"([{"id":"files","name":"Files","command":"files"},{"id":"browser","name":"Browser","command":"browser"},{"id":"terminal","name":"Terminal","command":"terminal"},{"id":"settings","name":"Settings","command":"settings"},{"id":"calendar","name":"Calendar","command":"calendar"},{"id":"mail","name":"Mail","command":"mail"},{"id":"music","name":"Music","command":"music"}])";
+  auto const apps = lambda_shell::buildDefaultAppRegistry(
+      "examples", lambda_shell::defaultXdgApplicationDirs(), lambda_shell::executableInPath);
+  std::string json = "[";
+  bool first = true;
+  for (auto const& app : apps) {
+    if (app.hidden || app.noDisplay || app.command.empty()) continue;
+    if (!first) json.push_back(',');
+    first = false;
+    json += "{\"id\":\"";
+    json += flux::shell::escapeJson(app.appId);
+    json += "\",\"name\":\"";
+    json += flux::shell::escapeJson(app.name.empty() ? app.appId : app.name);
+    json += "\",\"icon\":\"";
+    json += flux::shell::escapeJson(app.icon);
+    json += "\",\"command\":\"";
+    json += flux::shell::escapeJson(app.command);
+    json += "\"}";
+  }
+  json += "]";
+  return json;
 }
 
 std::string windowStateJson(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface) {
