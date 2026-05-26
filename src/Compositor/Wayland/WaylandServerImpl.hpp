@@ -344,6 +344,11 @@ struct WaylandServer::Impl::Surface {
   std::int32_t height = 0;
   std::int32_t frameWidth = 0;
   std::int32_t frameHeight = 0;
+  bool xdgWindowGeometrySet = false;
+  std::int32_t xdgWindowGeometryX = 0;
+  std::int32_t xdgWindowGeometryY = 0;
+  std::int32_t xdgWindowGeometryWidth = 0;
+  std::int32_t xdgWindowGeometryHeight = 0;
   float sourceX = 0.f;
   float sourceY = 0.f;
   float sourceWidth = 0.f;

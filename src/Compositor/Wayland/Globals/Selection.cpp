@@ -2,6 +2,7 @@
 
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Window/WindowManagerInternal.hpp"
 #include "primary-selection-unstable-v1-server-protocol.h"
 
 #include <unistd.h>
@@ -428,16 +429,16 @@ void updateDndTargetImpl(WaylandServer::Impl* server, WaylandServer::Impl::Surfa
           }
         }
         std::uint32_t const serial = server->nextInputSerial_++;
-        wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(target->windowX));
-        wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(target->windowY));
+        wl_fixed_t const x = wl_fixed_from_double(wm::surfaceLocalX(target, server->pointerX_));
+        wl_fixed_t const y = wl_fixed_from_double(wm::surfaceLocalY(target, server->pointerY_));
         wl_data_device_send_enter(targetDevice->resource, serial, target->resource, x, y, offerResource);
       }
     }
   }
   if (server->dndTarget_) {
     if (auto* device = dataDeviceForClientImpl(server, wl_resource_get_client(server->dndTarget_->resource))) {
-      wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(server->dndTarget_->windowX));
-      wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(server->dndTarget_->windowY));
+      wl_fixed_t const x = wl_fixed_from_double(wm::surfaceLocalX(server->dndTarget_, server->pointerX_));
+      wl_fixed_t const y = wl_fixed_from_double(wm::surfaceLocalY(server->dndTarget_, server->pointerY_));
       wl_data_device_send_motion(device->resource, timeMs, x, y);
       updateDndOfferAction(server->dndOffer_);
     }

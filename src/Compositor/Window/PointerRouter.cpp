@@ -64,6 +64,10 @@ using wm::ChromeHitContext;
 using wm::controlsRegionContains;
 using wm::inputRegionContains;
 using wm::popupAt;
+using wm::surfaceBufferOriginX;
+using wm::surfaceBufferOriginY;
+using wm::surfaceLocalX;
+using wm::surfaceLocalY;
 using wm::subsurfaceAt;
 using wm::surfaceUsesCutouts;
 
@@ -85,7 +89,7 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
     float const right = left + static_cast<float>(width);
     float const bottom = top + static_cast<float>(height);
     if (x >= left && x < right && y >= top && y < bottom) {
-      if (!inputRegionContains(surface, x - left, y - top)) continue;
+      if (!inputRegionContains(surface, surfaceLocalX(surface, x), surfaceLocalY(surface, y))) continue;
       if (surfaceUsesCutouts(server, surface)) {
         ChromeHitContext context{
             .surface = surface,
@@ -100,7 +104,12 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
         };
         if (controlsRegionContains(context, x, y)) return nullptr;
       }
-      if (WaylandServer::Impl::Surface* subsurface = subsurfaceAt(server, surface, left, top, x, y)) {
+      if (WaylandServer::Impl::Surface* subsurface = subsurfaceAt(server,
+                                                                  surface,
+                                                                  surfaceBufferOriginX(surface),
+                                                                  surfaceBufferOriginY(surface),
+                                                                  x,
+                                                                  y)) {
         return subsurface;
       }
       return surface;
@@ -254,8 +263,8 @@ namespace flux::compositor::wm {
 void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next, std::uint32_t timeMs) {
   if (server->pointerFocus_ == next) {
     if (!next) return;
-    wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(next->windowX));
-    wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(next->windowY));
+    wl_fixed_t const x = wl_fixed_from_double(surfaceLocalX(next, server->pointerX_));
+    wl_fixed_t const y = wl_fixed_from_double(surfaceLocalY(next, server->pointerY_));
     for (wl_resource* pointer : server->pointerResources_) {
       if (!resourceBelongsToSurfaceClient(pointer, next)) continue;
       wl_pointer_send_motion(pointer, timeMs, x, y);
@@ -278,8 +287,8 @@ void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   server->cursorSurface_ = nullptr;
   server->cursorShape_ = CursorShape::Arrow;
   if (next) {
-    wl_fixed_t const x = wl_fixed_from_double(server->pointerX_ - static_cast<float>(next->windowX));
-    wl_fixed_t const y = wl_fixed_from_double(server->pointerY_ - static_cast<float>(next->windowY));
+    wl_fixed_t const x = wl_fixed_from_double(surfaceLocalX(next, server->pointerX_));
+    wl_fixed_t const y = wl_fixed_from_double(surfaceLocalY(next, server->pointerY_));
     server->pointerEnterSerial_ = serial;
     for (wl_resource* pointer : server->pointerResources_) {
       if (!resourceBelongsToSurfaceClient(pointer, next)) continue;

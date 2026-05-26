@@ -166,6 +166,24 @@ inline bool inputRegionContains(WaylandServer::Impl::Surface const* surface, flo
                               localY < static_cast<float>(rect.y + rect.height);
                      });
 }
+inline std::int32_t xdgWindowGeometryOffsetX(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryX : 0;
+}
+inline std::int32_t xdgWindowGeometryOffsetY(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryY : 0;
+}
+inline float surfaceBufferOriginX(WaylandServer::Impl::Surface const* surface) {
+  return surface ? static_cast<float>(surface->windowX - xdgWindowGeometryOffsetX(surface)) : 0.f;
+}
+inline float surfaceBufferOriginY(WaylandServer::Impl::Surface const* surface) {
+  return surface ? static_cast<float>(surface->windowY - xdgWindowGeometryOffsetY(surface)) : 0.f;
+}
+inline float surfaceLocalX(WaylandServer::Impl::Surface const* surface, float globalX) {
+  return globalX - surfaceBufferOriginX(surface);
+}
+inline float surfaceLocalY(WaylandServer::Impl::Surface const* surface, float globalY) {
+  return globalY - surfaceBufferOriginY(surface);
+}
 WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surface);
 OutputGeometry outputGeometryFor(WaylandServer::Impl const* server);
 OutputGeometry snapOutputGeometryFor(WaylandServer::Impl const* server);

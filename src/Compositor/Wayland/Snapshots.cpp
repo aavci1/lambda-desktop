@@ -113,8 +113,13 @@ std::int32_t committedDisplayHeightForSurface(WaylandServer::Impl::Surface const
 
 bool surfaceContentFullyOpaque(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return false;
-  if (regionCoversRect(surface->opaqueRegionRects, 0, 0, committedDisplayWidthForSurface(surface),
-                       committedDisplayHeightForSurface(surface))) {
+  std::int32_t const x = surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryX : 0;
+  std::int32_t const y = surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryY : 0;
+  std::int32_t const width =
+      surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryWidth : committedDisplayWidthForSurface(surface);
+  std::int32_t const height =
+      surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryHeight : committedDisplayHeightForSurface(surface);
+  if (regionCoversRect(surface->opaqueRegionRects, x, y, width, height)) {
     return true;
   }
   if (surface->rgbaPixels && !surface->rgbaPixels->empty()) return surface->rgbaFullyOpaque;
@@ -164,6 +169,30 @@ bool cutoutsRejected(WaylandServer::Impl const* server, WaylandServer::Impl::Sur
   return toplevel && toplevel->cutoutsRejected;
 }
 
+bool hasClientSideGeometryMargins(WaylandServer::Impl::Surface const* surface) {
+  if (!surface || !surface->xdgWindowGeometrySet) return false;
+  return surface->xdgWindowGeometryX != 0 ||
+         surface->xdgWindowGeometryY != 0 ||
+         surface->xdgWindowGeometryWidth != committedDisplayWidthForSurface(surface) ||
+         surface->xdgWindowGeometryHeight != committedDisplayHeightForSurface(surface);
+}
+
+bool canCropToXdgWindowGeometry(WaylandServer::Impl::Surface const* surface) {
+  if (!surface || !surface->xdgWindowGeometrySet || surface->sourceSet || surface->destinationSet) return false;
+  if (surface->bufferTransform != WL_OUTPUT_TRANSFORM_NORMAL) return false;
+  std::int32_t const scale = std::max(1, surface->scale);
+  std::int32_t const sourceX = surface->xdgWindowGeometryX * scale;
+  std::int32_t const sourceY = surface->xdgWindowGeometryY * scale;
+  std::int32_t const sourceWidth = surface->xdgWindowGeometryWidth * scale;
+  std::int32_t const sourceHeight = surface->xdgWindowGeometryHeight * scale;
+  return sourceX >= 0 &&
+         sourceY >= 0 &&
+         sourceWidth > 0 &&
+         sourceHeight > 0 &&
+         sourceX + sourceWidth <= surface->width &&
+         sourceY + sourceHeight <= surface->height;
+}
+
 enum class ChromeButton {
   None,
   Close,
@@ -208,6 +237,18 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
   std::int32_t const height = displayHeight(surface);
   std::int32_t const committedWidth = committedDisplayWidthForSurface(surface);
   std::int32_t const committedHeight = committedDisplayHeightForSurface(surface);
+  bool const cropToWindowGeometry = canCropToXdgWindowGeometry(surface);
+  std::int32_t const bufferScale = std::max(1, surface->scale);
+  float const sourceX = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryX * bufferScale)
+                                             : surface->sourceSet ? surface->sourceX : 0.f;
+  float const sourceY = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryY * bufferScale)
+                                             : surface->sourceSet ? surface->sourceY : 0.f;
+  float const sourceWidth = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryWidth * bufferScale)
+                                                 : surface->sourceSet ? surface->sourceWidth
+                                                                      : static_cast<float>(surface->width);
+  float const sourceHeight = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryHeight * bufferScale)
+                                                  : surface->sourceSet ? surface->sourceHeight
+                                                                       : static_cast<float>(surface->height);
   std::int32_t const titleBarHeight = decorated && !cutoutMode ? server->chromeConfig_.titleBarHeight : 0;
   std::int32_t const workTop = server ? server->topBarExclusiveZone_ : 0;
   std::int32_t const workBottom = server
@@ -232,10 +273,10 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .bufferWidth = surface->width,
       .bufferHeight = surface->height,
       .bufferTransform = surface->bufferTransform,
-      .sourceX = surface->sourceSet ? surface->sourceX : 0.f,
-      .sourceY = surface->sourceSet ? surface->sourceY : 0.f,
-      .sourceWidth = surface->sourceSet ? surface->sourceWidth : static_cast<float>(surface->width),
-      .sourceHeight = surface->sourceSet ? surface->sourceHeight : static_cast<float>(surface->height),
+      .sourceX = sourceX,
+      .sourceY = sourceY,
+      .sourceWidth = sourceWidth,
+      .sourceHeight = sourceHeight,
       .destinationWidth = surface->destinationSet ? surface->destinationWidth : width,
       .destinationHeight = surface->destinationSet ? surface->destinationHeight : height,
       .titleBarHeight = titleBarHeight,
@@ -249,36 +290,38 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .maximizeButtonPressed = server->maximizePressSurface_ == surface,
       .minimizeButtonHovered = hovered == ChromeButton::Minimize,
       .minimizeButtonPressed = server->minimizePressSurface_ == surface,
-	      .focused = server->keyboardFocus_ == surface,
-	      .activeSizing = server->resizeSurface_ == surface ||
-	                      surface->geometryAnimationActive ||
-	                      surface->awaitingConfigureCommit,
-	      .pacingSizing = server->resizeSurface_ == surface ||
-	                      surface->geometryAnimationActive,
-	      .geometryAnimationGrowing = geometryAnimationGrowing,
-	      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface) && !surfaceContentFullyOpaque(surface),
-	      .shadowClipTop = server ? server->topBarExclusiveZone_ : 0,
-	      .shadowClipBottom = server
-	                              ? std::max(0, server->logicalOutputHeight() - server->dockReservedZone_)
-	                              : 0,
-	      .windowClipTop = windowClipTop,
-	      .windowClipBottom = windowClipBottom,
-	      .backgroundEffect = surface->backgroundEffectState,
-	      .serial = surface->serial,
-	      .lastConfigureSerial = surface->lastConfigureSerial,
-	      .lastConfigureWidth = surface->lastConfigureWidth,
-	      .lastConfigureHeight = surface->lastConfigureHeight,
-	      .lastResizeInputNsec = surface->lastResizeInputNsec,
-	      .lastConfigureSentNsec = surface->lastConfigureSentNsec,
-	      .lastConfigureAckNsec = surface->lastConfigureAckNsec,
-	      .lastCommitNsec = surface->lastCommitNsec,
-	      .backgroundBlurRects = surface->backgroundBlurRects,
-	      .opaqueRegionRects = surface->opaqueRegionRects,
-	      .rgbaPixels = surface->rgbaPixels,
-	      .pixelFormat = surface->pixelFormat,
-	      .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,
-	      .dmabufFormat = 0,
-	      .dmabufPlanes = {},
+      .focused = server->keyboardFocus_ == surface,
+      .activeSizing = server->resizeSurface_ == surface ||
+                      surface->geometryAnimationActive ||
+                      surface->awaitingConfigureCommit,
+      .pacingSizing = server->resizeSurface_ == surface ||
+                      surface->geometryAnimationActive,
+      .geometryAnimationGrowing = geometryAnimationGrowing,
+      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface) &&
+                              !hasClientSideGeometryMargins(surface) &&
+                              !surfaceContentFullyOpaque(surface),
+      .shadowClipTop = server ? server->topBarExclusiveZone_ : 0,
+      .shadowClipBottom = server
+                              ? std::max(0, server->logicalOutputHeight() - server->dockReservedZone_)
+                              : 0,
+      .windowClipTop = windowClipTop,
+      .windowClipBottom = windowClipBottom,
+      .backgroundEffect = surface->backgroundEffectState,
+      .serial = surface->serial,
+      .lastConfigureSerial = surface->lastConfigureSerial,
+      .lastConfigureWidth = surface->lastConfigureWidth,
+      .lastConfigureHeight = surface->lastConfigureHeight,
+      .lastResizeInputNsec = surface->lastResizeInputNsec,
+      .lastConfigureSentNsec = surface->lastConfigureSentNsec,
+      .lastConfigureAckNsec = surface->lastConfigureAckNsec,
+      .lastCommitNsec = surface->lastCommitNsec,
+      .backgroundBlurRects = surface->backgroundBlurRects,
+      .opaqueRegionRects = surface->opaqueRegionRects,
+      .rgbaPixels = surface->rgbaPixels,
+      .pixelFormat = surface->pixelFormat,
+      .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,
+      .dmabufFormat = 0,
+      .dmabufPlanes = {},
   };
   if (surface->dmabufBuffer) {
     snapshot.dmabufFormat = surface->dmabufBuffer->format;
@@ -327,7 +370,11 @@ void appendRenderableSurface(WaylandServer::Impl const* server,
   if (surfaceIsRenderable(surface)) {
     snapshots.push_back(snapshotForSurface(server, surface, surface->windowX, surface->windowY, true));
   }
-  appendSubsurfaceSnapshots(server, snapshots, surface, surface->windowX, surface->windowY);
+  appendSubsurfaceSnapshots(server,
+                            snapshots,
+                            surface,
+                            static_cast<std::int32_t>(wm::surfaceBufferOriginX(surface)),
+                            static_cast<std::int32_t>(wm::surfaceBufferOriginY(surface)));
 }
 
 } // namespace

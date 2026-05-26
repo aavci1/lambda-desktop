@@ -368,10 +368,22 @@ std::int32_t committedDisplayHeight(WaylandServer::Impl::Surface const* surface)
   return std::max(1, transformedBufferHeight(surface) / std::max(1, surface->scale));
 }
 
+std::int32_t committedWindowDisplayWidth(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->xdgWindowGeometrySet
+             ? surface->xdgWindowGeometryWidth
+             : committedDisplayWidth(surface);
+}
+
+std::int32_t committedWindowDisplayHeight(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->xdgWindowGeometrySet
+             ? surface->xdgWindowGeometryHeight
+             : committedDisplayHeight(surface);
+}
+
 bool clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
   if (!surface || !surface->awaitingConfigureCommit) return false;
-  if (committedDisplayWidth(surface) != surface->awaitingConfigureWidth ||
-      committedDisplayHeight(surface) != surface->awaitingConfigureHeight) {
+  if (committedWindowDisplayWidth(surface) != surface->awaitingConfigureWidth ||
+      committedWindowDisplayHeight(surface) != surface->awaitingConfigureHeight) {
     return false;
   }
   surface->awaitingConfigureCommit = false;
@@ -470,11 +482,11 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
   bool const interactiveSizing = surface->server->resizeSurface_ == surface;
   bool const animationSizing = surface->geometryAnimationActive;
   bool const matchedConfigure = surface->awaitingConfigureCommit &&
-                                committedDisplayWidth(surface) == surface->awaitingConfigureWidth &&
-                                committedDisplayHeight(surface) == surface->awaitingConfigureHeight;
+                                committedWindowDisplayWidth(surface) == surface->awaitingConfigureWidth &&
+                                committedWindowDisplayHeight(surface) == surface->awaitingConfigureHeight;
   if (interactiveSizing || (matchedConfigure && !animationSizing)) {
-    std::int32_t const committedWidth = committedDisplayWidth(surface);
-    std::int32_t const committedHeight = committedDisplayHeight(surface);
+    std::int32_t const committedWidth = committedWindowDisplayWidth(surface);
+    std::int32_t const committedHeight = committedWindowDisplayHeight(surface);
     if (committedWidth > 0 && committedHeight > 0) {
       setConfiguredFrameSize(surface, committedWidth, committedHeight);
     }
@@ -502,7 +514,10 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
     return true;
   }
 
-  if (surface->destinationSet) {
+  if (surface->xdgWindowGeometrySet) {
+    surface->frameWidth = surface->xdgWindowGeometryWidth;
+    surface->frameHeight = surface->xdgWindowGeometryHeight;
+  } else if (surface->destinationSet) {
     surface->frameWidth = surface->destinationWidth;
     surface->frameHeight = surface->destinationHeight;
   } else if (surface->sourceSet) {
@@ -568,6 +583,11 @@ bool applyXdgProtocolState(WaylandServer::Impl::Surface* surface) {
     xdgSurface->windowGeometryHeight = xdgSurface->pendingWindowGeometryHeight;
     xdgSurface->windowGeometrySet = true;
     xdgSurface->pendingWindowGeometrySet = false;
+    surface->xdgWindowGeometrySet = true;
+    surface->xdgWindowGeometryX = xdgSurface->windowGeometryX;
+    surface->xdgWindowGeometryY = xdgSurface->windowGeometryY;
+    surface->xdgWindowGeometryWidth = xdgSurface->windowGeometryWidth;
+    surface->xdgWindowGeometryHeight = xdgSurface->windowGeometryHeight;
   }
 
   if (auto* toplevel = toplevelForSurface(surface->server, surface)) {

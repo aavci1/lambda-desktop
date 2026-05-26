@@ -232,12 +232,14 @@ terminate = "ctrl+alt+backspace"
 Wallpaper paths may be absolute, `~/...`, or relative to the config file directory. On Linux,
 the framework image loader supports stb_image formats, including JPEG and PNG.
 
-`window_glass` enables compositor-side blur behind every normal window by default. `[chrome.glass]`
-uses the same shape as client-requested glass: `blur_radius`, `base_color`, `tint_color`, `border_color`,
-and `opacity`. Client content is rendered at the opacity the client submitted. `window_border_color` /
-`window_border_width` control the subtle rounded outline around the window frame. Clients that use
-`ext-background-effect-v1` can still request explicit blur regions; set `window_glass = false` to disable
-only the compositor's default full-window policy.
+`window_glass` enables compositor-side blur behind eligible normal windows by default. Lambda skips
+the default full-window glass policy for client-side-decorated windows that declare transparent geometry
+margins, such as browser shadow buffers, and uses their XDG window geometry as the visible window size.
+`[chrome.glass]` uses the same shape as client-requested glass: `blur_radius`, `base_color`, `tint_color`,
+`border_color`, and `opacity`. Client content is rendered at the opacity the client submitted.
+`window_border_color` / `window_border_width` control the subtle rounded outline around the window frame.
+Clients that use `ext-background-effect-v1` can still request explicit blur regions; set
+`window_glass = false` to disable only the compositor's default full-window policy.
 
 `[rendering.backdrop_blur].base_downsample` controls the compositor backdrop blur quality/performance tradeoff.
 The effective blur texture downsample is `round(base_downsample * scale)` and applies to both width and height.

@@ -137,6 +137,23 @@ TEST_CASE("xdg window geometry validates positive size") {
   CHECK_FALSE(flux::compositor::wm::xdgWindowGeometrySizeValid(-1, 1));
 }
 
+TEST_CASE("xdg window geometry offsets surface-local input") {
+  flux::compositor::WaylandServer::Impl::Surface surface{};
+  surface.role = flux::compositor::SurfaceRole::XdgToplevel;
+  surface.windowX = 100;
+  surface.windowY = 80;
+  surface.xdgWindowGeometrySet = true;
+  surface.xdgWindowGeometryX = 32;
+  surface.xdgWindowGeometryY = 24;
+  surface.xdgWindowGeometryWidth = 960;
+  surface.xdgWindowGeometryHeight = 640;
+
+  CHECK(flux::compositor::wm::surfaceBufferOriginX(&surface) == doctest::Approx(68.f));
+  CHECK(flux::compositor::wm::surfaceBufferOriginY(&surface) == doctest::Approx(56.f));
+  CHECK(flux::compositor::wm::surfaceLocalX(&surface, 110.f) == doctest::Approx(42.f));
+  CHECK(flux::compositor::wm::surfaceLocalY(&surface, 90.f) == doctest::Approx(34.f));
+}
+
 TEST_CASE("xdg toplevel size hints reject negative and inverted dimensions") {
   using flux::compositor::wm::ToplevelSizeHints;
   CHECK(flux::compositor::wm::toplevelSizeHintsValid(ToplevelSizeHints{}));
