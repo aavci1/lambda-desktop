@@ -349,6 +349,10 @@ FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
                               std::filesystem::path const& path,
                               bool isDirectory,
                               int preferredSize = 48);
+FileIconLookup resolveFileIcon(std::vector<std::filesystem::path> const& themeRoots,
+                               std::filesystem::path const& path,
+                               bool isDirectory,
+                               int preferredSize = 48);
 FilesPreferences parseFilesPreferencesToml(std::string_view tomlText);
 std::string writeFilesPreferencesToml(FilesPreferences const& preferences);
 std::filesystem::path filesPreferencesPath();

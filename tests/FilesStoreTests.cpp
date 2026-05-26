@@ -847,6 +847,16 @@ TEST_CASE("FilesStore looks up file icons through icon theme fallback data") {
   CHECK(unknown.themePath.empty());
   CHECK(unknown.fallback);
 
+  auto secondary = root / "secondary";
+  std::filesystem::create_directories(secondary / "48x48" / "mimetypes");
+  {
+    std::ofstream(secondary / "48x48" / "mimetypes" / "image-x-generic.svg") << "image";
+  }
+  auto resolved = lambda_files::resolveFileIcon({root / "missing", secondary}, "/tmp/photo.png", false, 48);
+  CHECK(resolved.iconName == "image-x-generic");
+  CHECK(resolved.themePath == secondary / "48x48" / "mimetypes" / "image-x-generic.svg");
+  CHECK_FALSE(resolved.fallback);
+
   std::filesystem::remove_all(root);
 }
 

@@ -477,6 +477,7 @@ struct FilesAppRoot {
     auto scrollOffset = useState(Point{});
     auto preferences = useState(loadFilesPreferences().preferences);
     auto showHiddenFiles = useState(preferences().showHidden);
+    auto iconThemeRoots = useState(lambda_shell::defaultIconThemeRoots(""));
 
     auto places = useState(sidebarPlaces());
 
@@ -583,6 +584,8 @@ struct FilesAppRoot {
         .listingKey = listingKey,
         .selectedPath = selectedPath,
         .selection = selection,
+        .iconThemeRoots = iconThemeRoots(),
+        .iconSize = preferences().iconSize,
         .activateEntry = activateEntry,
     };
     Element root = VStack{

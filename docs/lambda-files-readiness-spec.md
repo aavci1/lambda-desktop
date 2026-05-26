@@ -983,7 +983,7 @@ Add focused automated tests where behavior is deterministic:
 - [ ] Grid and list/detail views exist.
 - [x] Sorting and current-folder search work.
 - [x] Open-with uses shared app/MIME registry.
-- [ ] Icons use shared icon theme provider with fallback.
+- [x] Icons use shared icon theme provider with fallback.
 - [x] Files preferences persist.
 - [x] Tests cover model, operations, trash, selection, and open-with fixtures.
 - [ ] User guide and app docs match actual behavior.

@@ -1521,6 +1521,20 @@ FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
   return {.iconName = fallback, .fallback = true};
 }
 
+FileIconLookup resolveFileIcon(std::vector<std::filesystem::path> const& themeRoots,
+                               std::filesystem::path const& path,
+                               bool isDirectory,
+                               int preferredSize) {
+  FileIconLookup fallback;
+  for (auto const& root : themeRoots) {
+    FileIconLookup const lookup = lookupFileIcon(root, path, isDirectory, preferredSize);
+    if (!lookup.themePath.empty()) return lookup;
+    if (fallback.iconName.empty() || !lookup.fallback) fallback = lookup;
+  }
+  if (!fallback.iconName.empty()) return fallback;
+  return lookupFileIcon({}, path, isDirectory, preferredSize);
+}
+
 FilesPreferences defaultFilesPreferences() {
   return FilesPreferences{};
 }

@@ -130,6 +130,8 @@ struct FilesFlowGrid {
   flux::Reactive::Signal<std::string> listingKey;
   flux::Reactive::Signal<std::string> selectedPath;
   flux::Reactive::Signal<FileSelectionState> selection;
+  std::vector<std::filesystem::path> iconThemeRoots;
+  int iconSize = 48;
   std::function<void(FileEntry const&)> activateEntry;
 
   float cellWidth = FilesTheme::kGridMinCell;
@@ -184,6 +186,8 @@ inline flux::Element FilesFlowGrid::body() const {
   Reactive::Signal<std::string> const listingKeySignal = listingKey;
   Reactive::Signal<std::string> const selectedPathSignal = selectedPath;
   Reactive::Signal<FileSelectionState> const selectionSignal = selection;
+  std::vector<std::filesystem::path> const roots = iconThemeRoots;
+  int const preferredIconSize = iconSize;
   auto const activate = activateEntry;
   float const tileW = cellWidth;
   float const tileH = cellHeight;
@@ -215,8 +219,9 @@ inline flux::Element FilesFlowGrid::body() const {
       [](detail::RowDescriptor const& row) {
         return row.key;
       },
-      [selectedPathSignal, selectionSignal, activate, tileW, tileH, gapH](detail::RowDescriptor const& row,
-                                                                          Signal<std::size_t> const&) {
+      [selectedPathSignal, selectionSignal, roots, preferredIconSize, activate, tileW, tileH, gapH](
+          detail::RowDescriptor const& row,
+          Signal<std::size_t> const&) {
         int const colCount = std::max(1, row.columns);
         std::vector<Element> cells;
         cells.reserve(static_cast<std::size_t>(colCount));
@@ -229,6 +234,9 @@ inline flux::Element FilesFlowGrid::body() const {
               }};
           cells.push_back(Element{FileItemTile{
                                       .entry = entry,
+                                      .iconPath =
+                                          resolveFileIcon(roots, entry.path, entry.isDirectory, preferredIconSize)
+                                              .themePath.string(),
                                       .selected = selected,
                                       .onActivate = [activate, entry] {
                                         if (activate) {

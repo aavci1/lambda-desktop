@@ -3,16 +3,38 @@
 #include "FilesStore.hpp"
 #include "FilesTheme.hpp"
 
+#include <Flux/Graphics/Image.hpp>
+#include <Flux/Graphics/ImageFillMode.hpp>
 #include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/IconName.hpp>
+#include <Flux/UI/Views/Image.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
+
 namespace lambda_files {
+
+namespace detail {
+
+inline std::shared_ptr<flux::Image> themedFileIconImage(std::string const& path) {
+  if (path.empty()) return nullptr;
+  static std::unordered_map<std::string, std::shared_ptr<flux::Image>> cache;
+  auto found = cache.find(path);
+  if (found != cache.end()) return found->second;
+  auto image = flux::loadImage(path);
+  cache.emplace(path, image);
+  return image;
+}
+
+} // namespace detail
 
 struct FolderGlyph {
   flux::Element body() const {
@@ -84,6 +106,7 @@ struct FileDocGlyph {
 
 struct FileItemTile {
   FileEntry entry;
+  std::string iconPath;
   flux::Reactive::Bindable<bool> selected{false};
   std::function<void()> onActivate;
 
@@ -108,8 +131,16 @@ struct FileItemTile {
       return StrokeStyle::solid(Colors::transparent, 0.f);
     }};
 
-    flux::Element glyph =
-        entry.isDirectory ? flux::Element{FolderGlyph{}} : flux::Element{FileDocGlyph{.kind = entry.visualKind}};
+    flux::Element glyph = [this] {
+      if (auto image = detail::themedFileIconImage(iconPath)) {
+        return flux::Element{flux::views::Image{
+                   .source = std::move(image),
+                   .fillMode = flux::ImageFillMode::Fit,
+               }}
+            .size(70.f, 66.f);
+      }
+      return entry.isDirectory ? flux::Element{FolderGlyph{}} : flux::Element{FileDocGlyph{.kind = entry.visualKind}};
+    }();
 
     auto tile = VStack{
                    .spacing = 6.f,
