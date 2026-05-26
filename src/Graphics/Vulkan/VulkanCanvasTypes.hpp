@@ -37,6 +37,8 @@ struct RectInstance {
   float gradient[4]{};
   float stroke[4]{};
   float params[4]{};
+  float clipRect[4]{};
+  float clipRadii[4]{};
 };
 
 struct QuadInstance {

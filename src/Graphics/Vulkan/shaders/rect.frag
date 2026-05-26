@@ -2,6 +2,7 @@
 
 layout(location = 0) in vec2 vLocal;
 layout(location = 1) in flat uint vInstance;
+layout(location = 2) in vec2 vWorld;
 layout(location = 0) out vec4 outColor;
 
 struct RectInstance {
@@ -17,6 +18,8 @@ struct RectInstance {
   vec4 gradient;
   vec4 stroke;
   vec4 params;
+  vec4 clipRect;
+  vec4 clipRadii;
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer Rects {
@@ -29,6 +32,17 @@ float roundedRectSDF(vec2 p, vec2 halfSize, vec4 radii) {
               : ((p.y > 0.0) ? radii.w : radii.x);
   vec2 q = abs(p) - halfSize + vec2(r);
   return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
+}
+
+float roundedClipCoverage(RectInstance r, vec2 world) {
+  if (r.clipRect.z <= 0.0 || r.clipRect.w <= 0.0 ||
+      max(max(r.clipRadii.x, r.clipRadii.y), max(r.clipRadii.z, r.clipRadii.w)) <= 0.0) {
+    return 1.0;
+  }
+  vec2 halfSize = r.clipRect.zw * 0.5;
+  vec2 local = world - r.clipRect.xy - halfSize;
+  float d = roundedRectSDF(local, halfSize, r.clipRadii);
+  return 1.0 - smoothstep(-0.75, 0.75, d);
 }
 
 vec4 sampleStops(RectInstance r, float t) {
@@ -95,8 +109,12 @@ void main() {
   if (outAlpha <= 0.001) {
     discard;
   }
+  float clipCoverage = roundedClipCoverage(r, vWorld);
+  if (clipCoverage <= 0.001) {
+    discard;
+  }
   vec3 outRgb = (r.stroke.rgb * strokeAlpha + fill.rgb * fillAlpha * (1.0 - strokeAlpha)) / outAlpha;
   vec4 color = vec4(outRgb, outAlpha);
-  color.a *= r.params.w;
+  color.a *= r.params.w * clipCoverage;
   outColor = color;
 }

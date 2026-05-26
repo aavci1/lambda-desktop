@@ -7,6 +7,7 @@ layout(push_constant) uniform Push {
 
 layout(location = 0) out vec2 vLocal;
 layout(location = 1) out flat uint vInstance;
+layout(location = 2) out vec2 vWorld;
 
 struct RectInstance {
   vec4 rect;
@@ -21,6 +22,8 @@ struct RectInstance {
   vec4 gradient;
   vec4 stroke;
   vec4 params;
+  vec4 clipRect;
+  vec4 clipRadii;
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer Rects {
@@ -48,4 +51,5 @@ void main() {
   gl_Position = vec4(ndc, 0.0, 1.0);
   vLocal = local;
   vInstance = gl_InstanceIndex;
+  vWorld = pos;
 }

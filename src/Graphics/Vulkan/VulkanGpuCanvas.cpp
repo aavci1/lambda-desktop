@@ -1871,13 +1871,29 @@ public:
   void rotate(float r, Point p) override { transform(Mat3::rotate(r, p)); }
   Mat3 currentTransform() const override { return state_.transform; }
 
-  void clipRect(Rect rect, CornerRadius const &, bool) override {
+  void clipRect(Rect rect, CornerRadius const &cornerRadius, bool) override {
     Rect r = transformedBounds(rect);
     float x0 = std::max(state_.clip.x, r.x);
     float y0 = std::max(state_.clip.y, r.y);
     float x1 = std::min(state_.clip.x + state_.clip.width, r.x + r.width);
     float y1 = std::min(state_.clip.y + state_.clip.height, r.y + r.height);
     state_.clip = Rect::sharp(x0, y0, std::max(0.f, x1 - x0), std::max(0.f, y1 - y0));
+    if (!cornerRadius.isZero() && r.width > 0.f && r.height > 0.f) {
+      float const sx = std::hypot(state_.transform.m[0], state_.transform.m[1]);
+      float const sy = std::hypot(state_.transform.m[3], state_.transform.m[4]);
+      float const radiusScale = std::max(0.f, std::min(sx, sy));
+      CornerRadius radii{
+          cornerRadius.topLeft * radiusScale,
+          cornerRadius.topRight * radiusScale,
+          cornerRadius.bottomRight * radiusScale,
+          cornerRadius.bottomLeft * radiusScale,
+      };
+      state_.roundedClip = RoundedClipState{
+          .rect = r,
+          .radii = clampRadii(radii, r.width, r.height),
+          .active = true,
+      };
+    }
   }
   Rect clipBounds() const override { return state_.clip; }
   bool quickReject(Rect rect) const override { return !state_.clip.intersects(transformedBounds(rect)); }
@@ -1916,6 +1932,16 @@ public:
       inst.params[2] = stroke.width;
     }
     inst.params[3] = opacity;
+    if (state_.roundedClip.active) {
+      inst.clipRect[0] = state_.roundedClip.rect.x;
+      inst.clipRect[1] = state_.roundedClip.rect.y;
+      inst.clipRect[2] = state_.roundedClip.rect.width;
+      inst.clipRect[3] = state_.roundedClip.rect.height;
+      inst.clipRadii[0] = state_.roundedClip.radii.topLeft;
+      inst.clipRadii[1] = state_.roundedClip.radii.topRight;
+      inst.clipRadii[2] = state_.roundedClip.radii.bottomRight;
+      inst.clipRadii[3] = state_.roundedClip.radii.bottomLeft;
+    }
     RecordingTarget target = recordingTarget();
     std::uint32_t first = static_cast<std::uint32_t>(target.rects.size());
     target.rects.push_back(inst);
@@ -2233,9 +2259,16 @@ private:
     bool valid = false;
   };
 
+  struct RoundedClipState {
+    Rect rect{};
+    CornerRadius radii{};
+    bool active = false;
+  };
+
   struct DrawState {
     Mat3 transform = Mat3::identity();
     Rect clip{};
+    RoundedClipState roundedClip{};
     float opacity = 1.f;
     BlendMode blendMode = BlendMode::Normal;
   };
@@ -2482,6 +2515,20 @@ private:
     inst.params[3] *= opacityScale;
   }
 
+  void applyCurrentRoundedClip(RectInstance &inst) const {
+    if (!state_.roundedClip.active) {
+      return;
+    }
+    inst.clipRect[0] = state_.roundedClip.rect.x;
+    inst.clipRect[1] = state_.roundedClip.rect.y;
+    inst.clipRect[2] = state_.roundedClip.rect.width;
+    inst.clipRect[3] = state_.roundedClip.rect.height;
+    inst.clipRadii[0] = state_.roundedClip.radii.topLeft;
+    inst.clipRadii[1] = state_.roundedClip.radii.topRight;
+    inst.clipRadii[2] = state_.roundedClip.radii.bottomRight;
+    inst.clipRadii[3] = state_.roundedClip.radii.bottomLeft;
+  }
+
   static void translateQuadInstance(QuadInstance &inst, float dx, float dy, float opacityScale) {
     inst.axisX[0] += dx;
     inst.axisX[1] += dy;
@@ -2555,6 +2602,7 @@ private:
     for (RectInstance inst : recorded.rects) {
       if (localReplay) {
         translateRectInstance(inst, dx, dy, opacityScale);
+        applyCurrentRoundedClip(inst);
       }
       rects_.push_back(inst);
     }
@@ -2610,7 +2658,7 @@ private:
       if (localReplay) {
         op.geometrySignature =
             translatedGeometrySignature(op.geometrySignature, dx, dy, opacityScale);
-        op.clip = translatedRect(op.clip, dx, dy);
+        op.clip = intersectRects(translatedRect(op.clip, dx, dy), state_.clip);
         if (op.hasBlurCacheClip) {
           op.blurCacheClip = translatedRect(op.blurCacheClip, dx, dy);
         }
