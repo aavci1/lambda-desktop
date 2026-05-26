@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SettingsBackend.hpp"
 #include "SettingsTheme.hpp"
 
 #include <Flux.hpp>
@@ -656,6 +657,13 @@ Element genericPage(std::string title, std::vector<SettingsRowValue> rows) {
 }
 
 Element aboutPage() {
+  auto rows = systemInfoRows(loadSystemInfo());
+  std::vector<Element> rowElements;
+  rowElements.reserve(rows.size());
+  for (auto const& [label, value] : rows) {
+    rowElements.push_back(settingsRow(label, "", valueText(value)));
+  }
+
   Element logo = ZStack{
                      .horizontalAlignment = Alignment::Center,
                      .verticalAlignment = Alignment::Center,
@@ -709,14 +717,7 @@ Element aboutPage() {
                               .font = Font{.size = 12.f, .weight = 400.f},
                               .color = SettingsTheme::text3,
                           })})},
-          rowsList({
-              settingsRow("Processor", "", valueText("8-core · 3.2 GHz")),
-              settingsRow("Memory", "", valueText("16 GB")),
-              settingsRow("Storage", "", valueText("512 GB SSD · 192 GB free")),
-              settingsRow("Graphics", "", valueText("Integrated GPU")),
-              settingsRow("Display", "", valueText("2560 × 1440 · 60 Hz")),
-              settingsRow("Kernel", "", valueText("lambda-kernel 6.8.2")),
-          }))};
+          rowsList(std::move(rowElements)))};
 }
 
 Element contentForSection(SettingsSection section,

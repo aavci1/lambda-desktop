@@ -242,5 +242,13 @@ TEST_CASE("Settings theme discovery and system info parsing use fixtures") {
   CHECK(info.kernelRelease == "6.9.1");
   CHECK(info.machine == "x86_64");
   CHECK(info.memoryTotalKb == 16384000);
+  CHECK(lambda_settings::formatMemoryTotal(info.memoryTotalKb) == "16 GiB");
+  auto rows = lambda_settings::systemInfoRows(info);
+  REQUIRE(rows.size() == 7);
+  CHECK(rows[0] == std::pair<std::string, std::string>{"Kernel", "Linux 6.9.1"});
+  CHECK(rows[1] == std::pair<std::string, std::string>{"Architecture", "x86_64"});
+  CHECK(rows[2] == std::pair<std::string, std::string>{"Memory", "16 GiB"});
+  CHECK(rows[3] == std::pair<std::string, std::string>{"Processor", "Unavailable"});
+  CHECK(lambda_settings::systemInfoRows({})[0].second == "Unavailable");
   std::filesystem::remove_all(root);
 }

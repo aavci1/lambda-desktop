@@ -57,7 +57,7 @@ These areas should be included in the Settings milestone:
 - Add apply/revert/error UX that is explicit enough to prevent silent config corruption.
 - Add tests for config read/write, validation, schema metadata, and settings model behavior.
 
-Status update 2026-05-26: a first `SettingsBackend` is in place with deterministic schema descriptors, apply-mode metadata, default extraction, validation for color/number/enum/path/shortcut values, dirty/revert/reset/save model state, Window Manager TOML load/write while preserving unknown keys, Shell TOML load/write for the current Shell config contract while preserving unknown keys, atomic file writes including write-failure preservation tests, shortcut conflict detection, wallpaper path normalization, theme discovery plus missing-theme fallback status, and fixture-based system-info parsing. Full UI binding and richer provider discovery remain open.
+Status update 2026-05-26: a first `SettingsBackend` is in place with deterministic schema descriptors, apply-mode metadata, default extraction, validation for color/number/enum/path/shortcut values, dirty/revert/reset/save model state, Window Manager TOML load/write while preserving unknown keys, Shell TOML load/write for the current Shell config contract while preserving unknown keys, atomic file writes including write-failure preservation tests, shortcut conflict detection, wallpaper path normalization, theme discovery plus missing-theme fallback status, fixture-based system-info parsing/formatting, and About-page system rows that show real kernel/architecture/memory data plus explicit unavailable states instead of fake CPU/storage/display values. Full UI binding and richer provider discovery remain open.
 
 ## Goals
 
@@ -828,7 +828,7 @@ Add focused automated tests where behavior is deterministic:
 - [ ] Keyboard page edits real keyboard and shortcut config.
 - [ ] Dock & Panel page edits real Shell config.
 - [ ] Desktop page edits real animations/idle/screenshot-supported config.
-- [ ] About/System pages show real or unavailable values, not fake values.
+- [x] About/System pages show real or unavailable values, not fake values.
 - [ ] Save/revert/reset/error UX is implemented.
 - [ ] Restart-required changes are visible.
 - [ ] Hot-reloadable changes apply live where supported.

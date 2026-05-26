@@ -6,6 +6,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace lambda_settings {
@@ -103,5 +104,8 @@ struct ThemeSelectionStatus {
                                                         std::string requested,
                                                         std::string fallback = {});
 [[nodiscard]] SystemInfo parseSystemInfo(std::string_view unameText, std::string_view meminfoText);
+[[nodiscard]] std::string formatMemoryTotal(long memoryTotalKb);
+[[nodiscard]] std::vector<std::pair<std::string, std::string>> systemInfoRows(SystemInfo const& info);
+[[nodiscard]] SystemInfo loadSystemInfo();
 
 } // namespace lambda_settings

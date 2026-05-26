@@ -8,6 +8,10 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <utility>
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/utsname.h>
+#endif
 
 namespace lambda_settings {
 namespace {
@@ -581,6 +585,50 @@ SystemInfo parseSystemInfo(std::string_view unameText, std::string_view meminfoT
     }
   }
   return info;
+}
+
+std::string formatMemoryTotal(long memoryTotalKb) {
+  if (memoryTotalKb <= 0) return "Unavailable";
+  double const gib = static_cast<double>(memoryTotalKb) / 1024.0 / 1024.0;
+  std::ostringstream out;
+  out.setf(std::ios::fixed);
+  out.precision(gib >= 10.0 ? 0 : 1);
+  out << gib << " GiB";
+  return out.str();
+}
+
+std::vector<std::pair<std::string, std::string>> systemInfoRows(SystemInfo const& info) {
+  auto valueOrUnavailable = [](std::string value) {
+    return value.empty() ? std::string{"Unavailable"} : std::move(value);
+  };
+  std::vector<std::pair<std::string, std::string>> rows;
+  rows.emplace_back("Kernel", valueOrUnavailable(info.kernelName + (info.kernelRelease.empty() ? "" : " " + info.kernelRelease)));
+  rows.emplace_back("Architecture", valueOrUnavailable(info.machine));
+  rows.emplace_back("Memory", formatMemoryTotal(info.memoryTotalKb));
+  rows.emplace_back("Processor", "Unavailable");
+  rows.emplace_back("Storage", "Unavailable");
+  rows.emplace_back("Graphics", "Unavailable");
+  rows.emplace_back("Display", "Unavailable");
+  return rows;
+}
+
+SystemInfo loadSystemInfo() {
+  std::string unameText;
+#if defined(__unix__) || defined(__APPLE__)
+  utsname name{};
+  if (uname(&name) == 0) {
+    unameText = std::string{name.sysname} + " " + name.release + " " + name.machine;
+  }
+#endif
+
+  std::string meminfoText;
+  std::ifstream meminfo("/proc/meminfo");
+  if (meminfo) {
+    std::ostringstream contents;
+    contents << meminfo.rdbuf();
+    meminfoText = contents.str();
+  }
+  return parseSystemInfo(unameText, meminfoText);
 }
 
 } // namespace lambda_settings
