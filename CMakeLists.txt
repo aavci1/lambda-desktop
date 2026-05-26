@@ -944,6 +944,7 @@ if(FLUX_BUILD_TESTS)
       tests/CompositorConfigTests.cpp
       tests/CompositorDecorationStateTests.cpp
       tests/CompositorWindowGeometryTests.cpp
+      tests/CompositorWindowFrameGeometryTests.cpp
       tests/CompositorConfigHotReloadTests.cpp
       tests/CompositorLayerShellZoneTests.cpp
       tests/CompositorOutputSelectorTests.cpp

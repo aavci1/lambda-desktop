@@ -1,5 +1,6 @@
 #include "Compositor/Surface/CommittedSurfacePainter.hpp"
 
+#include "Compositor/Chrome/WindowFrameGeometry.hpp"
 #include "Compositor/Chrome/WindowChromeRenderer.hpp"
 #include "Detail/ResizeTrace.hpp"
 
@@ -204,8 +205,7 @@ bool materialShouldCoverFrame(CommittedSurfaceSnapshot const& surface,
                               Rect const& rect,
                               Rect const& fullContentRect) {
   return material.enabled &&
-         surface.serverSideDecorated &&
-         surface.titleBarHeight > 0 &&
+         windowExternalTitleBarHeight(surface) > 0.f &&
          sameRect(rect, fullContentRect);
 }
 
@@ -262,10 +262,7 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
   };
 
   auto drawFrameMaterial = [&] {
-    Rect const frameRect = Rect::sharp(static_cast<float>(surface.x),
-                                      static_cast<float>(surface.y - surface.titleBarHeight),
-                                      static_cast<float>(surface.width),
-                                      static_cast<float>(surface.height + surface.titleBarHeight));
+    Rect const frameRect = windowFrameRect(surface);
     CornerRadius const frameCorners = material.cornerRadiusSet
                                           ? material.cornerRadius
                                           : windowCorners;
@@ -273,7 +270,7 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
   };
 
   if (materialShouldCoverAnimatedSurface(surface, material)) {
-    if (surface.serverSideDecorated && surface.titleBarHeight > 0) {
+    if (windowExternalTitleBarHeight(surface) > 0.f) {
       drawFrameMaterial();
     } else {
       CornerRadius const corners = material.cornerRadiusSet ? material.cornerRadius : contentCorners;
@@ -324,11 +321,8 @@ void drawSurfaceMaterialBorder(Canvas& canvas,
   ResolvedGlassMaterial const material = resolvedGlassMaterial(surface, chrome);
   if (!material.enabled || !material.usesSurfaceRegions || material.borderColor.a <= 0.f) return;
 
-  if (surface.serverSideDecorated && surface.titleBarHeight > 0) {
-    Rect const frameRect = Rect::sharp(static_cast<float>(surface.x),
-                                      static_cast<float>(surface.y - surface.titleBarHeight),
-                                      static_cast<float>(surface.width),
-                                      static_cast<float>(surface.height + surface.titleBarHeight));
+  if (windowExternalTitleBarHeight(surface) > 0.f) {
+    Rect const frameRect = windowFrameRect(surface);
     CornerRadius const frameCorners = material.cornerRadiusSet
                                           ? material.cornerRadius
                                           : windowCorners;
@@ -411,14 +405,10 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   float const windowY = static_cast<float>(surface.y);
   float const windowWidth = static_cast<float>(surface.width);
   float const windowHeight = static_cast<float>(surface.height);
-  float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
-  bool const cutoutChrome = surface.serverSideDecorated && surface.cutoutsBound && !surface.cutoutsRejected;
+  float const titleBarHeight = windowExternalTitleBarHeight(surface);
+  bool const cutoutChrome = windowUsesCutoutChrome(surface);
   CornerRadius const windowCorners = chrome.windowCornerRadius;
-  CornerRadius const contentCorners = cutoutChrome
-                                          ? windowCorners
-                                          : (titleBarHeight > 0.f
-                                                 ? CornerRadius{0.f, 0.f, windowCorners.bottomRight, windowCorners.bottomLeft}
-                                                 : windowCorners);
+  CornerRadius const contentCorners = windowContentCornerRadius(surface, windowCorners);
   float const animationMs = static_cast<float>(
       std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - visual.firstSeen).count());
   float const openProgress = animationsEnabled
@@ -466,7 +456,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                   : clientContentSmallerThanFrame
                                         ? static_cast<float>(surface.destinationHeight)
                                         : windowHeight;
-  Rect const fullContentRect = Rect::sharp(windowX, windowY, windowWidth, windowHeight);
+  Rect const fullContentRect = windowContentRect(surface);
   drawSurfaceBackgroundBlur(canvas, surface, chrome, fullContentRect, contentCorners, windowCorners);
   drawWindowFrameShadow(canvas, surface, chrome);
   if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);

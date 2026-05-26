@@ -1,6 +1,7 @@
 #include "Compositor/Chrome/WindowChromeRenderer.hpp"
 
 #include "Compositor/Chrome/ChromeMetrics.hpp"
+#include "Compositor/Chrome/WindowFrameGeometry.hpp"
 
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Path.hpp>
@@ -41,10 +42,6 @@ ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {
       .offset = {0.f, focused ? 14.f : 9.f},
       .color = focused ? chrome.focusedShadowColor : chrome.unfocusedShadowColor,
   };
-}
-
-bool usesCutoutChrome(CommittedSurfaceSnapshot const& surface) {
-  return surface.serverSideDecorated && surface.cutoutsBound && !surface.cutoutsRejected;
 }
 
 bool backgroundEffectCoversContent(CommittedSurfaceSnapshot const& surface) {
@@ -148,15 +145,15 @@ void drawDefaultChrome(Canvas& canvas,
                        CommittedSurfaceSnapshot const& surface,
                        ChromeConfig const& chrome) {
   float const windowX = static_cast<float>(surface.x);
-  float const windowY = static_cast<float>(surface.y);
   float const windowWidth = static_cast<float>(surface.width);
-  float const titleBarHeight = static_cast<float>(surface.titleBarHeight);
+  Rect const titleRect = windowTitleBarRect(surface);
+  float const titleBarHeight = titleRect.height;
   if (titleBarHeight <= 0.f) return;
 
-  float const titleTop = windowY - titleBarHeight;
-  Rect const titleRect = Rect::sharp(windowX, titleTop, windowWidth, titleBarHeight);
+  float const windowY = static_cast<float>(surface.y);
+  float const titleTop = titleRect.y;
   CornerRadius const frameRadius = chrome.windowCornerRadius;
-  CornerRadius const titleRadius{frameRadius.topLeft, frameRadius.topRight, 0.f, 0.f};
+  CornerRadius const titleRadius = windowTitleBarCornerRadius(frameRadius);
   bool const titlebarCoveredBySurfaceMaterial = materialCoversTitlebar(surface, chrome);
   if (!titlebarCoveredBySurfaceMaterial) {
     bool const customEffect = !surface.backgroundBlurRects.empty() && !surface.backgroundEffect.usesDefaultMaterial;
@@ -235,7 +232,7 @@ void drawWindowChrome(Canvas& canvas,
                       CommittedSurfaceSnapshot const& surface,
                       ChromeConfig const& chrome) {
   if (!surface.serverSideDecorated) return;
-  if (usesCutoutChrome(surface)) {
+  if (windowUsesCutoutChrome(surface)) {
     drawControls(canvas, surface, chrome, static_cast<float>(surface.y), static_cast<float>(chrome.titleBarHeight));
     return;
   }
@@ -245,13 +242,7 @@ void drawWindowChrome(Canvas& canvas,
 void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
   if (!surface.serverSideDecorated) return;
 
-  bool const cutoutChrome = usesCutoutChrome(surface);
-  float const windowX = static_cast<float>(surface.x);
-  float const windowY = static_cast<float>(surface.y);
-  float const windowWidth = static_cast<float>(surface.width);
-  float const windowHeight = static_cast<float>(surface.height);
-  float const titleBarHeight = cutoutChrome ? 0.f : static_cast<float>(surface.titleBarHeight);
-  Rect const frameRect = Rect::sharp(windowX, windowY - titleBarHeight, windowWidth, windowHeight + titleBarHeight);
+  Rect const frameRect = windowFrameRect(surface);
   ShadowStyle const shadow = windowShadow(chrome, surface.focused);
   if (shadow.isNone()) return;
 
@@ -264,28 +255,15 @@ void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
     color.a = alpha;
     if (color.a <= 0.f) continue;
 
-    float const leftSpread = std::max(0.f, spread - shadow.offset.x);
-    float const rightSpread = std::max(0.f, spread + shadow.offset.x);
-    float const topSpread = std::max(0.f, spread - shadow.offset.y);
-    float const bottomSpread = std::max(0.f, spread + shadow.offset.y);
-    Rect const layerRect = Rect::sharp(frameRect.x - leftSpread,
-                                      frameRect.y - topSpread,
-                                      frameRect.width + leftSpread + rightSpread,
-                                      frameRect.height + topSpread + bottomSpread);
-    CornerRadius const layerRadius{
-        chrome.windowCornerRadius.topLeft + std::max(leftSpread, topSpread),
-        chrome.windowCornerRadius.topRight + std::max(rightSpread, topSpread),
-        chrome.windowCornerRadius.bottomRight + std::max(rightSpread, bottomSpread),
-        chrome.windowCornerRadius.bottomLeft + std::max(leftSpread, bottomSpread),
-    };
+    WindowShadowLayerGeometry const layer = windowShadowLayerGeometry(frameRect, chrome.windowCornerRadius, shadow, spread);
     Path ring;
-    ring.rect(layerRect, layerRadius);
+    ring.rect(layer.rect, layer.cornerRadius);
     ring.rect(frameRect, chrome.windowCornerRadius);
     FillStyle fill = FillStyle::solid(color);
     fill.fillRule = FillRule::EvenOdd;
-    if (auto const shadowClip = clippedShadowRect(layerRect, surface)) {
-      bool const clipNeeded = std::abs(shadowClip->y - layerRect.y) > 0.5f ||
-                              std::abs(shadowClip->height - layerRect.height) > 0.5f;
+    if (auto const shadowClip = clippedShadowRect(layer.rect, surface)) {
+      bool const clipNeeded = std::abs(shadowClip->y - layer.rect.y) > 0.5f ||
+                              std::abs(shadowClip->height - layer.rect.height) > 0.5f;
       if (!clipNeeded) {
         canvas.drawPath(ring, fill, StrokeStyle::none(), ShadowStyle::none());
         continue;
@@ -303,13 +281,7 @@ void drawWindowFrameBorder(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
   StrokeStyle const border = visibleStroke(chrome.windowBorderColor, chrome.windowBorderWidth);
   if (border.isNone()) return;
 
-  bool const cutoutChrome = usesCutoutChrome(surface);
-  float const windowX = static_cast<float>(surface.x);
-  float const windowY = static_cast<float>(surface.y);
-  float const windowWidth = static_cast<float>(surface.width);
-  float const windowHeight = static_cast<float>(surface.height);
-  float const titleBarHeight = cutoutChrome ? 0.f : static_cast<float>(surface.titleBarHeight);
-  Rect const frameRect = Rect::sharp(windowX, windowY - titleBarHeight, windowWidth, windowHeight + titleBarHeight);
+  Rect const frameRect = windowFrameRect(surface);
   canvas.drawRect(frameRect,
                   chrome.windowCornerRadius,
                   FillStyle::none(),

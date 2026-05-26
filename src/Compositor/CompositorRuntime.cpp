@@ -5,6 +5,7 @@
 #include <Flux/Platform/Linux/KmsOutput.hpp>
 
 #include "Compositor/Chrome/CursorRenderer.hpp"
+#include "Compositor/Chrome/WindowFrameGeometry.hpp"
 #include "Compositor/CompositorConfigWatch.hpp"
 #include "Compositor/CompositorPresentation.hpp"
 #include "Compositor/CompositorRenderFrame.hpp"
@@ -160,11 +161,12 @@ std::optional<ActiveWindowScreenshotTarget> focusedWindowScreenshotTarget(Waylan
                                                                          ChromeConfig const& chrome) {
   for (auto const& surface : wayland.committedSurfaces()) {
     if (!surface.focused || surface.width <= 0 || surface.height <= 0) continue;
+    Rect const frame = windowFrameRect(surface);
     ScreenshotRegion const region{
-        .x = surface.x,
-        .y = surface.y - surface.titleBarHeight,
-        .width = surface.width,
-        .height = surface.height + surface.titleBarHeight,
+        .x = static_cast<std::int32_t>(std::lround(frame.x)),
+        .y = static_cast<std::int32_t>(std::lround(frame.y)),
+        .width = static_cast<std::int32_t>(std::lround(frame.width)),
+        .height = static_cast<std::int32_t>(std::lround(frame.height)),
     };
     auto normalized = normalizeScreenshotRegion(region, wayland.logicalOutputWidth(), wayland.logicalOutputHeight());
     if (!normalized) return std::nullopt;
