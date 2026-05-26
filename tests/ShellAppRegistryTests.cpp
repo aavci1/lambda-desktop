@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -23,6 +24,27 @@ void makeExecutable(std::filesystem::path const& path) {
                                    std::filesystem::perms::others_exec,
                                std::filesystem::perm_options::add);
 }
+
+struct ScopedEnv {
+  explicit ScopedEnv(char const* name) : name(name) {
+    if (char const* value = std::getenv(name)) {
+      hadOriginal = true;
+      original = value;
+    }
+  }
+
+  ~ScopedEnv() {
+    if (!hadOriginal) {
+      unsetenv(name);
+    } else {
+      setenv(name, original.c_str(), 1);
+    }
+  }
+
+  char const* name;
+  bool hadOriginal = false;
+  std::string original;
+};
 
 } // namespace
 
@@ -228,6 +250,34 @@ TEST_CASE("Shell app registry finds icon theme paths with fallback") {
         root / "48x48" / "mimetypes" / "text-x-generic.svg");
   CHECK(lambda_shell::lookupIconThemePath(root, "settings", 48) == root / "scalable" / "apps" / "settings.svg");
   CHECK(lambda_shell::lookupIconThemePath(root, "missing", 48).empty());
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Shell app registry resolves configured icon themes through XDG roots") {
+  ScopedEnv homeEnv("HOME");
+  ScopedEnv dataHomeEnv("XDG_DATA_HOME");
+  ScopedEnv dataDirsEnv("XDG_DATA_DIRS");
+
+  auto root = tempRoot("lambda-shell-icon-theme-roots-test");
+  auto dataHome = root / "data-home";
+  auto dataDir = root / "data-dir";
+  auto themedIcon = dataHome / "icons" / "Lambda" / "48x48" / "apps" / "lambda-terminal.png";
+  auto fallbackIcon = dataDir / "icons" / "hicolor" / "48x48" / "apps" / "lambda-files.png";
+  std::filesystem::create_directories(themedIcon.parent_path());
+  std::filesystem::create_directories(fallbackIcon.parent_path());
+  std::ofstream(themedIcon) << "png";
+  std::ofstream(fallbackIcon) << "png";
+
+  auto const dataHomeString = dataHome.string();
+  auto const dataDirString = dataDir.string();
+  setenv("XDG_DATA_HOME", dataHomeString.c_str(), 1);
+  setenv("XDG_DATA_DIRS", dataDirString.c_str(), 1);
+  unsetenv("HOME");
+
+  CHECK(lambda_shell::resolveIconThemePath("lambda-terminal", "Lambda", 48) == themedIcon);
+  CHECK(lambda_shell::resolveIconThemePath("lambda-files", "Lambda", 48) == fallbackIcon);
+  CHECK(lambda_shell::resolveIconThemePath("missing", "Lambda", 48).empty());
 
   std::filesystem::remove_all(root);
 }

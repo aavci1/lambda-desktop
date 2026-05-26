@@ -5,8 +5,23 @@
 
 #include <doctest/doctest.h>
 
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
+#include <unistd.h>
+
+namespace {
+
+std::filesystem::path tempRoot(char const* name) {
+  auto path = std::filesystem::temp_directory_path() /
+              (std::string(name) + "-" + std::to_string(static_cast<unsigned long long>(getpid())));
+  std::filesystem::remove_all(path);
+  std::filesystem::create_directories(path);
+  return path;
+}
+
+} // namespace
 
 TEST_CASE("Shell model launcher keyboard state is deterministic") {
   lambda_shell::ShellModel model;
@@ -129,13 +144,19 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
 }
 
 TEST_CASE("Shell model dock items come from config pins and app registry") {
+  auto iconRoot = tempRoot("lambda-shell-model-icon-test");
+  auto terminalIcon = iconRoot / "lambda-terminal.png";
+  auto browserIcon = iconRoot / "browser.png";
+  std::ofstream(terminalIcon) << "png";
+  std::ofstream(browserIcon) << "png";
+
   lambda_shell::ShellModel model;
   lambda_shell::ShellConfig config = lambda_shell::defaultShellConfig();
   config.dockPinned = {"lambda-terminal", "missing-app", "firefox", "lambda-files"};
   std::vector<lambda_shell::AppRegistryEntry> apps{
       {.appId = "lambda-files", .name = "Files", .icon = "lambda-files", .command = "lambda-files"},
-      {.appId = "lambda-terminal", .name = "Terminal", .icon = "lambda-terminal", .command = "lambda-terminal"},
-      {.appId = "browser", .name = "Browser", .icon = "browser", .command = "firefox"},
+      {.appId = "lambda-terminal", .name = "Terminal", .icon = terminalIcon.string(), .command = "lambda-terminal"},
+      {.appId = "browser", .name = "Browser", .icon = browserIcon.string(), .command = "firefox"},
       {.appId = "org.example.Hidden", .name = "Hidden", .command = "hidden", .hidden = true},
   };
 
@@ -145,6 +166,9 @@ TEST_CASE("Shell model dock items come from config pins and app registry") {
     if (item.kind == "app") appIds.push_back(item.appId);
   }
   CHECK(appIds == std::vector<std::string>{"lambda-terminal", "browser", "lambda-files"});
+  CHECK(model.dockItems()[2].icon == terminalIcon.string());
+  CHECK(model.dockItems()[2].iconPath == terminalIcon.string());
+  CHECK(model.launcherResults()[0].iconPath == terminalIcon.string());
   CHECK(model.dockItems().back().kind == "trash");
   CHECK(model.dockItems().back().disabled);
 
@@ -175,4 +199,6 @@ TEST_CASE("Shell model dock items come from config pins and app registry") {
   for (auto const& item : model.dockItems()) {
     CHECK(item.appId != "org.example.Editor");
   }
+
+  std::filesystem::remove_all(iconRoot);
 }

@@ -3,11 +3,16 @@
 #include "Shell/ShellAppRegistry.hpp"
 
 #include <Flux/Core/Color.hpp>
+#include <Flux/Graphics/Image.hpp>
+#include <Flux/Graphics/ImageFillMode.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/IconName.hpp>
+#include <Flux/UI/Views/Image.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
+#include <memory>
+#include <unordered_map>
 
 using namespace flux;
 
@@ -38,6 +43,21 @@ std::string icon(IconName name) {
   return utf8(static_cast<char32_t>(name));
 }
 
+std::shared_ptr<Image> iconImage(std::string const& path) {
+  if (path.empty()) return nullptr;
+  static std::unordered_map<std::string, std::shared_ptr<Image>> cache;
+  auto found = cache.find(path);
+  if (found != cache.end()) return found->second;
+  auto image = loadImage(path);
+  cache.emplace(path, image);
+  return image;
+}
+
+std::string iconKey(DockItem const& item) {
+  if (!item.icon.empty()) return item.icon;
+  return item.appId;
+}
+
 struct IconPalette {
   Color from;
   Color to;
@@ -58,14 +78,15 @@ IconPalette iconPalette(DockItem const& item) {
 }
 
 IconName dockIconName(DockItem const& item) {
+  std::string const key = iconKey(item);
   if (item.kind == "launcher") return IconName::Dashboard;
-  if (shellAppIdMatches("files", item.appId)) return IconName::FolderOpen;
-  if (shellAppIdMatches("browser", item.appId)) return IconName::Globe;
-  if (shellAppIdMatches("terminal", item.appId)) return IconName::Terminal;
-  if (shellAppIdMatches("settings", item.appId)) return IconName::Tune;
-  if (item.appId == "calendar") return IconName::CalendarToday;
-  if (item.appId == "mail") return IconName::Mail;
-  if (item.appId == "music") return IconName::LibraryMusic;
+  if (shellAppIdMatches("files", key)) return IconName::FolderOpen;
+  if (shellAppIdMatches("browser", key)) return IconName::Globe;
+  if (shellAppIdMatches("terminal", key)) return IconName::Terminal;
+  if (shellAppIdMatches("settings", key)) return IconName::Tune;
+  if (key == "calendar") return IconName::CalendarToday;
+  if (key == "mail") return IconName::Mail;
+  if (key == "music") return IconName::LibraryMusic;
   if (item.kind == "trash") return IconName::DeleteForever;
   return IconName::Apps;
 }
@@ -95,19 +116,27 @@ Element dockIconAt(std::size_t index,
   float const iconInsetX = (slotWidth - iconSize) * 0.5f;
 
   std::vector<Element> iconLayers;
+  auto image = iconImage(item.iconPath);
   iconLayers.push_back(Rectangle{}
       .size(iconSize, iconSize)
       .position(iconInsetX, lift)
       .fill(FillStyle::linearGradient(palette.from, palette.to, {0.f, 0.f}, {1.f, 1.f}))
       .stroke(StrokeStyle::solid(Color(1.f, 1.f, 1.f, 0.4f), 0.5f))
       .cornerRadius(11.f));
-  iconLayers.push_back(Text{
-      .text = icon(dockIconName(item)),
-      .font = Font{.family = "Material Symbols Rounded", .size = 31.f, .weight = 780.f},
-      .color = palette.ink,
-      .horizontalAlignment = HorizontalAlignment::Center,
-      .verticalAlignment = VerticalAlignment::Center,
-  }.size(iconSize, iconSize).position(iconInsetX, lift));
+  if (image) {
+    iconLayers.push_back(Element{views::Image{
+        .source = std::move(image),
+        .fillMode = ImageFillMode::Fit,
+    }}.size(iconSize - 4.f, iconSize - 4.f).position(iconInsetX + 2.f, lift + 2.f));
+  } else {
+    iconLayers.push_back(Text{
+        .text = icon(dockIconName(item)),
+        .font = Font{.family = "Material Symbols Rounded", .size = 31.f, .weight = 780.f},
+        .color = palette.ink,
+        .horizontalAlignment = HorizontalAlignment::Center,
+        .verticalAlignment = VerticalAlignment::Center,
+    }.size(iconSize, iconSize).position(iconInsetX, lift));
+  }
 
   float const dotSize = static_cast<float>(kDockDotSize);
   Reactive::Bindable<float> dotOpacity{[running] { return running.evaluate() ? 1.f : 0.f; }};

@@ -38,6 +38,11 @@ bool appMatchesPin(AppRegistryEntry const& app, std::string_view pin) {
   return shellAppIdMatches(pin, app.appId) || shellAppIdMatches(app.appId, pin);
 }
 
+std::string resolvedIconPath(std::string const& icon, std::string const& theme, int size) {
+  auto path = resolveIconThemePath(icon, theme, size);
+  return path.empty() ? std::string{} : path.string();
+}
+
 } // namespace
 
 std::string ShellModel::formatTimeText() {
@@ -78,10 +83,22 @@ void ShellModel::resetDockItems() {
 
 void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellConfig const& config) {
   showRunningUnpinned_ = config.showRunningUnpinned;
-  std::vector<DockItem> items{
-      {"launcher", "launcher", "Launcher", {}, false, false, false},
-      {"sep1", "separator", "", {}, false, false, false},
-  };
+  iconTheme_ = config.iconTheme;
+  iconSize_ = config.iconSize;
+  std::vector<DockItem> items;
+  DockItem launcher;
+  launcher.id = "launcher";
+  launcher.kind = "launcher";
+  launcher.label = "Launcher";
+  launcher.icon = "view-app-grid";
+  launcher.iconPath = resolvedIconPath("view-app-grid", iconTheme_, iconSize_);
+  items.push_back(std::move(launcher));
+
+  DockItem firstSeparator;
+  firstSeparator.id = "sep1";
+  firstSeparator.kind = "separator";
+  items.push_back(std::move(firstSeparator));
+
   std::set<std::string> added;
   for (auto const& pin : config.dockPinned) {
     auto found = std::find_if(apps.begin(), apps.end(), [&](AppRegistryEntry const& app) {
@@ -90,16 +107,30 @@ void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellCo
     if (found == apps.end()) continue;
     std::string appId = found->appId.empty() ? pin : found->appId;
     if (!added.insert(appId).second) continue;
-    items.push_back({
-        .id = appId,
-        .kind = "app",
-        .label = found->name.empty() ? appId : found->name,
-        .appId = appId,
-        .pinned = true,
-    });
+    DockItem item;
+    item.id = appId;
+    item.kind = "app";
+    item.label = found->name.empty() ? appId : found->name;
+    item.appId = appId;
+    item.pinned = true;
+    item.icon = found->icon;
+    item.iconPath = resolvedIconPath(found->icon, iconTheme_, iconSize_);
+    items.push_back(std::move(item));
   }
-  items.push_back({"sep2", "separator", "", {}, false, false, false});
-  items.push_back({"trash", "trash", "Trash", "trash", false, false, true});
+  DockItem secondSeparator;
+  secondSeparator.id = "sep2";
+  secondSeparator.kind = "separator";
+  items.push_back(std::move(secondSeparator));
+
+  DockItem trash;
+  trash.id = "trash";
+  trash.kind = "trash";
+  trash.label = "Trash";
+  trash.appId = "trash";
+  trash.disabled = true;
+  trash.icon = "user-trash";
+  trash.iconPath = resolvedIconPath("user-trash", iconTheme_, iconSize_);
+  items.push_back(std::move(trash));
   dockItems_.set(std::move(items));
   refreshLauncherResults();
 }
@@ -108,7 +139,7 @@ bool ShellModel::dockItemsVisualStateEqual(std::vector<DockItem> const& a,
                                            std::vector<DockItem> const& b) {
   if (a.size() != b.size()) return false;
   for (std::size_t i = 0; i < a.size(); ++i) {
-    if (a[i].running != b[i].running || a[i].focused != b[i].focused) return false;
+    if (a[i] != b[i]) return false;
   }
   return true;
 }
@@ -144,14 +175,19 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
       }
     }
     if (represented || !showRunningUnpinned_) continue;
-    DockItem item{
-        .id = window.appId,
-        .kind = "app",
-        .label = window.title.empty() ? window.appId : window.title,
-        .appId = window.appId,
-        .running = true,
-        .focused = window.focused,
-    };
+    auto app = std::find_if(snapshot.apps.begin(), snapshot.apps.end(), [&](AppRegistryEntry const& candidate) {
+      return shellAppIdMatches(candidate.appId, window.appId) || shellAppIdMatches(window.appId, candidate.appId);
+    });
+    std::string icon = app == snapshot.apps.end() || app->icon.empty() ? window.appId : app->icon;
+    DockItem item;
+    item.id = window.appId;
+    item.kind = "app";
+    item.label = window.title.empty() ? window.appId : window.title;
+    item.appId = window.appId;
+    item.running = true;
+    item.focused = window.focused;
+    item.icon = icon;
+    item.iconPath = resolvedIconPath(icon, iconTheme_, iconSize_);
     if (item.focused) nextTitle = item.label;
     auto separator = std::find_if(items.begin(), items.end(), [](DockItem const& candidate) {
       return candidate.id == "sep2";

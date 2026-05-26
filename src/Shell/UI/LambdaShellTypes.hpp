@@ -38,6 +38,8 @@ struct DockItem {
   bool focused = false;
   bool disabled = false;
   bool pinned = false;
+  std::string icon;
+  std::string iconPath;
 
   bool operator==(DockItem const& other) const = default;
 };

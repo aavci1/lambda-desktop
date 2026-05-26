@@ -3,11 +3,16 @@
 #include "Shell/ShellAppRegistry.hpp"
 
 #include <Flux/Core/Color.hpp>
+#include <Flux/Graphics/Image.hpp>
+#include <Flux/Graphics/ImageFillMode.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/IconName.hpp>
+#include <Flux/UI/Views/Image.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
+#include <memory>
+#include <unordered_map>
 
 namespace lambda_shell {
 namespace {
@@ -44,14 +49,30 @@ std::string icon(flux::IconName name) {
   return utf8(static_cast<char32_t>(name));
 }
 
+std::shared_ptr<flux::Image> iconImage(std::string const& path) {
+  if (path.empty()) return nullptr;
+  static std::unordered_map<std::string, std::shared_ptr<flux::Image>> cache;
+  auto found = cache.find(path);
+  if (found != cache.end()) return found->second;
+  auto image = flux::loadImage(path);
+  cache.emplace(path, image);
+  return image;
+}
+
+std::string iconKey(DockItem const& item) {
+  if (!item.icon.empty()) return item.icon;
+  return item.appId;
+}
+
 flux::IconName dockIconName(DockItem const& item) {
-  if (shellAppIdMatches("files", item.appId)) return flux::IconName::FolderOpen;
-  if (shellAppIdMatches("browser", item.appId)) return flux::IconName::Globe;
-  if (shellAppIdMatches("terminal", item.appId)) return flux::IconName::Terminal;
-  if (shellAppIdMatches("settings", item.appId)) return flux::IconName::Tune;
-  if (item.appId == "calendar") return flux::IconName::CalendarToday;
-  if (item.appId == "mail") return flux::IconName::Mail;
-  if (item.appId == "music") return flux::IconName::LibraryMusic;
+  std::string const key = iconKey(item);
+  if (shellAppIdMatches("files", key)) return flux::IconName::FolderOpen;
+  if (shellAppIdMatches("browser", key)) return flux::IconName::Globe;
+  if (shellAppIdMatches("terminal", key)) return flux::IconName::Terminal;
+  if (shellAppIdMatches("settings", key)) return flux::IconName::Tune;
+  if (key == "calendar") return flux::IconName::CalendarToday;
+  if (key == "mail") return flux::IconName::Mail;
+  if (key == "music") return flux::IconName::LibraryMusic;
   return flux::IconName::Apps;
 }
 
@@ -78,15 +99,22 @@ flux::Element resultTile(DockItem item,
       }})
       .stroke(flux::StrokeStyle::solid(rgba(1.f, 1.f, 1.f, 0.68f), 0.9f))
       .cornerRadius(11.f));
-  layers.push_back(flux::Text{
-      .text = icon(dockIconName(item)),
-      .font = flux::Font{.family = "Material Symbols Rounded", .size = 31.f, .weight = 780.f},
-      .color = flux::Reactive::Bindable<flux::Color>{[active] {
-        return active.evaluate() ? rgba(1.f, 1.f, 1.f, 1.f) : rgba(0.10f, 0.15f, 0.25f, 1.f);
-      }},
-      .horizontalAlignment = flux::HorizontalAlignment::Center,
-      .verticalAlignment = flux::VerticalAlignment::Center,
-  }.size(40.f, 40.f).position(43.f, 14.f));
+  if (auto image = iconImage(item.iconPath)) {
+    layers.push_back(flux::Element{flux::views::Image{
+        .source = std::move(image),
+        .fillMode = flux::ImageFillMode::Fit,
+    }}.size(36.f, 36.f).position(45.f, 16.f));
+  } else {
+    layers.push_back(flux::Text{
+        .text = icon(dockIconName(item)),
+        .font = flux::Font{.family = "Material Symbols Rounded", .size = 31.f, .weight = 780.f},
+        .color = flux::Reactive::Bindable<flux::Color>{[active] {
+          return active.evaluate() ? rgba(1.f, 1.f, 1.f, 1.f) : rgba(0.10f, 0.15f, 0.25f, 1.f);
+        }},
+        .horizontalAlignment = flux::HorizontalAlignment::Center,
+        .verticalAlignment = flux::VerticalAlignment::Center,
+    }.size(40.f, 40.f).position(43.f, 14.f));
+  }
   layers.push_back(flux::Text{
       .text = item.label,
       .font = flux::Font{.size = 12.5f, .weight = 620.f},

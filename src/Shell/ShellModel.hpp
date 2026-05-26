@@ -93,6 +93,8 @@ private:
   flux::Signal<SystemStatus> systemStatus_;
   flux::Signal<std::vector<DockItem>> launcherResults_;
   bool showRunningUnpinned_ = true;
+  std::string iconTheme_;
+  int iconSize_ = 48;
 };
 
 } // namespace lambda_shell

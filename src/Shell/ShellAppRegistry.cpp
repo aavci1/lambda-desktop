@@ -333,6 +333,44 @@ std::vector<std::filesystem::path> defaultXdgApplicationDirs() {
   return dirs;
 }
 
+std::vector<std::filesystem::path> defaultIconThemeRoots(std::string const& themeName) {
+  std::vector<std::string> themes;
+  if (!themeName.empty()) themes.push_back(themeName);
+  if (std::find(themes.begin(), themes.end(), "hicolor") == themes.end()) themes.push_back("hicolor");
+  if (std::find(themes.begin(), themes.end(), "Adwaita") == themes.end()) themes.push_back("Adwaita");
+
+  std::vector<std::filesystem::path> bases;
+  if (char const* home = std::getenv("HOME"); home && *home) {
+    bases.emplace_back(std::filesystem::path{home} / ".icons");
+  }
+  if (char const* xdgDataHome = std::getenv("XDG_DATA_HOME"); xdgDataHome && *xdgDataHome) {
+    bases.emplace_back(std::filesystem::path{xdgDataHome} / "icons");
+  } else if (char const* home = std::getenv("HOME"); home && *home) {
+    bases.emplace_back(std::filesystem::path{home} / ".local" / "share" / "icons");
+  }
+
+  char const* xdgDataDirs = std::getenv("XDG_DATA_DIRS");
+  std::string_view dataDirs = xdgDataDirs && *xdgDataDirs ? std::string_view{xdgDataDirs}
+                                                          : std::string_view{"/usr/local/share:/usr/share"};
+  for (auto const& entry : splitColonList(dataDirs)) {
+    if (!entry.empty()) bases.emplace_back(std::filesystem::path{entry} / "icons");
+  }
+
+  std::vector<std::filesystem::path> roots;
+  for (auto const& base : bases) {
+    for (auto const& theme : themes) {
+      roots.emplace_back(base / theme);
+    }
+  }
+  if (char const* xdgDataHome = std::getenv("XDG_DATA_HOME"); xdgDataHome && *xdgDataHome) {
+    roots.emplace_back(std::filesystem::path{xdgDataHome} / "pixmaps");
+  }
+  for (auto const& entry : splitColonList(dataDirs)) {
+    if (!entry.empty()) roots.emplace_back(std::filesystem::path{entry} / "pixmaps");
+  }
+  return roots;
+}
+
 std::vector<std::string> defaultLocalExampleAppNames() {
   return {"lambda-files", "lambda-settings", "lambda-terminal"};
 }
@@ -448,20 +486,41 @@ std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot
   std::vector<std::filesystem::path> candidates{
       themeRoot / std::to_string(preferredSize) / "apps",
       themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "apps",
+      themeRoot / std::to_string(preferredSize) / "actions",
+      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "actions",
       themeRoot / std::to_string(preferredSize) / "mimetypes",
       themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "mimetypes",
       themeRoot / std::to_string(preferredSize) / "places",
       themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "places",
+      themeRoot / std::to_string(preferredSize) / "status",
+      themeRoot / (std::to_string(preferredSize) + "x" + std::to_string(preferredSize)) / "status",
       themeRoot / "scalable" / "apps",
+      themeRoot / "scalable" / "actions",
       themeRoot / "scalable" / "mimetypes",
       themeRoot / "scalable" / "places",
+      themeRoot / "scalable" / "status",
       themeRoot / "apps",
+      themeRoot / "actions",
       themeRoot / "mimetypes",
       themeRoot / "places",
+      themeRoot / "status",
       themeRoot,
   };
   for (auto const& dir : candidates) {
     if (auto candidate = iconCandidate(dir, iconName); !candidate.empty()) return candidate;
+  }
+  return {};
+}
+
+std::filesystem::path resolveIconThemePath(std::string const& iconName,
+                                           std::string const& themeName,
+                                           int preferredSize) {
+  if (iconName.empty()) return {};
+  if (std::filesystem::path iconPath(iconName); iconPath.is_absolute() && std::filesystem::exists(iconPath)) {
+    return iconPath;
+  }
+  for (auto const& root : defaultIconThemeRoots(themeName)) {
+    if (auto path = lookupIconThemePath(root, iconName, preferredSize); !path.empty()) return path;
   }
   return {};
 }

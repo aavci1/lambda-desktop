@@ -68,5 +68,9 @@ using TryExecResolver = std::function<bool(std::string const& executable)>;
 [[nodiscard]] std::filesystem::path lookupIconThemePath(std::filesystem::path const& themeRoot,
                                                         std::string const& iconName,
                                                         int preferredSize = 48);
+[[nodiscard]] std::vector<std::filesystem::path> defaultIconThemeRoots(std::string const& themeName);
+[[nodiscard]] std::filesystem::path resolveIconThemePath(std::string const& iconName,
+                                                         std::string const& themeName,
+                                                         int preferredSize = 48);
 
 } // namespace lambda_shell
