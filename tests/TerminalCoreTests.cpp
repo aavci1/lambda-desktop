@@ -72,6 +72,26 @@ TEST_CASE("terminal bracketed paste wraps text without rewriting payload") {
   CHECK(encodeBracketedPaste("echo one\nsecond") == "\x1b[200~echo one\nsecond\x1b[201~");
 }
 
+TEST_CASE("terminal copy and paste payload helpers honor selection and bracketed paste policy") {
+  TerminalTextBuffer buffer{2, 10};
+  buffer.pushLine("alpha");
+  buffer.pushLine("bravo");
+
+  CHECK(terminalCopyPayload(buffer, TerminalSelection{
+                                        .anchor = {.line = 0, .column = 1},
+                                        .focus = {.line = 1, .column = 3},
+                                    }) == "lpha\nbra");
+
+  TerminalConfig bracketed = defaultTerminalConfig();
+  bracketed.bracketedPaste = true;
+  CHECK(terminalPastePayload("echo hi", bracketed) == "\x1b[200~echo hi\x1b[201~");
+
+  TerminalConfig plain = bracketed;
+  plain.bracketedPaste = false;
+  CHECK(terminalPastePayload("echo hi", plain) == "echo hi");
+  CHECK(terminalPastePayload("", plain).empty());
+}
+
 TEST_CASE("terminal SGR mouse encoding maps buttons modifiers motion and wheel events") {
   CHECK(encodeSgrMouseEvent({
             .button = TerminalMouseButton::Left,

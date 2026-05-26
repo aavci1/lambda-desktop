@@ -196,6 +196,10 @@ private:
                                             TerminalInputMode mode = {});
 [[nodiscard]] std::string encodeTerminalKeypadKey(TerminalKeypadKey key, TerminalInputMode mode = {});
 [[nodiscard]] std::string encodeBracketedPaste(std::string_view text);
+[[nodiscard]] std::string terminalCopyPayload(TerminalTextBuffer const& buffer,
+                                              TerminalSelection selection);
+[[nodiscard]] std::string terminalPastePayload(std::string_view clipboardText,
+                                               TerminalConfig const& config);
 [[nodiscard]] std::string encodeSgrMouseEvent(TerminalMouseEvent event);
 [[nodiscard]] TerminalBufferCoordinate terminalMouseCell(float x,
                                                         float y,

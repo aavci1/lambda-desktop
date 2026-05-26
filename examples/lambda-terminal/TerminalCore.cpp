@@ -453,6 +453,16 @@ std::string encodeBracketedPaste(std::string_view text) {
   return encoded;
 }
 
+std::string terminalCopyPayload(TerminalTextBuffer const& buffer, TerminalSelection selection) {
+  return buffer.selectedText(selection);
+}
+
+std::string terminalPastePayload(std::string_view clipboardText, TerminalConfig const& config) {
+  if (clipboardText.empty()) return {};
+  if (config.bracketedPaste) return encodeBracketedPaste(clipboardText);
+  return std::string(clipboardText);
+}
+
 std::string encodeSgrMouseEvent(TerminalMouseEvent event) {
   int button = 0;
   switch (event.button) {
