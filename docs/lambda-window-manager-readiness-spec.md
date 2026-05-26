@@ -807,6 +807,8 @@ Add focused automated tests where behavior is deterministic:
 
 Do not require GPU screenshot comparison in this milestone unless it is straightforward to add using existing render fixtures.
 
+Current deterministic validation: unit tests cover single-output selector aliases/indexes, per-output scale overrides and fallback scale, cursor theme/size parsing plus invalid-value fallback, keyboard layout/model/options/repeat parsing plus invalid-value fallback, screenshot mode request policy, region normalization, logical-to-framebuffer conversion, filename collision handling, and PNG writing. Live screenshot capture and visual compositor behavior still require manual validation on target hardware.
+
 ## Done checklist
 
 - [ ] Idle behavior is acceptable with shell and core Lambda apps open.
@@ -816,11 +818,11 @@ Do not require GPU screenshot comparison in this milestone unless it is straight
 - [ ] Shell panels do not flicker during nearby window animations.
 - [ ] Shadow, border, and corner radius behavior is consistent.
 - [x] Shell focus requests restore minimized windows.
-- [ ] Single-output selection and scale behavior are validated.
-- [ ] Cursor theme and size configuration are validated.
-- [ ] Keyboard layout and repeat configuration are validated.
+- [x] Single-output selection and scale behavior are validated.
+- [x] Cursor theme and size configuration are validated.
+- [x] Keyboard layout and repeat configuration are validated.
 - [ ] Screenshot capture is reliable.
-- [ ] Screenshot full-output, active-window, and region modes are specified and validated.
+- [x] Screenshot full-output, active-window, and region modes are specified and validated.
 - [ ] Compositor-drawn screenshot UI is cancelable and does not disturb focus.
 - [ ] In-tree protocol demos pass.
 - [ ] Real-app smoke matrix passes or has documented intentional exclusions.
