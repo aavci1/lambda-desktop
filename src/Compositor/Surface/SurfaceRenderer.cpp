@@ -559,6 +559,14 @@ void pruneSurfaceRenderState(SurfaceRenderState &state, std::unordered_set<std::
       it = state.surfaceVisuals.erase(it);
     }
   }
+  for (auto it = state.rejectedOverlaySignaturesBySurface.begin();
+       it != state.rejectedOverlaySignaturesBySurface.end();) {
+    if (liveSurfaceIds.contains(it->first)) {
+      ++it;
+    } else {
+      it = state.rejectedOverlaySignaturesBySurface.erase(it);
+    }
+  }
 }
 
 } // namespace flux::compositor

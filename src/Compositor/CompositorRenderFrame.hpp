@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <functional>
+#include <memory>
 
 namespace flux {
 class FreeTypeTextSystem;
@@ -37,6 +38,7 @@ struct AtomicReadyFrame {
   bool directScanout = false;
   std::uint64_t contentSerial = 0;
   presentation::AtomicFrameProfile profile{};
+  std::shared_ptr<platform::KmsAtomicPresenter::OverlayCandidate> scanoutCandidate;
 };
 
 struct CompositorRenderFrameContext {

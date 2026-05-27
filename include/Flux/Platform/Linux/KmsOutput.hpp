@@ -61,6 +61,7 @@ public:
     std::int32_t crtcY = 0;
     std::uint32_t crtcWidth = 0;
     std::uint32_t crtcHeight = 0;
+    int acquireFenceFd = -1;
     std::vector<DmabufPlane> planes;
   };
 
@@ -100,14 +101,20 @@ public:
   [[nodiscard]] bool canPrepareOverlayOnly() const noexcept;
   [[nodiscard]] bool prepareOverlayCandidateForDisplayedFrame(OverlayCandidate candidate);
   [[nodiscard]] bool canScheduleOverlayOnly() const noexcept;
+  [[nodiscard]] int preparedOverlayAcquireFenceFd() const noexcept;
   std::uint32_t scheduleOverlayOnly();
+  [[nodiscard]] bool primeDirectScanoutCandidate(OverlayCandidate& candidate);
   [[nodiscard]] bool prepareDirectScanoutCandidate(OverlayCandidate candidate);
   [[nodiscard]] bool canScheduleDirectScanout() const noexcept;
+  [[nodiscard]] int preparedDirectScanoutAcquireFenceFd() const noexcept;
   std::uint32_t scheduleDirectScanout();
+  [[nodiscard]] bool canScheduleDirectScanoutRepeat() const noexcept;
+  std::uint32_t scheduleDirectScanoutRepeat();
   void clearPreparedDirectScanout();
   void clearPreparedOverlayCandidate();
   [[nodiscard]] std::uint64_t preparedOverlaySurfaceId() const noexcept;
   [[nodiscard]] std::vector<std::uint64_t> overlayBufferIdsInUse() const;
+  [[nodiscard]] bool canUseOverlayFormatModifier(std::uint32_t format, std::uint64_t modifier) const noexcept;
   [[nodiscard]] std::vector<KmsDmabufFormatModifier> overlayDmabufFormatModifierPreferences() const;
   std::uint32_t schedulePresent(std::uint32_t token = 0);
   PageFlipTiming present();

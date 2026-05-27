@@ -61,6 +61,7 @@ struct WaylandOutputInfo {
   std::int32_t physicalWidthMm = 0;
   std::int32_t physicalHeightMm = 0;
   std::uint64_t drmDevice = 0;
+  int drmFd = -1;
 };
 
 struct DmabufFormatModifierPreference {

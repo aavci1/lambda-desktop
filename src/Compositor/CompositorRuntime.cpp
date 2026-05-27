@@ -47,6 +47,7 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <poll.h>
 #include <vulkan/vulkan.h>
 
 namespace flux::compositor {
@@ -200,6 +201,23 @@ bool logScreenshotSaveResult(ScreenshotSaveResult const& saved) {
                  saved.error.c_str());
     return false;
   }
+}
+
+void disarmOverlayCandidateFds(platform::KmsAtomicPresenter::OverlayCandidate& candidate) noexcept {
+  candidate.acquireFenceFd = -1;
+  for (auto& plane : candidate.planes) {
+    plane.fd = -1;
+  }
+}
+
+bool fdReadableNow(int fd) noexcept {
+  if (fd < 0) return true;
+  pollfd pfd{
+      .fd = fd,
+      .events = POLLIN,
+      .revents = 0,
+  };
+  return poll(&pfd, 1, 0) > 0 && (pfd.revents & (POLLIN | POLLERR | POLLHUP | POLLNVAL)) != 0;
 }
 
 CornerRadius scaleCornerRadius(CornerRadius corners, double scale) {
@@ -608,6 +626,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         .height = static_cast<std::int32_t>(output.height()),
         .refreshMilliHz = static_cast<std::int32_t>(output.refreshRateMilliHz()),
         .drmDevice = drmDeviceForFd(device->fd()),
+        .drmFd = device->fd(),
     });
     auto lastInputActivity = SteadyClock::now();
     bool inputActivityThisLoop = false;
@@ -807,6 +826,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     std::uint64_t lastKnownContentSerial = wayland.contentSerial();
     presentation::AtomicFrameProfile lastAtomicScheduledProfile{};
     std::uint64_t atomicRenderAheadLeadEstimateNsec = initialRenderAheadLeadNsec(output.refreshRateMilliHz());
+    std::uint64_t lastAcquireWaitFrameCallbackNsec = 0;
     auto lastCrashHeartbeat = SteadyClock::now();
     auto maybeCrashHeartbeat = [&](char const* reason) {
       if (!diagnostics::crashLogEnabled()) return;
@@ -858,6 +878,72 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       return presenter->atomicPresenter() && atomicFrameDirty && atomicCanPrepareFrame() &&
              presenter->atomicPresenter()->hasPendingPageFlip() && atomicRenderAheadDelayMs() == 0;
     };
+    auto queuedScanoutAcquireFenceFd = [&]() -> int {
+      if (!presenter->atomicPresenter() || atomicReadyFrames.empty()) return -1;
+      AtomicReadyFrame const& frame = atomicReadyFrames.back();
+      if (!frame.directScanout && !frame.overlayOnly) return -1;
+      if (frame.scanoutCandidate) return frame.scanoutCandidate->acquireFenceFd;
+      if (frame.directScanout) return presenter->atomicPresenter()->preparedDirectScanoutAcquireFenceFd();
+      return presenter->atomicPresenter()->preparedOverlayAcquireFenceFd();
+    };
+    auto queuedScanoutWaitingForAcquire = [&]() {
+      int const fd = queuedScanoutAcquireFenceFd();
+      return fd >= 0 && !fdReadableNow(fd);
+    };
+    auto acquireWaitFrameCallbackDelayMs = [&]() -> int {
+      if (!presenter->atomicPresenter() || presenter->atomicPresenter()->hasPendingPageFlip() ||
+          !queuedScanoutWaitingForAcquire()) {
+        return kIdlePollMs;
+      }
+      if (presenter->atomicPresenter()->canScheduleDirectScanoutRepeat()) return 0;
+      std::uint64_t const refresh = refreshNsec(output.refreshRateMilliHz());
+      if (refresh == 0) return 0;
+      std::uint64_t const anchor = std::max(lastAtomicFlipNsec, lastAcquireWaitFrameCallbackNsec);
+      if (anchor == 0) return 0;
+      std::uint64_t const deadline = anchor + refresh;
+      std::uint64_t const now = monotonicNanoseconds();
+      if (now >= deadline) return 0;
+      std::uint64_t const remainingMs = (deadline - now + 999'999ull) / 1'000'000ull;
+      return static_cast<int>(std::min<std::uint64_t>(remainingMs, kIdlePollMs));
+    };
+    auto maybeSendAcquireWaitFrameCallback = [&]() {
+      if (!device->isVtForeground() || !presenter->atomicPresenter() ||
+          presenter->atomicPresenter()->hasPendingPageFlip() || !queuedScanoutWaitingForAcquire() ||
+          acquireWaitFrameCallbackDelayMs() != 0) {
+        return false;
+      }
+      if (presenter->atomicPresenter()->canScheduleDirectScanoutRepeat()) {
+        std::uint32_t const presentId = presenter->atomicPresenter()->scheduleDirectScanoutRepeat();
+        std::uint64_t const scheduledNsec = monotonicNanoseconds();
+        double const sinceLastFlipMs =
+            lastAtomicFlipNsec > 0 && scheduledNsec >= lastAtomicFlipNsec
+                ? static_cast<double>(scheduledNsec - lastAtomicFlipNsec) / 1'000'000.0
+                : 0.0;
+        tracePacing("flip-scheduled id=%u surfaces=0 activeSizing=0 maxBuffer=0x0 "
+                    "maxFrame=0x0 maxDmabuf=0x00000000 maxDmabufModifier=0x0000000000000000 "
+                    "snapshotFrameTime=0.000ms renderAhead=0 directRepeat=1 "
+                    "contentSerial=%llu sinceLastFlip=%.3fms gpuWait=0.000ms "
+                    "ageSurface=0 inputToRender=0.000ms configureToRender=0.000ms ackToRender=0.000ms "
+                    "commitToRender=0.000ms configureToCommit=0.000ms "
+                    "phaseBg=0.000ms phaseSnapshot=0.000ms phaseSurface=0.000ms "
+                    "phaseClosing=0.000ms phaseCursor=0.000ms "
+                    "phasePresent=0.000ms phaseTotal=0.000ms\n",
+                    presentId,
+                    static_cast<unsigned long long>(wayland.contentSerial()),
+                    sinceLastFlipMs);
+        lastAtomicScheduledNsec = scheduledNsec;
+        lastAtomicScheduledRenderMs = 0.0;
+        lastAtomicScheduledProfile = {};
+      } else {
+        return false;
+      }
+      lastAcquireWaitFrameCallbackNsec = monotonicNanoseconds();
+      tracePacing("acquire-wait-repeat contentSerial=%llu queuedSerial=%llu acquireFd=%d\n",
+                  static_cast<unsigned long long>(wayland.contentSerial()),
+                  static_cast<unsigned long long>(atomicReadyFrames.empty() ? 0ull : atomicReadyFrames.back().contentSerial),
+                  queuedScanoutAcquireFenceFd());
+      return true;
+    };
     auto updateAtomicRenderAheadLead = [&](std::uint64_t renderToReadyNsec, bool usedRenderFence) {
       std::uint64_t const refresh = refreshNsec(output.refreshRateMilliHz());
       std::uint64_t const guard = refresh > 0 ? refresh / 8ull : 2'000'000ull;
@@ -885,16 +971,31 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         int const flipFd = presenter->atomicPresenter()->eventFd();
         if (flipFd >= 0) storage[count++] = flipFd;
       }
-      if (presenter->atomicPresenter()) {
-        for (auto frame = atomicReadyFrames.rbegin(); frame != atomicReadyFrames.rend(); ++frame) {
-          if (frame->overlayOnly || frame->directScanout) continue;
-          int const readyFd = presenter->atomicPresenter()->renderReadyFd(frame->presentToken);
-          if (readyFd >= 0) {
-            storage[count++] = readyFd;
-            break;
-          }
-        }
-      }
+	      if (presenter->atomicPresenter()) {
+	        for (auto frame = atomicReadyFrames.rbegin(); frame != atomicReadyFrames.rend(); ++frame) {
+	          if (frame->overlayOnly || frame->directScanout) continue;
+	          int const readyFd = presenter->atomicPresenter()->renderReadyFd(frame->presentToken);
+	          if (readyFd >= 0) {
+	            storage[count++] = readyFd;
+	            break;
+	          }
+	        }
+	        for (auto frame = atomicReadyFrames.rbegin(); frame != atomicReadyFrames.rend(); ++frame) {
+	          int acquireFenceFd = -1;
+	          if (frame->scanoutCandidate) {
+	            acquireFenceFd = frame->scanoutCandidate->acquireFenceFd;
+	          } else if (frame->directScanout) {
+	            acquireFenceFd = presenter->atomicPresenter()->preparedDirectScanoutAcquireFenceFd();
+	          } else if (frame->overlayOnly) {
+	            acquireFenceFd = presenter->atomicPresenter()->preparedOverlayAcquireFenceFd();
+	          }
+	          if (acquireFenceFd < 0) continue;
+	          if (!fdReadableNow(acquireFenceFd)) {
+	            storage[count++] = acquireFenceFd;
+	            break;
+	          }
+	        }
+	      }
       return std::span<int const>(storage.data(), count);
     };
     auto pollMaskHas = [](std::uint64_t mask, std::size_t index) {
@@ -914,13 +1015,53 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                             wayland.logicalOutputHeight(),
                             static_cast<unsigned long long>(wayland.contentSerial()));
     };
-    auto scheduleAtomicFrame = [&](AtomicReadyFrame& frame) {
+	    auto scheduleAtomicFrame = [&](AtomicReadyFrame& frame) {
       if (!presenter->atomicPresenter() || !frame.ready) return false;
       if (frame.directScanout) {
-        if (!presenter->atomicPresenter()->canScheduleDirectScanout()) return false;
+        std::uint64_t const scheduleStartNsec = monotonicNanoseconds();
+        std::uint64_t candidateBufferId = 0;
+        int candidateAcquireFenceFd = -1;
+        if (frame.scanoutCandidate) {
+          candidateBufferId = frame.scanoutCandidate->bufferId;
+          candidateAcquireFenceFd = frame.scanoutCandidate->acquireFenceFd;
+          bool const acquireReady = fdReadableNow(candidateAcquireFenceFd);
+          tracePacing("scanout-schedule-begin mode=direct contentSerial=%llu buffer=%llu "
+                      "acquireFd=%d acquireReady=%d\n",
+                      static_cast<unsigned long long>(frame.contentSerial),
+                      static_cast<unsigned long long>(candidateBufferId),
+                      candidateAcquireFenceFd,
+                      acquireReady ? 1 : 0);
+          auto candidate = std::move(*frame.scanoutCandidate);
+          disarmOverlayCandidateFds(*frame.scanoutCandidate);
+          frame.scanoutCandidate.reset();
+          std::uint64_t const prepareStartNsec = monotonicNanoseconds();
+          if (!presenter->atomicPresenter()->prepareDirectScanoutCandidate(std::move(candidate))) {
+            tracePacing("scanout-prepare-failed mode=direct contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
+                        static_cast<unsigned long long>(frame.contentSerial),
+                        static_cast<unsigned long long>(candidateBufferId),
+                        static_cast<double>(monotonicNanoseconds() - prepareStartNsec) / 1'000'000.0);
+            frame = AtomicReadyFrame{};
+            return false;
+          }
+          tracePacing("scanout-prepare-done mode=direct contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
+                      static_cast<unsigned long long>(frame.contentSerial),
+                      static_cast<unsigned long long>(candidateBufferId),
+                      static_cast<double>(monotonicNanoseconds() - prepareStartNsec) / 1'000'000.0);
+	        }
+	        if (!fdReadableNow(presenter->atomicPresenter()->preparedDirectScanoutAcquireFenceFd())) return false;
+	        if (!presenter->atomicPresenter()->canScheduleDirectScanout()) return false;
         std::uint64_t const frameContentSerial = frame.contentSerial;
         std::uint32_t const presentId = presenter->atomicPresenter()->scheduleDirectScanout();
         std::uint64_t const scheduledNsec = monotonicNanoseconds();
+        tracePacing("scanout-schedule-done mode=direct id=%u contentSerial=%llu buffer=%llu "
+                    "elapsed=%.3fms commitCall=%.3fms\n",
+                    presentId,
+                    static_cast<unsigned long long>(frame.contentSerial),
+                    static_cast<unsigned long long>(candidateBufferId),
+                    static_cast<double>(scheduledNsec - scheduleStartNsec) / 1'000'000.0,
+                    candidateAcquireFenceFd >= 0
+                        ? static_cast<double>(scheduledNsec - scheduleStartNsec) / 1'000'000.0
+                        : 0.0);
         double const sinceLastFlipMs =
             lastAtomicFlipNsec > 0 && scheduledNsec >= lastAtomicFlipNsec
                 ? static_cast<double>(scheduledNsec - lastAtomicFlipNsec) / 1'000'000.0
@@ -968,16 +1109,52 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                          WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
         wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
-        frame = {};
+	        frame = AtomicReadyFrame{};
         if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
         forceRender = false;
         return true;
       }
       if (frame.overlayOnly) {
-        if (!presenter->atomicPresenter()->canScheduleOverlayOnly()) return false;
+        std::uint64_t const scheduleStartNsec = monotonicNanoseconds();
+        std::uint64_t candidateBufferId = 0;
+        int candidateAcquireFenceFd = -1;
+        if (frame.scanoutCandidate) {
+          candidateBufferId = frame.scanoutCandidate->bufferId;
+          candidateAcquireFenceFd = frame.scanoutCandidate->acquireFenceFd;
+          bool const acquireReady = fdReadableNow(candidateAcquireFenceFd);
+          tracePacing("scanout-schedule-begin mode=overlay contentSerial=%llu buffer=%llu "
+                      "acquireFd=%d acquireReady=%d\n",
+                      static_cast<unsigned long long>(frame.contentSerial),
+                      static_cast<unsigned long long>(candidateBufferId),
+                      candidateAcquireFenceFd,
+                      acquireReady ? 1 : 0);
+          auto candidate = std::move(*frame.scanoutCandidate);
+          disarmOverlayCandidateFds(*frame.scanoutCandidate);
+          frame.scanoutCandidate.reset();
+          std::uint64_t const prepareStartNsec = monotonicNanoseconds();
+          if (!presenter->atomicPresenter()->prepareOverlayCandidateForDisplayedFrame(std::move(candidate))) {
+            tracePacing("scanout-prepare-failed mode=overlay contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
+                        static_cast<unsigned long long>(frame.contentSerial),
+                        static_cast<unsigned long long>(candidateBufferId),
+                        static_cast<double>(monotonicNanoseconds() - prepareStartNsec) / 1'000'000.0);
+            frame = AtomicReadyFrame{};
+            return false;
+          }
+          tracePacing("scanout-prepare-done mode=overlay contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
+                      static_cast<unsigned long long>(frame.contentSerial),
+                      static_cast<unsigned long long>(candidateBufferId),
+                      static_cast<double>(monotonicNanoseconds() - prepareStartNsec) / 1'000'000.0);
+	        }
+	        if (!fdReadableNow(presenter->atomicPresenter()->preparedOverlayAcquireFenceFd())) return false;
+	        if (!presenter->atomicPresenter()->canScheduleOverlayOnly()) return false;
         std::uint64_t const frameContentSerial = frame.contentSerial;
         std::uint32_t const presentId = presenter->atomicPresenter()->scheduleOverlayOnly();
         std::uint64_t const scheduledNsec = monotonicNanoseconds();
+        tracePacing("scanout-schedule-done mode=overlay id=%u contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
+                    presentId,
+                    static_cast<unsigned long long>(frame.contentSerial),
+                    static_cast<unsigned long long>(candidateBufferId),
+                    static_cast<double>(scheduledNsec - scheduleStartNsec) / 1'000'000.0);
         double const sinceLastFlipMs =
             lastAtomicFlipNsec > 0 && scheduledNsec >= lastAtomicFlipNsec
                 ? static_cast<double>(scheduledNsec - lastAtomicFlipNsec) / 1'000'000.0
@@ -1025,7 +1202,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                          WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
         wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
-        frame = {};
+	        frame = AtomicReadyFrame{};
         if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
         forceRender = false;
         return true;
@@ -1108,7 +1285,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       frame.timing.flags |= static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
                                                        WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK);
       wayland.sendPresentationFeedbacks(monotonicMilliseconds(), frame.timing);
-      frame = {};
+	      frame = AtomicReadyFrame{};
       if (wayland.contentSerial() != frameContentSerial) atomicFrameDirty = true;
       forceRender = false;
       return true;
@@ -1123,10 +1300,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     };
     auto discardQueuedAtomicFrame = [&](std::size_t index) {
       if (!presenter->atomicPresenter() || index >= atomicReadyFrames.size()) return;
-      if (atomicReadyFrames[index].directScanout) {
-        presenter->atomicPresenter()->clearPreparedDirectScanout();
-      } else if (atomicReadyFrames[index].overlayOnly) {
-        presenter->atomicPresenter()->clearPreparedOverlayCandidate();
+	      if (atomicReadyFrames[index].directScanout && !atomicReadyFrames[index].scanoutCandidate) {
+	        presenter->atomicPresenter()->clearPreparedDirectScanout();
+	      } else if (atomicReadyFrames[index].overlayOnly && !atomicReadyFrames[index].scanoutCandidate) {
+	        presenter->atomicPresenter()->clearPreparedOverlayCandidate();
       } else {
         presenter->atomicPresenter()->discardPreparedFrame(atomicReadyFrames[index].presentToken);
       }
@@ -1143,14 +1320,24 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
       std::size_t const candidate = atomicReadyFrames.size() - 1;
       AtomicReadyFrame const& frame = atomicReadyFrames[candidate];
-      if (!frame.ready) return std::nullopt;
-      if (frame.directScanout) {
-        return presenter->atomicPresenter()->canScheduleDirectScanout() ? std::optional<std::size_t>{candidate}
-                                                                        : std::nullopt;
-      }
-      if (frame.overlayOnly) {
-        return presenter->atomicPresenter()->canScheduleOverlayOnly() ? std::optional<std::size_t>{candidate}
-                                                                      : std::nullopt;
+	      if (!frame.ready) return std::nullopt;
+	      if (frame.directScanout) {
+	        if (frame.scanoutCandidate) {
+	          return fdReadableNow(frame.scanoutCandidate->acquireFenceFd) ? std::optional<std::size_t>{candidate}
+	                                                                      : std::nullopt;
+	        }
+	        if (!fdReadableNow(presenter->atomicPresenter()->preparedDirectScanoutAcquireFenceFd())) return std::nullopt;
+	        return presenter->atomicPresenter()->canScheduleDirectScanout() ? std::optional<std::size_t>{candidate}
+	                                                                        : std::nullopt;
+	      }
+	      if (frame.overlayOnly) {
+	        if (frame.scanoutCandidate) {
+	          return fdReadableNow(frame.scanoutCandidate->acquireFenceFd) ? std::optional<std::size_t>{candidate}
+	                                                                      : std::nullopt;
+	        }
+	        if (!fdReadableNow(presenter->atomicPresenter()->preparedOverlayAcquireFenceFd())) return std::nullopt;
+	        return presenter->atomicPresenter()->canScheduleOverlayOnly() ? std::optional<std::size_t>{candidate}
+	                                                                      : std::nullopt;
       }
       bool const allowRenderFence = frame.renderedAhead;
       if (!allowRenderFence && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0) {
@@ -1195,17 +1382,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     auto discardAllQueuedAtomicFrames = [&] {
       if (presenter->atomicPresenter()) {
         for (auto const& frame : atomicReadyFrames) {
-          if (frame.directScanout) {
-            presenter->atomicPresenter()->clearPreparedDirectScanout();
-          } else if (frame.overlayOnly) {
-            presenter->atomicPresenter()->clearPreparedOverlayCandidate();
+	          if (frame.directScanout && !frame.scanoutCandidate) {
+	            presenter->atomicPresenter()->clearPreparedDirectScanout();
+	          } else if (frame.overlayOnly && !frame.scanoutCandidate) {
+	            presenter->atomicPresenter()->clearPreparedOverlayCandidate();
           } else {
             presenter->atomicPresenter()->discardPreparedFrame(frame.presentToken);
           }
         }
       }
       atomicReadyFrames.clear();
-      atomicRenderedFrame = {};
+	      atomicRenderedFrame = AtomicReadyFrame{};
     };
     auto dispatchAtomicPageFlip = [&] {
       if (!presenter->atomicPresenter()) return false;
@@ -1275,7 +1462,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                   flip->renderReadyMonotonicNsec >= flip->renderSubmittedMonotonicNsec
               ? flip->renderReadyMonotonicNsec - flip->renderSubmittedMonotonicNsec
               : 0;
-      updateAtomicRenderAheadLead(renderToReadyNsec, flip->usedRenderFence);
+      std::uint64_t renderAheadWorkNsec = renderToReadyNsec;
+      if (renderAheadWorkNsec == 0 && completedProfile.totalMs > 0.0) {
+        renderAheadWorkNsec = static_cast<std::uint64_t>(completedProfile.totalMs * 1'000'000.0);
+      }
+      updateAtomicRenderAheadLead(renderAheadWorkNsec, flip->usedRenderFence);
       tracePacing("flip-complete id=%u hw=%d seq=%llu interval=%.3fms expected=%.3fms error=%+.3fms "
                   "queue=%.3fms render=%.3fms renderToReady=%.3fms readyToCommit=%.3fms "
                   "commit=%.3fms scheduledToCommit=%.3fms commitReturnToFlip=%.3fms "
@@ -1383,8 +1574,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           }
           atomicReadyFrames.clear();
         }
-        atomicReadyFrames.push_back(atomicRenderedFrame);
-        atomicRenderedFrame = {};
+	        atomicReadyFrames.push_back(std::move(atomicRenderedFrame));
+	        atomicRenderedFrame = AtomicReadyFrame{};
       }
       displayTimingSupportLogged = renderFrameCtx.vulkanDisplayTimingSupportLogged;
       useVulkanPresentationCompletion = renderFrameCtx.useVulkanPresentationCompletion;
@@ -1492,9 +1683,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
            atomicDirtyCanRenderBeforePoll) &&
           !atomicFrameBlockedBeforePoll;
       int const renderAheadDelayBeforePoll = atomicRenderAheadDelayMs();
+      int const acquireWaitCallbackDelayBeforePoll = acquireWaitFrameCallbackDelayMs();
       int pollTimeoutMs = forceRender || animationCanRenderBeforePoll || renderAheadNeededBeforePoll
                               ? 0
                               : std::min(kIdlePollMs, renderAheadDelayBeforePoll);
+      pollTimeoutMs = std::min(pollTimeoutMs, acquireWaitCallbackDelayBeforePoll);
       if (snapPreviewDelayBeforePoll) {
         int const snapPreviewDelayMs = std::max(0, *snapPreviewDelayBeforePoll);
         if (snapPreviewDelayMs > 0 || snapPreviewCanRenderBeforePoll) {
@@ -1522,12 +1715,30 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           renderReadyWoke && presenter->atomicPresenter();
       if (renderReadyUpdated) updateQueuedAtomicFrames();
       bool const pageFlipCompleted = dispatchAtomicPageFlip();
+      if (pageFlipCompleted && presenter->atomicPresenter() && !atomicReadyFrames.empty() &&
+          !presenter->atomicPresenter()->hasPendingPageFlip() && device->isVtForeground()) {
+        updateQueuedAtomicFrames();
+        bool const scheduledAfterFlip = scheduleQueuedAtomicFrame();
+        tracePacing("post-flip-schedule scheduled=%d ready=%d pendingFlip=%d dirty=%d "
+                    "contentSerial=%llu queuedSerial=%llu\n",
+                    scheduledAfterFlip ? 1 : 0,
+                    atomicReadyFrames.empty() ? 0 : 1,
+                    presenter->atomicPresenter()->hasPendingPageFlip() ? 1 : 0,
+                    atomicFrameDirty ? 1 : 0,
+                    static_cast<unsigned long long>(wayland.contentSerial()),
+                    static_cast<unsigned long long>(queuedContentSerial()));
+        if (scheduledAfterFlip && atomicFrameDirty && presenter->atomicPresenter()->hasPendingPageFlip() &&
+            atomicRenderAheadDue()) {
+          renderAtomicFrame(true);
+        }
+      }
       if (pollWoke) {
         diagnostics::recordCpuWakeSources(pollResult.inputOrSystem,
                                           waylandWoke || shellWoke,
                                           pageFlipWoke,
                                           renderReadyWoke);
       }
+      bool const acquireWaitFrameCallbackSent = maybeSendAcquireWaitFrameCallback();
       if (shellWoke) {
         wayland.dispatchShellIpc();
       }
@@ -1626,7 +1837,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const snapPreviewFrameNeeded = snapPreviewDelay && *snapPreviewDelay <= 0;
       bool const screenshotFlashFrameNeeded = screenshotFlashStartedAt.has_value();
       if (forceRender || pollResult.inputOrSystem || waylandWoke || inputRenderRequired || configReloaded ||
-          animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded) {
+          animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded ||
+          acquireWaitFrameCallbackSent) {
         if (!presenter->atomicPresenter() || forceRender || waylandWoke || inputRenderRequired || configReloaded ||
             animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded) {
           atomicFrameDirty = true;
