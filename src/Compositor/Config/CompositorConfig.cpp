@@ -388,14 +388,6 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
       std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.%s value in %s\n", key, path);
     }
   };
-  auto parseBoolField = [&](char const* key, bool& field) {
-    if (!table.contains(key)) return;
-    if (auto value = configBool(table, key)) {
-      field = *value;
-    } else {
-      std::fprintf(stderr, "lambda-window-manager: ignoring invalid chrome.%s value in %s\n", key, path);
-    }
-  };
   auto parseRadiusValue = [&](toml::table const& radiusTable,
                               char const* key,
                               float& field,
@@ -488,7 +480,6 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
   parseFloatField("title_text_font_weight", chrome.titleTextFontWeight, 100.f, 1000.f);
   parseCornerRadiusField("window_corner_radius", chrome.windowCornerRadius, 0.f, 48.f);
   parseIntField("resize_grip_size", chrome.resizeGripSize, 1, 24);
-  parseBoolField("window_glass", chrome.windowGlassEnabled);
   if (auto* glassTable = table["glass"].as_table()) {
     parseGlassConfig(*glassTable);
   } else if (table.contains("glass")) {
@@ -571,7 +562,6 @@ scale = 2.0 # fallback scale for outputs without an override
 animations = true
 hardware_cursor = true
 idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
-window_glass = true
 
 [rendering.backdrop_blur]
 # Effective downsample is round(base_downsample * output scale), applied to width and height.
@@ -918,14 +908,6 @@ CompositorConfig loadConfig() {
     parseRenderingConfig(*renderingTable, config.rendering, path->c_str());
   } else if (table.contains("rendering")) {
     std::fprintf(stderr, "lambda-window-manager: ignoring invalid rendering value in %s\n", path->c_str());
-  }
-
-  if (table.contains("window_glass")) {
-    if (auto enabled = configBool(table, "window_glass")) {
-      config.chrome.windowGlassEnabled = *enabled;
-    } else {
-      std::fprintf(stderr, "lambda-window-manager: ignoring invalid window_glass value in %s\n", path->c_str());
-    }
   }
 
   if (auto* chromeTable = table["chrome"].as_table()) {

@@ -70,7 +70,6 @@ void backgroundEffectSurfaceSetBlurRadius(wl_client*, wl_resource* resource, std
   }
   effect->surface->pendingBackgroundEffectState.blurRadius =
       std::max(0.f, static_cast<float>(wl_fixed_to_double(radius)));
-  effect->surface->pendingBackgroundEffectState.usesDefaultMaterial = false;
   effect->surface->backgroundEffectStatePending = true;
 }
 
@@ -87,7 +86,6 @@ void backgroundEffectSurfaceSetTint(wl_client*, wl_resource* resource, std::uint
     effect->surface->pendingBackgroundEffectState = effect->surface->backgroundEffectState;
   }
   effect->surface->pendingBackgroundEffectState.tint = colorFromRgba(tint);
-  effect->surface->pendingBackgroundEffectState.usesDefaultMaterial = false;
   effect->surface->backgroundEffectStatePending = true;
 }
 
@@ -104,7 +102,6 @@ void backgroundEffectSurfaceSetBaseColor(wl_client*, wl_resource* resource, std:
     effect->surface->pendingBackgroundEffectState = effect->surface->backgroundEffectState;
   }
   effect->surface->pendingBackgroundEffectState.baseColor = colorFromRgba(baseColor);
-  effect->surface->pendingBackgroundEffectState.usesDefaultMaterial = false;
   effect->surface->backgroundEffectStatePending = true;
 }
 
@@ -121,7 +118,6 @@ void backgroundEffectSurfaceSetBorder(wl_client*, wl_resource* resource, std::ui
     effect->surface->pendingBackgroundEffectState = effect->surface->backgroundEffectState;
   }
   effect->surface->pendingBackgroundEffectState.borderColor = colorFromRgba(border);
-  effect->surface->pendingBackgroundEffectState.usesDefaultMaterial = false;
   effect->surface->backgroundEffectStatePending = true;
 }
 

@@ -93,7 +93,6 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, surface.focused);
   hashValue(hash, surface.activeSizing);
   hashValue(hash, surface.geometryAnimationGrowing);
-  hashValue(hash, surface.defaultGlassEligible);
   hashValue(hash, surface.shadowClipTop);
   hashValue(hash, surface.shadowClipBottom);
   hashValue(hash, surface.windowClipTop);
@@ -102,7 +101,6 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashColor(hash, surface.backgroundEffect.baseColor);
   hashColor(hash, surface.backgroundEffect.tint);
   hashColor(hash, surface.backgroundEffect.borderColor);
-  hashValue(hash, surface.backgroundEffect.usesDefaultMaterial);
   hashValue(hash, surface.backgroundEffect.cornerRadiusSet);
   hashCornerRadius(hash, surface.backgroundEffect.cornerRadius);
   hashValue(hash, static_cast<std::uint8_t>(surface.backgroundEffect.shape));
@@ -128,9 +126,7 @@ std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, Cach
   hashValue(hash, chrome.buttonSize);
   hashValue(hash, chrome.buttonRadius);
   hashValue(hash, chrome.buttonGap);
-  hashValue(hash, chrome.windowGlassEnabled);
   hashValue(hash, chrome.glass.opacity);
-  hashValue(hash, chrome.glass.blurRadius);
   hashColor(hash, chrome.glass.baseColor);
   hashColor(hash, chrome.glass.tintColor);
   hashColor(hash, chrome.glass.borderColor);
@@ -265,8 +261,8 @@ bool updateDamagedImageRegions(Canvas& canvas,
 }
 
 bool hasCompositorMaterial(CommittedSurfaceSnapshot const &surface, ChromeConfig const &chrome) {
-  return !surface.backgroundBlurRects.empty() ||
-         (chrome.windowGlassEnabled && surface.defaultGlassEligible && chrome.glass.blurRadius > 0.f);
+  (void)chrome;
+  return !surface.backgroundBlurRects.empty();
 }
 
 bool canDrawPlainClientSurfaceDirectly(CommittedSurfaceSnapshot const &surface,

@@ -637,9 +637,6 @@ TEST_CASE("Compositor glass material does not fade client content") {
   REQUIRE(clientImage);
 
   flux::compositor::ChromeConfig chrome{};
-  chrome.windowGlassEnabled = true;
-  chrome.glass.opacity = 0.2f;
-  chrome.glass.tintColor = Color{1.f, 1.f, 1.f, 0.9f};
 
   flux::compositor::CommittedSurfaceSnapshot surface{
       .id = 1,
@@ -659,8 +656,19 @@ TEST_CASE("Compositor glass material does not fade client content") {
       .title = "Opaque client",
       .serverSideDecorated = true,
       .focused = true,
-      .defaultGlassEligible = true,
+      .backgroundEffect = flux::compositor::SurfaceBackgroundEffectSnapshot{
+          .blurRadius = 18.f,
+          .baseColor = Color{1.f, 1.f, 1.f, 0.04f},
+          .tint = Color{1.f, 1.f, 1.f, 0.18f},
+          .borderColor = Colors::transparent,
+      },
       .serial = 1,
+      .backgroundBlurRects = {flux::compositor::CommittedSurfaceSnapshot::RegionRect{
+          .x = 0,
+          .y = 0,
+          .width = clientWidth,
+          .height = clientHeight,
+      }},
   };
   flux::compositor::SurfaceVisualState visual{};
 
@@ -725,7 +733,6 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
   REQUIRE(clientImage);
 
   flux::compositor::ChromeConfig chrome{};
-  chrome.windowGlassEnabled = false;
 
   flux::compositor::CommittedSurfaceSnapshot surface{
       .id = 1,
@@ -746,7 +753,6 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
           .blurRadius = 18.f,
           .tint = Color{0.f, 0.f, 0.f, 0.5f},
           .borderColor = Color{1.f, 1.f, 1.f, 0.f},
-          .usesDefaultMaterial = false,
       },
       .serial = 1,
       .backgroundBlurRects = {flux::compositor::CommittedSurfaceSnapshot::RegionRect{
@@ -787,7 +793,7 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
   CHECK(capturedChannel(pixels, width, 40, 32, 2) < 180);
 }
 
-TEST_CASE("Compositor default glass material matches system and integrated titlebar paths") {
+TEST_CASE("Compositor explicit glass material matches system and integrated titlebar paths") {
   auto& vk = VulkanContext::instance();
   vk.ensureInitialized();
 
@@ -815,12 +821,6 @@ TEST_CASE("Compositor default glass material matches system and integrated title
   REQUIRE(clientImage);
 
   flux::compositor::ChromeConfig chrome{};
-  chrome.windowGlassEnabled = true;
-  chrome.glass.blurRadius = 18.f;
-  chrome.glass.opacity = 1.f;
-  chrome.glass.baseColor = Color{1.f, 1.f, 1.f, 0.42f};
-  chrome.glass.tintColor = Color{0.78f, 0.90f, 1.f, 0.34f};
-  chrome.glass.borderColor = Colors::transparent;
   chrome.windowBorderColor = Colors::transparent;
   chrome.borderLineColor = Colors::transparent;
   chrome.focusedShadowColor = Colors::transparent;
@@ -844,7 +844,10 @@ TEST_CASE("Compositor default glass material matches system and integrated title
       .serverSideDecorated = true,
       .focused = true,
       .backgroundEffect = flux::compositor::SurfaceBackgroundEffectSnapshot{
-          .usesDefaultMaterial = true,
+          .blurRadius = 18.f,
+          .baseColor = Color{1.f, 1.f, 1.f, 0.42f},
+          .tint = Color{0.78f, 0.90f, 1.f, 0.34f},
+          .borderColor = Colors::transparent,
       },
       .serial = 1,
       .backgroundBlurRects = {flux::compositor::CommittedSurfaceSnapshot::RegionRect{

@@ -271,13 +271,8 @@ public:
     return true;
   }
 
-  void drawBackground(Canvas& canvas, Rect frame) {
-    canvas.drawRect(frame, CornerRadius{}, FillStyle::solid(Color{0.f, 0.f, 0.f, 0.12f}), StrokeStyle::none());
-  }
-
   void drawTerminal(Canvas& canvas, Rect frame) {
     scheduleResizeForFrame(frame);
-    drawBackground(canvas, frame);
     canvas.save();
     canvas.clipRect(frame);
     std::vector<TerminalRow> const& rows = rows_.evaluate();

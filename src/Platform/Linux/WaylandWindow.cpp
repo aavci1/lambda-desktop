@@ -2193,17 +2193,15 @@ private:
       }
     }
     if (wantsGlass) {
-      if (!background_.glassUsesDefaultMaterial) {
-        float const opacity = std::clamp(background_.glass.opacity, 0.f, 1.f);
-        Color baseColor = background_.glass.baseColor;
-        baseColor.a *= opacity;
-        Color tint = background_.glass.tintColor;
-        tint.a *= opacity;
-        ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(background_.glass.blurRadius));
-        ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(baseColor));
-        ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
-        ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(background_.glass.borderColor));
-      }
+      float const opacity = std::clamp(background_.glass.opacity, 0.f, 1.f);
+      Color baseColor = background_.glass.baseColor;
+      baseColor.a *= opacity;
+      Color tint = background_.glass.tintColor;
+      tint.a *= opacity;
+      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(background_.glass.blurRadius));
+      ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(baseColor));
+      ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
+      ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(background_.glass.borderColor));
     } else if (chrome.style != LayerShellChromeStyle::None) {
       float const opacity = std::clamp(chrome.glass.opacity, 0.f, 1.f);
       Color baseColor = chrome.glass.baseColor;

@@ -13,18 +13,12 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
-#include <span>
 
 namespace flux::compositor {
 namespace {
 
 float clamp01(float value) {
   return std::clamp(value, 0.f, 1.f);
-}
-
-Color withOpacity(Color color, float opacity) {
-  color.a *= clamp01(opacity);
-  return color;
 }
 
 float easeOutCubic(float value) {
@@ -150,8 +144,6 @@ void drawClientSurfacePiece(Canvas& canvas,
 
 struct ResolvedGlassMaterial {
   bool enabled = false;
-  bool usesSurfaceRegions = false;
-  bool customMaterial = false;
   float blurRadius = 0.f;
   Color baseColor{};
   Color tintColor{};
@@ -164,82 +156,31 @@ struct ResolvedGlassMaterial {
   float arrowHeight = 8.f;
 };
 
-ResolvedGlassMaterial resolvedGlassMaterial(CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
-  if (!surface.backgroundBlurRects.empty()) {
-    if (surface.backgroundEffect.usesDefaultMaterial) {
-      if (!chrome.windowGlassEnabled || chrome.glass.blurRadius <= 0.f) {
-        return {};
-      }
-      return ResolvedGlassMaterial{
-          .enabled = true,
-          .usesSurfaceRegions = true,
-          .customMaterial = false,
-          .blurRadius = chrome.glass.blurRadius,
-          .baseColor = withOpacity(chrome.glass.baseColor, chrome.glass.opacity),
-          .tintColor = withOpacity(chrome.glass.tintColor, chrome.glass.opacity),
-          .borderColor = chrome.glass.borderColor,
-          .cornerRadius = surface.backgroundEffect.cornerRadius,
-          .cornerRadiusSet = surface.backgroundEffect.cornerRadiusSet,
-          .shape = surface.backgroundEffect.shape,
-          .calloutPlacement = surface.backgroundEffect.calloutPlacement,
-          .arrowWidth = surface.backgroundEffect.arrowWidth,
-          .arrowHeight = surface.backgroundEffect.arrowHeight,
-      };
-    }
-    return ResolvedGlassMaterial{
-        .enabled = surface.backgroundEffect.blurRadius > 0.f,
-        .usesSurfaceRegions = true,
-        .customMaterial = true,
-        .blurRadius = surface.backgroundEffect.blurRadius,
-        .baseColor = surface.backgroundEffect.baseColor,
-        .tintColor = surface.backgroundEffect.tint,
-        .borderColor = surface.backgroundEffect.borderColor,
-        .cornerRadius = surface.backgroundEffect.cornerRadius,
-        .cornerRadiusSet = surface.backgroundEffect.cornerRadiusSet,
-        .shape = surface.backgroundEffect.shape,
-        .calloutPlacement = surface.backgroundEffect.calloutPlacement,
-        .arrowWidth = surface.backgroundEffect.arrowWidth,
-        .arrowHeight = surface.backgroundEffect.arrowHeight,
-    };
-  }
-  if (!chrome.windowGlassEnabled || !surface.defaultGlassEligible || chrome.glass.blurRadius <= 0.f) {
-    return {};
-  }
+ResolvedGlassMaterial resolvedGlassMaterial(CommittedSurfaceSnapshot const& surface) {
+  if (surface.backgroundBlurRects.empty()) return {};
   return ResolvedGlassMaterial{
-      .enabled = true,
-      .usesSurfaceRegions = false,
-      .customMaterial = false,
-      .blurRadius = chrome.glass.blurRadius,
-      .baseColor = withOpacity(chrome.glass.baseColor, chrome.glass.opacity),
-      .tintColor = withOpacity(chrome.glass.tintColor, chrome.glass.opacity),
-      .borderColor = chrome.glass.borderColor,
+      .enabled = surface.backgroundEffect.blurRadius > 0.f ||
+                 surface.backgroundEffect.baseColor.a > 0.f ||
+                 surface.backgroundEffect.tint.a > 0.f ||
+                 surface.backgroundEffect.borderColor.a > 0.f,
+      .blurRadius = surface.backgroundEffect.blurRadius,
+      .baseColor = surface.backgroundEffect.baseColor,
+      .tintColor = surface.backgroundEffect.tint,
+      .borderColor = surface.backgroundEffect.borderColor,
+      .cornerRadius = surface.backgroundEffect.cornerRadius,
+      .cornerRadiusSet = surface.backgroundEffect.cornerRadiusSet,
+      .shape = surface.backgroundEffect.shape,
+      .calloutPlacement = surface.backgroundEffect.calloutPlacement,
+      .arrowWidth = surface.backgroundEffect.arrowWidth,
+      .arrowHeight = surface.backgroundEffect.arrowHeight,
   };
-}
-
-bool materialShouldCoverFrame(CommittedSurfaceSnapshot const& surface,
-                              ResolvedGlassMaterial const& material,
-                              Rect const& rect,
-                              Rect const& fullContentRect) {
-  return material.enabled &&
-         windowExternalTitleBarHeight(surface) > 0.f &&
-         sameRect(rect, fullContentRect);
 }
 
 bool materialShouldCoverAnimatedSurface(CommittedSurfaceSnapshot const& surface,
                                         ResolvedGlassMaterial const& material) {
   return material.enabled &&
-         material.usesSurfaceRegions &&
          surface.geometryAnimationGrowing &&
          backgroundEffectCoversCommittedContent(surface);
-}
-
-std::span<CommittedSurfaceSnapshot::RegionRect const> glassMaterialRegions(
-    CommittedSurfaceSnapshot const& surface,
-    ResolvedGlassMaterial const& material,
-    CommittedSurfaceSnapshot::RegionRect const& defaultRegion) {
-  if (!material.enabled) return {};
-  if (material.usesSurfaceRegions) return std::span<CommittedSurfaceSnapshot::RegionRect const>(surface.backgroundBlurRects);
-  return std::span<CommittedSurfaceSnapshot::RegionRect const>(&defaultRegion, 1);
 }
 
 PopoverPlacement popoverPlacement(BackgroundEffectCalloutPlacement placement) {
@@ -350,20 +291,10 @@ Path materialPath(Rect const& rect, CornerRadius const& corners, ResolvedGlassMa
 
 void drawSurfaceBackgroundBlur(Canvas& canvas,
                                CommittedSurfaceSnapshot const& surface,
-                               ChromeConfig const& chrome,
                                Rect const& fullContentRect,
-                               CornerRadius const& contentCorners,
-                               CornerRadius const& windowCorners) {
-  ResolvedGlassMaterial const material = resolvedGlassMaterial(surface, chrome);
+                               CornerRadius const& contentCorners) {
+  ResolvedGlassMaterial const material = resolvedGlassMaterial(surface);
   if (!material.enabled) return;
-
-  CommittedSurfaceSnapshot::RegionRect defaultRegion{
-      .x = 0,
-      .y = 0,
-      .width = surface.width,
-      .height = surface.height,
-  };
-  std::span<CommittedSurfaceSnapshot::RegionRect const> regions = glassMaterialRegions(surface, material, defaultRegion);
 
   auto drawMaterialRect = [&](Rect const& rect, CornerRadius const& corners) {
     Rect const blurRect = material.shape == BackgroundEffectShape::Callout ? calloutCardRect(rect, material) : rect;
@@ -377,25 +308,13 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
     }
   };
 
-  auto drawFrameMaterial = [&] {
-    Rect const frameRect = windowFrameRect(surface);
-    CornerRadius const frameCorners = material.cornerRadiusSet
-                                          ? material.cornerRadius
-                                          : windowCorners;
-    drawMaterialRect(frameRect, frameCorners);
-  };
-
   if (materialShouldCoverAnimatedSurface(surface, material)) {
-    if (windowExternalTitleBarHeight(surface) > 0.f) {
-      drawFrameMaterial();
-    } else {
-      CornerRadius const corners = material.cornerRadiusSet ? material.cornerRadius : contentCorners;
-      drawMaterialRect(fullContentRect, corners);
-    }
+    CornerRadius const corners = material.cornerRadiusSet ? material.cornerRadius : contentCorners;
+    drawMaterialRect(fullContentRect, corners);
     return;
   }
 
-  for (auto const& region : regions) {
+  for (auto const& region : surface.backgroundBlurRects) {
     Rect const requested = Rect::sharp(static_cast<float>(surface.x + region.x),
                                       static_cast<float>(surface.y + region.y),
                                       static_cast<float>(region.width),
@@ -408,22 +327,17 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
                                      : sameRect(rect, fullContentRect)
                                            ? effectCorners
                                            : cornerRadiusForPiece(fullContentRect, rect, effectCorners);
-    if (materialShouldCoverFrame(surface, material, rect, fullContentRect)) {
-      drawFrameMaterial();
-      continue;
-    }
     drawMaterialRect(rect, corners);
   }
 }
 
 void drawSurfaceMaterialBorder(Canvas& canvas,
                                CommittedSurfaceSnapshot const& surface,
-                               ChromeConfig const& chrome,
                                Rect const& fullContentRect,
                                CornerRadius const& contentCorners,
                                CornerRadius const& windowCorners) {
-  ResolvedGlassMaterial const material = resolvedGlassMaterial(surface, chrome);
-  if (!material.enabled || !material.usesSurfaceRegions || material.borderColor.a <= 0.f) return;
+  ResolvedGlassMaterial const material = resolvedGlassMaterial(surface);
+  if (!material.enabled || material.borderColor.a <= 0.f) return;
 
   if (windowExternalTitleBarHeight(surface) > 0.f) {
     Rect const frameRect = windowFrameRect(surface);
@@ -438,10 +352,7 @@ void drawSurfaceMaterialBorder(Canvas& canvas,
     return;
   }
 
-  std::span<CommittedSurfaceSnapshot::RegionRect const> regions;
-  regions = std::span<CommittedSurfaceSnapshot::RegionRect const>(surface.backgroundBlurRects);
-
-  for (auto const& region : regions) {
+  for (auto const& region : surface.backgroundBlurRects) {
     Rect const requested = Rect::sharp(static_cast<float>(surface.x + region.x),
                                       static_cast<float>(surface.y + region.y),
                                       static_cast<float>(region.width),
@@ -560,7 +471,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                         ? static_cast<float>(surface.destinationHeight)
                                         : windowHeight;
   Rect const fullContentRect = windowContentRect(surface);
-  drawSurfaceBackgroundBlur(canvas, surface, chrome, fullContentRect, contentCorners, windowCorners);
+  drawSurfaceBackgroundBlur(canvas, surface, fullContentRect, contentCorners);
   drawWindowFrameShadow(canvas, surface, chrome);
   if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   canvas.save();
@@ -626,7 +537,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
     }
   }
   canvas.restore();
-  drawSurfaceMaterialBorder(canvas, surface, chrome, fullContentRect, contentCorners, windowCorners);
+  drawSurfaceMaterialBorder(canvas, surface, fullContentRect, contentCorners, windowCorners);
   if (cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   drawWindowFrameBorder(canvas, surface, chrome);
   canvas.restore();

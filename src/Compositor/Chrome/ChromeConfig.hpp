@@ -34,7 +34,6 @@ struct ChromeConfig {
   float titleTextFontWeight = 600.f;
   CornerRadius windowCornerRadius = CornerRadius{14.f};
   std::int32_t resizeGripSize = 4;
-  bool windowGlassEnabled = true;
   GlassEffectConfig glass{};
   Color windowBorderColor = Color{1.f, 1.f, 1.f, 0.62f};
   float windowBorderWidth = 1.f;

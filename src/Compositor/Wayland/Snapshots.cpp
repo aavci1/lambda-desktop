@@ -30,70 +30,6 @@ bool surfaceIsRenderable(WaylandServer::Impl::Surface const* surface) {
           surface->dmabufBuffer);
 }
 
-bool dmabufFormatFullyOpaque(std::uint32_t format) {
-  return format == DRM_FORMAT_XRGB8888 || format == DRM_FORMAT_XBGR8888;
-}
-
-using RegionRect = CommittedSurfaceSnapshot::RegionRect;
-
-bool emptyRegionRect(RegionRect const& rect) {
-  return rect.width <= 0 || rect.height <= 0;
-}
-
-void appendRegionRect(std::vector<RegionRect>& rects, RegionRect rect) {
-  if (!emptyRegionRect(rect)) rects.push_back(rect);
-}
-
-void subtractRegionRect(std::vector<RegionRect>& rects, RegionRect cut) {
-  if (emptyRegionRect(cut)) return;
-  std::vector<RegionRect> result;
-  result.reserve(rects.size() + 4u);
-  std::int64_t const cutLeft = cut.x;
-  std::int64_t const cutTop = cut.y;
-  std::int64_t const cutRight = cutLeft + cut.width;
-  std::int64_t const cutBottom = cutTop + cut.height;
-  for (RegionRect const& rect : rects) {
-    std::int64_t const left = rect.x;
-    std::int64_t const top = rect.y;
-    std::int64_t const right = left + rect.width;
-    std::int64_t const bottom = top + rect.height;
-    std::int64_t const overlapLeft = std::max(left, cutLeft);
-    std::int64_t const overlapTop = std::max(top, cutTop);
-    std::int64_t const overlapRight = std::min(right, cutRight);
-    std::int64_t const overlapBottom = std::min(bottom, cutBottom);
-    if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) {
-      result.push_back(rect);
-      continue;
-    }
-    appendRegionRect(result, RegionRect{rect.x, rect.y, rect.width,
-                                        static_cast<std::int32_t>(overlapTop - top)});
-    appendRegionRect(result, RegionRect{rect.x, static_cast<std::int32_t>(overlapBottom),
-                                        rect.width, static_cast<std::int32_t>(bottom - overlapBottom)});
-    appendRegionRect(result, RegionRect{rect.x, static_cast<std::int32_t>(overlapTop),
-                                        static_cast<std::int32_t>(overlapLeft - left),
-                                        static_cast<std::int32_t>(overlapBottom - overlapTop)});
-    appendRegionRect(result, RegionRect{static_cast<std::int32_t>(overlapRight),
-                                        static_cast<std::int32_t>(overlapTop),
-                                        static_cast<std::int32_t>(right - overlapRight),
-                                        static_cast<std::int32_t>(overlapBottom - overlapTop)});
-  }
-  rects = std::move(result);
-}
-
-bool regionCoversRect(std::vector<RegionRect> const& rects,
-                      std::int32_t x,
-                      std::int32_t y,
-                      std::int32_t width,
-                      std::int32_t height) {
-  if (width <= 0 || height <= 0) return false;
-  std::vector<RegionRect> remaining{RegionRect{x, y, width, height}};
-  for (RegionRect const& rect : rects) {
-    subtractRegionRect(remaining, rect);
-    if (remaining.empty()) return true;
-  }
-  return remaining.empty();
-}
-
 bool transformSwapsAxes(std::int32_t transform) {
   return transform == WL_OUTPUT_TRANSFORM_90 ||
          transform == WL_OUTPUT_TRANSFORM_270 ||
@@ -113,23 +49,6 @@ std::int32_t transformedBufferHeight(WaylandServer::Impl::Surface const* surface
 
 std::int32_t committedDisplayWidthForSurface(WaylandServer::Impl::Surface const* surface);
 std::int32_t committedDisplayHeightForSurface(WaylandServer::Impl::Surface const* surface);
-
-bool surfaceContentFullyOpaque(WaylandServer::Impl::Surface const* surface) {
-  if (!surface) return false;
-  std::int32_t const x = surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryX : 0;
-  std::int32_t const y = surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryY : 0;
-  std::int32_t const width =
-      surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryWidth : committedDisplayWidthForSurface(surface);
-  std::int32_t const height =
-      surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryHeight : committedDisplayHeightForSurface(surface);
-  if (regionCoversRect(surface->opaqueRegionRects, x, y, width, height)) {
-    return true;
-  }
-  if ((surface->rgbaPixels && !surface->rgbaPixels->empty()) ||
-      (surface->shmPixels && surface->shmPixelBytes > 0)) return surface->rgbaFullyOpaque;
-  if (surface->dmabufBuffer) return dmabufFormatFullyOpaque(surface->dmabufBuffer->format);
-  return false;
-}
 
 std::int32_t committedDisplayWidthForSurface(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return 0;
@@ -175,14 +94,6 @@ bool cutoutsRejected(WaylandServer::Impl const* server, WaylandServer::Impl::Sur
 
 bool fullscreenToplevel(WaylandServer::Impl::Surface const* surface) {
   return surfaceIsXdgToplevel(surface) && surface->fullscreen;
-}
-
-bool hasClientSideGeometryMargins(WaylandServer::Impl::Surface const* surface) {
-  if (!surface || !surface->xdgWindowGeometrySet) return false;
-  return surface->xdgWindowGeometryX != 0 ||
-         surface->xdgWindowGeometryY != 0 ||
-         surface->xdgWindowGeometryWidth != committedDisplayWidthForSurface(surface) ||
-         surface->xdgWindowGeometryHeight != committedDisplayHeightForSurface(surface);
 }
 
 bool canCropToXdgWindowGeometry(WaylandServer::Impl::Surface const* surface) {
@@ -307,9 +218,6 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .pacingSizing = server->resizeSurface_ == surface ||
                       surface->geometryAnimationActive,
       .geometryAnimationGrowing = geometryAnimationGrowing,
-      .defaultGlassEligible = withChrome && surfaceIsXdgToplevel(surface) && !fullscreen &&
-                              !hasClientSideGeometryMargins(surface) &&
-                              !surfaceContentFullyOpaque(surface),
       .shadowClipTop = fullscreen ? 0 : server ? server->topBarExclusiveZone_ : 0,
       .shadowClipBottom = fullscreen ? outputHeight
                                       : server
@@ -485,7 +393,6 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
       .title = {},
 	      .focused = false,
 	      .activeSizing = false,
-	      .defaultGlassEligible = false,
 	      .serial = surface->serial,
 	      .backgroundBlurRects = {},
 	      .bufferDamageRects = surface->committedBufferDamageRects,

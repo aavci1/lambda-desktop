@@ -134,7 +134,7 @@ void setTomlValue(toml::table& table, std::string const& key, std::string const&
     table.insert_or_assign(key, value);
   } else if (key == "scale") {
     table.insert_or_assign(key, std::strtod(value.c_str(), nullptr));
-  } else if (key == "animations" || key == "hardware_cursor" || key == "window_glass") {
+  } else if (key == "animations" || key == "hardware_cursor") {
     table.insert_or_assign(key, lowerAscii(value) == "true" || value == "1");
   } else if (key == "idle_blank_timeout_seconds" || key == "cursor_size") {
     table.insert_or_assign(key, static_cast<std::int64_t>(std::strtoll(value.c_str(), nullptr, 10)));
@@ -300,8 +300,6 @@ std::vector<SettingSchema> windowManagerSettingsSchema() {
        .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
       {.id = "idle_blank_timeout_seconds", .label = "Idle blank timeout", .type = SettingType::Integer,
        .applyMode = ApplyMode::HotReload, .defaultValue = "0"},
-      {.id = "window_glass", .label = "Default window glass", .type = SettingType::Boolean,
-       .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
       {.id = "input.keyboard.layout", .label = "Keyboard layout", .type = SettingType::String,
        .applyMode = ApplyMode::HotReload},
       {.id = "input.keyboard.repeat_rate", .label = "Key repeat rate", .type = SettingType::Integer,
@@ -458,7 +456,6 @@ SettingsDocument loadWindowManagerSettings(std::string_view tomlText) {
   setIf("animations", tomlBool(table, "animations"));
   setIf("hardware_cursor", tomlBool(table, "hardware_cursor"));
   setIf("idle_blank_timeout_seconds", tomlNumber(table, "idle_blank_timeout_seconds"));
-  setIf("window_glass", tomlBool(table, "window_glass"));
   if (auto* input = table["input"].as_table()) {
     if (auto* keyboard = (*input)["keyboard"].as_table()) {
       setIf("input.keyboard.layout", tomlString(*keyboard, "layout"));

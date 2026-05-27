@@ -926,7 +926,6 @@ Element contentForSection(SettingsSection section,
   case SettingsSection::Appearance:
     return settingsPage("Appearance",
                         {wm("background"),
-                         wm("window_glass"),
                          wm("wallpaper"),
                          wm("wallpaper_mode"),
                          shell("appearance.icon_theme"),

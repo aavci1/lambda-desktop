@@ -27,11 +27,10 @@ enum class BackgroundEffectCalloutPlacement : std::uint8_t {
 };
 
 struct SurfaceBackgroundEffectSnapshot {
-  float blurRadius = 46.f;
+  float blurRadius = 0.f;
   Color baseColor{0.f, 0.f, 0.f, 0.f};
   Color tint{0.f, 0.f, 0.f, 0.f};
   Color borderColor{0.f, 0.f, 0.f, 0.f};
-  bool usesDefaultMaterial = true;
   bool cornerRadiusSet = false;
   CornerRadius cornerRadius{};
   BackgroundEffectShape shape = BackgroundEffectShape::RoundedRect;
@@ -129,7 +128,6 @@ struct CommittedSurfaceSnapshot {
   bool activeSizing = false;
   bool pacingSizing = false;
   bool geometryAnimationGrowing = false;
-  bool defaultGlassEligible = false;
   std::int32_t shadowClipTop = 0;
   std::int32_t shadowClipBottom = 0;
   std::int32_t windowClipTop = 0;

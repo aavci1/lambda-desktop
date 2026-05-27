@@ -156,7 +156,6 @@ scale = 2.0 # fallback scale for outputs without an override
 animations = true
 hardware_cursor = true
 idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
-window_glass = true
 
 [rendering.backdrop_blur]
 # Effective downsample is round(base_downsample * output scale), applied to width and height.
@@ -232,14 +231,12 @@ terminate = "ctrl+alt+backspace"
 Wallpaper paths may be absolute, `~/...`, or relative to the config file directory. On Linux,
 the framework image loader supports stb_image formats, including JPEG and PNG.
 
-`window_glass` enables compositor-side blur behind eligible normal windows by default. Lambda skips
-the default full-window glass policy for client-side-decorated windows that declare transparent geometry
-margins, such as browser shadow buffers, and uses their XDG window geometry as the visible window size.
-`[chrome.glass]` uses the same shape as client-requested glass: `blur_radius`, `base_color`, `tint_color`,
-`border_color`, and `opacity`. Client content is rendered at the opacity the client submitted.
+Normal-window glass is client-requested. Flux apps that use `WindowBackground::glassEffect()` send a complete
+glass material descriptor to the compositor, including blur radius, base color, tint, border color, and opacity.
+The compositor does not synthesize default glass for windows that did not request it.
+`[chrome.glass]` configures compositor chrome previews and layer-shell chrome styling, not normal-window glass.
 `window_border_color` / `window_border_width` control the subtle rounded outline around the window frame.
-Clients that use `ext-background-effect-v1` can still request explicit blur regions; set
-`window_glass = false` to disable only the compositor's default full-window policy.
+Clients that use `ext-background-effect-v1` request their own explicit blur regions and material values.
 
 `[rendering.backdrop_blur].base_downsample` controls the compositor backdrop blur quality/performance tradeoff.
 The effective blur texture downsample is `round(base_downsample * scale)` and applies to both width and height.
@@ -262,7 +259,7 @@ Config application policy:
 | `[rendering.backdrop_blur]` | Hot reload |
 | `[input] popup_grabs` | Hot reload |
 | `[input.keyboard]` | Hot reload; existing keyboard resources receive updated keymap/repeat info |
-| `window_glass`, `[chrome]`, `[chrome.glass]`, `[chrome.dark]` | Hot reload |
+| `[chrome]`, `[chrome.glass]`, `[chrome.dark]` | Hot reload |
 | `[keybindings]` | Hot reload |
 
 ## Window Management

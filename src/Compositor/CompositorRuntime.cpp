@@ -486,7 +486,7 @@ struct SnapAnimationTrace {
     csv << "frame,event,monotonic_ms,content_serial,output_width,output_height,surface_count,"
            "snap_preview,active_animations,surface_id,x,y,width,height,buffer_width,buffer_height,"
            "committed_width,committed_height,titlebar_height,server_side,focused,active_sizing,pacing_sizing,"
-           "geometry_animation_growing,default_glass,"
+           "geometry_animation_growing,"
            "window_clip_top,window_clip_bottom,shadow_clip_top,shadow_clip_bottom,"
            "last_configure_serial,last_configure_width,last_configure_height,"
            "input_to_render_ms,configure_to_render_ms,ack_to_render_ms,commit_to_render_ms,"
@@ -519,7 +519,7 @@ struct SnapAnimationTrace {
 
     presentation::AtomicFrameProfile const profile = readyFrame ? readyFrame->profile : presentation::AtomicFrameProfile{};
     writeCommon("frame", 0);
-    for (int i = 0; i < 27; ++i) {
+    for (int i = 0; i < 26; ++i) {
       csv << "0,";
     }
     csv << (readyFrame ? (readyFrame->renderedAhead ? 1 : 0) : (renderAheadFrame ? 1 : 0)) << ','
@@ -549,7 +549,6 @@ struct SnapAnimationTrace {
           << (surface.activeSizing ? 1 : 0) << ','
           << (surface.pacingSizing ? 1 : 0) << ','
           << (surface.geometryAnimationGrowing ? 1 : 0) << ','
-          << (surface.defaultGlassEligible ? 1 : 0) << ','
           << surface.windowClipTop << ','
           << surface.windowClipBottom << ','
           << surface.shadowClipTop << ','

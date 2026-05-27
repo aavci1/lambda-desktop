@@ -101,7 +101,7 @@ struct GlassEffectOptions {
   /// Some backends map this to the nearest native material instead.
   float blurRadius = 46.f;
   /// Base material wash applied over the blurred backdrop before the tint.
-  Color baseColor{1.f, 1.f, 1.f, 0.18f};
+  Color baseColor{1.f, 1.f, 1.f, 0.5f};
   /// Color tint applied over the base glass material.
   Color tintColor{0.86f, 0.96f, 1.f, 0.56f};
   Color borderColor{1.f, 1.f, 1.f, 0.62f};
@@ -165,7 +165,6 @@ struct WindowBackground {
   WindowBackgroundKind kind = WindowBackgroundKind::Fill;
   FillStyle fill = FillStyle::solid(Color::windowBackground());
   GlassEffectOptions glass{};
-  bool glassUsesDefaultMaterial = false;
 
   static WindowBackground transparent();
   static WindowBackground solid(Color color);

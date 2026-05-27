@@ -44,24 +44,11 @@ ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {
   };
 }
 
-bool backgroundEffectCoversContent(CommittedSurfaceSnapshot const& surface) {
-  return std::ranges::any_of(surface.backgroundBlurRects, [&](CommittedSurfaceSnapshot::RegionRect const& rect) {
-    return rect.x == 0 && rect.y == 0 && rect.width >= surface.width && rect.height >= surface.height;
-  });
-}
-
-bool backgroundEffectCoversCommittedContent(CommittedSurfaceSnapshot const& surface) {
-  int const width = surface.committedWidth > 0 ? surface.committedWidth : surface.width;
-  int const height = surface.committedHeight > 0 ? surface.committedHeight : surface.height;
-  return std::ranges::any_of(surface.backgroundBlurRects, [&](CommittedSurfaceSnapshot::RegionRect const& rect) {
-    return rect.x == 0 && rect.y == 0 && rect.width >= width && rect.height >= height;
-  });
-}
-
-bool materialCoversTitlebar(CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
-  return backgroundEffectCoversContent(surface) ||
-         (surface.geometryAnimationGrowing && backgroundEffectCoversCommittedContent(surface)) ||
-         (chrome.windowGlassEnabled && surface.defaultGlassEligible);
+bool hasClientGlassMaterial(CommittedSurfaceSnapshot const& surface) {
+  return surface.backgroundEffect.blurRadius > 0.f ||
+         surface.backgroundEffect.baseColor.a > 0.f ||
+         surface.backgroundEffect.tint.a > 0.f ||
+         surface.backgroundEffect.borderColor.a > 0.f;
 }
 
 void drawControls(Canvas& canvas,
@@ -154,25 +141,23 @@ void drawDefaultChrome(Canvas& canvas,
   float const titleTop = titleRect.y;
   CornerRadius const frameRadius = chrome.windowCornerRadius;
   CornerRadius const titleRadius = windowTitleBarCornerRadius(frameRadius);
-  bool const titlebarCoveredBySurfaceMaterial = materialCoversTitlebar(surface, chrome);
-  if (!titlebarCoveredBySurfaceMaterial) {
-    bool const customEffect = !surface.backgroundBlurRects.empty() && !surface.backgroundEffect.usesDefaultMaterial;
-    float const blurRadius = customEffect ? surface.backgroundEffect.blurRadius : chrome.glass.blurRadius;
+  bool const titlebarUsesClientMaterial = hasClientGlassMaterial(surface);
+  {
+    float const blurRadius = titlebarUsesClientMaterial ? surface.backgroundEffect.blurRadius : 0.f;
     Color const baseColor =
-        customEffect ? surface.backgroundEffect.baseColor : withOpacity(chrome.glass.baseColor, chrome.glass.opacity);
-    Color const titleTint =
-        customEffect && surface.backgroundEffect.tint.a > 0.f
-            ? surface.backgroundEffect.tint
-            : (chrome.windowGlassEnabled
-                   ? withOpacity(chrome.glass.tintColor, chrome.glass.opacity)
-                   : Color{chrome.glass.tintColor.r, chrome.glass.tintColor.g, chrome.glass.tintColor.b, 1.f});
-    if (chrome.windowGlassEnabled && blurRadius > 0.f) {
+        titlebarUsesClientMaterial ? surface.backgroundEffect.baseColor : withOpacity(chrome.glass.baseColor, chrome.glass.opacity);
+    Color const titleTint = titlebarUsesClientMaterial
+                                ? surface.backgroundEffect.tint
+                                : Color{chrome.glass.tintColor.r, chrome.glass.tintColor.g, chrome.glass.tintColor.b, 1.f};
+    if (titlebarUsesClientMaterial && blurRadius > 0.f) {
       canvas.drawBackdropBlur(titleRect, blurRadius, Colors::transparent, titleRadius);
     }
     if (baseColor.a > 0.f) {
       canvas.drawRect(titleRect, titleRadius, FillStyle::solid(baseColor), StrokeStyle::none(), ShadowStyle::none());
     }
-    canvas.drawRect(titleRect, titleRadius, FillStyle::solid(titleTint), StrokeStyle::none(), ShadowStyle::none());
+    if (titleTint.a > 0.f) {
+      canvas.drawRect(titleRect, titleRadius, FillStyle::solid(titleTint), StrokeStyle::none(), ShadowStyle::none());
+    }
   }
 
   float constexpr separatorHeight = 0.5f;
@@ -181,7 +166,7 @@ void drawDefaultChrome(Canvas& canvas,
                   FillStyle::solid(chrome.borderLineColor),
                   StrokeStyle::none(),
                   ShadowStyle::none());
-  if (!titlebarCoveredBySurfaceMaterial) {
+  if (!titlebarUsesClientMaterial) {
     float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
     float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
     if (chrome.insetHighlightColor.a > 0.f && topInsetRight > topInsetLeft) {
