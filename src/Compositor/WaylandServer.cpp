@@ -66,6 +66,10 @@ bool WaylandServer::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::u
   return impl_->copyDmabufToRgba(surfaceId, out);
 }
 
+void WaylandServer::consumeSurfaceDamage(std::uint64_t surfaceId, std::uint64_t serial) {
+  impl_->consumeSurfaceDamage(surfaceId, serial);
+}
+
 void WaylandServer::dispatch() {
   impl_->dispatch();
 }

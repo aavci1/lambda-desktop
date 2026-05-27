@@ -94,6 +94,12 @@ bool vulkanPresentFencesDisabled() {
 struct VulkanImage;
 void evictImageTexturesFor(VulkanImage const *image);
 void updateImageTexturesFor(VulkanImage const* image);
+void updateImageTextureRegionFor(VulkanImage const* image,
+                                 std::uint32_t x,
+                                 std::uint32_t y,
+                                 std::uint32_t width,
+                                 std::uint32_t height,
+                                 void const* pixels);
 struct SharedVulkanCore;
 SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface);
 void releaseSharedVulkanCore();
@@ -201,6 +207,44 @@ struct VulkanImage final : Image {
     }
     std::memcpy(pixels.data(), newPixels.data(), expectedSize);
     updateImageTexturesFor(this);
+    return true;
+  }
+  bool updatePixelsRegion(std::span<std::uint8_t const> newPixels,
+                          PixelFormat pixelFormat,
+                          std::uint32_t x,
+                          std::uint32_t y,
+                          std::uint32_t regionWidth,
+                          std::uint32_t regionHeight,
+                          void*) override {
+    if (external || ownsGpuResource || width <= 0 || height <= 0 || regionWidth == 0 || regionHeight == 0) {
+      return false;
+    }
+    if (format != vkFormatForImagePixelFormat(pixelFormat)) {
+      return false;
+    }
+    if (x > static_cast<std::uint32_t>(width) || y > static_cast<std::uint32_t>(height) ||
+        regionWidth > static_cast<std::uint32_t>(width) - x ||
+        regionHeight > static_cast<std::uint32_t>(height) - y) {
+      return false;
+    }
+    std::size_t const expectedRegionSize =
+        static_cast<std::size_t>(regionWidth) * static_cast<std::size_t>(regionHeight) * 4u;
+    if (newPixels.size() != expectedRegionSize) {
+      return false;
+    }
+    std::size_t const expectedSize = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u;
+    if (pixels.size() != expectedSize) {
+      return false;
+    }
+    std::size_t const dstStride = static_cast<std::size_t>(width) * 4u;
+    std::size_t const srcStride = static_cast<std::size_t>(regionWidth) * 4u;
+    for (std::uint32_t row = 0; row < regionHeight; ++row) {
+      auto* dst = pixels.data() + (static_cast<std::size_t>(y + row) * dstStride) +
+                  static_cast<std::size_t>(x) * 4u;
+      auto const* src = newPixels.data() + static_cast<std::size_t>(row) * srcStride;
+      std::memcpy(dst, src, srcStride);
+    }
+    updateImageTextureRegionFor(this, x, y, regionWidth, regionHeight, newPixels.data());
     return true;
   }
 };
@@ -2252,6 +2296,33 @@ public:
     queueTextureUpload(texture, image->pixels.data());
   }
 
+  void updateImageTextureRegion(VulkanImage const* image,
+                                std::uint32_t x,
+                                std::uint32_t y,
+                                std::uint32_t width,
+                                std::uint32_t height,
+                                void const* pixels) {
+    if (!image || image->external || image->ownsGpuResource || !pixels || width == 0 || height == 0) {
+      return;
+    }
+    auto it = imageTextures_.find(image);
+    if (it == imageTextures_.end() || !it->second) {
+      return;
+    }
+    Texture& texture = *it->second;
+    if (texture.width != image->width || texture.height != image->height) {
+      evictImageTexture(image);
+      return;
+    }
+    if (x > static_cast<std::uint32_t>(texture.width) || y > static_cast<std::uint32_t>(texture.height) ||
+        width > static_cast<std::uint32_t>(texture.width) - x ||
+        height > static_cast<std::uint32_t>(texture.height) - y) {
+      return;
+    }
+    renderTargetFrameCacheValid_ = false;
+    queueTextureRegionUpload(texture, x, y, width, height, pixels);
+  }
+
 private:
   struct PendingTextureDestroy {
     std::unique_ptr<Texture> texture;
@@ -2261,6 +2332,10 @@ private:
   struct PendingTextureUpload {
     Texture* texture = nullptr;
     Buffer staging;
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
   };
 
   struct PendingBufferDestroy {
@@ -4507,28 +4582,72 @@ private:
     if (!pixels || tex.width <= 0 || tex.height <= 0)
       return;
     VkDeviceSize size = static_cast<VkDeviceSize>(tex.width) * tex.height * 4u;
-    for (auto& uploadJob : pendingTextureUploads_) {
-      if (uploadJob.texture == &tex) {
-        ensureBuffer(uploadJob.staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-        upload(uploadJob.staging, pixels, static_cast<std::size_t>(size));
-        return;
+    for (auto it = pendingTextureUploads_.begin(); it != pendingTextureUploads_.end();) {
+      if (it->texture == &tex) {
+        pendingBufferDestroys_.push_back(PendingBufferDestroy{takeBuffer(it->staging), kMaxFramesInFlight + 1u});
+        it = pendingTextureUploads_.erase(it);
+      } else {
+        ++it;
       }
     }
     PendingTextureUpload uploadJob{};
     uploadJob.texture = &tex;
+    uploadJob.width = static_cast<std::uint32_t>(tex.width);
+    uploadJob.height = static_cast<std::uint32_t>(tex.height);
     ensureBuffer(uploadJob.staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     upload(uploadJob.staging, pixels, static_cast<std::size_t>(size));
     pendingTextureUploads_.push_back(std::move(uploadJob));
   }
 
-  void recordTextureUpload(VkCommandBuffer cmd, Texture& tex, Buffer& staging) {
+  void queueTextureRegionUpload(Texture& tex,
+                                std::uint32_t x,
+                                std::uint32_t y,
+                                std::uint32_t width,
+                                std::uint32_t height,
+                                void const* pixels) {
+    if (!pixels || tex.width <= 0 || tex.height <= 0 || width == 0 || height == 0)
+      return;
+    if (x > static_cast<std::uint32_t>(tex.width) || y > static_cast<std::uint32_t>(tex.height) ||
+        width > static_cast<std::uint32_t>(tex.width) - x ||
+        height > static_cast<std::uint32_t>(tex.height) - y)
+      return;
+    for (auto const& uploadJob : pendingTextureUploads_) {
+      if (uploadJob.texture == &tex && uploadJob.x == 0 && uploadJob.y == 0 &&
+          uploadJob.width == static_cast<std::uint32_t>(tex.width) &&
+          uploadJob.height == static_cast<std::uint32_t>(tex.height)) {
+        return;
+      }
+    }
+    PendingTextureUpload uploadJob{};
+    uploadJob.texture = &tex;
+    uploadJob.x = x;
+    uploadJob.y = y;
+    uploadJob.width = width;
+    uploadJob.height = height;
+    VkDeviceSize size = static_cast<VkDeviceSize>(width) * height * 4u;
+    ensureBuffer(uploadJob.staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    upload(uploadJob.staging, pixels, static_cast<std::size_t>(size));
+    pendingTextureUploads_.push_back(std::move(uploadJob));
+  }
+
+  void recordTextureUpload(VkCommandBuffer cmd, Texture& tex, PendingTextureUpload& uploadJob) {
+    Buffer& staging = uploadJob.staging;
     if (!staging.buffer || tex.width <= 0 || tex.height <= 0)
       return;
+    std::uint32_t const copyWidth = uploadJob.width > 0 ? uploadJob.width : static_cast<std::uint32_t>(tex.width);
+    std::uint32_t const copyHeight = uploadJob.height > 0 ? uploadJob.height : static_cast<std::uint32_t>(tex.height);
+    if (uploadJob.x > static_cast<std::uint32_t>(tex.width) ||
+        uploadJob.y > static_cast<std::uint32_t>(tex.height) ||
+        copyWidth > static_cast<std::uint32_t>(tex.width) - uploadJob.x ||
+        copyHeight > static_cast<std::uint32_t>(tex.height) - uploadJob.y) {
+      return;
+    }
     transition(cmd, tex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     VkBufferImageCopy copy{};
     copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     copy.imageSubresource.layerCount = 1;
-    copy.imageExtent = {static_cast<std::uint32_t>(tex.width), static_cast<std::uint32_t>(tex.height), 1};
+    copy.imageOffset = {static_cast<std::int32_t>(uploadJob.x), static_cast<std::int32_t>(uploadJob.y), 0};
+    copy.imageExtent = {copyWidth, copyHeight, 1};
     vkCmdCopyBufferToImage(cmd, staging.buffer, tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
     transition(cmd, tex, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
   }
@@ -4536,7 +4655,7 @@ private:
   void recordPendingTextureUploads(VkCommandBuffer cmd) {
     for (auto& uploadJob : pendingTextureUploads_) {
       if (uploadJob.texture) {
-        recordTextureUpload(cmd, *uploadJob.texture, uploadJob.staging);
+        recordTextureUpload(cmd, *uploadJob.texture, uploadJob);
       }
       pendingBufferDestroys_.push_back(PendingBufferDestroy{takeBuffer(uploadJob.staging),
                                                             kMaxFramesInFlight + 1u});
@@ -4979,6 +5098,21 @@ void updateImageTexturesFor(VulkanImage const* image) {
   for (::flux::VulkanCanvas* canvas : gCanvases) {
     if (canvas)
       canvas->updateImageTexture(image);
+  }
+}
+
+void updateImageTextureRegionFor(VulkanImage const* image,
+                                 std::uint32_t x,
+                                 std::uint32_t y,
+                                 std::uint32_t width,
+                                 std::uint32_t height,
+                                 void const* pixels) {
+  if (!image || !pixels)
+    return;
+  std::lock_guard lock(gCanvasRegistryMutex);
+  for (::flux::VulkanCanvas* canvas : gCanvases) {
+    if (canvas)
+      canvas->updateImageTextureRegion(image, x, y, width, height, pixels);
   }
 }
 

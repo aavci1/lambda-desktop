@@ -284,6 +284,16 @@ bool Image::updatePixels(std::span<std::uint8_t const> pixels, PixelFormat forma
   return format == PixelFormat::Rgba8888 && updateRgbaPixels(pixels, gpuDevice);
 }
 
+bool Image::updatePixelsRegion(std::span<std::uint8_t const>,
+                               PixelFormat,
+                               std::uint32_t,
+                               std::uint32_t,
+                               std::uint32_t,
+                               std::uint32_t,
+                               void*) {
+  return false;
+}
+
 std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path, std::uint32_t maxLongEdge) {
   std::filesystem::path const imagePath{std::string(path)};
 #if defined(FLUX_PLATFORM_LINUX_WAYLAND) || defined(FLUX_PLATFORM_LINUX_KMS)

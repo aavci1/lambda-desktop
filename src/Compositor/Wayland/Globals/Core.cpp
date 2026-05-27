@@ -632,6 +632,47 @@ void clearPendingDamage(WaylandServer::Impl::Surface* surface) {
   surface->pendingBufferDamageRects.clear();
 }
 
+RegionRect clippedBufferRect(RegionRect rect, std::int32_t width, std::int32_t height) {
+  std::int64_t const left = std::clamp<std::int64_t>(rect.x, 0, width);
+  std::int64_t const top = std::clamp<std::int64_t>(rect.y, 0, height);
+  std::int64_t const right = std::clamp<std::int64_t>(static_cast<std::int64_t>(rect.x) + rect.width, 0, width);
+  std::int64_t const bottom = std::clamp<std::int64_t>(static_cast<std::int64_t>(rect.y) + rect.height, 0, height);
+  return RegionRect{
+      .x = static_cast<std::int32_t>(left),
+      .y = static_cast<std::int32_t>(top),
+      .width = static_cast<std::int32_t>(std::max<std::int64_t>(0, right - left)),
+      .height = static_cast<std::int32_t>(std::max<std::int64_t>(0, bottom - top)),
+  };
+}
+
+void appendCommittedBufferDamage(WaylandServer::Impl::Surface* surface) {
+  if (!surface || surface->width <= 0 || surface->height <= 0) return;
+  if (surface->pendingSurfaceDamageRects.empty() && surface->pendingBufferDamageRects.empty()) return;
+
+  constexpr std::size_t kMaxCommittedDamageRects = 32;
+  auto appendFullBufferDamage = [&] {
+    surface->committedBufferDamageRects.clear();
+    appendRegionRect(surface->committedBufferDamageRects,
+                     RegionRect{0, 0, surface->width, surface->height});
+  };
+
+  // wl_surface.damage is in surface coordinates and can interact with scale,
+  // transform, and viewport state. Preserve correctness by treating it as full
+  // buffer damage; wl_surface.damage_buffer carries exact buffer-space rects.
+  if (!surface->pendingSurfaceDamageRects.empty()) {
+    appendFullBufferDamage();
+    return;
+  }
+
+  for (RegionRect const& rect : surface->pendingBufferDamageRects) {
+    appendRegionRect(surface->committedBufferDamageRects, clippedBufferRect(rect, surface->width, surface->height));
+    if (surface->committedBufferDamageRects.size() > kMaxCommittedDamageRects) {
+      appendFullBufferDamage();
+      return;
+    }
+  }
+}
+
 void queueBufferRelease(WaylandServer::Impl::Surface* surface, wl_resource* buffer) {
   if (!surface || !buffer) return;
   if (std::find(surface->pendingBufferReleases.begin(), surface->pendingBufferReleases.end(), buffer) ==
@@ -855,6 +896,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
           if (!applyViewportState(surface)) return;
           applyLayerGeometry(surface->layerSurface);
           maybeSendInitialCutoutsConfigure(surface->server, surface);
+          appendCommittedBufferDamage(surface);
           bumpSurfaceSerial(surface);
           serialBumped = true;
           surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
@@ -871,6 +913,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         if (!applyViewportState(surface)) return;
         applyLayerGeometry(surface->layerSurface);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
+        appendCommittedBufferDamage(surface);
         bumpSurfaceSerial(surface);
         serialBumped = true;
         surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
@@ -919,6 +962,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         applyLayerGeometry(surface->layerSurface);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
         surface->dmabufBuffer = nullptr;
+        appendCommittedBufferDamage(surface);
         bumpSurfaceSerial(surface);
         surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
         traceResizeSurface("commit-shm", surface);
@@ -949,6 +993,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         applyLayerGeometry(surface->layerSurface);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
         surface->dmabufBuffer = dmabufBuffer;
+        appendCommittedBufferDamage(surface);
         bumpSurfaceSerial(surface);
         surface->lastCommitNsec = flux::detail::resizeTraceTimestampNanoseconds();
         traceResizeSurface("commit-dmabuf", surface);
@@ -974,6 +1019,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     surface->awaitingConfigureWidth = 0;
     surface->awaitingConfigureHeight = 0;
     surface->dmabufBuffer = nullptr;
+    surface->committedBufferDamageRects.clear();
     bumpSurfaceSerial(surface);
     traceResizeSurface("commit-empty", surface);
     traceCrashSurfaceCommit(surface, "empty", 0u, 0u);

@@ -328,6 +328,7 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .lastCommitNsec = surface->lastCommitNsec,
       .backgroundBlurRects = surface->backgroundBlurRects,
       .opaqueRegionRects = surface->opaqueRegionRects,
+      .bufferDamageRects = surface->committedBufferDamageRects,
       .rgbaPixels = surface->rgbaPixels,
       .shmPixels = surface->shmPixels,
       .shmPixelBytes = surface->shmPixelBytes,
@@ -487,6 +488,7 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
 	      .defaultGlassEligible = false,
 	      .serial = surface->serial,
 	      .backgroundBlurRects = {},
+	      .bufferDamageRects = surface->committedBufferDamageRects,
 	      .rgbaPixels = surface->rgbaPixels,
 	      .shmPixels = surface->shmPixels,
 	      .shmPixelBytes = surface->shmPixelBytes,
@@ -582,6 +584,15 @@ bool WaylandServer::Impl::copyDmabufToRgba(std::uint64_t surfaceId, std::vector<
 
   munmap(mapping, dataSize);
   return true;
+}
+
+void WaylandServer::Impl::consumeSurfaceDamage(std::uint64_t surfaceId, std::uint64_t serial) {
+  auto surface = std::find_if(surfaces_.begin(), surfaces_.end(),
+                              [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });
+  if (surface == surfaces_.end() || !*surface) return;
+  if ((*surface)->serial == serial) {
+    (*surface)->committedBufferDamageRects.clear();
+  }
 }
 
 } // namespace flux::compositor

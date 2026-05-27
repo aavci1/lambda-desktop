@@ -145,6 +145,7 @@ struct CommittedSurfaceSnapshot {
   std::uint64_t lastCommitNsec = 0;
   std::vector<RegionRect> backgroundBlurRects;
   std::vector<RegionRect> opaqueRegionRects;
+  std::vector<RegionRect> bufferDamageRects;
   std::shared_ptr<std::vector<std::uint8_t> const> rgbaPixels;
   std::uint8_t const* shmPixels = nullptr;
   std::size_t shmPixelBytes = 0;

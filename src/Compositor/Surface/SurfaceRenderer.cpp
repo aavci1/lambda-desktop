@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <unistd.h>
@@ -194,6 +195,75 @@ bool destinationMatchesWindow(CommittedSurfaceSnapshot const &surface) {
          (surface.destinationHeight <= 0 || surface.destinationHeight == surface.height);
 }
 
+bool rectCoversBuffer(CommittedSurfaceSnapshot::RegionRect const& rect,
+                      std::int32_t bufferWidth,
+                      std::int32_t bufferHeight) {
+  return rect.x <= 0 && rect.y <= 0 &&
+         rect.width >= bufferWidth &&
+         rect.height >= bufferHeight;
+}
+
+bool damageCoversFullBuffer(std::vector<CommittedSurfaceSnapshot::RegionRect> const& damage,
+                            std::int32_t bufferWidth,
+                            std::int32_t bufferHeight) {
+  return std::any_of(damage.begin(), damage.end(), [&](auto const& rect) {
+    return rectCoversBuffer(rect, bufferWidth, bufferHeight);
+  });
+}
+
+bool updateDamagedImageRegions(Canvas& canvas,
+                               Image& image,
+                               std::span<std::uint8_t const> pixels,
+                               Image::PixelFormat pixelFormat,
+                               std::int32_t bufferWidth,
+                               std::int32_t bufferHeight,
+                               std::vector<CommittedSurfaceSnapshot::RegionRect> const& damage) {
+  if (pixels.empty() || damage.empty() || bufferWidth <= 0 || bufferHeight <= 0 ||
+      damageCoversFullBuffer(damage, bufferWidth, bufferHeight)) {
+    return false;
+  }
+  std::size_t const fullSize = static_cast<std::size_t>(bufferWidth) * static_cast<std::size_t>(bufferHeight) * 4u;
+  if (pixels.size() != fullSize) return false;
+
+  auto const updateStart = diagnostics::cpuTraceNow();
+  std::size_t uploadedBytes = 0;
+  std::vector<std::uint8_t> regionPixels;
+  for (auto const& damageRect : damage) {
+    std::int32_t const left = std::clamp(damageRect.x, 0, bufferWidth);
+    std::int32_t const top = std::clamp(damageRect.y, 0, bufferHeight);
+    std::int32_t const right = std::clamp(damageRect.x + damageRect.width, 0, bufferWidth);
+    std::int32_t const bottom = std::clamp(damageRect.y + damageRect.height, 0, bufferHeight);
+    std::int32_t const width = right - left;
+    std::int32_t const height = bottom - top;
+    if (width <= 0 || height <= 0) continue;
+
+    std::size_t const rowBytes = static_cast<std::size_t>(width) * 4u;
+    regionPixels.resize(rowBytes * static_cast<std::size_t>(height));
+    std::size_t const sourceStride = static_cast<std::size_t>(bufferWidth) * 4u;
+    for (std::int32_t row = 0; row < height; ++row) {
+      auto const* src = pixels.data() + (static_cast<std::size_t>(top + row) * sourceStride) +
+                        static_cast<std::size_t>(left) * 4u;
+      auto* dst = regionPixels.data() + static_cast<std::size_t>(row) * rowBytes;
+      std::memcpy(dst, src, rowBytes);
+    }
+    if (!image.updatePixelsRegion(regionPixels,
+                                  pixelFormat,
+                                  static_cast<std::uint32_t>(left),
+                                  static_cast<std::uint32_t>(top),
+                                  static_cast<std::uint32_t>(width),
+                                  static_cast<std::uint32_t>(height),
+                                  canvas.gpuDevice())) {
+      return false;
+    }
+    uploadedBytes += regionPixels.size();
+  }
+  if (uploadedBytes == 0) return false;
+  diagnostics::recordSurfaceImageUpload(uploadedBytes,
+                                        diagnostics::cpuTraceElapsedMilliseconds(updateStart),
+                                        false);
+  return true;
+}
+
 bool hasCompositorMaterial(CommittedSurfaceSnapshot const &surface, ChromeConfig const &chrome) {
   return !surface.backgroundBlurRects.empty() ||
          (chrome.windowGlassEnabled && surface.defaultGlassEligible && chrome.glass.blurRadius > 0.f);
@@ -263,10 +333,14 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
     cached = {};
   }
   if (cached.image && cached.id == surface.id) {
-    if (hasDmabuf && cached.dmabufBufferId == surface.dmabufBufferId)
+    if (hasDmabuf && cached.dmabufBufferId == surface.dmabufBufferId) {
+      wayland.consumeSurfaceDamage(surface.id, surface.serial);
       return;
-    if (!hasDmabuf && cached.serial == surface.serial)
+    }
+    if (!hasDmabuf && cached.serial == surface.serial) {
+      wayland.consumeSurfaceDamage(surface.id, surface.serial);
       return;
+    }
   }
 
   cached.id = surface.id;
@@ -278,6 +352,17 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
     cached.dmabufBufferId = 0;
     cached.dmabufImported = false;
     std::size_t const uploadBytes = pixels.size();
+    if (cached.image && cached.shmBufferWidth == bufferWidth && cached.shmBufferHeight == bufferHeight &&
+        updateDamagedImageRegions(canvas,
+                                  *cached.image,
+                                  pixels,
+                                  surface.pixelFormat,
+                                  bufferWidth,
+                                  bufferHeight,
+                                  surface.bufferDamageRects)) {
+      wayland.consumeSurfaceDamage(surface.id, surface.serial);
+      return;
+    }
     if (cached.image && cached.shmBufferWidth == bufferWidth && cached.shmBufferHeight == bufferHeight && [&] {
           auto const updateStart = diagnostics::cpuTraceNow();
           bool const updated = cached.image->updatePixels(pixels, surface.pixelFormat, canvas.gpuDevice());
@@ -285,6 +370,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
                                                 false);
           return updated;
         }()) {
+      wayland.consumeSurfaceDamage(surface.id, surface.serial);
       return;
     }
     cached.dmabufImages.clear();
@@ -295,6 +381,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
     diagnostics::recordSurfaceImageUpload(uploadBytes, diagnostics::cpuTraceElapsedMilliseconds(createStart), true);
     cached.shmBufferWidth = bufferWidth;
     cached.shmBufferHeight = bufferHeight;
+    if (cached.image) wayland.consumeSurfaceDamage(surface.id, surface.serial);
   } else if (!surface.dmabufPlanes.empty()) {
     cached.image.reset();
     cached.dmabufImported = false;
@@ -310,6 +397,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
       CachedClientImage::DmabufEntry entry = std::move(*cachedDmabuf);
       cached.dmabufImages.erase(cachedDmabuf);
       cached.dmabufImages.push_back(std::move(entry));
+      wayland.consumeSurfaceDamage(surface.id, surface.serial);
       return;
     }
 
@@ -368,6 +456,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
       while (cached.dmabufImages.size() > kMaxCachedDmabufImagesPerSurface) {
         cached.dmabufImages.erase(cached.dmabufImages.begin());
       }
+      wayland.consumeSurfaceDamage(surface.id, surface.serial);
       return;
     }
 
@@ -397,6 +486,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
         while (cached.dmabufImages.size() > kMaxCachedDmabufImagesPerSurface) {
           cached.dmabufImages.erase(cached.dmabufImages.begin());
         }
+        wayland.consumeSurfaceDamage(surface.id, surface.serial);
       }
     } else {
       diagnostics::recordDmabufFallbackCopy(0, diagnostics::cpuTraceElapsedMilliseconds(fallbackStart), false);

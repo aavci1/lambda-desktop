@@ -90,6 +90,7 @@ struct WaylandServer::Impl {
   [[nodiscard]] std::optional<int> snapPreviewWakeDelayMs() const;
   [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
   [[nodiscard]] bool copyDmabufToRgba(std::uint64_t surfaceId, std::vector<std::uint8_t>& out) const;
+  void consumeSurfaceDamage(std::uint64_t surfaceId, std::uint64_t serial);
 
   void dispatch();
   void initializeShellIpc();
@@ -430,6 +431,7 @@ struct WaylandServer::Impl::Surface {
   bool pendingInputRegionSet = false;
   std::vector<CommittedSurfaceSnapshot::RegionRect> pendingSurfaceDamageRects;
   std::vector<CommittedSurfaceSnapshot::RegionRect> pendingBufferDamageRects;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> committedBufferDamageRects;
   Viewport* viewport = nullptr;
   FractionalScale* fractionalScale = nullptr;
   LayerSurface* layerSurface = nullptr;

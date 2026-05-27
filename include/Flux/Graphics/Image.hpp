@@ -46,6 +46,18 @@ public:
                             PixelFormat format,
                             void* gpuDevice = nullptr);
 
+  /// Replace a same-format sub-rectangle with tightly packed 8-bit pixels.
+  /// `pixels` must contain exactly width * height * 4 bytes. Returns false
+  /// when the backend cannot update regions, the format is incompatible, or
+  /// the rectangle is outside the image bounds.
+  virtual bool updatePixelsRegion(std::span<std::uint8_t const> pixels,
+                                  PixelFormat format,
+                                  std::uint32_t x,
+                                  std::uint32_t y,
+                                  std::uint32_t width,
+                                  std::uint32_t height,
+                                  void* gpuDevice = nullptr);
+
   /// Create an image from tightly packed 8-bit RGBA pixels.
   /// `rgbaPixels` must contain exactly width * height * 4 bytes.
   /// Metal uses `gpuDevice` as an optional id<MTLDevice>; other backends ignore it.

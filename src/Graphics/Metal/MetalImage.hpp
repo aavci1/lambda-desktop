@@ -17,6 +17,13 @@ public:
   bool updatePixels(std::span<std::uint8_t const> pixels,
                     PixelFormat format,
                     void* gpuDevice = nullptr) override;
+  bool updatePixelsRegion(std::span<std::uint8_t const> pixels,
+                          PixelFormat format,
+                          std::uint32_t x,
+                          std::uint32_t y,
+                          std::uint32_t width,
+                          std::uint32_t height,
+                          void* gpuDevice = nullptr) override;
 
   id<MTLTexture> texture() const { return texture_; }
 
