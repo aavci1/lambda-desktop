@@ -1299,10 +1299,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     };
     auto discardQueuedAtomicFrame = [&](std::size_t index) {
       if (!presenter->atomicPresenter() || index >= atomicReadyFrames.size()) return;
-	      if (atomicReadyFrames[index].directScanout && !atomicReadyFrames[index].scanoutCandidate) {
-	        presenter->atomicPresenter()->clearPreparedDirectScanout();
-	      } else if (atomicReadyFrames[index].overlayOnly && !atomicReadyFrames[index].scanoutCandidate) {
-	        presenter->atomicPresenter()->clearPreparedOverlayCandidate();
+      if (atomicReadyFrames[index].directScanout) {
+        if (!atomicReadyFrames[index].scanoutCandidate) {
+          presenter->atomicPresenter()->clearPreparedDirectScanout();
+        }
+      } else if (atomicReadyFrames[index].overlayOnly) {
+        if (!atomicReadyFrames[index].scanoutCandidate) {
+          presenter->atomicPresenter()->clearPreparedOverlayCandidate();
+        }
       } else {
         presenter->atomicPresenter()->discardPreparedFrame(atomicReadyFrames[index].presentToken);
       }
@@ -1381,10 +1385,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     auto discardAllQueuedAtomicFrames = [&] {
       if (presenter->atomicPresenter()) {
         for (auto const& frame : atomicReadyFrames) {
-	          if (frame.directScanout && !frame.scanoutCandidate) {
-	            presenter->atomicPresenter()->clearPreparedDirectScanout();
-	          } else if (frame.overlayOnly && !frame.scanoutCandidate) {
-	            presenter->atomicPresenter()->clearPreparedOverlayCandidate();
+          if (frame.directScanout) {
+            if (!frame.scanoutCandidate) {
+              presenter->atomicPresenter()->clearPreparedDirectScanout();
+            }
+          } else if (frame.overlayOnly) {
+            if (!frame.scanoutCandidate) {
+              presenter->atomicPresenter()->clearPreparedOverlayCandidate();
+            }
           } else {
             presenter->atomicPresenter()->discardPreparedFrame(frame.presentToken);
           }
