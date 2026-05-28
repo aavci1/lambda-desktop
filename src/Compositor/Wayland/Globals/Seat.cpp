@@ -69,17 +69,24 @@ void pointerSetCursor(wl_client*, wl_resource* resource, std::uint32_t, wl_resou
                       std::int32_t hotspotX, std::int32_t hotspotY) {
   auto* server = serverFrom(resource);
   if (!surfaceResource) {
+    bool const changed = server->cursorSurface_ || server->cursorShape_ != CursorShape::Arrow;
     server->cursorSurface_ = nullptr;
     server->cursorShape_ = CursorShape::Arrow;
+    if (changed) ++server->contentSerial_;
     return;
   }
 
   auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
   if (!surfaceHasNoRole(surface) && !surfaceIsCursor(surface)) return;
   surface->role = SurfaceRole::Cursor;
+  bool const changed = server->cursorSurface_ != surface ||
+                       server->cursorShape_ != CursorShape::Arrow ||
+                       server->cursorHotspotX_ != hotspotX ||
+                       server->cursorHotspotY_ != hotspotY;
   server->cursorSurface_ = surface;
   server->cursorHotspotX_ = hotspotX;
   server->cursorHotspotY_ = hotspotY;
+  if (changed) ++server->contentSerial_;
 }
 
 void pointerRelease(wl_client*, wl_resource* resource) {

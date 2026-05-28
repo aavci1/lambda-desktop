@@ -196,6 +196,45 @@ std::uint64_t propertyValue(int fd, std::uint32_t objectId, std::uint32_t object
   return value;
 }
 
+std::optional<std::pair<std::uint64_t, std::uint64_t>> propertyRange(int fd,
+                                                                     std::uint32_t objectId,
+                                                                     std::uint32_t objectType,
+                                                                     char const* name) {
+  drmModeObjectProperties* props = drmModeObjectGetProperties(fd, objectId, objectType);
+  if (!props) return std::nullopt;
+  std::optional<std::pair<std::uint64_t, std::uint64_t>> range;
+  for (std::uint32_t i = 0; i < props->count_props; ++i) {
+    drmModePropertyRes* prop = drmModeGetProperty(fd, props->props[i]);
+    if (prop) {
+      bool const matches = std::strcmp(prop->name, name) == 0;
+      if (matches && (prop->flags & DRM_MODE_PROP_RANGE) != 0 && prop->count_values >= 2) {
+        range = std::make_pair(prop->values[0], prop->values[1]);
+      }
+      drmModeFreeProperty(prop);
+      if (matches) break;
+    }
+  }
+  drmModeFreeObjectProperties(props);
+  return range;
+}
+
+std::uint32_t propertyFlags(int fd, std::uint32_t objectId, std::uint32_t objectType, char const* name) {
+  drmModeObjectProperties* props = drmModeObjectGetProperties(fd, objectId, objectType);
+  if (!props) return 0;
+  std::uint32_t flags = 0;
+  for (std::uint32_t i = 0; i < props->count_props; ++i) {
+    drmModePropertyRes* prop = drmModeGetProperty(fd, props->props[i]);
+    if (prop) {
+      bool const matches = std::strcmp(prop->name, name) == 0;
+      if (matches) flags = prop->flags;
+      drmModeFreeProperty(prop);
+      if (matches) break;
+    }
+  }
+  drmModeFreeObjectProperties(props);
+  return flags;
+}
+
 std::vector<std::uint64_t> planeModifiersForFormat(int fd, std::uint32_t planeId, std::uint32_t drmFormat) {
   std::vector<std::uint64_t> modifiers;
   drmModeObjectProperties* props = drmModeObjectGetProperties(fd, planeId, DRM_MODE_OBJECT_PLANE);
@@ -431,19 +470,56 @@ public:
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     std::uint32_t pitch = 0;
+    std::uint32_t fbId = 0;
   };
+
+  struct CursorPlaneProperties {
+    std::uint32_t fbId = 0;
+    std::uint32_t crtcId = 0;
+    std::uint32_t srcX = 0;
+    std::uint32_t srcY = 0;
+    std::uint32_t srcW = 0;
+    std::uint32_t srcH = 0;
+    std::uint32_t crtcX = 0;
+    std::uint32_t crtcY = 0;
+    std::uint32_t crtcW = 0;
+    std::uint32_t crtcH = 0;
+    std::uint32_t zpos = 0;
+  };
+
+  bool ensureAtomicCursorPlane() const;
+  bool commitAtomicCursor(std::int32_t x, std::int32_t y, bool visible) const noexcept;
+  bool addAtomicCursorProperties(drmModeAtomicReq* request) const;
+  void markAtomicCursorScheduled() const noexcept;
 
   std::shared_ptr<KmsDevice::Impl> device_;
   KmsConnector connector_{};
   mutable CursorBuffer cursorBuffer_{};
   mutable bool cursorVisible_ = false;
+  mutable bool atomicCursorInitialized_ = false;
+  mutable bool atomicCursorAvailable_ = false;
+  mutable bool atomicCursorActive_ = false;
+  mutable bool atomicCursorFailureLogged_ = false;
+  mutable std::uint32_t atomicCursorPlaneId_ = 0;
+  mutable CursorPlaneProperties atomicCursorPlaneProps_{};
+  mutable std::optional<std::uint64_t> atomicCursorZpos_;
+  mutable bool atomicCursorZposMutable_ = false;
+  mutable bool atomicCursorLogged_ = false;
+  mutable bool cursorUploadLogged_ = false;
+  mutable std::int32_t cursorX_ = 0;
+  mutable std::int32_t cursorY_ = 0;
+  mutable std::int32_t cursorHotspotX_ = 0;
+  mutable std::int32_t cursorHotspotY_ = 0;
   mutable bool vblankWaitDisabled_ = false;
 };
 
 class KmsAtomicPresenter::Impl {
 public:
-  Impl(int fd, KmsConnector connector, TextSystem& textSystem)
-      : fd_(fd), connector_(std::move(connector)), textSystem_(textSystem) {
+  Impl(std::shared_ptr<KmsOutput::Impl> output, TextSystem& textSystem)
+      : output_(std::move(output)),
+        fd_(output_ ? output_->drmFd() : -1),
+        connector_(output_ ? output_->connector_ : KmsConnector{}),
+        textSystem_(textSystem) {
     try {
       if (fd_ < 0 || connector_.connectorId == 0 || connector_.crtcId == 0) {
         throw std::runtime_error("Invalid KMS output for atomic presenter");
@@ -454,6 +530,7 @@ public:
       if (drmSetClientCap(fd_, DRM_CLIENT_CAP_ATOMIC, 1) != 0) {
         throw std::system_error(errno, std::generic_category(), "drmSetClientCap(ATOMIC)");
       }
+      if (output_) (void)output_->ensureAtomicCursorPlane();
       planeId_ = primaryPlaneForCrtc(fd_, connector_.crtcId);
       loadProperties();
       useRenderInFence_ = useKmsRenderInFence() && planeInFenceFd_ != 0;
@@ -696,6 +773,7 @@ public:
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit overlay-only");
       }
+      if (output_) output_->markAtomicCursorScheduled();
       drmModeAtomicFree(request);
       request = nullptr;
       pendingBuffer_ = displayedBuffer_;
@@ -790,6 +868,10 @@ public:
           .crtcW = candidate.crtcWidth,
           .crtcH = candidate.crtcHeight,
           .acquireFenceFd = -1,
+          .zpos = [&]() -> std::optional<std::uint64_t> {
+            std::optional<std::uint64_t> const target = cursorSafeOverlayZpos(plane.caps);
+            return target && *target != plane.caps.zpos ? target : std::nullopt;
+          }(),
       };
       if (testAtomicOverlay(buffer, overlay)) {
         clearPreparedOverlayCandidate();
@@ -800,7 +882,7 @@ public:
         if (!overlayPreparedLogged_) {
           std::fprintf(stderr,
                        "lambda-window-manager: KMS hardware overlay active plane=%u surface=%llu buffer=%llu "
-                       "fb=%u format=0x%08x modifier=0x%016llx crtc=%d,%d %ux%u\n",
+                       "fb=%u format=0x%08x modifier=0x%016llx crtc=%d,%d %ux%u zpos=%s%llu\n",
                        overlay.planeId,
                        static_cast<unsigned long long>(overlay.surfaceId),
                        static_cast<unsigned long long>(overlay.bufferId),
@@ -810,7 +892,9 @@ public:
                        overlay.crtcX,
                        overlay.crtcY,
                        overlay.crtcW,
-                       overlay.crtcH);
+                       overlay.crtcH,
+                       overlay.zpos ? "" : "default:",
+                       static_cast<unsigned long long>(overlay.zpos.value_or(plane.caps.zpos)));
           overlayPreparedLogged_ = true;
         }
         return true;
@@ -1012,6 +1096,7 @@ public:
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit direct scanout");
       }
+      if (output_) output_->markAtomicCursorScheduled();
       drmModeAtomicFree(request);
       request = nullptr;
       pendingBuffer_ = displayedBuffer_;
@@ -1061,6 +1146,7 @@ public:
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit direct scanout repeat");
       }
+      if (output_) output_->markAtomicCursorScheduled();
       drmModeAtomicFree(request);
       request = nullptr;
       pendingBuffer_ = displayedBuffer_;
@@ -1182,6 +1268,7 @@ public:
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit");
       }
+      if (output_) output_->markAtomicCursorScheduled();
       if (useRenderFence) {
         closeRenderFence(buffer);
         buffer.renderComplete = true;
@@ -1275,6 +1362,8 @@ private:
   struct PlaneCapabilities {
     std::uint32_t possibleCrtcs = 0;
     std::uint64_t type = 0;
+    bool hasZpos = false;
+    std::uint64_t zpos = 0;
     std::vector<PlaneFormatSupport> formats;
   };
 
@@ -1293,6 +1382,7 @@ private:
     std::uint32_t alpha = 0;
     std::uint32_t pixelBlendMode = 0;
     std::uint32_t rotation = 0;
+    std::uint32_t zpos = 0;
   };
 
   struct OverlayPlane {
@@ -1300,6 +1390,13 @@ private:
     PlaneProperties props{};
     PlaneCapabilities caps{};
   };
+
+  std::optional<std::uint64_t> cursorSafeOverlayZpos(PlaneCapabilities const& caps) const noexcept {
+    if (!cursorPlaneZpos_ || !caps.hasZpos || *cursorPlaneZpos_ == 0) return std::nullopt;
+    if (caps.zpos < *cursorPlaneZpos_) return caps.zpos;
+    if (!primaryPlaneCaps_.hasZpos || primaryPlaneCaps_.zpos + 1 >= *cursorPlaneZpos_) return std::nullopt;
+    return *cursorPlaneZpos_ - 1;
+  }
 
   struct OverlayFramebuffer {
     std::uint64_t bufferId = 0;
@@ -1328,6 +1425,7 @@ private:
     std::uint32_t crtcW = 0;
     std::uint32_t crtcH = 0;
     int acquireFenceFd = -1;
+    std::optional<std::uint64_t> zpos;
   };
 
   struct PreparedDirectScanout {
@@ -1731,7 +1829,8 @@ private:
                           std::uint32_t crtcW,
                           std::uint32_t crtcH,
                           int inFenceFd,
-                          char const* label) {
+                          char const* label,
+                          std::optional<std::uint64_t> zpos = std::nullopt) {
     addAtomicProperty(request, planeId, props.fbId, fbId, label);
     addAtomicProperty(request, planeId, props.crtcId, crtcId, label);
     addAtomicProperty(request, planeId, props.srcX, srcX, label);
@@ -1749,6 +1848,7 @@ private:
       addOptionalAtomicProperty(request, planeId, props.alpha, 65535);
       addOptionalAtomicProperty(request, planeId, props.pixelBlendMode, 2);
       addOptionalAtomicProperty(request, planeId, props.rotation, 1);
+      if (zpos) addOptionalAtomicProperty(request, planeId, props.zpos, *zpos);
     }
   }
 
@@ -1795,7 +1895,8 @@ private:
                          overlay->crtcW,
                          overlay->crtcH,
                          overlay->acquireFenceFd,
-                         "overlay");
+                         "overlay",
+                         overlay->zpos);
       if (activeOverlayPlaneId_ != 0 && activeOverlayPlaneId_ != overlay->planeId) {
         if (auto props = overlayPlaneProperties(activeOverlayPlaneId_)) {
           disableOverlayPlane(request, activeOverlayPlaneId_, *props);
@@ -1805,6 +1906,9 @@ private:
       if (auto props = overlayPlaneProperties(activeOverlayPlaneId_)) {
         disableOverlayPlane(request, activeOverlayPlaneId_, *props);
       }
+    }
+    if (output_) {
+      (void)output_->addAtomicCursorProperties(request);
     }
   }
 
@@ -1833,6 +1937,9 @@ private:
       if (auto props = overlayPlaneProperties(activeOverlayPlaneId_)) {
         disableOverlayPlane(request, activeOverlayPlaneId_, *props);
       }
+    }
+    if (output_) {
+      (void)output_->addAtomicCursorProperties(request);
     }
   }
 
@@ -1925,9 +2032,12 @@ private:
   }
 
   PlaneCapabilities loadPlaneCapabilities(std::uint32_t planeId) const {
+    std::uint32_t const zposProperty = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "zpos");
     PlaneCapabilities caps{
         .possibleCrtcs = 0,
         .type = propertyValue(fd_, planeId, DRM_MODE_OBJECT_PLANE, "type"),
+        .hasZpos = zposProperty != 0,
+        .zpos = zposProperty != 0 ? propertyValue(fd_, planeId, DRM_MODE_OBJECT_PLANE, "zpos") : 0,
         .formats = {},
     };
     drmModePlane* plane = drmModeGetPlane(fd_, planeId);
@@ -1995,6 +2105,7 @@ private:
         .alpha = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "alpha"),
         .pixelBlendMode = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "pixel blend mode"),
         .rotation = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "rotation"),
+        .zpos = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "zpos"),
     };
   }
 
@@ -2011,22 +2122,42 @@ private:
     }
     std::vector<std::uint32_t> const overlayIds = planesForCrtcWithType(fd_, connector_.crtcId, DRM_PLANE_TYPE_OVERLAY);
     overlayPlanes_.reserve(overlayIds.size());
+    std::optional<std::uint64_t> cursorPlaneZpos;
+    for (std::uint32_t cursorId : planesForCrtcWithType(fd_, connector_.crtcId, DRM_PLANE_TYPE_CURSOR)) {
+      PlaneCapabilities const caps = loadPlaneCapabilities(cursorId);
+      if (!caps.hasZpos) continue;
+      cursorPlaneZpos = cursorPlaneZpos ? std::max(*cursorPlaneZpos, caps.zpos) : caps.zpos;
+    }
+    cursorPlaneZpos_ = output_ && output_->atomicCursorZpos_ ? output_->atomicCursorZpos_ : cursorPlaneZpos;
     for (std::uint32_t overlayId : overlayIds) {
-      overlayPlanes_.push_back(OverlayPlane{
+      OverlayPlane plane{
           .id = overlayId,
           .props = loadPlaneProperties(overlayId),
           .caps = loadPlaneCapabilities(overlayId),
-      });
+      };
+      if (cursorPlaneZpos_ && !cursorSafeOverlayZpos(plane.caps)) {
+        continue;
+      }
+      overlayPlanes_.push_back(std::move(plane));
     }
+    std::sort(overlayPlanes_.begin(), overlayPlanes_.end(), [](OverlayPlane const& a, OverlayPlane const& b) {
+      if (a.caps.hasZpos != b.caps.hasZpos) return a.caps.hasZpos;
+      if (a.caps.hasZpos && b.caps.hasZpos && a.caps.zpos != b.caps.zpos) return a.caps.zpos < b.caps.zpos;
+      return a.id < b.id;
+    });
     std::fprintf(stderr,
-                 "lambda-window-manager: KMS hardware overlay planes available=%zu primaryFormats=%zu\n",
+                 "lambda-window-manager: KMS hardware overlay planes available=%zu primaryFormats=%zu cursorZpos=%s%llu\n",
                  overlayPlanes_.size(),
-                 primaryPlaneCaps_.formats.size());
+                 primaryPlaneCaps_.formats.size(),
+                 cursorPlaneZpos_ ? "" : "unknown:",
+                 static_cast<unsigned long long>(cursorPlaneZpos_.value_or(0)));
     for (OverlayPlane const& plane : overlayPlanes_) {
       std::fprintf(stderr,
-                   "lambda-window-manager: KMS overlay plane=%u formats=%zu\n",
+                   "lambda-window-manager: KMS overlay plane=%u formats=%zu zpos=%s%llu\n",
                    plane.id,
-                   plane.caps.formats.size());
+                   plane.caps.formats.size(),
+                   plane.caps.hasZpos ? "" : "unknown:",
+                   static_cast<unsigned long long>(plane.caps.zpos));
     }
   }
 
@@ -2535,6 +2666,7 @@ private:
 
   static constexpr std::size_t kBufferCount = 4;
 
+  std::shared_ptr<KmsOutput::Impl> output_;
   int fd_ = -1;
   KmsConnector connector_{};
   TextSystem& textSystem_;
@@ -2548,6 +2680,7 @@ private:
   std::uint32_t planeInFenceFd_ = 0;
   PlaneProperties primaryPlaneProps_{};
   PlaneCapabilities primaryPlaneCaps_{};
+  std::optional<std::uint64_t> cursorPlaneZpos_;
   std::vector<OverlayPlane> overlayPlanes_;
   std::vector<OverlayFramebuffer> overlayFramebuffers_;
   std::optional<PreparedOverlay> preparedOverlay_;
@@ -2600,11 +2733,193 @@ KmsOutput::Impl::~Impl() {
 
 void KmsOutput::Impl::destroyCursorBuffer() {
   if (!cursorBuffer_.handle) return;
+  if (cursorBuffer_.fbId != 0) {
+    drmModeRmFB(drmFd(), cursorBuffer_.fbId);
+  }
   drm_mode_destroy_dumb destroy{};
   destroy.handle = cursorBuffer_.handle;
   drmIoctl(drmFd(), DRM_IOCTL_MODE_DESTROY_DUMB, &destroy);
   cursorBuffer_ = {};
   cursorVisible_ = false;
+  atomicCursorActive_ = false;
+}
+
+bool KmsOutput::Impl::ensureAtomicCursorPlane() const {
+  if (atomicCursorInitialized_) return atomicCursorAvailable_;
+  atomicCursorInitialized_ = true;
+
+  int const fd = drmFd();
+  if (fd < 0) return false;
+  std::vector<std::uint32_t> const cursorPlanes = planesForCrtcWithType(fd, connector_.crtcId, DRM_PLANE_TYPE_CURSOR);
+  std::optional<std::uint64_t> highestContentZpos;
+  std::uint32_t const primaryPlaneId = primaryPlaneForCrtc(fd, connector_.crtcId);
+  if (primaryPlaneId != 0 && propertyId(fd, primaryPlaneId, DRM_MODE_OBJECT_PLANE, "zpos") != 0) {
+    highestContentZpos = propertyValue(fd, primaryPlaneId, DRM_MODE_OBJECT_PLANE, "zpos");
+  }
+  for (std::uint32_t overlayId : planesForCrtcWithType(fd, connector_.crtcId, DRM_PLANE_TYPE_OVERLAY)) {
+    if (propertyId(fd, overlayId, DRM_MODE_OBJECT_PLANE, "zpos") == 0) continue;
+    std::uint64_t const zpos = propertyValue(fd, overlayId, DRM_MODE_OBJECT_PLANE, "zpos");
+    highestContentZpos = highestContentZpos ? std::max(*highestContentZpos, zpos) : zpos;
+  }
+
+  struct CursorPlaneCandidate {
+    std::uint32_t planeId = 0;
+    CursorPlaneProperties props{};
+    std::optional<std::uint64_t> zpos;
+    bool zposMutable = false;
+  };
+  std::optional<CursorPlaneCandidate> selected;
+  auto betterCursorPlane = [](CursorPlaneCandidate const& a, CursorPlaneCandidate const& b) {
+    if (a.zpos.has_value() != b.zpos.has_value()) return a.zpos.has_value();
+    if (a.zpos && b.zpos && *a.zpos != *b.zpos) return *a.zpos > *b.zpos;
+    return a.planeId > b.planeId;
+  };
+
+  for (std::uint32_t planeId : cursorPlanes) {
+    CursorPlaneProperties const props{
+        .fbId = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "FB_ID"),
+        .crtcId = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_ID"),
+        .srcX = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "SRC_X"),
+        .srcY = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "SRC_Y"),
+        .srcW = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "SRC_W"),
+        .srcH = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "SRC_H"),
+        .crtcX = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_X"),
+        .crtcY = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_Y"),
+        .crtcW = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_W"),
+        .crtcH = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_H"),
+        .zpos = propertyId(fd, planeId, DRM_MODE_OBJECT_PLANE, "zpos"),
+    };
+    if (props.fbId == 0 || props.crtcId == 0 || props.srcX == 0 || props.srcY == 0 ||
+        props.srcW == 0 || props.srcH == 0 || props.crtcX == 0 || props.crtcY == 0 ||
+        props.crtcW == 0 || props.crtcH == 0) {
+      continue;
+    }
+    CursorPlaneCandidate candidate{
+        .planeId = planeId,
+        .props = props,
+        .zpos = std::nullopt,
+        .zposMutable = false,
+    };
+    if (props.zpos != 0) {
+      std::uint32_t const zposFlags = propertyFlags(fd, planeId, DRM_MODE_OBJECT_PLANE, "zpos");
+      candidate.zposMutable = (zposFlags & DRM_MODE_PROP_IMMUTABLE) == 0;
+      std::uint64_t const currentZpos = propertyValue(fd, planeId, DRM_MODE_OBJECT_PLANE, "zpos");
+      std::uint64_t targetZpos = highestContentZpos ? std::max(currentZpos, *highestContentZpos + 1u) : currentZpos;
+      if (auto range = propertyRange(fd, planeId, DRM_MODE_OBJECT_PLANE, "zpos")) {
+        targetZpos = std::clamp(targetZpos, range->first, range->second);
+      }
+      candidate.zpos = targetZpos;
+    }
+    if (!selected || betterCursorPlane(candidate, *selected)) {
+      selected = candidate;
+    }
+  }
+
+  if (!selected) return false;
+
+  atomicCursorPlaneId_ = selected->planeId;
+  atomicCursorPlaneProps_ = selected->props;
+  atomicCursorZpos_ = selected->zpos;
+  atomicCursorZposMutable_ = selected->zposMutable;
+  atomicCursorAvailable_ = true;
+  if (!atomicCursorLogged_) {
+    std::fprintf(stderr,
+                 "lambda-window-manager: KMS atomic cursor plane=%u candidates=%zu zpos=%s%llu mutable=%d highestContentZpos=%s%llu\n",
+                 atomicCursorPlaneId_,
+                 cursorPlanes.size(),
+                 atomicCursorZpos_ ? "" : "unknown:",
+                 static_cast<unsigned long long>(atomicCursorZpos_.value_or(0)),
+                 atomicCursorZposMutable_ ? 1 : 0,
+                 highestContentZpos ? "" : "unknown:",
+                 static_cast<unsigned long long>(highestContentZpos.value_or(0)));
+    atomicCursorLogged_ = true;
+  }
+  return true;
+}
+
+bool KmsOutput::Impl::addAtomicCursorProperties(drmModeAtomicReq* request) const {
+  if (!cursorVisible_) return false;
+  if (!ensureAtomicCursorPlane()) return false;
+  if (cursorBuffer_.fbId == 0 || cursorBuffer_.width == 0 || cursorBuffer_.height == 0) return false;
+
+  CursorPlaneProperties const& props = atomicCursorPlaneProps_;
+  std::int32_t const crtcX = cursorX_ - cursorHotspotX_;
+  std::int32_t const crtcY = cursorY_ - cursorHotspotY_;
+  addAtomicProperty(request, atomicCursorPlaneId_, props.fbId, cursorBuffer_.fbId, "cursor.FB_ID");
+  addAtomicProperty(request, atomicCursorPlaneId_, props.crtcId, connector_.crtcId, "cursor.CRTC_ID");
+  addAtomicProperty(request, atomicCursorPlaneId_, props.srcX, 0, "cursor.SRC_X");
+  addAtomicProperty(request, atomicCursorPlaneId_, props.srcY, 0, "cursor.SRC_Y");
+  addAtomicProperty(request, atomicCursorPlaneId_, props.srcW, static_cast<std::uint64_t>(cursorBuffer_.width) << 16u, "cursor.SRC_W");
+  addAtomicProperty(request, atomicCursorPlaneId_, props.srcH, static_cast<std::uint64_t>(cursorBuffer_.height) << 16u, "cursor.SRC_H");
+  addAtomicProperty(request,
+                    atomicCursorPlaneId_,
+                    props.crtcX,
+                    static_cast<std::uint64_t>(static_cast<std::int64_t>(crtcX)),
+                    "cursor.CRTC_X");
+  addAtomicProperty(request,
+                    atomicCursorPlaneId_,
+                    props.crtcY,
+                    static_cast<std::uint64_t>(static_cast<std::int64_t>(crtcY)),
+                    "cursor.CRTC_Y");
+  addAtomicProperty(request, atomicCursorPlaneId_, props.crtcW, cursorBuffer_.width, "cursor.CRTC_W");
+  addAtomicProperty(request, atomicCursorPlaneId_, props.crtcH, cursorBuffer_.height, "cursor.CRTC_H");
+  if (atomicCursorZpos_ && atomicCursorZposMutable_) {
+    addOptionalAtomicProperty(request, atomicCursorPlaneId_, props.zpos, *atomicCursorZpos_);
+  }
+  return true;
+}
+
+void KmsOutput::Impl::markAtomicCursorScheduled() const noexcept {
+  atomicCursorActive_ = cursorVisible_ && atomicCursorPlaneId_ != 0 && cursorBuffer_.fbId != 0;
+}
+
+bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool visible) const noexcept {
+  if (!ensureAtomicCursorPlane()) return false;
+  if (visible && (cursorBuffer_.fbId == 0 || cursorBuffer_.width == 0 || cursorBuffer_.height == 0)) return false;
+
+  int const fd = drmFd();
+  if (fd < 0) return false;
+  drmModeAtomicReq* request = drmModeAtomicAlloc();
+  if (!request) return false;
+  bool committed = false;
+  int commitErrno = 0;
+  try {
+    cursorX_ = x;
+    cursorY_ = y;
+    if (visible) {
+      committed = addAtomicCursorProperties(request) &&
+                  drmModeAtomicCommit(fd, request, DRM_MODE_ATOMIC_NONBLOCK, nullptr) == 0;
+      if (!committed) commitErrno = errno;
+    } else {
+      CursorPlaneProperties const& props = atomicCursorPlaneProps_;
+      addAtomicProperty(request, atomicCursorPlaneId_, props.fbId, 0, "cursor.FB_ID");
+      addAtomicProperty(request, atomicCursorPlaneId_, props.crtcId, 0, "cursor.CRTC_ID");
+      addAtomicProperty(request, atomicCursorPlaneId_, props.srcX, 0, "cursor.SRC_X");
+      addAtomicProperty(request, atomicCursorPlaneId_, props.srcY, 0, "cursor.SRC_Y");
+      addAtomicProperty(request, atomicCursorPlaneId_, props.srcW, 0, "cursor.SRC_W");
+      addAtomicProperty(request, atomicCursorPlaneId_, props.srcH, 0, "cursor.SRC_H");
+      addAtomicProperty(request, atomicCursorPlaneId_, props.crtcX, 0, "cursor.CRTC_X");
+      addAtomicProperty(request, atomicCursorPlaneId_, props.crtcY, 0, "cursor.CRTC_Y");
+      addAtomicProperty(request, atomicCursorPlaneId_, props.crtcW, 0, "cursor.CRTC_W");
+      addAtomicProperty(request, atomicCursorPlaneId_, props.crtcH, 0, "cursor.CRTC_H");
+      committed = drmModeAtomicCommit(fd, request, DRM_MODE_ATOMIC_NONBLOCK, nullptr) == 0;
+      if (!committed) commitErrno = errno;
+    }
+  } catch (...) {
+    committed = false;
+  }
+  drmModeAtomicFree(request);
+
+  bool const retryOnFrameCommit = commitErrno == EBUSY || commitErrno == EAGAIN;
+  if (!committed && !retryOnFrameCommit && !atomicCursorFailureLogged_) {
+    std::fprintf(stderr,
+                 "lambda-window-manager: KMS atomic cursor commit failed plane=%u: %s\n",
+                 atomicCursorPlaneId_,
+                 std::strerror(commitErrno));
+    atomicCursorFailureLogged_ = true;
+  }
+  atomicCursorActive_ = committed && visible;
+  return committed;
 }
 
 KmsOutput::KmsOutput() = default;
@@ -2852,24 +3167,37 @@ bool KmsOutput::setCursorImage(std::span<std::uint32_t const> premultipliedArgbP
 
   int const fd = impl_->drmFd();
   if (fd < 0) return false;
+  std::uint32_t const bufferWidth = std::max(width, cursorDimension(fd, DRM_CAP_CURSOR_WIDTH));
+  std::uint32_t const bufferHeight = std::max(height, cursorDimension(fd, DRM_CAP_CURSOR_HEIGHT));
   if (impl_->cursorBuffer_.handle &&
-      (impl_->cursorBuffer_.width != width || impl_->cursorBuffer_.height != height)) {
+      (impl_->cursorBuffer_.width != bufferWidth || impl_->cursorBuffer_.height != bufferHeight)) {
     hideCursor();
     impl_->destroyCursorBuffer();
   }
 
   if (!impl_->cursorBuffer_.handle) {
     drm_mode_create_dumb create{};
-    create.width = width;
-    create.height = height;
+    create.width = bufferWidth;
+    create.height = bufferHeight;
     create.bpp = 32;
     if (drmIoctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &create) != 0) return false;
+    std::uint32_t fbId = 0;
+    std::uint32_t handles[4] = {create.handle, 0, 0, 0};
+    std::uint32_t pitches[4] = {create.pitch, 0, 0, 0};
+    std::uint32_t offsets[4] = {0, 0, 0, 0};
+    if (drmModeAddFB2(fd, bufferWidth, bufferHeight, DRM_FORMAT_ARGB8888, handles, pitches, offsets, &fbId, 0) != 0) {
+      drm_mode_destroy_dumb destroy{};
+      destroy.handle = create.handle;
+      drmIoctl(fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy);
+      return false;
+    }
     impl_->cursorBuffer_ = KmsOutput::Impl::CursorBuffer{
         .handle = create.handle,
         .size = create.size,
-        .width = width,
-        .height = height,
+        .width = bufferWidth,
+        .height = bufferHeight,
         .pitch = create.pitch,
+        .fbId = fbId,
     };
   }
 
@@ -2881,6 +3209,7 @@ bool KmsOutput::setCursorImage(std::span<std::uint32_t const> premultipliedArgbP
   auto* dst = static_cast<std::uint8_t*>(mapped);
   std::size_t const srcRowBytes = static_cast<std::size_t>(width) * sizeof(std::uint32_t);
   std::size_t const dstRowBytes = impl_->cursorBuffer_.pitch;
+  std::memset(mapped, 0, impl_->cursorBuffer_.size);
   for (std::uint32_t y = 0; y < height; ++y) {
     std::memcpy(dst + static_cast<std::size_t>(y) * dstRowBytes,
                 premultipliedArgbPixels.data() + static_cast<std::size_t>(y) * width,
@@ -2888,11 +3217,41 @@ bool KmsOutput::setCursorImage(std::span<std::uint32_t const> premultipliedArgbP
   }
   munmap(mapped, impl_->cursorBuffer_.size);
 
-  int rc = drmModeSetCursor2(fd, impl_->connector_.crtcId, impl_->cursorBuffer_.handle, width, height, hotspotX, hotspotY);
+  impl_->cursorHotspotX_ = hotspotX;
+  impl_->cursorHotspotY_ = hotspotY;
+  if (!impl_->cursorUploadLogged_) {
+    std::fprintf(stderr,
+                 "lambda-window-manager: KMS cursor image uploaded size=%ux%u buffer=%ux%u hotspot=%d,%d fb=%u\n",
+                 width,
+                 height,
+                 impl_->cursorBuffer_.width,
+                 impl_->cursorBuffer_.height,
+                 hotspotX,
+                 hotspotY,
+                 impl_->cursorBuffer_.fbId);
+    impl_->cursorUploadLogged_ = true;
+  }
+  impl_->cursorVisible_ = true;
+  if (impl_->ensureAtomicCursorPlane()) {
+    return true;
+  }
+
+  int rc = drmModeSetCursor2(fd,
+                             impl_->connector_.crtcId,
+                             impl_->cursorBuffer_.handle,
+                             impl_->cursorBuffer_.width,
+                             impl_->cursorBuffer_.height,
+                             hotspotX,
+                             hotspotY);
   if (rc != 0) {
-    rc = drmModeSetCursor(fd, impl_->connector_.crtcId, impl_->cursorBuffer_.handle, width, height);
+    rc = drmModeSetCursor(fd,
+                          impl_->connector_.crtcId,
+                          impl_->cursorBuffer_.handle,
+                          impl_->cursorBuffer_.width,
+                          impl_->cursorBuffer_.height);
   }
   impl_->cursorVisible_ = rc == 0;
+  impl_->atomicCursorActive_ = false;
   if (!impl_->cursorVisible_) {
     drmModeSetCursor(fd, impl_->connector_.crtcId, 0, 0, 0);
   }
@@ -2901,19 +3260,28 @@ bool KmsOutput::setCursorImage(std::span<std::uint32_t const> premultipliedArgbP
 
 bool KmsOutput::moveCursor(std::int32_t x, std::int32_t y) const {
   if (!impl_ || !impl_->cursorVisible_) return false;
+  if (impl_->atomicCursorAvailable_ || !impl_->atomicCursorInitialized_) {
+    impl_->cursorX_ = x;
+    impl_->cursorY_ = y;
+    if (impl_->ensureAtomicCursorPlane()) return true;
+  }
   return drmModeMoveCursor(impl_->drmFd(), impl_->connector_.crtcId, x, y) == 0;
 }
 
 void KmsOutput::hideCursor() const {
   if (!impl_ || !impl_->cursorVisible_) return;
+  if (impl_->atomicCursorActive_) {
+    (void)impl_->commitAtomicCursor(0, 0, false);
+  }
   drmModeSetCursor(impl_->drmFd(), impl_->connector_.crtcId, 0, 0, 0);
   impl_->cursorVisible_ = false;
+  impl_->atomicCursorActive_ = false;
 }
 
 std::unique_ptr<KmsAtomicPresenter> KmsOutput::createAtomicPresenter(TextSystem& textSystem) const {
   if (!impl_) return nullptr;
   return std::unique_ptr<KmsAtomicPresenter>(
-      new KmsAtomicPresenter(std::make_unique<KmsAtomicPresenter::Impl>(impl_->drmFd(), impl_->connector_, textSystem)));
+      new KmsAtomicPresenter(std::make_unique<KmsAtomicPresenter::Impl>(impl_, textSystem)));
 }
 
 KmsDevice::Impl::Impl(char const* devicePath) {

@@ -630,6 +630,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     auto lastInputActivity = SteadyClock::now();
     bool inputActivityThisLoop = false;
     bool inputRenderRequiredThisLoop = false;
+    bool inputHardwareCursorFrameRequiredThisLoop = false;
     bool idleBlanked = false;
     bool displayTimingSupportLogged = false;
     bool useVulkanPresentationCompletion = false;
@@ -760,7 +761,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                     output,
                                     cursorState,
                                     appliedConfig.config.hardwareCursorEnabled && hardwareCursorAvailable);
-      if (!hardwareCursorMoved) inputRenderRequiredThisLoop = true;
+      if (hardwareCursorMoved) {
+        inputHardwareCursorFrameRequiredThisLoop = true;
+      } else {
+        inputRenderRequiredThisLoop = true;
+      }
     });
 
     bool forceRender = true;
@@ -1761,10 +1766,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       maybeCrashHeartbeat("main-loop");
       bool const hadInputActivity = inputActivityThisLoop;
       bool const inputRenderRequired = inputRenderRequiredThisLoop;
+      bool const inputHardwareCursorFrameRequired = inputHardwareCursorFrameRequiredThisLoop;
       if (hadInputActivity) {
         lastInputActivity = SteadyClock::now();
         inputActivityThisLoop = false;
         inputRenderRequiredThisLoop = false;
+        inputHardwareCursorFrameRequiredThisLoop = false;
       }
       ++loopStats.configChecks;
       bool configReloaded = false;
@@ -1814,6 +1821,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           lastInputActivity = SteadyClock::now();
           inputActivityThisLoop = false;
           inputRenderRequiredThisLoop = false;
+          inputHardwareCursorFrameRequiredThisLoop = false;
         }
         if (!device->isVtForeground()) {
           loopStats.maybeLog();
@@ -1843,10 +1851,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       std::optional<int> const snapPreviewDelay = wayland.snapPreviewWakeDelayMs();
       bool const snapPreviewFrameNeeded = snapPreviewDelay && *snapPreviewDelay <= 0;
       bool const screenshotFlashFrameNeeded = screenshotFlashStartedAt.has_value();
-      if (forceRender || pollResult.inputOrSystem || waylandWoke || inputRenderRequired || configReloaded ||
+      if (forceRender || pollResult.inputOrSystem || waylandWoke || inputRenderRequired ||
+          inputHardwareCursorFrameRequired || configReloaded ||
           animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded ||
           acquireWaitFrameCallbackSent) {
-        if (!presenter->atomicPresenter() || forceRender || waylandWoke || inputRenderRequired || configReloaded ||
+        if (!presenter->atomicPresenter() || forceRender || waylandWoke || inputRenderRequired ||
+            inputHardwareCursorFrameRequired || configReloaded ||
             animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded) {
           atomicFrameDirty = true;
         }

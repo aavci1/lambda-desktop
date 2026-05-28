@@ -223,7 +223,7 @@ public:
 
   [[nodiscard]] std::unique_ptr<KmsAtomicPresenter> createAtomicPresenter(TextSystem& textSystem) const;
 
-private:
+ private:
   class Impl;
 
   explicit KmsOutput(std::shared_ptr<Impl> impl);
@@ -231,6 +231,7 @@ private:
   std::shared_ptr<Impl> impl_;
 
   friend class KmsDevice::Impl;
+  friend class KmsAtomicPresenter::Impl;
 };
 
 } // namespace platform

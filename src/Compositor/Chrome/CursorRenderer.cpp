@@ -28,6 +28,12 @@ struct ThemeCursor {
   std::int32_t hotspotY = 0;
 };
 
+struct HardwareCursorPixels {
+  std::vector<std::uint32_t> pixels;
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+};
+
 constexpr std::uint32_t kXcursorMagic = 0x72756358u;
 constexpr std::uint32_t kXcursorImageType = 0xfffd0002u;
 constexpr std::uint32_t kXcursorImageVersion = 1u;
@@ -290,42 +296,64 @@ void hideHardwareCursor(platform::KmsOutput const& output, CursorRenderState& st
   state.hardwareClientId = 0;
 }
 
-std::vector<std::uint32_t> clientCursorPixelsForHardware(CommittedSurfaceSnapshot const& cursorSurface,
-                                                         float outputScale) {
+std::optional<HardwareCursorPixels> clientCursorPixelsForHardware(CommittedSurfaceSnapshot const& cursorSurface,
+                                                                  float outputScale) {
   if (!cursorSurface.rgbaPixels || cursorSurface.rgbaPixels->empty() ||
       cursorSurface.bufferWidth <= 0 || cursorSurface.bufferHeight <= 0) {
-    return {};
+    return std::nullopt;
   }
   auto const& rgbaPixels = *cursorSurface.rgbaPixels;
   std::size_t const count = static_cast<std::size_t>(cursorSurface.bufferWidth) *
                             static_cast<std::size_t>(cursorSurface.bufferHeight);
-  if (rgbaPixels.size() != count * 4u) return {};
+  if (rgbaPixels.size() != count * 4u) return std::nullopt;
 
-  float const cursorScaleX = cursorSurface.width > 0
-                                 ? static_cast<float>(cursorSurface.bufferWidth) /
-                                       static_cast<float>(cursorSurface.width)
-                                 : 0.f;
-  float const cursorScaleY = cursorSurface.height > 0
-                                 ? static_cast<float>(cursorSurface.bufferHeight) /
-                                       static_cast<float>(cursorSurface.height)
-                                 : 0.f;
-  if (std::abs(cursorScaleX - outputScale) > 0.01f || std::abs(cursorScaleY - outputScale) > 0.01f) {
-    return {};
+  float const logicalWidth =
+      cursorSurface.width > 0 ? static_cast<float>(cursorSurface.width) : static_cast<float>(cursorSurface.bufferWidth);
+  float const logicalHeight =
+      cursorSurface.height > 0 ? static_cast<float>(cursorSurface.height) : static_cast<float>(cursorSurface.bufferHeight);
+  auto const targetWidth =
+      static_cast<std::uint32_t>(std::max(1, static_cast<int>(std::lround(logicalWidth * outputScale))));
+  auto const targetHeight =
+      static_cast<std::uint32_t>(std::max(1, static_cast<int>(std::lround(logicalHeight * outputScale))));
+
+  float const sourceX = cursorSurface.sourceX;
+  float const sourceY = cursorSurface.sourceY;
+  float const sourceWidth =
+      cursorSurface.sourceWidth > 0.f ? cursorSurface.sourceWidth : static_cast<float>(cursorSurface.bufferWidth);
+  float const sourceHeight =
+      cursorSurface.sourceHeight > 0.f ? cursorSurface.sourceHeight : static_cast<float>(cursorSurface.bufferHeight);
+  if (!std::isfinite(sourceX) || !std::isfinite(sourceY) ||
+      !std::isfinite(sourceWidth) || !std::isfinite(sourceHeight) ||
+      sourceWidth <= 0.f || sourceHeight <= 0.f ||
+      sourceX < 0.f || sourceY < 0.f ||
+      sourceX + sourceWidth > static_cast<float>(cursorSurface.bufferWidth) + 0.5f ||
+      sourceY + sourceHeight > static_cast<float>(cursorSurface.bufferHeight) + 0.5f) {
+    return std::nullopt;
   }
 
-  std::vector<std::uint32_t> pixels(count);
-  for (std::size_t i = 0; i < count; ++i) {
-    auto const r = cursorSurface.pixelFormat == Image::PixelFormat::Bgra8888
-                       ? rgbaPixels[i * 4u + 2u]
-                       : rgbaPixels[i * 4u + 0u];
-    auto const g = rgbaPixels[i * 4u + 1u];
-    auto const b = cursorSurface.pixelFormat == Image::PixelFormat::Bgra8888
-                       ? rgbaPixels[i * 4u + 0u]
-                       : rgbaPixels[i * 4u + 2u];
-    auto const a = rgbaPixels[i * 4u + 3u];
-    pixels[i] = premulArgb(a, r, g, b);
+  std::vector<std::uint32_t> pixels(static_cast<std::size_t>(targetWidth) * targetHeight);
+  for (std::uint32_t y = 0; y < targetHeight; ++y) {
+    float const srcY = sourceY + (static_cast<float>(y) + 0.5f) * sourceHeight / static_cast<float>(targetHeight);
+    auto const sampleY = static_cast<std::uint32_t>(
+        std::clamp(static_cast<int>(std::floor(srcY)), 0, cursorSurface.bufferHeight - 1));
+    for (std::uint32_t x = 0; x < targetWidth; ++x) {
+      float const srcX = sourceX + (static_cast<float>(x) + 0.5f) * sourceWidth / static_cast<float>(targetWidth);
+      auto const sampleX = static_cast<std::uint32_t>(
+          std::clamp(static_cast<int>(std::floor(srcX)), 0, cursorSurface.bufferWidth - 1));
+      std::size_t const srcIndex = static_cast<std::size_t>(sampleY) * cursorSurface.bufferWidth + sampleX;
+      std::size_t const dstIndex = static_cast<std::size_t>(y) * targetWidth + x;
+      auto const r = cursorSurface.pixelFormat == Image::PixelFormat::Bgra8888
+                         ? rgbaPixels[srcIndex * 4u + 2u]
+                         : rgbaPixels[srcIndex * 4u + 0u];
+      auto const g = rgbaPixels[srcIndex * 4u + 1u];
+      auto const b = cursorSurface.pixelFormat == Image::PixelFormat::Bgra8888
+                         ? rgbaPixels[srcIndex * 4u + 0u]
+                         : rgbaPixels[srcIndex * 4u + 2u];
+      auto const a = rgbaPixels[srcIndex * 4u + 3u];
+      pixels[dstIndex] = premulArgb(a, r, g, b);
+    }
   }
-  return pixels;
+  return HardwareCursorPixels{.pixels = std::move(pixels), .width = targetWidth, .height = targetHeight};
 }
 
 std::uint64_t themeSerial(CursorShape shape, float scale) {
@@ -344,26 +372,18 @@ void drawCompositorCursor(WaylandServer& wayland,
                           bool hardwareCursorEnabled) {
   if (auto cursorSurface = wayland.cursorSurface()) {
     float const outputScale = wayland.preferredScale();
-    bool const wholeBuffer = cursorSurface->sourceX == 0.f &&
-                             cursorSurface->sourceY == 0.f &&
-                             cursorSurface->sourceWidth == static_cast<float>(cursorSurface->bufferWidth) &&
-                             cursorSurface->sourceHeight == static_cast<float>(cursorSurface->bufferHeight);
-    if (hardwareCursorEnabled &&
-        wholeBuffer &&
-        hardwareCursorFits(output,
-                           static_cast<std::uint32_t>(cursorSurface->bufferWidth),
-                           static_cast<std::uint32_t>(cursorSurface->bufferHeight))) {
-      std::vector<std::uint32_t> pixels = clientCursorPixelsForHardware(*cursorSurface, outputScale);
-      if (!pixels.empty()) {
+    if (hardwareCursorEnabled) {
+      std::optional<HardwareCursorPixels> hardwarePixels = clientCursorPixelsForHardware(*cursorSurface, outputScale);
+      if (hardwarePixels && hardwareCursorFits(output, hardwarePixels->width, hardwarePixels->height)) {
         bool const imageChanged = !cursorState.hardwareVisible ||
                                   !cursorState.hardwareClient ||
                                   cursorState.hardwareClientId != cursorSurface->id ||
                                   cursorState.hardwareSerial != cursorSurface->serial;
         if (imageChanged) {
           cursorState.hardwareVisible =
-              output.setCursorImage(pixels,
-                                    static_cast<std::uint32_t>(cursorSurface->bufferWidth),
-                                    static_cast<std::uint32_t>(cursorSurface->bufferHeight));
+              output.setCursorImage(hardwarePixels->pixels,
+                                    hardwarePixels->width,
+                                    hardwarePixels->height);
           cursorState.hardwareClient = cursorState.hardwareVisible;
           cursorState.hardwareClientId = cursorSurface->id;
           cursorState.hardwareSerial = cursorSurface->serial;
@@ -374,6 +394,39 @@ void drawCompositorCursor(WaylandServer& wayland,
           cursorState.clientImage = {};
           return;
         }
+      }
+      CursorShape const fallbackShape = wayland.cursorShape();
+      std::string const themeName = resolvedCursorTheme(cursorTheme);
+      int const themeBaseSize = resolvedCursorBaseSize(cursorSize);
+      std::uint64_t const serial = themeSerial(fallbackShape, outputScale);
+      if (!cursorState.hardwareVisible ||
+          cursorState.hardwareClient ||
+          cursorState.hardwareShape != fallbackShape ||
+          cursorState.hardwareSerial != serial ||
+          cursorState.themeName != themeName ||
+          cursorState.themeBaseSize != themeBaseSize ||
+          std::abs(cursorState.themeScale - outputScale) > 0.01f) {
+        if (auto themeCursor = loadThemeCursor(fallbackShape, outputScale, themeName, themeBaseSize);
+            themeCursor && hardwareCursorFits(output, themeCursor->width, themeCursor->height)) {
+          cursorState.hardwareVisible = output.setCursorImage(themeCursor->premultipliedArgbPixels,
+                                                              themeCursor->width,
+                                                              themeCursor->height,
+                                                              themeCursor->hotspotX,
+                                                              themeCursor->hotspotY);
+          cursorState.hardwareClient = false;
+          cursorState.hardwareClientId = 0;
+          cursorState.hardwareSerial = serial;
+          cursorState.hardwareShape = fallbackShape;
+          cursorState.themeName = themeName;
+          cursorState.themeScale = outputScale;
+          cursorState.themeBaseSize = themeBaseSize;
+        }
+      }
+      if (cursorState.hardwareVisible && !cursorState.hardwareClient) {
+        (void)output.moveCursor(static_cast<std::int32_t>(std::lround(wayland.pointerX() * outputScale)),
+                                static_cast<std::int32_t>(std::lround(wayland.pointerY() * outputScale)));
+        cursorState.clientImage = {};
+        return;
       }
     }
 

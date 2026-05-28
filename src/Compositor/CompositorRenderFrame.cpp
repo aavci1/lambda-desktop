@@ -649,30 +649,28 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                                                 ctx.screenshotFlashOpacity)) {
     std::uint64_t const candidateSurfaceId = pendingOverlay->candidate.surfaceId;
     std::uint64_t const candidateBufferId = pendingOverlay->candidate.bufferId;
-    bool const cursorRequiresMove = ctx.wayland.cursorSurface().has_value() && ctx.cursorState.hardwareVisible;
     bool const cursorMoved =
-        !cursorRequiresMove ||
         moveCurrentHardwareCursor(ctx.wayland,
                                   ctx.output,
                                   ctx.cursorState,
                                   ctx.appliedConfig.config.hardwareCursorEnabled && ctx.hardwareCursorAvailable);
-	    platform::KmsAtomicPresenter::OverlayCandidate directCandidate =
-	        cursorMoved ? duplicateOverlayCandidate(pendingOverlay->candidate)
-	                    : platform::KmsAtomicPresenter::OverlayCandidate{};
-	    auto const directPresentStart = profileNow();
-	    bool directPrepared = false;
-	    bool directDeferred = false;
-	    if (cursorMoved && !directCandidate.planes.empty()) {
-	      if (renderAheadFrame) {
-	        directDeferred = true;
-	        (void)atomicPresenter->primeDirectScanoutCandidate(directCandidate);
-	      } else {
-	        directPrepared = atomicPresenter->prepareDirectScanoutCandidate(std::move(directCandidate));
-	      }
-	    }
-	    if (directPrepared || directDeferred) {
-	      ctx.surfaceRenderState.clientImages.erase(candidateSurfaceId);
-	      atomicFrameProfile.presentMs = profileMs(directPresentStart);
+    platform::KmsAtomicPresenter::OverlayCandidate directCandidate =
+        cursorMoved ? duplicateOverlayCandidate(pendingOverlay->candidate)
+                    : platform::KmsAtomicPresenter::OverlayCandidate{};
+    auto const directPresentStart = profileNow();
+    bool directPrepared = false;
+    bool directDeferred = false;
+    if (cursorMoved && !directCandidate.planes.empty()) {
+      if (renderAheadFrame) {
+        directDeferred = true;
+        (void)atomicPresenter->primeDirectScanoutCandidate(directCandidate);
+      } else {
+        directPrepared = atomicPresenter->prepareDirectScanoutCandidate(std::move(directCandidate));
+      }
+    }
+    if (directPrepared || directDeferred) {
+      ctx.surfaceRenderState.clientImages.erase(candidateSurfaceId);
+      atomicFrameProfile.presentMs = profileMs(directPresentStart);
       atomicFrameProfile.totalMs = profileMs(frameProfileStart);
       diagnostics::recordCpuFrame({
           .surfaces = committedSurfaceCount,
@@ -694,12 +692,12 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
             .surfaceCount = committedSurfaceCount,
             .frameTime = frameTime,
             .renderMs = renderMs,
-	            .renderedAhead = renderAheadFrame,
-	            .directScanout = true,
-	            .contentSerial = ctx.wayland.contentSerial(),
-	            .profile = atomicFrameProfile,
-	            .scanoutCandidate = directDeferred ? ownOverlayCandidate(std::move(directCandidate)) : nullptr,
-	        };
+            .renderedAhead = renderAheadFrame,
+            .directScanout = true,
+            .contentSerial = ctx.wayland.contentSerial(),
+            .profile = atomicFrameProfile,
+            .scanoutCandidate = directDeferred ? ownOverlayCandidate(std::move(directCandidate)) : nullptr,
+        };
         *ctx.atomicFrameDirty = false;
         *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
       }
@@ -717,6 +715,11 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
       ctx.screenshotFlashOpacity <= 0.001f &&
       ctx.surfaceRenderState.primaryReuseSignatureValid &&
       ctx.surfaceRenderState.primaryReuseOverlaySurfaceId == pendingOverlay->candidate.surfaceId) {
+    bool const cursorMoved =
+        moveCurrentHardwareCursor(ctx.wayland,
+                                  ctx.output,
+                                  ctx.cursorState,
+                                  ctx.appliedConfig.config.hardwareCursorEnabled && ctx.hardwareCursorAvailable);
     std::uint64_t const signature = primaryReuseSignature(committedSurfaces,
                                                           pendingOverlay->candidate.surfaceId,
                                                           ctx.wayland.logicalOutputWidth(),
@@ -724,20 +727,20 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                                                           ctx.wayland.pointerX(),
                                                           ctx.wayland.pointerY(),
                                                           ctx.wayland.cursorShape());
-	    if (signature == ctx.surfaceRenderState.primaryReuseSignature) {
-	      std::uint64_t const candidateSurfaceId = pendingOverlay->candidate.surfaceId;
-	      std::uint64_t const candidateBufferId = pendingOverlay->candidate.bufferId;
-	      auto const overlayPresentStart = profileNow();
-	      bool overlayPrepared = false;
-	      bool overlayDeferred = false;
-	      if (renderAheadFrame) {
-	        overlayDeferred = true;
-	      } else {
-	        overlayPrepared =
-	            atomicPresenter->prepareOverlayCandidateForDisplayedFrame(std::move(pendingOverlay->candidate));
-	      }
-	      if (overlayPrepared || overlayDeferred) {
-	        atomicFrameProfile.presentMs = profileMs(overlayPresentStart);
+    if (cursorMoved && signature == ctx.surfaceRenderState.primaryReuseSignature) {
+      std::uint64_t const candidateSurfaceId = pendingOverlay->candidate.surfaceId;
+      std::uint64_t const candidateBufferId = pendingOverlay->candidate.bufferId;
+      auto const overlayPresentStart = profileNow();
+      bool overlayPrepared = false;
+      bool overlayDeferred = false;
+      if (renderAheadFrame) {
+        overlayDeferred = true;
+      } else {
+        overlayPrepared =
+            atomicPresenter->prepareOverlayCandidateForDisplayedFrame(std::move(pendingOverlay->candidate));
+      }
+      if (overlayPrepared || overlayDeferred) {
+        atomicFrameProfile.presentMs = profileMs(overlayPresentStart);
         atomicFrameProfile.totalMs = profileMs(frameProfileStart);
         diagnostics::recordCpuFrame({
             .surfaces = committedSurfaceCount,
@@ -760,11 +763,11 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
               .frameTime = frameTime,
               .renderMs = renderMs,
               .renderedAhead = renderAheadFrame,
-	              .overlayOnly = true,
-	              .contentSerial = ctx.wayland.contentSerial(),
-	              .profile = atomicFrameProfile,
-	              .scanoutCandidate = overlayDeferred ? ownOverlayCandidate(std::move(pendingOverlay->candidate)) : nullptr,
-	          };
+              .overlayOnly = true,
+              .contentSerial = ctx.wayland.contentSerial(),
+              .profile = atomicFrameProfile,
+              .scanoutCandidate = overlayDeferred ? ownOverlayCandidate(std::move(pendingOverlay->candidate)) : nullptr,
+          };
           *ctx.atomicFrameDirty = false;
           *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
         }

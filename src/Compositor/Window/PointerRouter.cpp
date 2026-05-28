@@ -284,8 +284,10 @@ void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   }
   server->pointerFocus_ = next;
   clearCompositorCursorOverride(server);
+  bool const cursorChanged = server->cursorSurface_ || server->cursorShape_ != CursorShape::Arrow;
   server->cursorSurface_ = nullptr;
   server->cursorShape_ = CursorShape::Arrow;
+  if (cursorChanged) ++server->contentSerial_;
   if (next) {
     wl_fixed_t const x = wl_fixed_from_double(surfaceLocalX(next, server->pointerX_));
     wl_fixed_t const y = wl_fixed_from_double(surfaceLocalY(next, server->pointerY_));

@@ -74,8 +74,11 @@ void cursorShapeDeviceSetShape(wl_client*, wl_resource* resource, std::uint32_t 
   if (!server->pointerFocus_ || !device->pointer) return;
   if (wl_resource_get_client(device->pointer) != wl_resource_get_client(server->pointerFocus_->resource)) return;
 
+  CursorShape const nextShape = compositorCursorShape(shape);
+  bool const changed = server->cursorSurface_ || server->cursorShape_ != nextShape;
   server->cursorSurface_ = nullptr;
-  server->cursorShape_ = compositorCursorShape(shape);
+  server->cursorShape_ = nextShape;
+  if (changed) ++server->contentSerial_;
 }
 
 struct wp_cursor_shape_device_v1_interface const cursorShapeDeviceImpl{
