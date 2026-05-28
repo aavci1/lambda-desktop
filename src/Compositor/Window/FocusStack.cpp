@@ -69,9 +69,12 @@ WaylandServer::Impl::Surface* mostRecentToplevel(WaylandServer::Impl* server) {
 void sendKeyboardModifiers(WaylandServer::Impl* server) {
   if (!server->keyboardFocus_) return;
   std::uint32_t const depressed = keyboardModifierMask(server);
+  std::uint32_t const latched = keyboardLatchedModifierMask(server);
+  std::uint32_t const locked = keyboardLockedModifierMask(server);
+  std::uint32_t const group = keyboardLayoutIndex(server);
   for (wl_resource* keyboard : server->keyboardResources_) {
     if (!resourceBelongsToSurfaceClient(keyboard, server->keyboardFocus_)) continue;
-    wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, depressed, 0, 0, 0);
+    wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, depressed, latched, locked, group);
   }
 }
 

@@ -118,9 +118,9 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
   KmsWindow* window = focusedWindow();
   if (!window) return;
   auto& xkb = xkbState();
+  xkb.updateKey(evdevKey, pressed);
   KeyCode const key = xkb.keyCodeForEvdevKey(evdevKey);
   Modifiers const modifiers = xkb.modifiers();
-  xkb.updateKey(evdevKey, pressed);
   ::flux::Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
                                                                                 : InputEvent::Kind::KeyUp,
                                                                .handle = window->handle(),
@@ -166,6 +166,7 @@ void KmsApplication::releaseRawInputState(std::uint32_t timeMs) {
   rawPressedKeys_.clear();
   pressedButtons_ = 0;
   xkbState().resetState();
+  emitRawInput({.kind = platform::KmsInputEvent::Kind::KeyboardReset, .timeMs = timeMs});
 }
 
 void KmsApplication::discardPendingInputEvents(bool handleDeviceEvents) {

@@ -175,6 +175,10 @@ void WaylandServer::handleKeyboardKey(std::uint32_t key, bool pressed, std::uint
   impl_->handleKeyboardKey(key, pressed, timeMs);
 }
 
+void WaylandServer::resetKeyboardState(std::uint32_t timeMs) {
+  impl_->resetKeyboardState(timeMs);
+}
+
 float WaylandServer::pointerX() const noexcept {
   return impl_->pointerX_;
 }

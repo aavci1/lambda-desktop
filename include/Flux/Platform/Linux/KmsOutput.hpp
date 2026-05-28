@@ -139,6 +139,7 @@ struct KmsInputEvent {
     PointerButton,
     PointerAxis,
     Key,
+    KeyboardReset,
   };
 
   Kind kind = Kind::PointerMotion;

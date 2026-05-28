@@ -428,12 +428,17 @@ void WaylandServer::Impl::handlePointerAxis(double dx, double dy, std::uint32_t 
   }
 }
 void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs) {
+  xkb_state_component changed = static_cast<xkb_state_component>(0);
   if (xkbState_) {
-    xkb_state_update_key(xkbState_,
-                         key + 8u,
-                         pressed ? XKB_KEY_DOWN : XKB_KEY_UP);
+    changed = xkb_state_update_key(xkbState_,
+                                   key + 8u,
+                                   pressed ? XKB_KEY_DOWN : XKB_KEY_UP);
   }
   bool const consumeModifier = updateShortcutModifier(this, key, pressed);
+  bool const modifiersChanged =
+      (changed & (XKB_STATE_MODS_DEPRESSED | XKB_STATE_MODS_LATCHED | XKB_STATE_MODS_LOCKED |
+                  XKB_STATE_LAYOUT_EFFECTIVE)) != 0;
+  if (modifiersChanged) wm::sendKeyboardModifiers(this);
   if (consumeModifier) return;
   if (handleScreenshotSelectionKey(this, key, pressed, timeMs)) return;
   if (pressed && key == KEY_ESC && dismissTopPopup(this)) return;
@@ -449,6 +454,22 @@ void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std
                          pressed ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
   }
 }
+
+void WaylandServer::Impl::resetKeyboardState(std::uint32_t) {
+  if (xkbKeymap_) {
+    xkb_state* state = xkb_state_new(xkbKeymap_);
+    if (state) {
+      if (xkbState_) xkb_state_unref(xkbState_);
+      xkbState_ = state;
+    }
+  }
+  metaDown_ = false;
+  ctrlDown_ = false;
+  altDown_ = false;
+  shiftDown_ = false;
+  wm::sendKeyboardModifiers(this);
+}
+
 namespace {
 
 std::optional<std::string> commandForAppId(std::string const& appId) {

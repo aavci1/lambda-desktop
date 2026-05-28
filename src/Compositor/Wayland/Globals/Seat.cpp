@@ -143,11 +143,14 @@ void seatGetKeyboard(wl_client* client, wl_resource* resource, std::uint32_t id)
     wl_array keys;
     wl_array_init(&keys);
     std::uint32_t const modifiers = wm::keyboardModifierMask(server);
+    std::uint32_t const latched = wm::keyboardLatchedModifierMask(server);
+    std::uint32_t const locked = wm::keyboardLockedModifierMask(server);
+    std::uint32_t const group = wm::keyboardLayoutIndex(server);
     wl_keyboard_send_enter(keyboard,
                            server->nextInputSerial_++,
                            server->keyboardFocus_->resource,
                            &keys);
-    wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, modifiers, 0, 0, 0);
+    wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, modifiers, latched, locked, group);
     wl_array_release(&keys);
   }
 }

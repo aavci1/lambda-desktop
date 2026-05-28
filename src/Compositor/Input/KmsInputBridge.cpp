@@ -44,6 +44,9 @@ void dispatchKmsInputEvent(WaylandServer& wayland, platform::KmsInputEvent const
   case platform::KmsInputEvent::Kind::Key:
     wayland.handleKeyboardKey(event.key, event.pressed, event.timeMs);
     break;
+  case platform::KmsInputEvent::Kind::KeyboardReset:
+    wayland.resetKeyboardState(event.timeMs);
+    break;
   }
 }
 

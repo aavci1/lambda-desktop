@@ -246,6 +246,9 @@ WaylandServer::Impl::Surface* mostRecentToplevel(WaylandServer::Impl* server);
 void noteFocusedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface);
 void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next);
 std::uint32_t keyboardModifierMask(WaylandServer::Impl* server);
+std::uint32_t keyboardLatchedModifierMask(WaylandServer::Impl* server);
+std::uint32_t keyboardLockedModifierMask(WaylandServer::Impl* server);
+std::uint32_t keyboardLayoutIndex(WaylandServer::Impl* server);
 void sendKeyboardModifiers(WaylandServer::Impl* server);
 WaylandServer::Impl::Surface* previousFocusedToplevel(WaylandServer::Impl* server,
                                                       WaylandServer::Impl::Surface* current);

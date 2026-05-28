@@ -129,6 +129,7 @@ struct WaylandServer::Impl {
   void handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs);
   void handlePointerAxis(double dx, double dy, std::uint32_t timeMs);
   void handleKeyboardKey(std::uint32_t key, bool pressed, std::uint32_t timeMs);
+  void resetKeyboardState(std::uint32_t timeMs);
 
   wl_resource* createSurface(wl_client* client, std::uint32_t version, std::uint32_t id);
   void destroySurface(Surface* surface);

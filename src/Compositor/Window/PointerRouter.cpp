@@ -514,10 +514,13 @@ void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     wl_array keys;
     wl_array_init(&keys);
     std::uint32_t const modifiers = keyboardModifierMask(server);
+    std::uint32_t const latched = keyboardLatchedModifierMask(server);
+    std::uint32_t const locked = keyboardLockedModifierMask(server);
+    std::uint32_t const group = keyboardLayoutIndex(server);
     for (wl_resource* keyboard : server->keyboardResources_) {
       if (!resourceBelongsToSurfaceClient(keyboard, next)) continue;
       wl_keyboard_send_enter(keyboard, serial, next->resource, &keys);
-      wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, modifiers, 0, 0, 0);
+      wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, modifiers, latched, locked, group);
     }
     wl_array_release(&keys);
   }
@@ -545,10 +548,31 @@ std::uint32_t modifierBit(std::uint32_t index, bool active) {
 namespace flux::compositor::wm {
 
 std::uint32_t keyboardModifierMask(WaylandServer::Impl* server) {
+  if (server && server->xkbState_) {
+    return xkb_state_serialize_mods(server->xkbState_, XKB_STATE_MODS_DEPRESSED);
+  }
   return modifierBit(server->shiftModifierIndex_, server->shiftDown_) |
          modifierBit(server->ctrlModifierIndex_, server->ctrlDown_) |
          modifierBit(server->altModifierIndex_, server->altDown_) |
          modifierBit(server->logoModifierIndex_, server->metaDown_);
+}
+
+std::uint32_t keyboardLatchedModifierMask(WaylandServer::Impl* server) {
+  return server && server->xkbState_
+             ? xkb_state_serialize_mods(server->xkbState_, XKB_STATE_MODS_LATCHED)
+             : 0u;
+}
+
+std::uint32_t keyboardLockedModifierMask(WaylandServer::Impl* server) {
+  return server && server->xkbState_
+             ? xkb_state_serialize_mods(server->xkbState_, XKB_STATE_MODS_LOCKED)
+             : 0u;
+}
+
+std::uint32_t keyboardLayoutIndex(WaylandServer::Impl* server) {
+  return server && server->xkbState_
+             ? xkb_state_serialize_layout(server->xkbState_, XKB_STATE_LAYOUT_EFFECTIVE)
+             : 0u;
 }
 
 } // namespace flux::compositor::wm

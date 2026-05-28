@@ -34,25 +34,25 @@ bool updateShortcutModifier(WaylandServer::Impl* server, std::uint32_t key, bool
   if (key == KEY_LEFTMETA || key == KEY_RIGHTMETA) {
     changed = server->metaDown_ != pressed;
     server->metaDown_ = pressed;
-    if (changed) sendKeyboardModifiers(server);
+    if (changed && !server->xkbState_) sendKeyboardModifiers(server);
     return true;
   }
   if (key == KEY_LEFTCTRL || key == KEY_RIGHTCTRL) {
     changed = server->ctrlDown_ != pressed;
     server->ctrlDown_ = pressed;
-    if (changed) sendKeyboardModifiers(server);
+    if (changed && !server->xkbState_) sendKeyboardModifiers(server);
     return false;
   }
-  if (key == KEY_LEFTALT || key == KEY_RIGHTALT) {
+  if (key == KEY_LEFTALT) {
     changed = server->altDown_ != pressed;
     server->altDown_ = pressed;
-    if (changed) sendKeyboardModifiers(server);
+    if (changed && !server->xkbState_) sendKeyboardModifiers(server);
     return false;
   }
   if (key == KEY_LEFTSHIFT || key == KEY_RIGHTSHIFT) {
     changed = server->shiftDown_ != pressed;
     server->shiftDown_ = pressed;
-    if (changed) sendKeyboardModifiers(server);
+    if (changed && !server->xkbState_) sendKeyboardModifiers(server);
     return false;
   }
   return false;
