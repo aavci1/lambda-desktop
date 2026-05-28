@@ -36,6 +36,8 @@ flux_add_example(gradient-demo gradient-demo/main.cpp)
 flux_add_example(hello-world hello-world/main.cpp)
 flux_add_example(icon-demo icon-demo/main.cpp)
 flux_add_example(image-demo image-demo/main.cpp)
+flux_add_example(lambda-editor lambda-editor/main.cpp)
+flux_add_example(lambda-preview lambda-preview/main.cpp)
 
 option(FLUX_BUILD_LAMBDA_STUDIO "Build the lambda-studio example when vendor/llama.cpp is available." ON)
 if(FLUX_BUILD_LAMBDA_STUDIO AND EXISTS "${CMAKE_SOURCE_DIR}/vendor/llama.cpp/CMakeLists.txt")

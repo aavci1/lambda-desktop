@@ -20,7 +20,7 @@ By default only the static `flux` library is built. Pass `-DFLUX_BUILD_EXAMPLES=
 
 Current example targets:
 
-`alert-demo`, `animation-demo`, `blend-demo`, `button-demo`, `card-demo`, `checkbox-demo`, `cursor-demo`, `hello-world`, `icon-demo`, `image-demo`, `lambda-studio`, `layout-demo`, `markdown-formatter-demo`, `popover-demo`, `reactive-demo`, `scene-graph-demo`, `scroll-demo`, `segmented-demo`, `select-demo`, `slider-demo`, `table-demo`, `text-demo`, `textinput-demo`, `theme-demo`, `toast-demo`, `toggle-demo`, `tooltip-demo`, `typography-demo`.
+`alert-demo`, `animation-demo`, `blend-demo`, `button-demo`, `card-demo`, `checkbox-demo`, `cursor-demo`, `hello-world`, `icon-demo`, `image-demo`, `lambda-editor`, `lambda-preview`, `lambda-studio`, `layout-demo`, `markdown-formatter-demo`, `popover-demo`, `reactive-demo`, `scene-graph-demo`, `scroll-demo`, `segmented-demo`, `select-demo`, `slider-demo`, `table-demo`, `text-demo`, `textinput-demo`, `theme-demo`, `toast-demo`, `toggle-demo`, `tooltip-demo`, `typography-demo`.
 
 ## Options
 
