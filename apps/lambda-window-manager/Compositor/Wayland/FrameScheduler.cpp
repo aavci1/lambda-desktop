@@ -161,7 +161,7 @@ void WaylandServer::Impl::updateAnimations(std::uint32_t timeMs, bool animations
 
     bool const configureSent =
         requestToplevelResizeConfigure(this, surface.get(), nextX, nextY, nextWidth, nextHeight);
-    lambda::detail::resizeTrace("compositor",
+    LAMBDA_RESIZE_TRACE("compositor",
                                 "animation-frame surface=%llu linear=%.3f eased=%.3f desired=%d,%d %dx%d "
                                 "sent=%d inFlight=%d acked=%d pending=%d %d,%d %dx%d\n",
                                 static_cast<unsigned long long>(surface->id),
@@ -245,7 +245,7 @@ void WaylandServer::Impl::releasePendingBuffers() {
     }
   }
   if (releaseCount > 0) {
-    lambda::detail::resizeTrace("compositor",
+    LAMBDA_RESIZE_TRACE("compositor",
                               "buffer-releases count=%llu\n",
                               static_cast<unsigned long long>(releaseCount));
   }
@@ -269,7 +269,7 @@ void WaylandServer::Impl::sendFrameCallbacksOnly(std::uint32_t timeMs) {
       wl_resource_destroy(callback);
     }
   }
-  lambda::detail::resizeTrace("compositor",
+  LAMBDA_RESIZE_TRACE("compositor",
                             "frame-callbacks time=%u callbacks=%llu pendingPresentationBatches=%zu\n",
                             timeMs,
                             static_cast<unsigned long long>(callbackCount),

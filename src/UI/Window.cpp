@@ -587,7 +587,7 @@ void Window::render(Canvas& canvas) {
   if (traceResize) {
     auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - renderStart).count();
-    detail::resizeTrace("window-render",
+    LAMBDA_RESIZE_TRACE("window-render",
                         "window=%u size=%.0fx%.0f elapsed=%.3fms\n",
                         handle(),
                         windowSize.width,

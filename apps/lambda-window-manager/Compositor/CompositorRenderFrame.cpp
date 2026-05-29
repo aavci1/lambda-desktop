@@ -536,7 +536,8 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   auto committedSurfaces = ctx.wayland.committedSurfaces();
   committedSurfaceCount = committedSurfaces.size();
   auto screenshotOverlay = ctx.wayland.screenshotSelectionOverlay();
-  std::uint64_t const renderSnapshotNsec = presentation::monotonicNanoseconds();
+  bool const collectAgeProfile = ctx.detailedFrameProfile;
+  std::uint64_t const renderSnapshotNsec = collectAgeProfile ? presentation::monotonicNanoseconds() : 0;
   auto ageMs = [renderSnapshotNsec](std::uint64_t thenNsec) {
     return thenNsec > 0 && renderSnapshotNsec >= thenNsec
                ? static_cast<double>(renderSnapshotNsec - thenNsec) / 1'000'000.0
@@ -556,7 +557,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
       atomicFrameProfile.maxFrameWidth = surface.width;
       atomicFrameProfile.maxFrameHeight = surface.height;
     }
-    if (surface.pacingSizing) {
+    if (surface.pacingSizing && collectAgeProfile) {
       double const commitToRenderMs = ageMs(surface.lastCommitNsec);
       double const inputToRenderMs = ageMs(surface.lastResizeInputNsec);
       double const configureToRenderMs = ageMs(surface.lastConfigureSentNsec);
@@ -576,28 +577,26 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
       atomicFrameProfile.maxAckToRenderMs = std::max(atomicFrameProfile.maxAckToRenderMs, ackToRenderMs);
       atomicFrameProfile.maxConfigureToCommitMs =
           std::max(atomicFrameProfile.maxConfigureToCommitMs, configureToCommitMs);
-      if (presentation::pacingTraceEnabled()) {
-        presentation::tracePacing("surface-age surface=%llu frame=%dx%d buffer=%dx%d serial=%llu "
-                                  "configureSerial=%u configure=%dx%d inputToRender=%.3fms "
-                                  "configureToRender=%.3fms ackToRender=%.3fms commitToRender=%.3fms "
-                                  "configureToCommit=%.3fms activeSizing=%d pacingSizing=%d\n",
-                                  static_cast<unsigned long long>(surface.id),
-                                  surface.width,
-                                  surface.height,
-                                  surface.bufferWidth,
-                                  surface.bufferHeight,
-                                  static_cast<unsigned long long>(surface.serial),
-                                  surface.lastConfigureSerial,
-                                  surface.lastConfigureWidth,
-                                  surface.lastConfigureHeight,
-                                  inputToRenderMs,
-                                  configureToRenderMs,
-                                  ackToRenderMs,
-                                  commitToRenderMs,
-                                  configureToCommitMs,
-                                  surface.activeSizing ? 1 : 0,
-                                  surface.pacingSizing ? 1 : 0);
-      }
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("surface-age surface=%llu frame=%dx%d buffer=%dx%d serial=%llu "
+                                "configureSerial=%u configure=%dx%d inputToRender=%.3fms "
+                                "configureToRender=%.3fms ackToRender=%.3fms commitToRender=%.3fms "
+                                "configureToCommit=%.3fms activeSizing=%d pacingSizing=%d\n",
+                                static_cast<unsigned long long>(surface.id),
+                                surface.width,
+                                surface.height,
+                                surface.bufferWidth,
+                                surface.bufferHeight,
+                                static_cast<unsigned long long>(surface.serial),
+                                surface.lastConfigureSerial,
+                                surface.lastConfigureWidth,
+                                surface.lastConfigureHeight,
+                                inputToRenderMs,
+                                configureToRenderMs,
+                                ackToRenderMs,
+                                commitToRenderMs,
+                                configureToCommitMs,
+                                surface.activeSizing ? 1 : 0,
+                                surface.pacingSizing ? 1 : 0);
     }
   }
   ctx.loopStats.lastSurfaceCount = committedSurfaces.size();
@@ -701,12 +700,12 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
         *ctx.atomicFrameDirty = false;
         *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
       }
-      presentation::tracePacing("direct-scanout surface=%llu buffer=%llu prepared=1 fullscreen=1\n",
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("direct-scanout surface=%llu buffer=%llu prepared=1 fullscreen=1\n",
                                 static_cast<unsigned long long>(candidateSurfaceId),
                                 static_cast<unsigned long long>(candidateBufferId));
       return;
     }
-    presentation::tracePacing("direct-scanout surface=%llu buffer=%llu prepared=0 fullscreen=1\n",
+    LAMBDA_WINDOW_MANAGER_TRACE_PACING("direct-scanout surface=%llu buffer=%llu prepared=0 fullscreen=1\n",
                               static_cast<unsigned long long>(candidateSurfaceId),
                               static_cast<unsigned long long>(candidateBufferId));
   }
@@ -771,7 +770,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
           *ctx.atomicFrameDirty = false;
           *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
         }
-        presentation::tracePacing("hardware-overlay surface=%llu buffer=%llu prepared=1 overlayOnly=1\n",
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-overlay surface=%llu buffer=%llu prepared=1 overlayOnly=1\n",
                                   static_cast<unsigned long long>(candidateSurfaceId),
                                   static_cast<unsigned long long>(candidateBufferId));
         return;
@@ -782,7 +781,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                                        outputScaleX,
                                        outputScaleY);
       overlaySurfaceId = 0;
-      presentation::tracePacing("hardware-overlay surface=%llu buffer=%llu prepared=0 overlayOnly=1\n",
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-overlay surface=%llu buffer=%llu prepared=0 overlayOnly=1\n",
                                 static_cast<unsigned long long>(candidateSurfaceId),
                                 static_cast<unsigned long long>(candidateBufferId));
     }
@@ -865,7 +864,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
       if (atomicPresenter->prepareOverlayCandidate(presentToken, std::move(pendingOverlay->candidate))) {
         overlaySurfaceId = atomicPresenter->preparedOverlaySurfaceId();
         overlayPreparedForFrame = true;
-        presentation::tracePacing("hardware-overlay surface=%llu buffer=%llu prepared=1\n",
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-overlay surface=%llu buffer=%llu prepared=1\n",
                                   static_cast<unsigned long long>(overlaySurfaceId),
                                   static_cast<unsigned long long>(candidateBufferId));
       } else {
@@ -875,7 +874,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                                          outputScaleX,
                                          outputScaleY);
         overlaySurfaceId = 0;
-        presentation::tracePacing("hardware-overlay surface=%llu buffer=%llu prepared=0\n",
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-overlay surface=%llu buffer=%llu prepared=0\n",
                                   static_cast<unsigned long long>(candidateSurfaceId),
                                   static_cast<unsigned long long>(candidateBufferId));
       }

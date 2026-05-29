@@ -95,7 +95,7 @@ struct FilesListRelayoutBridge {
       state->layoutWidth.set(width);
     }
     lambda::Size const size = content.measure(ctx, constraints, hints, textSystem);
-    trace::event("list bridge-measure width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+    LAMBDA_FILES_TRACE_EVENT("list bridge-measure width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                  width,
                  size.width,
                  size.height,
@@ -121,7 +121,7 @@ struct FilesListRelayoutBridge {
       (void)rawChild->relayout(constraints);
       rawWrapper->setSize(rawChild->size());
       lambda::Size const size = rawChild->size();
-      trace::event("list bridge-relayout width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+      LAMBDA_FILES_TRACE_EVENT("list bridge-relayout width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                    width,
                    size.width,
                    size.height,
@@ -299,7 +299,7 @@ struct FilesListView {
     float const rowsHeight = static_cast<float>(count) * FilesTheme::kListRowHeight;
     float const gaps = count > 0 ? static_cast<float>(count) * FilesTheme::kListRowGap : 0.f;
     lambda::Size const size{width, FilesTheme::kListHeaderHeight + rowsHeight + gaps};
-    trace::event("list measure entries=%zu width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+    LAMBDA_FILES_TRACE_EVENT("list measure entries=%zu width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                  count,
                  width,
                  size.width,
@@ -358,7 +358,7 @@ struct FilesListView {
                       FileIconLookup const icon =
                           resolveFileIcon(roots, entry.path, entry.isDirectory, preferredIconSize);
                       double const iconMs = trace::nowMs() - iconStartMs;
-                      trace::event("list row-body path=\"%s\" iconResolve=%.3fms elapsed=%.3fms\n",
+                      LAMBDA_FILES_TRACE_EVENT("list row-body path=\"%s\" iconResolve=%.3fms elapsed=%.3fms\n",
                                    entry.path.string().c_str(),
                                    iconMs,
                                    trace::nowMs() - startMs);
@@ -398,7 +398,7 @@ inline lambda::Size measureFilesListView(FilesListView const& list,
   float const rowsHeight = static_cast<float>(count) * FilesTheme::kListRowHeight;
   float const gaps = count > 0 ? static_cast<float>(count) * FilesTheme::kListRowGap : 0.f;
   lambda::Size const size{width, FilesTheme::kListHeaderHeight + rowsHeight + gaps};
-  trace::event("list test-measure entries=%zu width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+  LAMBDA_FILES_TRACE_EVENT("list test-measure entries=%zu width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                count,
                width,
                size.width,

@@ -58,7 +58,7 @@ void AsyncWallpaperLoader::workerMain(std::string path,
       auto const beforeDownscale = presentation::SteadyClock::now();
       *decoded = lambda::downscaleDecodedImageRgba(std::move(*decoded), maxLongEdge);
       if (presentation::timingTraceEnabled()) {
-        presentation::traceTiming("wallpaper-downscale", beforeDownscale);
+        LAMBDA_WINDOW_MANAGER_TRACE_TIMING("wallpaper-downscale", beforeDownscale);
       }
       writeWallpaperCache(sourcePath, maxLongEdge, cacheRoot, *decoded);
     }
@@ -128,7 +128,7 @@ bool tryLoadWallpaperFromCache(CompositorConfigWatchContext& ctx) {
   ctx.appliedConfig.wallpaperPreviewRevealStart.reset();
   ctx.appliedConfig.wallpaperRevealOpacity = 1.f;
   ctx.appliedConfig.wallpaperRevealStart.reset();
-  presentation::traceTiming("wallpaper-cache", cacheStart);
+  LAMBDA_WINDOW_MANAGER_TRACE_TIMING("wallpaper-cache", cacheStart);
   std::fprintf(stderr,
                "lambda-window-manager: wallpaper loaded from cache %ux%u\n",
                decoded->width,
@@ -148,7 +148,7 @@ bool pollWallpaperPreview(CompositorConfigWatchContext& ctx) {
 
   auto const uploadStart = presentation::SteadyClock::now();
   ctx.appliedConfig.wallpaperPreviewImage = lambda::imageFromDecodedRgba(*decoded, ctx.canvas.gpuDevice());
-  presentation::traceTiming("wallpaper-preview-upload", uploadStart);
+  LAMBDA_WINDOW_MANAGER_TRACE_TIMING("wallpaper-preview-upload", uploadStart);
   if (!ctx.appliedConfig.wallpaperPreviewImage) {
     return false;
   }
@@ -170,7 +170,7 @@ bool pollWallpaperLoad(CompositorConfigWatchContext& ctx) {
 
   auto const uploadStart = presentation::SteadyClock::now();
   ctx.appliedConfig.wallpaperImage = lambda::imageFromDecodedRgba(*decoded, ctx.canvas.gpuDevice());
-  presentation::traceTiming("wallpaper-upload", uploadStart);
+  LAMBDA_WINDOW_MANAGER_TRACE_TIMING("wallpaper-upload", uploadStart);
   if (presentation::timingTraceEnabled()) {
     std::fprintf(stderr,
                  "lambda-window-manager: timing wallpaper-decode %.3fms (async)\n",

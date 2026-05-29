@@ -52,7 +52,7 @@ inline std::vector<RowDescriptor> makeRowsForColumns(std::vector<FileEntry> cons
                                                      int columns, float layoutWidth) {
   double const startMs = trace::nowMs();
   if (columns <= 0) {
-    trace::event("flow-grid make-rows entries=%zu width=%.1f columns=0 rows=0 elapsed=%.3fms\n",
+    LAMBDA_FILES_TRACE_EVENT("flow-grid make-rows entries=%zu width=%.1f columns=0 rows=0 elapsed=%.3fms\n",
                  currentEntries.size(),
                  layoutWidth,
                  trace::nowMs() - startMs);
@@ -85,7 +85,7 @@ inline std::vector<RowDescriptor> makeRowsForColumns(std::vector<FileEntry> cons
         .entries = std::move(rowEntries),
     });
   }
-  trace::event("flow-grid make-rows entries=%zu width=%.1f columns=%d rows=%zu elapsed=%.3fms\n",
+  LAMBDA_FILES_TRACE_EVENT("flow-grid make-rows entries=%zu width=%.1f columns=%d rows=%zu elapsed=%.3fms\n",
                currentEntries.size(),
                layoutWidth,
                columns,
@@ -132,7 +132,7 @@ struct GridRelayoutBridge {
     float const width = resolvedLayoutWidth(constraints);
     updateGridLayout(*state, width, metrics);
     lambda::Size const size = content.measure(ctx, constraints, hints, textSystem);
-    trace::event("flow-grid bridge-measure width=%.1f rows=%zu size=%.1fx%.1f elapsed=%.3fms\n",
+    LAMBDA_FILES_TRACE_EVENT("flow-grid bridge-measure width=%.1f rows=%zu size=%.1fx%.1f elapsed=%.3fms\n",
                  width,
                  state->rows.peek().size(),
                  size.width,
@@ -158,7 +158,7 @@ struct GridRelayoutBridge {
       (void)rawChild->relayout(constraints);
       rawWrapper->setSize(rawChild->size());
       lambda::Size const size = rawChild->size();
-      trace::event("flow-grid bridge-relayout width=%.1f rows=%zu size=%.1fx%.1f elapsed=%.3fms\n",
+      LAMBDA_FILES_TRACE_EVENT("flow-grid bridge-relayout width=%.1f rows=%zu size=%.1fx%.1f elapsed=%.3fms\n",
                    width,
                    state->rows.peek().size(),
                    size.width,
@@ -213,7 +213,7 @@ inline lambda::Size FilesFlowGrid::measure(lambda::MeasureContext&, lambda::Layo
   float const layoutWidth = width > 0.f ? width : std::max(0.f, state->layoutWidth);
   std::size_t const entryCount = entries.peek().size();
   lambda::Size const size = layoutMetrics().contentSizeFor(layoutWidth, entryCount);
-  trace::event("flow-grid measure entries=%zu width=%.1f layoutWidth=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+  LAMBDA_FILES_TRACE_EVENT("flow-grid measure entries=%zu width=%.1f layoutWidth=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                entryCount,
                width,
                layoutWidth,
@@ -231,7 +231,7 @@ inline lambda::Size measureFilesFlowGrid(FilesFlowGrid const& grid,
   float const layoutWidth = width > 0.f ? width : std::max(0.f, grid.state->layoutWidth);
   std::size_t const entryCount = grid.entries.peek().size();
   lambda::Size const size = grid.layoutMetrics().contentSizeFor(layoutWidth, entryCount);
-  trace::event("flow-grid test-measure entries=%zu width=%.1f layoutWidth=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
+  LAMBDA_FILES_TRACE_EVENT("flow-grid test-measure entries=%zu width=%.1f layoutWidth=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                entryCount,
                width,
                layoutWidth,
@@ -279,7 +279,7 @@ inline lambda::Element FilesFlowGrid::body() const {
     if (changed) {
       gridState->rows.set(std::move(nextRows));
     }
-    trace::event("flow-grid rows-effect entries=%zu width=%.1f columns=%d rows=%zu elapsed=%.3fms\n",
+    LAMBDA_FILES_TRACE_EVENT("flow-grid rows-effect entries=%zu width=%.1f columns=%d rows=%zu elapsed=%.3fms\n",
                  entriesSignal.peek().size(),
                  width,
                  columns,
@@ -333,7 +333,7 @@ inline lambda::Element FilesFlowGrid::body() const {
                               .size(tileW, tileH)
                               .clipContent(true));
         }
-        trace::event("flow-grid row-body row=%zu entries=%zu columns=%d iconResolve=%.3fms elapsed=%.3fms\n",
+        LAMBDA_FILES_TRACE_EVENT("flow-grid row-body row=%zu entries=%zu columns=%d iconResolve=%.3fms elapsed=%.3fms\n",
                      row.rowIndex,
                      row.entries.size(),
                      colCount,

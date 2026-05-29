@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Debug/DebugFlags.hpp>
+
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
@@ -10,13 +12,13 @@ namespace lambda_files::trace {
 
 inline bool enabled() {
   static bool const value = [] {
-    char const* env = std::getenv("LAMBDA_FILES_TRACE");
-    return !env || std::strcmp(env, "0") != 0;
+    return lambda::debug::envNonZero(std::getenv("LAMBDA_FILES_TRACE"));
   }();
   return value;
 }
 
 inline double nowMs() {
+  if (!enabled()) return 0.0;
   using Clock = std::chrono::steady_clock;
   static Clock::time_point const start = Clock::now();
   return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
@@ -44,3 +46,10 @@ inline void event(char const* format, ...) {
 }
 
 } // namespace lambda_files::trace
+
+#define LAMBDA_FILES_TRACE_EVENT(...)             \
+  do {                                            \
+    if (::lambda_files::trace::enabled()) {       \
+      ::lambda_files::trace::event(__VA_ARGS__); \
+    }                                             \
+  } while (false)

@@ -552,7 +552,7 @@ struct FilesAppRoot {
       std::filesystem::path const current{history().current};
       ListDirectoryResult const result = listDirectory(current, showHiddenFiles());
       if (!force && !directoryListingChanged(entries(), listError(), result)) {
-        trace::event("app sync-listing force=%d changed=0 entries=%zu error=%d elapsed=%.3fms path=\"%s\"\n",
+        LAMBDA_FILES_TRACE_EVENT("app sync-listing force=%d changed=0 entries=%zu error=%d elapsed=%.3fms path=\"%s\"\n",
                      force ? 1 : 0,
                      result.entries.size(),
                      result.error.empty() ? 0 : 1,
@@ -602,7 +602,7 @@ struct FilesAppRoot {
         selectedPath.set(focused >= 0 ? result.entries[static_cast<std::size_t>(focused)].path.string()
                                       : std::string{});
       }
-      trace::event("app sync-listing force=%d changed=1 entries=%zu error=%d elapsed=%.3fms path=\"%s\"\n",
+      LAMBDA_FILES_TRACE_EVENT("app sync-listing force=%d changed=1 entries=%zu error=%d elapsed=%.3fms path=\"%s\"\n",
                    force ? 1 : 0,
                    result.entries.size(),
                    result.error.empty() ? 0 : 1,
@@ -1089,7 +1089,7 @@ struct FilesAppRoot {
           }
         });
 
-    trace::event("app body bounds=%.1fx%.1f entries=%zu view=%s gridWidth=%.1f columns=%d elapsed=%.3fms\n",
+    LAMBDA_FILES_TRACE_EVENT("app body bounds=%.1fx%.1f entries=%zu view=%s gridWidth=%.1f columns=%d elapsed=%.3fms\n",
                  bounds.width,
                  bounds.height,
                  entries().size(),

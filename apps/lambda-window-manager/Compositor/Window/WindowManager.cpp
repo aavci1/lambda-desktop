@@ -295,7 +295,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         resizeLastHeight_ = resizeStartHeight_;
         resizeEdges_ = resizeEdges;
         updateCompositorCursorForPointer(this);
-        lambda::detail::resizeTrace("compositor",
+        LAMBDA_RESIZE_TRACE("compositor",
                                   "begin-resize surface=%llu pointer=%.1f,%.1f edges=%u startWindow=%d,%d "
                                   "startSize=%dx%d\n",
                                   static_cast<unsigned long long>(chromeControlTarget->id),

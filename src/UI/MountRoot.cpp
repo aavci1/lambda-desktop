@@ -89,7 +89,7 @@ void MountRoot::resize(Size viewportSize, scenegraph::SceneGraph& sceneGraph) {
     if (traceResize) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - resizeStart).count();
-      detail::resizeTrace("mount-root",
+      LAMBDA_RESIZE_TRACE("mount-root",
                           "resize-mounted size=%.0fx%.0f elapsed=%.3fms\n",
                           viewportSize_.width,
                           viewportSize_.height,
@@ -113,7 +113,7 @@ void MountRoot::resize(Size viewportSize, scenegraph::SceneGraph& sceneGraph) {
   if (traceResize) {
     auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - resizeStart).count();
-    detail::resizeTrace("mount-root",
+    LAMBDA_RESIZE_TRACE("mount-root",
                         "resize size=%.0fx%.0f relayout=%.3fms elapsed=%.3fms\n",
                         viewportSize_.width,
                         viewportSize_.height,

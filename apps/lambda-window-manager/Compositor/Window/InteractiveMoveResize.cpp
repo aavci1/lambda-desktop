@@ -238,9 +238,11 @@ void startGeometryAnimation(WaylandServer::Impl* server,
   surface->geometryAnimationTargetWidth = targetWidth;
   surface->geometryAnimationTargetHeight = targetHeight;
   surface->geometryAnimationStartedAtMs = monotonicMilliseconds();
-  surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+  if (lambda::detail::resizeTraceMetadataEnabled()) {
+    surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+  }
   surface->geometryAnimationActive = true;
-  lambda::detail::resizeTrace("compositor",
+  LAMBDA_RESIZE_TRACE("compositor",
                               "animation-start surface=%llu start=%d,%d %dx%d target=%d,%d %dx%d\n",
                               static_cast<unsigned long long>(surface->id),
                               surface->geometryAnimationStartX,
@@ -565,12 +567,14 @@ void updateResize(WaylandServer::Impl* server) {
       next.height == server->resizeLastHeight_) {
     return;
   }
-  surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+  if (lambda::detail::resizeTraceMetadataEnabled()) {
+    surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+  }
   server->resizeLastX_ = nextX;
   server->resizeLastY_ = nextY;
   server->resizeLastWidth_ = next.width;
   server->resizeLastHeight_ = next.height;
-  lambda::detail::resizeTrace("compositor",
+  LAMBDA_RESIZE_TRACE("compositor",
                             "update-resize surface=%llu pointer=%.1f,%.1f window=%d,%d size=%dx%d "
                             "delta=%.1f,%.1f edges=%u\n",
                             static_cast<unsigned long long>(surface->id),

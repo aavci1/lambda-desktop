@@ -290,7 +290,7 @@ struct SceneRenderer::Impl {
             auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now() - renderStart).count();
             std::string_view const rootKind = sceneNodeKindName(node.kind());
-            ::lambda::detail::resizeTrace("scene-render",
+            LAMBDA_RESIZE_TRACE("scene-render",
                                         "root=%.*s dirty=%d prepare=%.3fms traversal=%.3fms elapsed=%.3fms\n",
                                         static_cast<int>(rootKind.size()),
                                         rootKind.data(),

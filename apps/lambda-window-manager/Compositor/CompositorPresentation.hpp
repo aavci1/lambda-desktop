@@ -290,3 +290,17 @@ struct AtomicFrameProfile {
 };
 
 } // namespace lambda::compositor::presentation
+
+#define LAMBDA_WINDOW_MANAGER_TRACE_TIMING(...)                                      \
+  do {                                                                              \
+    if (::lambda::compositor::presentation::timingTraceEnabled()) {                 \
+      ::lambda::compositor::presentation::traceTiming(__VA_ARGS__);                 \
+    }                                                                               \
+  } while (false)
+
+#define LAMBDA_WINDOW_MANAGER_TRACE_PACING(...)                                     \
+  do {                                                                              \
+    if (::lambda::compositor::presentation::pacingTraceEnabled()) {                 \
+      ::lambda::compositor::presentation::tracePacing(__VA_ARGS__);                 \
+    }                                                                               \
+  } while (false)

@@ -553,7 +553,7 @@ void Application::requestWindowRedraw(unsigned int handle) {
   bool const alreadyRequested = stateIt->second.redrawRequested;
   stateIt->second.redrawRequested = true;
   if (!alreadyRequested && detail::resizeTraceEnabled()) {
-    detail::resizeTrace("app-render",
+    LAMBDA_RESIZE_TRACE("app-render",
                         "request window=%u already=%d frameReady=%d\n",
                         handle,
                         alreadyRequested ? 1 : 0,
@@ -590,7 +590,7 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
     }
     if (requireFrameReady && state.redrawRequested && !hasFrameReady) {
       if (!state.deferTraceLogged && detail::resizeTraceEnabled()) {
-        detail::resizeTrace("app-render",
+        LAMBDA_RESIZE_TRACE("app-render",
                             "defer window=%u requireFrameReady=1 redraw=1 frameReady=0\n",
                             w->handle());
         state.deferTraceLogged = true;
@@ -634,7 +634,7 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
         if (traceResize) {
           auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
               std::chrono::steady_clock::now() - renderStart).count();
-          detail::resizeTrace("app-render",
+          LAMBDA_RESIZE_TRACE("app-render",
                               "present window=%u requireFrameReady=%d frameReady=%d "
                               "begin=%.3fms render=%.3fms present=%.3fms elapsed=%.3fms\n",
                               w->handle(),

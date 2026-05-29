@@ -76,7 +76,7 @@ void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
   if (traceResize) {
     textOverlayElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - phaseStart).count();
-    detail::resizeTrace("window-frame",
+    LAMBDA_RESIZE_TRACE("window-frame",
                         "size=%.0fx%.0f overlays=%zu clear=%.3fms scene=%.3fms overlays=%.3fms textOverlay=%.3fms\n",
                         windowSize.width,
                         windowSize.height,

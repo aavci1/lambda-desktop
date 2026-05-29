@@ -643,7 +643,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     vulkan.addRequiredDeviceExtension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
     auto timingStart = SteadyClock::now();
     VkInstance instance = lambda::ensureSharedVulkanInstance();
-    traceTiming("ensure-vulkan-instance", timingStart);
+    LAMBDA_WINDOW_MANAGER_TRACE_TIMING("ensure-vulkan-instance", timingStart);
 
     static lambda::FreeTypeTextSystem textSystem;
 
@@ -678,7 +678,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     }
     lambda::Canvas& canvasRef = presenter->canvas();
     lambda::Canvas* canvas = &canvasRef;
-    traceTiming("create-presenter", canvasStart);
+    LAMBDA_WINDOW_MANAGER_TRACE_TIMING("create-presenter", canvasStart);
 
     std::fprintf(stderr,
                  "lambda-window-manager: presenting %ux%u on %s\n",
@@ -924,7 +924,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
             lastAtomicFlipNsec > 0 && scheduledNsec >= lastAtomicFlipNsec
                 ? static_cast<double>(scheduledNsec - lastAtomicFlipNsec) / 1'000'000.0
                 : 0.0;
-        tracePacing("flip-scheduled id=%u surfaces=0 activeSizing=0 maxBuffer=0x0 "
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("flip-scheduled id=%u surfaces=0 activeSizing=0 maxBuffer=0x0 "
                     "maxFrame=0x0 maxDmabuf=0x00000000 maxDmabufModifier=0x0000000000000000 "
                     "snapshotFrameTime=0.000ms renderAhead=0 directRepeat=1 "
                     "contentSerial=%llu sinceLastFlip=%.3fms gpuWait=0.000ms "
@@ -943,7 +943,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         return false;
       }
       lastAcquireWaitFrameCallbackNsec = monotonicNanoseconds();
-      tracePacing("acquire-wait-repeat contentSerial=%llu queuedSerial=%llu acquireFd=%d\n",
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("acquire-wait-repeat contentSerial=%llu queuedSerial=%llu acquireFd=%d\n",
                   static_cast<unsigned long long>(wayland.contentSerial()),
                   static_cast<unsigned long long>(atomicReadyFrames.empty() ? 0ull : atomicReadyFrames.back().contentSerial),
                   queuedScanoutAcquireFenceFd());
@@ -1010,7 +1010,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       auto const resumeStart = SteadyClock::now();
       diagnostics::crashLog("vt-resume begin");
       applyOutputScale(true);
-      traceTiming("vt-resume-total", resumeStart);
+      LAMBDA_WINDOW_MANAGER_TRACE_TIMING("vt-resume-total", resumeStart);
       vtAcquireFramePending = true;
       forceRender = true;
       skipNextVblank = true;
@@ -1030,7 +1030,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           candidateBufferId = frame.scanoutCandidate->bufferId;
           candidateAcquireFenceFd = frame.scanoutCandidate->acquireFenceFd;
           bool const acquireReady = fdReadableNow(candidateAcquireFenceFd);
-          tracePacing("scanout-schedule-begin mode=direct contentSerial=%llu buffer=%llu "
+          LAMBDA_WINDOW_MANAGER_TRACE_PACING("scanout-schedule-begin mode=direct contentSerial=%llu buffer=%llu "
                       "acquireFd=%d acquireReady=%d\n",
                       static_cast<unsigned long long>(frame.contentSerial),
                       static_cast<unsigned long long>(candidateBufferId),
@@ -1041,14 +1041,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           frame.scanoutCandidate.reset();
           std::uint64_t const prepareStartNsec = monotonicNanoseconds();
           if (!presenter->atomicPresenter()->prepareDirectScanoutCandidate(std::move(candidate))) {
-            tracePacing("scanout-prepare-failed mode=direct contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
+            LAMBDA_WINDOW_MANAGER_TRACE_PACING("scanout-prepare-failed mode=direct contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
                         static_cast<unsigned long long>(frame.contentSerial),
                         static_cast<unsigned long long>(candidateBufferId),
                         static_cast<double>(monotonicNanoseconds() - prepareStartNsec) / 1'000'000.0);
             frame = AtomicReadyFrame{};
             return false;
           }
-          tracePacing("scanout-prepare-done mode=direct contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
+          LAMBDA_WINDOW_MANAGER_TRACE_PACING("scanout-prepare-done mode=direct contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
                       static_cast<unsigned long long>(frame.contentSerial),
                       static_cast<unsigned long long>(candidateBufferId),
                       static_cast<double>(monotonicNanoseconds() - prepareStartNsec) / 1'000'000.0);
@@ -1058,7 +1058,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         std::uint64_t const frameContentSerial = frame.contentSerial;
         std::uint32_t const presentId = presenter->atomicPresenter()->scheduleDirectScanout();
         std::uint64_t const scheduledNsec = monotonicNanoseconds();
-        tracePacing("scanout-schedule-done mode=direct id=%u contentSerial=%llu buffer=%llu "
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("scanout-schedule-done mode=direct id=%u contentSerial=%llu buffer=%llu "
                     "elapsed=%.3fms commitCall=%.3fms\n",
                     presentId,
                     static_cast<unsigned long long>(frame.contentSerial),
@@ -1071,7 +1071,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
             lastAtomicFlipNsec > 0 && scheduledNsec >= lastAtomicFlipNsec
                 ? static_cast<double>(scheduledNsec - lastAtomicFlipNsec) / 1'000'000.0
                 : 0.0;
-        tracePacing("flip-scheduled id=%u surfaces=%zu activeSizing=%zu maxBuffer=%dx%d "
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("flip-scheduled id=%u surfaces=%zu activeSizing=%zu maxBuffer=%dx%d "
                     "maxFrame=%dx%d maxDmabuf=0x%08x maxDmabufModifier=0x%016llx "
                     "snapshotFrameTime=%.3fms renderAhead=%d directScanout=1 "
                     "contentSerial=%llu sinceLastFlip=%.3fms gpuWait=0.000ms "
@@ -1127,7 +1127,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           candidateBufferId = frame.scanoutCandidate->bufferId;
           candidateAcquireFenceFd = frame.scanoutCandidate->acquireFenceFd;
           bool const acquireReady = fdReadableNow(candidateAcquireFenceFd);
-          tracePacing("scanout-schedule-begin mode=overlay contentSerial=%llu buffer=%llu "
+          LAMBDA_WINDOW_MANAGER_TRACE_PACING("scanout-schedule-begin mode=overlay contentSerial=%llu buffer=%llu "
                       "acquireFd=%d acquireReady=%d\n",
                       static_cast<unsigned long long>(frame.contentSerial),
                       static_cast<unsigned long long>(candidateBufferId),
@@ -1138,14 +1138,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           frame.scanoutCandidate.reset();
           std::uint64_t const prepareStartNsec = monotonicNanoseconds();
           if (!presenter->atomicPresenter()->prepareOverlayCandidateForDisplayedFrame(std::move(candidate))) {
-            tracePacing("scanout-prepare-failed mode=overlay contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
+            LAMBDA_WINDOW_MANAGER_TRACE_PACING("scanout-prepare-failed mode=overlay contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
                         static_cast<unsigned long long>(frame.contentSerial),
                         static_cast<unsigned long long>(candidateBufferId),
                         static_cast<double>(monotonicNanoseconds() - prepareStartNsec) / 1'000'000.0);
             frame = AtomicReadyFrame{};
             return false;
           }
-          tracePacing("scanout-prepare-done mode=overlay contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
+          LAMBDA_WINDOW_MANAGER_TRACE_PACING("scanout-prepare-done mode=overlay contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
                       static_cast<unsigned long long>(frame.contentSerial),
                       static_cast<unsigned long long>(candidateBufferId),
                       static_cast<double>(monotonicNanoseconds() - prepareStartNsec) / 1'000'000.0);
@@ -1155,7 +1155,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         std::uint64_t const frameContentSerial = frame.contentSerial;
         std::uint32_t const presentId = presenter->atomicPresenter()->scheduleOverlayOnly();
         std::uint64_t const scheduledNsec = monotonicNanoseconds();
-        tracePacing("scanout-schedule-done mode=overlay id=%u contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("scanout-schedule-done mode=overlay id=%u contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
                     presentId,
                     static_cast<unsigned long long>(frame.contentSerial),
                     static_cast<unsigned long long>(candidateBufferId),
@@ -1164,7 +1164,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
             lastAtomicFlipNsec > 0 && scheduledNsec >= lastAtomicFlipNsec
                 ? static_cast<double>(scheduledNsec - lastAtomicFlipNsec) / 1'000'000.0
                 : 0.0;
-        tracePacing("flip-scheduled id=%u surfaces=%zu activeSizing=%zu maxBuffer=%dx%d "
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("flip-scheduled id=%u surfaces=%zu activeSizing=%zu maxBuffer=%dx%d "
                     "maxFrame=%dx%d maxDmabuf=0x%08x maxDmabufModifier=0x%016llx "
                     "snapshotFrameTime=%.3fms renderAhead=%d overlayOnly=1 "
                     "contentSerial=%llu sinceLastFlip=%.3fms gpuWait=0.000ms "
@@ -1215,7 +1215,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const allowRenderFence = frame.renderedAhead && frame.profile.activeSizingSurfaces == 0;
       if (!allowRenderFence && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0 &&
           !presenter->atomicPresenter()->updateRenderReady(frame.presentToken)) {
-        tracePacing("schedule-wait-render-ready token=%u surfaces=%zu contentSerial=%llu\n",
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("schedule-wait-render-ready token=%u surfaces=%zu contentSerial=%llu\n",
                     frame.presentToken,
                     frame.surfaceCount,
                     static_cast<unsigned long long>(frame.contentSerial));
@@ -1233,7 +1233,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           frame.timing.monotonicNsec > 0 && scheduledNsec >= frame.timing.monotonicNsec
               ? static_cast<double>(scheduledNsec - frame.timing.monotonicNsec) / 1'000'000.0
               : 0.0;
-      tracePacing("flip-scheduled id=%u surfaces=%zu activeSizing=%zu maxBuffer=%dx%d "
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("flip-scheduled id=%u surfaces=%zu activeSizing=%zu maxBuffer=%dx%d "
                   "maxFrame=%dx%d maxDmabuf=0x%08x maxDmabufModifier=0x%016llx "
                   "snapshotFrameTime=%.3fms renderAhead=%d "
                   "contentSerial=%llu sinceLastFlip=%.3fms gpuWait=%.3fms "
@@ -1316,7 +1316,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       } else {
         presenter->atomicPresenter()->discardPreparedFrame(atomicReadyFrames[index].presentToken);
       }
-      tracePacing("mailbox-discard token=%u surfaces=%zu contentSerial=%llu\n",
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("mailbox-discard token=%u surfaces=%zu contentSerial=%llu\n",
                   atomicReadyFrames[index].presentToken,
                   atomicReadyFrames[index].surfaceCount,
                   static_cast<unsigned long long>(atomicReadyFrames[index].contentSerial));
@@ -1499,7 +1499,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         renderAheadWorkNsec = static_cast<std::uint64_t>(completedProfile.totalMs * 1'000'000.0);
       }
       updateAtomicRenderAheadLead(renderAheadWorkNsec, flip->usedRenderFence);
-      tracePacing("flip-complete id=%u hw=%d seq=%llu interval=%.3fms expected=%.3fms error=%+.3fms "
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("flip-complete id=%u hw=%d seq=%llu interval=%.3fms expected=%.3fms error=%+.3fms "
                   "queue=%.3fms render=%.3fms renderToReady=%.3fms readyToCommit=%.3fms "
                   "commit=%.3fms scheduledToCommit=%.3fms commitReturnToFlip=%.3fms "
                   "eventDelay=%.3fms eventHandle=%.3fms scheduledDelta=%.3fms "
@@ -1754,7 +1754,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           !presenter->atomicPresenter()->hasPendingPageFlip() && device->isVtForeground()) {
         updateQueuedAtomicFrames();
         bool const scheduledAfterFlip = scheduleQueuedAtomicFrame();
-        tracePacing("post-flip-schedule scheduled=%d ready=%d pendingFlip=%d dirty=%d "
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("post-flip-schedule scheduled=%d ready=%d pendingFlip=%d dirty=%d "
                     "contentSerial=%llu queuedSerial=%llu\n",
                     scheduledAfterFlip ? 1 : 0,
                     atomicReadyFrames.empty() ? 0 : 1,
@@ -1904,7 +1904,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           renderAheadNeeded || genericRenderWake || inputRenderRequired || configReloaded ||
           atomicDirtyCanRender;
       if (pollWoke || renderNeeded) {
-        tracePacing("loop woke=%d system=%d extra=0x%llx waylandWake=%d pageFlipWake=%d "
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("loop woke=%d system=%d extra=0x%llx waylandWake=%d pageFlipWake=%d "
                     "pageFlipDone=%d input=%d nonFlipWake=%d force=%d anim=%d config=%d render=%d "
                     "ready=%d pendingFlip=%d renderReadyFd=%d renderReadyWake=%d renderAheadNeed=%d "
                     "renderAheadDelay=%d queuedDelay=%d renderAheadLead=%.3fms dirty=%d activeSizing=%zu "

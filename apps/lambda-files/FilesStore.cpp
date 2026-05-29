@@ -1598,7 +1598,7 @@ FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
   std::string const mime = mimeTypeForPath(path, isDirectory);
   std::string iconName = iconNameForMime(mime);
   if (auto themePath = lambda_shell::lookupIconThemePath(themeRoot, iconName, preferredSize); !themePath.empty()) {
-    trace::event("icon-lookup path=\"%s\" root=\"%s\" mime=\"%s\" icon=\"%s\" fallback=0 hit=1 elapsed=%.3fms\n",
+    LAMBDA_FILES_TRACE_EVENT("icon-lookup path=\"%s\" root=\"%s\" mime=\"%s\" icon=\"%s\" fallback=0 hit=1 elapsed=%.3fms\n",
                  path.string().c_str(),
                  themeRoot.string().c_str(),
                  mime.c_str(),
@@ -1610,7 +1610,7 @@ FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
   if (mime == "application/octet-stream") fallback = "application-octet-stream";
   if (fallback != iconName) {
     if (auto themePath = lambda_shell::lookupIconThemePath(themeRoot, fallback, preferredSize); !themePath.empty()) {
-      trace::event("icon-lookup path=\"%s\" root=\"%s\" mime=\"%s\" icon=\"%s\" fallback=1 hit=1 elapsed=%.3fms\n",
+      LAMBDA_FILES_TRACE_EVENT("icon-lookup path=\"%s\" root=\"%s\" mime=\"%s\" icon=\"%s\" fallback=1 hit=1 elapsed=%.3fms\n",
                    path.string().c_str(),
                    themeRoot.string().c_str(),
                    mime.c_str(),
@@ -1619,7 +1619,7 @@ FileIconLookup lookupFileIcon(std::filesystem::path const& themeRoot,
       return {.iconName = fallback, .themePath = themePath, .fallback = true};
     }
   }
-  trace::event("icon-lookup path=\"%s\" root=\"%s\" mime=\"%s\" icon=\"%s\" fallback=1 hit=0 elapsed=%.3fms\n",
+  LAMBDA_FILES_TRACE_EVENT("icon-lookup path=\"%s\" root=\"%s\" mime=\"%s\" icon=\"%s\" fallback=1 hit=0 elapsed=%.3fms\n",
                path.string().c_str(),
                themeRoot.string().c_str(),
                mime.c_str(),
@@ -1647,7 +1647,7 @@ FileIconLookup resolveFileIcon(std::vector<std::filesystem::path> const& themeRo
   }();
   static std::unordered_map<std::string, FileIconLookup> cache;
   if (auto found = cache.find(cacheKey); found != cache.end()) {
-    trace::event("icon-resolve-cache path=\"%s\" dir=%d roots=%zu hit=%d fallback=%d elapsed=%.3fms\n",
+    LAMBDA_FILES_TRACE_EVENT("icon-resolve-cache path=\"%s\" dir=%d roots=%zu hit=%d fallback=%d elapsed=%.3fms\n",
                  path.string().c_str(),
                  isDirectory ? 1 : 0,
                  themeRoots.size(),
@@ -1662,7 +1662,7 @@ FileIconLookup resolveFileIcon(std::vector<std::filesystem::path> const& themeRo
     ++rootsChecked;
     FileIconLookup const lookup = lookupFileIcon(root, path, isDirectory, preferredSize);
     if (!lookup.themePath.empty()) {
-      trace::event("icon-resolve path=\"%s\" dir=%d roots=%d hit=1 fallback=%d elapsed=%.3fms\n",
+      LAMBDA_FILES_TRACE_EVENT("icon-resolve path=\"%s\" dir=%d roots=%d hit=1 fallback=%d elapsed=%.3fms\n",
                    path.string().c_str(),
                    isDirectory ? 1 : 0,
                    rootsChecked,
@@ -1674,7 +1674,7 @@ FileIconLookup resolveFileIcon(std::vector<std::filesystem::path> const& themeRo
     if (fallback.iconName.empty() || !lookup.fallback) fallback = lookup;
   }
   if (!fallback.iconName.empty()) {
-    trace::event("icon-resolve path=\"%s\" dir=%d roots=%d hit=0 fallback=1 elapsed=%.3fms\n",
+    LAMBDA_FILES_TRACE_EVENT("icon-resolve path=\"%s\" dir=%d roots=%d hit=0 fallback=1 elapsed=%.3fms\n",
                  path.string().c_str(),
                  isDirectory ? 1 : 0,
                  rootsChecked,
@@ -1683,7 +1683,7 @@ FileIconLookup resolveFileIcon(std::vector<std::filesystem::path> const& themeRo
     return fallback;
   }
   FileIconLookup lookup = lookupFileIcon({}, path, isDirectory, preferredSize);
-  trace::event("icon-resolve path=\"%s\" dir=%d roots=%d hit=%d fallback=%d elapsed=%.3fms\n",
+  LAMBDA_FILES_TRACE_EVENT("icon-resolve path=\"%s\" dir=%d roots=%d hit=%d fallback=%d elapsed=%.3fms\n",
                path.string().c_str(),
                isDirectory ? 1 : 0,
                rootsChecked,

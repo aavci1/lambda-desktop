@@ -12,7 +12,7 @@ void applyCompositorRuntimeConfig(CompositorConfigWatchContext& ctx, bool forceO
   ctx.appliedConfig = applyCompositorConfig(ctx.effectiveConfig(), ctx.canvas);
   lambda::setVulkanCanvasBackdropBlurBaseDownsample(&ctx.canvas,
                                                   ctx.appliedConfig.config.rendering.backdropBlurBaseDownsample);
-  presentation::traceTiming("apply-config", configStart);
+  LAMBDA_WINDOW_MANAGER_TRACE_TIMING("apply-config", configStart);
   ctx.wayland.setShortcutBindings(ctx.appliedConfig.config.shortcutBindings);
   ctx.wayland.setChromeThemeConfig(ctx.appliedConfig.config.chrome, ctx.appliedConfig.config.darkChrome);
   ctx.wayland.setInputConfig({

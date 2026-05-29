@@ -6,7 +6,10 @@
 namespace lambda::debug {
 
 inline bool envNonZero(char const* value) {
-  return value && value[0] != '\0' && std::strcmp(value, "0") != 0;
+  return value && value[0] != '\0' && std::strcmp(value, "0") != 0 &&
+         std::strcmp(value, "false") != 0 && std::strcmp(value, "FALSE") != 0 &&
+         std::strcmp(value, "off") != 0 && std::strcmp(value, "OFF") != 0 &&
+         std::strcmp(value, "no") != 0 && std::strcmp(value, "NO") != 0;
 }
 
 inline bool envTruthy(char const* value) {

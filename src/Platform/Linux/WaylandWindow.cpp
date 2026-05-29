@@ -1253,7 +1253,7 @@ public:
     if (framePending_ || !surface_ || !canSendWaylandRequests(shared_)) return;
     framePending_ = true;
     if (detail::resizeTraceEnabled()) {
-      detail::resizeTrace("wayland-window", "request-frame window=%u size=%dx%d\n",
+      LAMBDA_RESIZE_TRACE("wayland-window", "request-frame window=%u size=%dx%d\n",
                    handle_, static_cast<int>(std::lround(size_.width)),
                    static_cast<int>(std::lround(size_.height)));
     }
@@ -1268,7 +1268,7 @@ public:
 
   void completeAnimationFrame(bool needsAnotherFrame) override {
     if (detail::resizeTraceEnabled()) {
-      detail::resizeTrace("wayland-window", "complete-frame window=%u needsAnother=%d\n",
+      LAMBDA_RESIZE_TRACE("wayland-window", "complete-frame window=%u needsAnother=%d\n",
                    handle_, needsAnotherFrame ? 1 : 0);
     }
     flushWaylandDisplay(shared_, "animation frame complete");
@@ -1791,7 +1791,7 @@ private:
     }
     if (!self->framePending_) return;
     if (detail::resizeTraceEnabled()) {
-      detail::resizeTrace("wayland-window", "frame-done window=%u size=%dx%d\n",
+      LAMBDA_RESIZE_TRACE("wayland-window", "frame-done window=%u size=%dx%d\n",
                    self->handle_, static_cast<int>(std::lround(self->size_.width)),
                    static_cast<int>(std::lround(self->size_.height)));
     }
@@ -1806,7 +1806,7 @@ private:
     xdg_surface_ack_configure(surface, serial);
     self->configured_ = true;
     if (detail::resizeTraceEnabled()) {
-      detail::resizeTrace("wayland-window", "xdg-configure window=%u serial=%u pending=%dx%d\n",
+      LAMBDA_RESIZE_TRACE("wayland-window", "xdg-configure window=%u serial=%u pending=%dx%d\n",
                    self->handle_, serial, self->pendingWidth_, self->pendingHeight_);
     }
     if (self->pendingWidth_ > 0 && self->pendingHeight_ > 0) {
@@ -1822,7 +1822,7 @@ private:
       self->pendingWidth_ = width;
       self->pendingHeight_ = height;
       if (detail::resizeTraceEnabled()) {
-        detail::resizeTrace("wayland-window", "toplevel-configure window=%u size=%dx%d\n",
+        LAMBDA_RESIZE_TRACE("wayland-window", "toplevel-configure window=%u size=%dx%d\n",
                      self->handle_, width, height);
       }
     }
@@ -1838,7 +1838,7 @@ private:
     self->configureBoundsHeight_ = std::max(0, height);
     setVulkanCanvasResizeBoundsHint(self->canvas_, self->configureBoundsWidth_, self->configureBoundsHeight_);
     if (detail::resizeTraceEnabled()) {
-      detail::resizeTrace("wayland-window", "configure-bounds window=%u size=%dx%d\n",
+      LAMBDA_RESIZE_TRACE("wayland-window", "configure-bounds window=%u size=%dx%d\n",
                           self->handle_, self->configureBoundsWidth_, self->configureBoundsHeight_);
     }
 	  }
@@ -1955,7 +1955,7 @@ private:
     if (detail::resizeTraceEnabled()) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start).count();
-      detail::resizeTrace("wayland-window", 
+      LAMBDA_RESIZE_TRACE("wayland-window",
           "apply-configure window=%u size=%dx%d framePending=%d batched=%d elapsed=%.3fms\n",
           handle_, width, height, framePending_ ? 1 : 0, dispatchingWaylandEvents_ ? 1 : 0,
           static_cast<double>(elapsed) / 1000.0);
@@ -2335,7 +2335,7 @@ private:
     Application::instance().requestWindowRedraw(handle_);
     wakeEventLoop();
     if (detail::resizeTraceEnabled()) {
-      detail::resizeTrace("wayland-window", "request-resize-redraw window=%u framePending=%d\n",
+      LAMBDA_RESIZE_TRACE("wayland-window", "request-resize-redraw window=%u framePending=%d\n",
                    handle_, framePending_ ? 1 : 0);
     }
   }
@@ -2443,7 +2443,7 @@ private:
     if (detail::resizeTraceEnabled()) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start).count();
-      detail::resizeTrace("wayland-window", 
+      LAMBDA_RESIZE_TRACE("wayland-window",
           "flush-deferred window=%u size=%.0fx%.0f framePending=%d immediate=%d elapsed=%.3fms\n",
           handle_, pendingResizeSize_.width, pendingResizeSize_.height, framePending_ ? 1 : 0,
           renderedImmediately ? 1 : 0, static_cast<double>(elapsed) / 1000.0);

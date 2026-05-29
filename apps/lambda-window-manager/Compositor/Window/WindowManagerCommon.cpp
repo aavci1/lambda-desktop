@@ -261,8 +261,7 @@ WaylandServer::Impl::XdgPopup* popupForSurface(WaylandServer::Impl* server, Wayl
 
 bool popupTraceEnabled() {
   static bool const enabled = [] {
-    char const* env = std::getenv("LAMBDA_WINDOW_MANAGER_POPUP_TRACE");
-    return env && *env && *env != '0';
+    return lambda::debug::envNonZero(std::getenv("LAMBDA_WINDOW_MANAGER_POPUP_TRACE"));
   }();
   return enabled;
 }

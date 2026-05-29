@@ -891,7 +891,7 @@ void Runtime::handleWindowEvent(WindowEvent const& event) {
       if (traceResize) {
         auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - resizeStart).count();
-        detail::resizeTrace("runtime",
+        LAMBDA_RESIZE_TRACE("runtime",
                             "resize window=%u size=%.0fx%.0f elapsed=%.3fms\n",
                             d->window.handle(),
                             event.size.width,

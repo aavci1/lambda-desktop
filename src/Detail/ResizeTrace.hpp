@@ -30,6 +30,14 @@ inline bool resizeTraceMirrorStderr() {
   return !value || debug::envNonZero(value);
 }
 
+inline bool resizeTraceMetadataEnabled() {
+  static bool const enabled = resizeTraceEnabled() ||
+                              debug::envNonZero(std::getenv("LAMBDA_WINDOW_MANAGER_PACING_TRACE")) ||
+                              debug::envNonZero(std::getenv("LAMBDA_WINDOW_MANAGER_CPU_TRACE")) ||
+                              debug::envNonZero(std::getenv("LWM_SNAP_TRACE"));
+  return enabled;
+}
+
 inline void resizeTrace(char const* prefix, char const* format, ...) {
   if (!resizeTraceEnabled()) return;
   if (!prefix || !*prefix) prefix = "resize";
@@ -61,3 +69,10 @@ inline void resizeTrace(char const* prefix, char const* format, ...) {
 }
 
 } // namespace lambda::detail
+
+#define LAMBDA_RESIZE_TRACE(...)                   \
+  do {                                             \
+    if (::lambda::detail::resizeTraceEnabled()) { \
+      ::lambda::detail::resizeTrace(__VA_ARGS__); \
+    }                                              \
+  } while (false)

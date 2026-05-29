@@ -81,12 +81,14 @@ std::uint32_t sendToplevelConfigureInternal(WaylandServer::Impl* server,
   std::uint32_t const serial = server->nextConfigureSerial_;
   if (auto* surface = toplevel->xdgSurface->surface) {
     surface->lastConfigureSerial = serial;
-    surface->lastConfigureSentNsec = lambda::detail::resizeTraceTimestampNanoseconds();
-    surface->lastConfigureAckNsec = 0;
+    if (lambda::detail::resizeTraceMetadataEnabled()) {
+      surface->lastConfigureSentNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+      surface->lastConfigureAckNsec = 0;
+    }
     surface->lastConfigureWidth = width;
     surface->lastConfigureHeight = height;
   }
-  lambda::detail::resizeTrace("compositor",
+  LAMBDA_RESIZE_TRACE("compositor",
                             "configure surface=%llu size=%dx%d serial=%u awaiting=%d\n",
                             static_cast<unsigned long long>(toplevel->xdgSurface->surface
                                                                 ? toplevel->xdgSurface->surface->id
@@ -162,7 +164,7 @@ bool requestToplevelResizeConfigure(WaylandServer::Impl* server,
     surface->pendingResizeConfigureWidth = sameAsInFlight ? 0 : width;
     surface->pendingResizeConfigureHeight = sameAsInFlight ? 0 : height;
     if (!sameAsInFlight) {
-      lambda::detail::resizeTrace("compositor",
+      LAMBDA_RESIZE_TRACE("compositor",
                                   "resize-configure-defer surface=%llu desired=%d,%d %dx%d inFlight=%u %d,%d %dx%d "
                                   "acked=%d\n",
                                   static_cast<unsigned long long>(surface->id),
@@ -764,16 +766,19 @@ void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t ser
   if (!xdgSurface) return;
   xdgSurface->configured = true;
   if (auto* surface = xdgSurface->surface) {
-    std::uint64_t const now = lambda::detail::resizeTraceTimestampNanoseconds();
-    if (serial == surface->lastConfigureSerial) surface->lastConfigureAckNsec = now;
+    std::uint64_t now = 0;
+    if (lambda::detail::resizeTraceMetadataEnabled()) {
+      now = lambda::detail::resizeTraceTimestampNanoseconds();
+      if (serial == surface->lastConfigureSerial) surface->lastConfigureAckNsec = now;
+    }
     if (surface->resizeConfigureInFlight && serial == surface->resizeConfigureSerial) {
       surface->resizeConfigureAcked = true;
     }
     double const configureToAckMs =
-        surface->lastConfigureSentNsec > 0 && now >= surface->lastConfigureSentNsec
+        now > 0 && surface->lastConfigureSentNsec > 0 && now >= surface->lastConfigureSentNsec
             ? static_cast<double>(now - surface->lastConfigureSentNsec) / 1'000'000.0
             : 0.0;
-    lambda::detail::resizeTrace("compositor",
+    LAMBDA_RESIZE_TRACE("compositor",
                               "ack-configure surface=%llu serial=%u lastSerial=%u configure=%dx%d "
                               "configureToAck=%.3fms\n",
                               static_cast<unsigned long long>(surface->id),

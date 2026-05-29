@@ -421,7 +421,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
         cached.dmabufImported = cached.image != nullptr;
         diagnostics::recordDmabufImport(elapsedMilliseconds(importStart), cached.dmabufImported);
         if (cached.image) {
-          detail::resizeTrace(
+          LAMBDA_RESIZE_TRACE(
               "compositor-render", "dmabuf-cache-import surface=%llu buffer=%llu imported=1 elapsed=%.3fms\n",
               static_cast<unsigned long long>(surface.id), static_cast<unsigned long long>(surface.dmabufBufferId),
               elapsedMilliseconds(importStart));
@@ -470,7 +470,7 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
         cached.logged = true;
       }
       if (cached.image) {
-        detail::resizeTrace("compositor-render",
+        LAMBDA_RESIZE_TRACE("compositor-render",
                             "dmabuf-cache-import surface=%llu buffer=%llu imported=0 elapsed=%.3fms\n",
                             static_cast<unsigned long long>(surface.id),
                             static_cast<unsigned long long>(surface.dmabufBufferId), elapsedMilliseconds(importStart));

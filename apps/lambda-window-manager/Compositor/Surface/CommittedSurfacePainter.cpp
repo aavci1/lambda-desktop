@@ -442,7 +442,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
 
   if (shouldTraceRenderSnapshot(surface, visual)) {
     auto const imageSize = clientImage.size();
-    detail::resizeTrace(
+    LAMBDA_RESIZE_TRACE(
         "compositor-render",
         "render-snapshot surface=%llu window=%d,%d frame=%dx%d buffer=%dx%d "
         "image=%dx%d source=%.1f,%.1f %.1fx%.1f dest=%dx%d serial=%llu\n",

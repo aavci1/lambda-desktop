@@ -31,14 +31,14 @@ inline std::shared_ptr<lambda::Image> themedFileIconImage(std::string const& pat
   static std::unordered_map<std::string, std::shared_ptr<lambda::Image>> cache;
   auto found = cache.find(path);
   if (found != cache.end()) {
-    trace::event("icon-image cache-hit path=\"%s\" elapsed=%.3fms\n",
+    LAMBDA_FILES_TRACE_EVENT("icon-image cache-hit path=\"%s\" elapsed=%.3fms\n",
                  path.c_str(),
                  trace::nowMs() - startMs);
     return found->second;
   }
   auto image = lambda::loadImage(path);
   cache.emplace(path, image);
-  trace::event("icon-image load path=\"%s\" ok=%d elapsed=%.3fms\n",
+  LAMBDA_FILES_TRACE_EVENT("icon-image load path=\"%s\" ok=%d elapsed=%.3fms\n",
                path.c_str(),
                image ? 1 : 0,
                trace::nowMs() - startMs);

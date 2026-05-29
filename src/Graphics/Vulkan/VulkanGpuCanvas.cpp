@@ -1302,7 +1302,7 @@ public:
       swapchainTargetHeight_ = fbH + (addHeadroom ? std::max(512, fbH / 2) : 0);
       swapchainDirty_ = true;
       if (detail::resizeTraceEnabled()) {
-        detail::resizeTrace(
+        LAMBDA_RESIZE_TRACE(
           "vulkan-resize",
           "window=%u logical=%dx%d framebuffer=%dx%d target=%dx%d boundsHint=%dx%d dirty=1\n",
                      handle_, width_, height_, framebufferWidth_, framebufferHeight_,
@@ -1311,7 +1311,7 @@ public:
                      resizeBoundsHintHeight_);
       }
     } else if (framebufferChanged && detail::resizeTraceEnabled()) {
-      detail::resizeTrace(
+      LAMBDA_RESIZE_TRACE(
         "vulkan-resize",
         "window=%u logical=%dx%d framebuffer=%dx%d extent=%ux%u dirty=0\n",
                    handle_, width_, height_, framebufferWidth_, framebufferHeight_,
@@ -1468,7 +1468,7 @@ public:
       if (detail::resizeTraceEnabled()) {
         auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - presentStart).count();
-        detail::resizeTrace(
+        LAMBDA_RESIZE_TRACE(
           "vulkan-present",
           "window=%u logical=%dx%d framebuffer=%dx%d extent=%ux%u elapsed=%.3fms\n",
                      handle_, width_, height_, framebufferWidth_, framebufferHeight_,
@@ -1673,7 +1673,7 @@ public:
     currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
     debug::perf::recordPresentedFrame();
     if (traceResize) {
-      detail::resizeTrace(
+      LAMBDA_RESIZE_TRACE(
           "vulkan-present-detail",
           "window=%u image=%u ops=%zu rects=%zu quads=%zu paths=%zu "
           "waitFrame=%.3fms deferred=%.3fms acquire=%.3fms waitImage=%.3fms "
@@ -1890,7 +1890,7 @@ public:
       currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
       debug::perf::recordPresentedFrame();
       if (traceResize) {
-        detail::resizeTrace(
+        LAMBDA_RESIZE_TRACE(
             "vulkan-render-target-detail",
             "window=%u target=%ux%u ops=%zu rects=%zu quads=%zu paths=%zu backdropRuns=%zu "
             "waitFrame=%.3fms deferred=%.3fms begin=%.3fms atlas=%.3fms blurPrep=%.3fms "
@@ -3375,7 +3375,7 @@ private:
     if (detail::resizeTraceEnabled()) {
       auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - recreateStart).count();
-      detail::resizeTrace(
+      LAMBDA_RESIZE_TRACE(
           "vulkan-recreate-swapchain",
           "window=%u framebuffer=%dx%d target=%dx%d extent=%ux%u images=%zu "
           "capsCurrent=%ux%u requested=%ux%u "
