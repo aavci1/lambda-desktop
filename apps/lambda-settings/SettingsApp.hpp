@@ -22,6 +22,7 @@
 #include <Lambda/UI/Views/VStack.hpp>
 #include <Lambda/UI/Views/ZStack.hpp>
 
+#include <array>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -77,8 +78,8 @@ ChromeInsets chromeInsets(WindowChromeMetrics const& chrome) {
   return insets;
 }
 
-std::vector<SidebarItem> sidebarItems() {
-  return {
+std::array<SidebarItem, 8> const& sidebarItems() {
+  static std::array<SidebarItem, 8> const items{{
       {SettingsSection::General, "General", IconName::Settings},
       {SettingsSection::Appearance, "Appearance", IconName::Palette},
       {SettingsSection::Display, "Display", IconName::Computer},
@@ -87,7 +88,8 @@ std::vector<SidebarItem> sidebarItems() {
       {SettingsSection::DockPanel, "Dock & Panel", IconName::Dock},
       {SettingsSection::Notifications, "Notifications", IconName::Notifications},
       {SettingsSection::About, "About", IconName::Info},
-  };
+  }};
+  return items;
 }
 
 bool hasGroupGapBefore(SettingsSection section) {
@@ -310,6 +312,28 @@ BoundSetting bindSetting(SettingsSource source, std::vector<SettingSchema> const
   auto found = findSchema(schema, id);
   return BoundSetting{.source = source,
                       .schema = found ? *found : SettingSchema{.id = id, .label = id}};
+}
+
+std::vector<SettingSchema> const& cachedWindowManagerSettingsSchema() {
+  static std::vector<SettingSchema> const schema = windowManagerSettingsSchema();
+  return schema;
+}
+
+std::vector<SettingSchema> const& cachedShellSettingsSchema() {
+  static std::vector<SettingSchema> const schema = shellSettingsSchema();
+  return schema;
+}
+
+std::map<std::string, std::string> const& cachedWindowManagerSchemaDefaults() {
+  static std::map<std::string, std::string> const defaults =
+      schemaDefaults(cachedWindowManagerSettingsSchema());
+  return defaults;
+}
+
+std::map<std::string, std::string> const& cachedShellSchemaDefaults() {
+  static std::map<std::string, std::string> const defaults =
+      schemaDefaults(cachedShellSettingsSchema());
+  return defaults;
 }
 
 void setSettingValue(Reactive::Signal<std::map<std::string, std::string>> values,
@@ -841,7 +865,8 @@ Element genericPage(std::string title, std::vector<SettingsRowValue> rows) {
 }
 
 Element aboutPage() {
-  auto rows = systemInfoRows(loadSystemInfo());
+  static std::vector<std::pair<std::string, std::string>> const rows =
+      systemInfoRows(loadSystemInfo());
   std::vector<Element> rowElements;
   rowElements.reserve(rows.size());
   for (auto const& [label, value] : rows) {
@@ -908,8 +933,8 @@ Element contentForSection(SettingsSection section,
                           Reactive::Signal<std::map<std::string, std::string>> wmValues,
                           Reactive::Signal<std::map<std::string, std::string>> shellValues,
                           std::function<void(SettingsSource, std::string, std::string)> setValue) {
-  auto const wmSchema = windowManagerSettingsSchema();
-  auto const shellSchema = shellSettingsSchema();
+  std::vector<SettingSchema> const& wmSchema = cachedWindowManagerSettingsSchema();
+  std::vector<SettingSchema> const& shellSchema = cachedShellSettingsSchema();
   auto wm = [&](std::string const& id) {
     return bindSetting(SettingsSource::WindowManager, wmSchema, id);
   };
@@ -1034,8 +1059,8 @@ struct SettingsAppRoot {
     };
 
     auto reset = [wmValues, shellValues, statusText] {
-      wmValues.set(schemaDefaults(windowManagerSettingsSchema()));
-      shellValues.set(schemaDefaults(shellSettingsSchema()));
+      wmValues.set(cachedWindowManagerSchemaDefaults());
+      shellValues.set(cachedShellSchemaDefaults());
       statusText.set("Defaults staged");
     };
 
