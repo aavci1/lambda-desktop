@@ -1,4 +1,5 @@
 add_subdirectory(lambda-editor)
+add_subdirectory(lambda-browser)
 add_subdirectory(lambda-files)
 add_subdirectory(lambda-preview)
 add_subdirectory(lambda-settings)

@@ -341,7 +341,7 @@ TEST_CASE("Shell config parses defaults and invalid fallback") {
                                    "lambda-preview",
                                    "lambda-terminal",
                                    "lambda-settings",
-                                   "firefox",
+                                   "lambda-browser",
                                });
   CHECK(defaults.iconSize == 48);
   CHECK(defaults.topBarModules.back() == "clock");

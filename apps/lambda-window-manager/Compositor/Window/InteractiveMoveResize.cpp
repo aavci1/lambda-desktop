@@ -250,12 +250,8 @@ void startGeometryAnimation(WaylandServer::Impl* server,
     surface->geometryAnimationActive = false;
     return;
   }
-  bool const grows = targetWidth > surface->geometryAnimationStartWidth ||
-                     targetHeight > surface->geometryAnimationStartHeight;
-  if (grows) {
-    sendToplevelConfigure(server, toplevelForSurface(server, surface), targetWidth, targetHeight);
-    surface->geometryAnimationConfigureSent = true;
-  }
+  sendToplevelConfigure(server, toplevelForSurface(server, surface), targetWidth, targetHeight);
+  surface->geometryAnimationConfigureSent = true;
   ++server->contentSerial_;
   server->flushClients();
 }
@@ -500,6 +496,7 @@ void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Sur
   server->dragOffsetX_ = server->pointerX_ - static_cast<float>(surface->windowX);
   server->dragOffsetY_ = server->pointerY_ - static_cast<float>(surface->windowY);
   sendToplevelConfigure(server, toplevelForSurface(server, surface), restored.width, restored.height);
+  server->flushClients();
 }
 
 } // namespace lambda::compositor::wm
@@ -604,17 +601,8 @@ void updateResize(WaylandServer::Impl* server) {
                             dx,
                             dy,
                             server->resizeEdges_);
-  if (!surface->awaitingConfigureCommit) {
-    sendToplevelConfigure(server, toplevelForSurface(server, surface), next.width, next.height);
-  } else {
-    lambda::detail::resizeTrace("compositor",
-                              "coalesce-resize-configure surface=%llu pending=%dx%d awaiting=%dx%d\n",
-                              static_cast<unsigned long long>(surface->id),
-                              next.width,
-                              next.height,
-                              surface->awaitingConfigureWidth,
-                              surface->awaitingConfigureHeight);
-  }
+  sendToplevelConfigure(server, toplevelForSurface(server, surface), next.width, next.height);
+  server->flushClients();
 }
 
 } // namespace lambda::compositor::wm

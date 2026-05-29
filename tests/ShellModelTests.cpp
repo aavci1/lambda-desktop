@@ -194,11 +194,11 @@ TEST_CASE("Shell model dock items come from config pins and app registry") {
 
   lambda_shell::ShellModel model;
   lambda_shell::ShellConfig config = lambda_shell::defaultShellConfig();
-  config.dockPinned = {"lambda-terminal", "missing-app", "firefox", "lambda-files"};
+  config.dockPinned = {"lambda-terminal", "missing-app", "lambda-browser", "lambda-files"};
   std::vector<lambda_shell::AppRegistryEntry> apps{
       {.appId = "lambda-files", .name = "Files", .icon = "lambda-files", .command = "lambda-files"},
       {.appId = "lambda-terminal", .name = "Terminal", .icon = terminalIcon.string(), .command = "lambda-terminal"},
-      {.appId = "browser", .name = "Browser", .icon = browserIcon.string(), .command = "firefox"},
+      {.appId = "browser", .name = "Browser", .icon = browserIcon.string(), .command = "lambda-browser"},
       {.appId = "org.example.Hidden", .name = "Hidden", .command = "hidden", .hidden = true},
   };
 

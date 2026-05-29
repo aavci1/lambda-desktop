@@ -374,8 +374,10 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
       } else {
         sendToplevelStateConfigure(this, toplevelForSurface(this, resizedSurface));
       }
+      ++contentSerial_;
       sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
       updateCompositorCursorForPointer(this);
+      flushClients();
       return;
     } else if (dragSurface_) {
       if (auto target = activeDragSnapTarget(this, dragSurface_, monotonicMilliseconds())) {

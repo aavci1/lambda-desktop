@@ -187,7 +187,7 @@ struct ShellConfig {
   bool showRunningUnpinned = true;
   bool dockShowTooltips = true;
   std::vector<std::string> dockPinned{
-      "lambda-files", "lambda-editor", "lambda-preview", "lambda-terminal", "lambda-settings", "firefox"};
+      "lambda-files", "lambda-editor", "lambda-preview", "lambda-terminal", "lambda-settings", "lambda-browser"};
 
   std::string topBarClockFormat = "%a %d %b, %H:%M";
   bool topBarShowActiveTitle = true;

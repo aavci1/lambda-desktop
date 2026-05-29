@@ -337,7 +337,7 @@ std::vector<SettingSchema> shellSettingsSchema() {
        .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
       {.id = "dock.pinned", .label = "Pinned apps", .type = SettingType::String,
        .applyMode = ApplyMode::HotReload,
-       .defaultValue = "lambda-files,lambda-editor,lambda-preview,lambda-terminal,lambda-settings,firefox"},
+       .defaultValue = "lambda-files,lambda-editor,lambda-preview,lambda-terminal,lambda-settings,lambda-browser"},
       {.id = "top_bar.clock_format", .label = "Clock format", .type = SettingType::String,
        .applyMode = ApplyMode::HotReload, .defaultValue = "%a %d %b, %H:%M"},
       {.id = "top_bar.show_active_title", .label = "Show active title", .type = SettingType::Boolean,

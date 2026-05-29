@@ -218,6 +218,7 @@ std::string localLambdaAppTitle(std::string_view appId) {
   static std::map<std::string, std::string> const titles{
       {"lambda-editor", "Editor"},
       {"lambda-files", "Files"},
+      {"lambda-browser", "Browser"},
       {"lambda-preview", "Preview"},
       {"lambda-settings", "Settings"},
       {"lambda-terminal", "Terminal"},
@@ -231,6 +232,7 @@ std::string localLambdaAppBundleName(std::string_view appId) {
   static std::map<std::string, std::string> const bundleNames{
       {"lambda-editor", "Lambda Editor"},
       {"lambda-files", "Lambda Files"},
+      {"lambda-browser", "Lambda Browser"},
       {"lambda-preview", "Lambda Preview"},
       {"lambda-settings", "Lambda Settings"},
       {"lambda-terminal", "Lambda Terminal"},
@@ -574,7 +576,9 @@ bool shellAppIdMatches(std::string_view requested, std::string_view actual) {
   std::string app = lowerAscii(actual);
   if (req == app) return true;
   if (req == "terminal" && (app == "lambda-terminal" || app == "foot")) return true;
-  if (req == "browser" && (app == "firefox" || app == "org.mozilla.firefox")) return true;
+  if (req == "browser" && (app == "lambda-browser" || app == "firefox" || app == "org.mozilla.firefox")) {
+    return true;
+  }
   if (req == "editor" && app == "lambda-editor") return true;
   if (req == "files" && (app == "lambda-files" || app == "files" || app == "org.gnome.nautilus" ||
                          app == "nautilus" || app == "thunar")) {
@@ -686,7 +690,7 @@ std::vector<std::filesystem::path> defaultLocalLambdaAppDirs() {
 }
 
 std::vector<std::string> defaultLocalLambdaAppNames() {
-  return {"lambda-editor", "lambda-files", "lambda-preview", "lambda-settings", "lambda-terminal"};
+  return {"lambda-browser", "lambda-editor", "lambda-files", "lambda-preview", "lambda-settings", "lambda-terminal"};
 }
 
 std::vector<AppRegistryEntry> discoverInstalledDesktopApps(std::vector<std::filesystem::path> const& applicationDirs,
@@ -722,6 +726,7 @@ std::vector<AppRegistryEntry> discoverLocalLambdaApps(std::vector<std::filesyste
   static std::map<std::string, std::string> const themedIcons{
       {"lambda-editor", "accessories-text-editor"},
       {"lambda-files", "system-file-manager"},
+      {"lambda-browser", "web-browser"},
       {"lambda-preview", "image-viewer"},
       {"lambda-settings", "preferences-system"},
       {"lambda-terminal", "utilities-terminal"},
@@ -772,8 +777,8 @@ std::vector<AppRegistryEntry> builtinFallbackAppEntries() {
   AppRegistryEntry browser;
   browser.appId = "browser";
   browser.name = "Browser";
-  browser.icon = "firefox";
-  browser.command = "firefox";
+  browser.icon = "web-browser";
+  browser.command = "lambda-browser";
 
   return {std::move(terminal), std::move(browser)};
 }

@@ -506,7 +506,6 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
        surface.destinationHeight != static_cast<int>(std::lround(windowHeight)));
   bool const geometryAnimationContentSizeMismatch =
       surface.pacingSizing &&
-      surface.geometryAnimationGrowing &&
       surface.committedWidth > 0 &&
       surface.committedHeight > 0 &&
       (surface.committedWidth != surface.width ||
@@ -539,7 +538,8 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                      contentHeight),
                          fullContentRect,
                          contentCorners);
-  if (clientContentSmallerThanFrame && !geometryAnimationContentSizeMismatch) {
+  bool const contentSmallerThanFrame = contentWidth < windowWidth || contentHeight < windowHeight;
+  if (contentSmallerThanFrame) {
     float const rightPad = std::max(0.f, windowWidth - contentWidth);
     float const bottomPad = std::max(0.f, windowHeight - contentHeight);
     float const edgeSourceWidth = std::max(1.f, sourceWidth);

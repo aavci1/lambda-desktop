@@ -106,6 +106,7 @@ TEST_CASE("presentation eligibility excludes minimized toplevels and dismissed p
 TEST_CASE("shell app id matching accepts built-in app aliases") {
   CHECK(lambda::compositor::wm::shellAppIdMatches("terminal", "lambda-terminal"));
   CHECK(lambda::compositor::wm::shellAppIdMatches("terminal", "foot"));
+  CHECK(lambda::compositor::wm::shellAppIdMatches("browser", "lambda-browser"));
   CHECK(lambda::compositor::wm::shellAppIdMatches("browser", "firefox"));
   CHECK(lambda::compositor::wm::shellAppIdMatches("files", "lambda-files"));
   CHECK(lambda::compositor::wm::shellAppIdMatches("lambda-files", "files"));

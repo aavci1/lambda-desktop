@@ -67,7 +67,7 @@ TEST_CASE("Settings Shell schema descriptors are unique and expose defaults") {
   CHECK(lambda_settings::schemaIdsUnique(schema));
   auto defaults = lambda_settings::schemaDefaults(schema);
   CHECK(defaults.at("dock.pinned") ==
-        "lambda-files,lambda-editor,lambda-preview,lambda-terminal,lambda-settings,firefox");
+        "lambda-files,lambda-editor,lambda-preview,lambda-terminal,lambda-settings,lambda-browser");
   CHECK(defaults.at("appearance.icon_size") == "48");
   CHECK(defaults.at("clipboard_history.persist") == "false");
   CHECK(defaults.at("launcher.empty_query") == "recommended");

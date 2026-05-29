@@ -120,6 +120,7 @@ TEST_CASE("Shell app registry matches app aliases") {
   CHECK(lambda_shell::shellAppIdMatches("editor", "lambda-editor"));
   CHECK(lambda_shell::shellAppIdMatches("terminal", "lambda-terminal"));
   CHECK(lambda_shell::shellAppIdMatches("terminal", "foot"));
+  CHECK(lambda_shell::shellAppIdMatches("browser", "lambda-browser"));
   CHECK(lambda_shell::shellAppIdMatches("files", "org.gnome.Nautilus"));
   CHECK(lambda_shell::shellAppIdMatches("preview", "lambda-preview"));
   CHECK(lambda_shell::shellAppIdMatches("settings", "lambda-settings"));
@@ -179,7 +180,7 @@ TEST_CASE("Shell app registry resolves launch commands from shared registry") {
 
   auto browser = lambda_shell::resolveAppLaunchCommand("browser", registry);
   REQUIRE(browser);
-  CHECK(*browser == "'firefox'");
+  CHECK(*browser == "'lambda-browser'");
 
   CHECK_FALSE(lambda_shell::resolveAppLaunchCommand("calendar", registry));
 
