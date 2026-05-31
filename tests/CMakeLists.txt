@@ -85,6 +85,7 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
     CompositorSeatSerialTests.cpp
     CompositorSnapshotBuilderTests.cpp
     CompositorSubsurfaceHitTests.cpp
+    CompositorViewporterTests.cpp
     CompositorXdgOutputTests.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/LayerShellZones.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/LayerShellState.cpp

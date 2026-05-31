@@ -1,10 +1,10 @@
 #include "Compositor/Wayland/Globals/Viewporter.hpp"
 
 #include "Compositor/Wayland/ResourceTemplates.hpp"
+#include "Compositor/Wayland/ViewporterState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "viewporter-server-protocol.h"
 
-#include <algorithm>
 #include <memory>
 #include <wayland-server-core.h>
 
@@ -99,7 +99,10 @@ void viewporterGetViewport(wl_client* client, wl_resource* resource, std::uint32
   auto viewport = std::make_unique<WaylandServer::Impl::Viewport>();
   viewport->server = server;
   viewport->surface = surface;
-  wl_resource* viewportResource = wl_resource_create(client, &wp_viewport_interface, 1, id);
+  wl_resource* viewportResource = wl_resource_create(client,
+                                                     &wp_viewport_interface,
+                                                     viewporterResourceVersion(wl_resource_get_version(resource)),
+                                                     id);
   if (!viewportResource) {
     wl_client_post_no_memory(client);
     return;
@@ -118,7 +121,11 @@ struct wp_viewporter_interface const viewporterImpl{
 
 
 void bindViewporterImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &wp_viewporter_interface, std::min(version, 1u), id);
+  wl_resource* resource = wl_resource_create(client, &wp_viewporter_interface, viewporterResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &viewporterImpl, data, nullptr);
 }
 

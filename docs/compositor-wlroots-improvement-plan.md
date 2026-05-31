@@ -36,6 +36,7 @@
 | P16 | WM-COMP-17 Output done-event batching | Verified | Runtime `wl_output.scale` and xdg-output logical-size updates are batched behind one `wl_output.done`, matching wlroots scheduling semantics | XDG-output/output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P17 | WM-COMP-18 Pointer extension dependent-resource cleanup | Verified | Server-side relative-pointer and pointer-constraint objects are removed when their wl_pointer resource is destroyed, leaving protocol resources inert | Pointer-extension helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle slice |
 | P18 | WM-COMP-19 Cursor-shape dependent-resource cleanup | Verified | Cursor-shape device state is removed when the underlying wl_pointer resource is destroyed, leaving protocol resources inert | Cursor-shape helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle slice |
+| P19 | WM-COMP-20 Viewporter resource hygiene | Verified | Viewporter resource versioning and bind no-memory handling now align with wlroots | Viewporter helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -674,6 +675,37 @@
 - Manager bind allocation failure posts no-memory.
 - Resource version selection and dependent-pointer matching are covered by automated helper tests.
 
+## WM-COMP-20 Viewporter Resource Hygiene
+
+**Why this matters:** wlroots creates `wp_viewport` resources at the bound viewporter manager version and posts no-memory on manager bind allocation failure. Lambda already has the important viewport pending/current commit validation, but its resource creation path still has the same small allocation/version gaps seen in other globals.
+
+**Goal:** centralize the implemented viewporter version cap and use it for both manager and viewport object resources, with bind no-memory handling.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Viewporter.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/ViewporterState.hpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: added a viewporter resource-version helper.
+2. Done: used the helper in manager binding and viewport object creation, with no-memory handling.
+3. Done: ran targeted viewporter/compositor tests and the broader feasible suite.
+
+**Step 1 inventory:**
+
+- wlroots advertises viewporter version 1 and creates viewport objects at the bound manager resource version.
+- wlroots posts no-memory if manager binding or viewport object creation fails.
+- Lambda already posts no-memory for viewport object creation and has commit-time validation for source bounds and integer source sizes without destination.
+- Lambda hardcodes viewport object resources to version 1 and lacks a manager bind no-memory guard.
+
+**Acceptance criteria:**
+
+- Viewporter manager and viewport object resources use the implemented version cap.
+- Manager bind allocation failure posts no-memory.
+- Automated helper tests cover version selection.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -756,3 +788,5 @@
 | 2026-05-31 | WM-COMP-18 | Verified | Added shared pointer-extension version helpers, matched extension objects by dependent `wl_pointer`, and changed `wl_pointer` destruction to inert and remove associated relative-pointer and pointer-constraint server objects instead of retaining null-pointer entries. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*pointer extension*,*pointer constraint*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-19 | In progress | Cursor-shape comparison found wlroots makes cursor-shape device resources inert when their dependent seat/pointer object is destroyed. Lambda retains cursor-shape devices with raw `wl_pointer` pointers. Implementing dependent-pointer cleanup and bind no-memory handling. |
 | 2026-05-31 | WM-COMP-19 | Verified | Added cursor-shape version and dependent-pointer helpers, guarded manager bind allocation failure, created devices at the capped manager version, and changed `wl_pointer` destruction to inert and remove associated cursor-shape devices. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*cursor shape*,*pointer extension*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-20 | In progress | Viewporter comparison found Lambda already has commit-time viewport validation, but still hardcodes viewport object resources to version 1 and lacks manager bind no-memory handling. Implementing a shared version helper and bind guard. |
+| 2026-05-31 | WM-COMP-20 | Verified | Added a shared viewporter version helper, created `wp_viewport` objects at the capped manager-bound version, and guarded manager bind allocation failure. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*viewport*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
