@@ -27,6 +27,19 @@ namespace lambda::compositor {
   return xdgToplevelMapped(parent) ? parent : nullptr;
 }
 
+inline bool resetXdgToplevelClientStateForUnmap(WaylandServer::Impl::XdgToplevel* toplevel) {
+  if (!toplevel) return false;
+  bool const changed = toplevel->mapped ||
+                       toplevel->parent != nullptr ||
+                       !toplevel->title.empty() ||
+                       !toplevel->appId.empty();
+  toplevel->parent = nullptr;
+  toplevel->mapped = false;
+  toplevel->title.clear();
+  toplevel->appId.clear();
+  return changed;
+}
+
 [[nodiscard]] inline bool xdgToplevelTitleUtf8Valid(std::string_view text) {
   auto inRange = [](unsigned char value, unsigned char low, unsigned char high) {
     return low <= value && value <= high;

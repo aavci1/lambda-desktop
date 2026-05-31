@@ -721,7 +721,7 @@ void resetXdgToplevelForUnmap(WaylandServer::Impl::Surface* surface) {
   auto* toplevel = surface && surface->server ? toplevelForSurface(surface->server, surface) : nullptr;
   if (!toplevel) return;
 
-  bool changed = toplevel->mapped || toplevel->parent != nullptr;
+  bool changed = false;
   WaylandServer::Impl::XdgToplevel* replacementParent = xdgToplevelRetainedParent(toplevel->parent);
   for (auto& child : surface->server->toplevels_) {
     if (child && child.get() != toplevel && child->parent == toplevel) {
@@ -729,8 +729,7 @@ void resetXdgToplevelForUnmap(WaylandServer::Impl::Surface* surface) {
       changed = true;
     }
   }
-  toplevel->parent = nullptr;
-  toplevel->mapped = false;
+  changed = resetXdgToplevelClientStateForUnmap(toplevel) || changed;
   if (changed) surface->server->notifyShellStateChanged();
 }
 

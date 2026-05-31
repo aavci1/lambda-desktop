@@ -289,6 +289,24 @@ TEST_CASE("xdg toplevel parent retention requires a mapped toplevel parent") {
   CHECK(lambda::compositor::xdgToplevelRetainedParent(&parent) == nullptr);
 }
 
+TEST_CASE("xdg toplevel client state resets on unmap") {
+  lambda::compositor::WaylandServer::Impl::XdgToplevel parent{};
+  lambda::compositor::WaylandServer::Impl::XdgToplevel toplevel{};
+  CHECK_FALSE(lambda::compositor::resetXdgToplevelClientStateForUnmap(&toplevel));
+
+  toplevel.parent = &parent;
+  toplevel.mapped = true;
+  toplevel.title = "Settings";
+  toplevel.appId = "lambda-settings";
+
+  CHECK(lambda::compositor::resetXdgToplevelClientStateForUnmap(&toplevel));
+  CHECK(toplevel.parent == nullptr);
+  CHECK_FALSE(toplevel.mapped);
+  CHECK(toplevel.title.empty());
+  CHECK(toplevel.appId.empty());
+  CHECK_FALSE(lambda::compositor::resetXdgToplevelClientStateForUnmap(&toplevel));
+}
+
 TEST_CASE("xdg popup topmost validation detects live child popups") {
   lambda::compositor::WaylandServer::Impl::Surface parentSurface{};
   lambda::compositor::WaylandServer::Impl::Surface unrelatedSurface{};
