@@ -20,9 +20,11 @@ enum class XdgOutputDoneKind : std::uint8_t {
 }
 
 [[nodiscard]] inline XdgOutputDoneKind xdgOutputDoneKind(std::uint32_t xdgOutputVersion,
-                                                         std::uint32_t wlOutputVersion) {
+                                                         std::uint32_t wlOutputVersion,
+                                                         bool includeWlOutputDone = true) {
   if (xdgOutputVersion < kXdgOutputDoneDeprecatedSinceVersion) return XdgOutputDoneKind::XdgOutput;
-  return wlOutputVersion >= kWlOutputDoneSinceVersion ? XdgOutputDoneKind::WlOutput : XdgOutputDoneKind::None;
+  return includeWlOutputDone && wlOutputVersion >= kWlOutputDoneSinceVersion ? XdgOutputDoneKind::WlOutput
+                                                                             : XdgOutputDoneKind::None;
 }
 
 [[nodiscard]] inline bool xdgOutputLogicalSizeChanged(std::int32_t currentWidth,

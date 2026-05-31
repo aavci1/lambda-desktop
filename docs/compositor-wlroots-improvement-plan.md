@@ -33,6 +33,7 @@
 | P13 | WM-COMP-14 Idle-inhibit lifecycle/resource hygiene | Verified | Idle-inhibit resource versioning, bind allocation handling, logging, and active-surface checks now follow wlroots-style resource behavior | Idle-inhibit helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P14 | WM-COMP-15 Output scale/resource hygiene | Verified | Legacy `wl_output.scale` rounding, resource-version checks, and bind no-memory handling now follow wlroots | Output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P15 | WM-COMP-16 XDG output runtime updates | Verified | XDG-output resources are tracked and receive logical-size updates when output scale changes, with wlroots-style done-event selection | XDG-output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
+| P16 | WM-COMP-17 Output done-event batching | Verified | Runtime `wl_output.scale` and xdg-output logical-size updates are batched behind one `wl_output.done`, matching wlroots scheduling semantics | XDG-output/output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -574,6 +575,38 @@
 - Destroyed wl_output resources are not used for later xdg-output done events.
 - Automated helper tests cover version selection, done-event selection, and logical-size update detection.
 
+## WM-COMP-17 Output Done-Event Batching
+
+**Why this matters:** wlroots schedules output done events so `wl_output.scale` and xdg-output logical-size updates caused by the same output state change are observed atomically. Lambda's runtime scale path can send `wl_output.done` once after scale and then again after xdg-output updates, which splits one logical output change into two client-visible batches.
+
+**Goal:** send runtime output scale changes, xdg-output logical-size updates, and the final `wl_output.done` in one ordered batch.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgOutput.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgOutput.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/XdgOutputState.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/ServerLifecycle.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: suppressed runtime xdg-output `wl_output.done` while still allowing pre-v3 `zxdg_output_v1.done`.
+2. Done: reordered `setPreferredScale` so output scale, xdg-output details, and final `wl_output.done` are emitted in one batch.
+3. Done: ran targeted xdg-output/output/compositor tests and the broader feasible suite.
+
+**Step 1 inventory:**
+
+- wlroots sends xdg-output details and calls `wlr_output_schedule_done`; output scale changes also schedule done, so the event loop coalesces them.
+- Lambda sends output scale and `wl_output.done` immediately from `setPreferredScale`.
+- After WM-COMP-16, Lambda can also send `wl_output.done` from the xdg-output update helper for xdg-output v3 resources.
+
+**Acceptance criteria:**
+
+- Runtime scale updates send `wl_output.scale` before xdg-output logical details and one `wl_output.done` after both.
+- Pre-v3 xdg-output resources still receive `zxdg_output_v1.done` for xdg-output details.
+- Automated helper tests cover suppressing only wl_output done events during a batched update.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -649,4 +682,6 @@
 | 2026-05-31 | WM-COMP-15 | In progress | Output comparison found wlroots gates output events by bound resource version, guards bind allocation failure, and sends legacy `wl_output.scale` as `ceil(output->scale)`. Implementing a shared output version/scale helper and applying it to initial bind plus runtime scale updates. |
 | 2026-05-31 | WM-COMP-15 | Verified | Added an output version/scale helper, changed legacy `wl_output.scale` to round fractional scales up with `ceil`, reused it for runtime scale updates, gated output events by bound resource version, and added bind no-memory handling. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*output*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-16 | In progress | XDG-output comparison found wlroots keeps xdg-output resources attached to outputs and sends logical-size updates when effective resolution changes. Lambda sends xdg-output details only at creation and does not guard manager bind allocation failure. Implementing resource tracking, done-event selection, and runtime logical-size updates. |
-| 2026-05-31 | WM-COMP-16 | Verified | Added tracked xdg-output resources, clear stale paired `wl_output` links on output-resource destruction, update xdg-output logical size when runtime output scale changes, select `zxdg_output_v1.done` versus `wl_output.done` from resource versions, and guard manager bind allocation failure. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg output*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-16 | Verified | Added tracked xdg-output resources, cleared stale paired `wl_output` links on output-resource destruction, updated xdg-output logical size when runtime output scale changes, selected `zxdg_output_v1.done` versus `wl_output.done` from resource versions, and guarded manager bind allocation failure. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg output*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-17 | In progress | Output done comparison found wlroots coalesces output scale and xdg-output logical-size notifications behind scheduled `wl_output.done`. Lambda can now emit a scale done and a separate xdg-output done in the same runtime scale update. Implementing batched done emission. |
+| 2026-05-31 | WM-COMP-17 | Verified | Batched runtime scale notifications by sending `wl_output.scale`, then xdg-output logical details with only wl_output done suppressed, then one final `wl_output.done` per output resource. Pre-v3 xdg-output resources still receive `zxdg_output_v1.done`. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg output*,*output*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

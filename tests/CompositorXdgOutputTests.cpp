@@ -17,6 +17,8 @@ TEST_CASE("xdg output done event follows xdg-output and wl_output versions") {
   CHECK(xdgOutputDoneKind(3, 1) == XdgOutputDoneKind::None);
   CHECK(xdgOutputDoneKind(3, 2) == XdgOutputDoneKind::WlOutput);
   CHECK(xdgOutputDoneKind(4, 2) == XdgOutputDoneKind::WlOutput);
+  CHECK(xdgOutputDoneKind(2, 2, false) == XdgOutputDoneKind::XdgOutput);
+  CHECK(xdgOutputDoneKind(3, 2, false) == XdgOutputDoneKind::None);
 }
 
 TEST_CASE("xdg output logical-size updates are emitted only when size changes") {

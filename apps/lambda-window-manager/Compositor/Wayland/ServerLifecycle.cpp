@@ -326,7 +326,6 @@ void WaylandServer::Impl::setPreferredScale(float scale) {
   for (wl_resource* output : outputResources_) {
     if (output && wl_resource_get_version(output) >= 2) {
       wl_output_send_scale(output, integerScale);
-      wl_output_send_done(output);
     }
   }
   std::uint32_t const preferred = fractionalScalePreferredScale120(preferredScale_);
@@ -336,10 +335,15 @@ void WaylandServer::Impl::setPreferredScale(float scale) {
     }
   }
   if (outputGeometryChanged) {
-    sendXdgOutputUpdatesForOutputGeometry(this);
+    sendXdgOutputUpdatesForOutputGeometry(this, false);
     reconfigureLayerSurfacesForOutputGeometry(this);
     ++contentSerial_;
     notifyShellStateChanged();
+  }
+  for (wl_resource* output : outputResources_) {
+    if (output && wl_resource_get_version(output) >= 2) {
+      wl_output_send_done(output);
+    }
   }
   flushClients();
 }

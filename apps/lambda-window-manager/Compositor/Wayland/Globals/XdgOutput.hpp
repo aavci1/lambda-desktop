@@ -9,6 +9,6 @@ struct wl_client;
 namespace lambda::compositor {
 
 void bindXdgOutputManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
-void sendXdgOutputUpdatesForOutputGeometry(WaylandServer::Impl* server);
+void sendXdgOutputUpdatesForOutputGeometry(WaylandServer::Impl* server, bool includeWlOutputDone = true);
 
 } // namespace lambda::compositor
