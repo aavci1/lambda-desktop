@@ -25,6 +25,7 @@
 | P5 | WM-COMP-6 DMABUF feedback and buffer lifetime | Verified | Automated protocol hardening is complete and target-hardware GPU-client/video validation passed | DMABUF validation and buffer release tests pass | User validation passed |
 | P6 | WM-COMP-7 XDG popup and positioner completeness | Verified | Positioner validation, popup lifecycle checks, and wlroots-style popup constraint adjustment are implemented and covered by automated tests | Popup lifecycle, positioner validation, popup geometry, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol/geometry workstream |
 | P7 | WM-COMP-8 XDG surface role and configure lifecycle | Verified | XDG surface role sequencing, base-role creation checks, and buffer commit ordering now follow the wlroots rules covered by automated tests | XDG surface lifecycle, xdg popup, layer role, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol-lifecycle workstream |
+| P8 | WM-COMP-9 XDG toplevel request and configure parity | Verified slice | Implemented wlroots-style interactive request sequencing, resize-edge validation, and WM capability advertisement; next step is deeper toplevel state comparison | XDG toplevel/surface lifecycle tests plus compositor suite pass | No manual gate needed for this protocol-validation slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -303,6 +304,39 @@
 - The xdg_surface base object cannot be destroyed before its live role object.
 - Existing xdg popup, toplevel, and compositor tests continue to pass.
 
+## WM-COMP-9 XDG Toplevel Request and Configure Parity
+
+**Why this matters:** wlroots keeps xdg_toplevel requests tied to the configured xdg_surface lifecycle and validates request enums before compositor policy runs. Lambda already has the main toplevel operations, but several request handlers still accept or ignore protocol-invalid states before the xdg_surface is configured.
+
+**Goal:** align xdg_toplevel request sequencing and configure-adjacent state with wlroots while keeping window-management policy behavior unchanged where Lambda intentionally differs.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgShell.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/WaylandServerImpl.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/XdgToplevelState.hpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: add configured-surface gating for `show_window_menu`, `move`, and `resize`, validate resize edges with the generated protocol validator, and advertise `window_menu` in xdg_toplevel WM capabilities.
+2. Planned: compare toplevel title/app-id, parent, and size-hint commit semantics against wlroots and split follow-up slices by automated coverage.
+3. Planned: compare scheduled/pending/current toplevel configure state against wlroots and decide whether Lambda needs a larger synced-state migration after the deferred titlebar/content issue.
+
+**Step 1 inventory:**
+
+- wlroots rejects `xdg_toplevel.show_window_menu` and `xdg_toplevel.move` with `XDG_SURFACE_ERROR_NOT_CONSTRUCTED` if the base xdg_surface has not been configured yet. Lambda currently validates the input serial first and otherwise ignores the request.
+- wlroots validates `xdg_toplevel.resize` edges with the generated `xdg_toplevel_resize_edge_is_valid` helper and posts `XDG_TOPLEVEL_ERROR_INVALID_RESIZE_EDGE` before checking the configured state. Lambda currently accepts invalid bit patterns as compositor resize edges.
+- wlroots includes `window_menu`, `maximize`, `fullscreen`, and `minimize` in the initial WM capabilities when supported by the client. Lambda currently omits `window_menu` even though it handles `show_window_menu`.
+- wlroots stores min/max size requests as pending synced state and validates them on client commit. Lambda currently validates these at request time; this should be treated as a separate follow-up because changing it affects commit rejection behavior.
+
+**Acceptance criteria:**
+
+- Toplevel interactive requests cannot run before the base xdg_surface has been configured.
+- Invalid resize-edge enum values produce the protocol error wlroots produces.
+- WM capabilities accurately advertise the toplevel operations Lambda supports.
+- Automated tests cover the new toplevel lifecycle helper behavior and existing xdg/compositor tests continue to pass.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -349,3 +383,5 @@
 | 2026-05-31 | WM-COMP-8 | Verified slice | Added a distinct `SurfaceRole::XdgSurface` base role, assigned it during `get_xdg_surface`, required toplevel/popup role construction to transition from that base role, released it when the base xdg_surface is destroyed without a role object, and rejected `get_xdg_surface` for surfaces with an existing committed buffer. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg surface*"`, `./build/tests/lambda_tests --test-case="*xdg popup*"`, `./build/tests/lambda_tests --test-case="*layer*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
 | 2026-05-31 | WM-COMP-8 | In progress | Commit-order comparison found that wlroots rejects buffer commits on a base xdg_surface with no role object and rejects toplevel/popup buffer commits before configure acknowledgement. Implementing this check in the shared `wl_surface.commit` path. |
 | 2026-05-31 | WM-COMP-8 | Verified | Added xdg_surface buffer-commit readiness checks and rejected non-null buffer commits when the base xdg_surface has no toplevel/popup role object or the role has not acked a configure. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg surface*"`, `./build/tests/lambda_tests --test-case="*xdg popup*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
+| 2026-05-31 | WM-COMP-9 | In progress | Toplevel comparison found missing configured-surface checks for `show_window_menu`, `move`, and `resize`, missing resize-edge enum validation, and an omitted `window_menu` WM capability. Starting with this automated protocol-validation slice. |
+| 2026-05-31 | WM-COMP-9 | Verified slice | Added the configured-surface gate for toplevel interactive requests, validated resize edges with the generated xdg-shell enum helper, and advertised the supported `window_menu` WM capability. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg toplevel*"`, `./build/tests/lambda_tests --test-case="*xdg surface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

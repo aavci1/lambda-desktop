@@ -1,6 +1,7 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Wayland/XdgSurfaceState.hpp"
+#include "Compositor/Wayland/XdgToplevelState.hpp"
 
 #include <doctest/doctest.h>
 
@@ -181,6 +182,33 @@ TEST_CASE("xdg surface buffer commits require role object and configure ack") {
 
   xdgSurface.configured = true;
   CHECK(lambda::compositor::xdgSurfaceBufferCommitReadiness(&xdgSurface) == XdgSurfaceBufferCommitReadiness::Ready);
+}
+
+TEST_CASE("xdg toplevel interactive requests require a configured toplevel surface") {
+  CHECK_FALSE(lambda::compositor::xdgToplevelSurfaceConfigured(nullptr));
+
+  lambda::compositor::WaylandServer::Impl::XdgToplevel toplevel{};
+  CHECK_FALSE(lambda::compositor::xdgToplevelSurfaceConfigured(&toplevel));
+
+  lambda::compositor::WaylandServer::Impl::XdgSurface xdgSurface{};
+  toplevel.xdgSurface = &xdgSurface;
+  CHECK_FALSE(lambda::compositor::xdgToplevelSurfaceConfigured(&toplevel));
+
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  xdgSurface.surface = &surface;
+  xdgSurface.configured = true;
+
+  surface.role = lambda::compositor::SurfaceRole::XdgSurface;
+  CHECK_FALSE(lambda::compositor::xdgToplevelSurfaceConfigured(&toplevel));
+
+  surface.role = lambda::compositor::SurfaceRole::XdgPopup;
+  CHECK_FALSE(lambda::compositor::xdgToplevelSurfaceConfigured(&toplevel));
+
+  surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
+  CHECK(lambda::compositor::xdgToplevelSurfaceConfigured(&toplevel));
+
+  xdgSurface.configured = false;
+  CHECK_FALSE(lambda::compositor::xdgToplevelSurfaceConfigured(&toplevel));
 }
 
 TEST_CASE("xdg popup topmost validation detects live child popups") {

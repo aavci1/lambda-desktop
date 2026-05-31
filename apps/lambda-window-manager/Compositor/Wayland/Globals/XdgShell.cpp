@@ -10,6 +10,7 @@
 #include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Wayland/XdgPositionerState.hpp"
 #include "Compositor/Wayland/XdgSurfaceState.hpp"
+#include "Compositor/Wayland/XdgToplevelState.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
@@ -66,6 +67,7 @@ void sendToplevelWmCapabilities(WaylandServer::Impl::XdgToplevel* toplevel) {
   }
   wl_array capabilities;
   wl_array_init(&capabilities);
+  appendToplevelState(&capabilities, XDG_TOPLEVEL_WM_CAPABILITIES_WINDOW_MENU);
   appendToplevelState(&capabilities, XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE);
   appendToplevelState(&capabilities, XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
   appendToplevelState(&capabilities, XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE);
@@ -399,6 +401,23 @@ bool postInvalidToplevelSize(wl_resource* resource, wm::ToplevelSizeHints const&
                          hints.minHeight,
                          hints.maxWidth,
                          hints.maxHeight);
+  return true;
+}
+
+wl_resource* xdgToplevelBaseResource(wl_resource* fallback,
+                                     WaylandServer::Impl::XdgToplevel const* toplevel) {
+  if (toplevel && toplevel->xdgSurface && toplevel->xdgSurface->resource) {
+    return toplevel->xdgSurface->resource;
+  }
+  return fallback;
+}
+
+bool postToplevelUnconfiguredIfNeeded(wl_resource* fallback,
+                                      WaylandServer::Impl::XdgToplevel const* toplevel) {
+  if (xdgToplevelSurfaceConfigured(toplevel)) return false;
+  wl_resource_post_error(xdgToplevelBaseResource(fallback, toplevel),
+                         XDG_SURFACE_ERROR_NOT_CONSTRUCTED,
+                         "surface has not been configured yet");
   return true;
 }
 
@@ -1098,7 +1117,9 @@ void xdgToplevelShowWindowMenu(wl_client*,
                                std::int32_t,
                                std::int32_t) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
-  if (!toplevel || !toplevel->server || !toplevel->xdgSurface) return;
+  if (!toplevel) return;
+  if (postToplevelUnconfiguredIfNeeded(resource, toplevel)) return;
+  if (!toplevel->server || !toplevel->xdgSurface) return;
   auto* surface = toplevel->xdgSurface->surface;
   if (!validToplevelGrabSerial(toplevel->server, resource, surface, serial)) return;
   focusSurface(toplevel->server, surface, monotonicMilliseconds());
@@ -1106,7 +1127,16 @@ void xdgToplevelShowWindowMenu(wl_client*,
 
 void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t serial, std::uint32_t edges) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
-  if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
+  if (!toplevel) return;
+  wl_resource* baseResource = xdgToplevelBaseResource(resource, toplevel);
+  if (!xdg_toplevel_resize_edge_is_valid(edges, static_cast<std::uint32_t>(wl_resource_get_version(baseResource)))) {
+    wl_resource_post_error(baseResource,
+                           XDG_TOPLEVEL_ERROR_INVALID_RESIZE_EDGE,
+                           "provided value is not a valid variant of the resize_edge enum");
+    return;
+  }
+  if (postToplevelUnconfiguredIfNeeded(resource, toplevel)) return;
+  if (!toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
   auto* server = toplevel->server;
   auto* surface = toplevel->xdgSurface->surface;
   std::int32_t const width = displayWidth(surface);
@@ -1131,7 +1161,9 @@ void xdgToplevelResize(wl_client*, wl_resource* resource, wl_resource*, std::uin
 
 void xdgToplevelMove(wl_client*, wl_resource* resource, wl_resource*, std::uint32_t serial) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
-  if (!toplevel || !toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
+  if (!toplevel) return;
+  if (postToplevelUnconfiguredIfNeeded(resource, toplevel)) return;
+  if (!toplevel->xdgSurface || !toplevel->xdgSurface->surface) return;
   auto* server = toplevel->server;
   auto* surface = toplevel->xdgSurface->surface;
   if (surface->fullscreen) return;
