@@ -43,6 +43,10 @@ std::optional<std::uint32_t> bytesPerPixelForDmabufFormat(std::uint32_t format) 
   }
 }
 
+bool areDmabufBufferFlagsSupported(std::uint32_t flags) {
+  return flags == 0;
+}
+
 DmabufLayoutValidationResult validateSinglePlaneDmabufLayout(
     std::int32_t width,
     std::int32_t height,

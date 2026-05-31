@@ -46,6 +46,7 @@ struct DmabufLayoutValidationResult {
 
 [[nodiscard]] bool isSupportedSinglePlaneDmabufFormat(std::uint32_t format);
 [[nodiscard]] std::optional<std::uint32_t> bytesPerPixelForDmabufFormat(std::uint32_t format);
+[[nodiscard]] bool areDmabufBufferFlagsSupported(std::uint32_t flags);
 
 [[nodiscard]] DmabufLayoutValidationResult validateSinglePlaneDmabufLayout(
     std::int32_t width,

@@ -86,3 +86,12 @@ TEST_CASE("dmabuf layout validation checks required byte span against fd size") 
   CHECK(validateSinglePlaneDmabufLayout(1'073'741'824, 1, DRM_FORMAT_XRGB8888, impossibleStride).error ==
         DmabufLayoutValidationError::StrideTooSmall);
 }
+
+TEST_CASE("dmabuf validation rejects flags the renderer does not implement") {
+  using namespace lambda::compositor;
+
+  CHECK(areDmabufBufferFlagsSupported(0));
+  CHECK_FALSE(areDmabufBufferFlagsSupported(1));
+  CHECK_FALSE(areDmabufBufferFlagsSupported(2));
+  CHECK_FALSE(areDmabufBufferFlagsSupported(4));
+}

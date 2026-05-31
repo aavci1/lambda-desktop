@@ -120,11 +120,19 @@ bool isSupportedDmabufModifier(std::uint32_t format, std::uint64_t modifier) {
   return containsModifier(sampledDmabufModifiersForFormat(format), modifier);
 }
 
-bool validateDmabufParams(WaylandServer::Impl::DmabufParams* params, std::int32_t width, std::int32_t height,
-                          std::uint32_t format) {
+bool validateDmabufParams(WaylandServer::Impl::DmabufParams* params,
+                          std::int32_t width,
+                          std::int32_t height,
+                          std::uint32_t format,
+                          std::uint32_t flags) {
   if (params->used) {
     wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_ALREADY_USED,
                            "zwp_linux_buffer_params_v1 was already used");
+    return false;
+  }
+  if (!areDmabufBufferFlagsSupported(flags)) {
+    wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_FORMAT,
+                           "unsupported dmabuf flags 0x%08x", flags);
     return false;
   }
 
@@ -276,7 +284,7 @@ void linuxBufferParamsAdd(wl_client*, wl_resource* resource, int fd, std::uint32
 void linuxBufferParamsCreate(wl_client* client, wl_resource* resource, std::int32_t width,
                              std::int32_t height, std::uint32_t format, std::uint32_t flags) {
   auto* params = resourceData<WaylandServer::Impl::DmabufParams>(resource);
-  if (!validateDmabufParams(params, width, height, format)) return;
+  if (!validateDmabufParams(params, width, height, format, flags)) return;
   params->used = true;
   wl_resource* buffer = createDmabufBuffer(client, params, 0, width, height, format, flags);
   if (buffer) zwp_linux_buffer_params_v1_send_created(resource, buffer);
@@ -286,7 +294,7 @@ void linuxBufferParamsCreateImmed(wl_client* client, wl_resource* resource, std:
                                   std::int32_t width, std::int32_t height, std::uint32_t format,
                                   std::uint32_t flags) {
   auto* params = resourceData<WaylandServer::Impl::DmabufParams>(resource);
-  if (!validateDmabufParams(params, width, height, format)) return;
+  if (!validateDmabufParams(params, width, height, format, flags)) return;
   params->used = true;
   createDmabufBuffer(client, params, bufferId, width, height, format, flags);
 }
