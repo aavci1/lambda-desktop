@@ -401,6 +401,29 @@ TEST_CASE("xdg toplevel size hints reject negative and inverted dimensions") {
   }));
 }
 
+TEST_CASE("xdg toplevel pending size hints are validated as commit state") {
+  lambda::compositor::WaylandServer::Impl::XdgToplevel toplevel{};
+  toplevel.minWidth = 320;
+  toplevel.minHeight = 200;
+  toplevel.maxWidth = 640;
+  toplevel.maxHeight = 480;
+
+  CHECK(lambda::compositor::wm::toplevelPendingSizeHintsValid(&toplevel));
+
+  toplevel.pendingMaxWidth = 300;
+  toplevel.pendingMaxHeight = 480;
+  toplevel.pendingMaxSizeSet = true;
+  CHECK_FALSE(lambda::compositor::wm::toplevelPendingSizeHintsValid(&toplevel));
+
+  toplevel.pendingMaxWidth = 640;
+  CHECK(lambda::compositor::wm::toplevelPendingSizeHintsValid(&toplevel));
+
+  toplevel.pendingMinWidth = -1;
+  toplevel.pendingMinHeight = 200;
+  toplevel.pendingMinSizeSet = true;
+  CHECK_FALSE(lambda::compositor::wm::toplevelPendingSizeHintsValid(&toplevel));
+}
+
 TEST_CASE("xdg toplevel size hints clamp interactive resize geometry around anchored edges") {
   using lambda::compositor::ResizeEdge;
   using lambda::compositor::WindowGeometry;

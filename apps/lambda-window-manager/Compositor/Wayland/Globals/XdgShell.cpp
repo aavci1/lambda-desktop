@@ -392,18 +392,6 @@ bool toplevelParentWouldCycle(WaylandServer::Impl::XdgToplevel* child,
   return false;
 }
 
-bool postInvalidToplevelSize(wl_resource* resource, wm::ToplevelSizeHints const& hints) {
-  if (wm::toplevelSizeHintsValid(hints)) return false;
-  wl_resource_post_error(resource,
-                         XDG_TOPLEVEL_ERROR_INVALID_SIZE,
-                         "invalid xdg_toplevel size hints min=%dx%d max=%dx%d",
-                         hints.minWidth,
-                         hints.minHeight,
-                         hints.maxWidth,
-                         hints.maxHeight);
-  return true;
-}
-
 wl_resource* xdgToplevelBaseResource(wl_resource* fallback,
                                      WaylandServer::Impl::XdgToplevel const* toplevel) {
   if (toplevel && toplevel->xdgSurface && toplevel->xdgSurface->resource) {
@@ -1205,10 +1193,6 @@ void xdgToplevelUnsetMaximized(wl_client*, wl_resource* resource) {
 void xdgToplevelSetMaxSize(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
   if (!toplevel) return;
-  wm::ToplevelSizeHints hints = wm::pendingSizeHints(toplevel);
-  hints.maxWidth = width;
-  hints.maxHeight = height;
-  if (postInvalidToplevelSize(resource, hints)) return;
   toplevel->pendingMaxWidth = width;
   toplevel->pendingMaxHeight = height;
   toplevel->pendingMaxSizeSet = true;
@@ -1217,10 +1201,6 @@ void xdgToplevelSetMaxSize(wl_client*, wl_resource* resource, std::int32_t width
 void xdgToplevelSetMinSize(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
   auto* toplevel = resourceData<WaylandServer::Impl::XdgToplevel>(resource);
   if (!toplevel) return;
-  wm::ToplevelSizeHints hints = wm::pendingSizeHints(toplevel);
-  hints.minWidth = width;
-  hints.minHeight = height;
-  if (postInvalidToplevelSize(resource, hints)) return;
   toplevel->pendingMinWidth = width;
   toplevel->pendingMinHeight = height;
   toplevel->pendingMinSizeSet = true;

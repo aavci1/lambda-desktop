@@ -84,6 +84,9 @@ inline ToplevelSizeHints pendingSizeHints(WaylandServer::Impl::XdgToplevel const
       .maxHeight = toplevel->pendingMaxSizeSet ? toplevel->pendingMaxHeight : toplevel->maxHeight,
   };
 }
+inline bool toplevelPendingSizeHintsValid(WaylandServer::Impl::XdgToplevel const* toplevel) {
+  return toplevelSizeHintsValid(pendingSizeHints(toplevel));
+}
 inline WindowGeometry clampToplevelGeometryToSizeHints(WindowGeometry geometry,
                                                       ToplevelSizeHints const& hints,
                                                       ResizeEdge anchoredEdges = ResizeEdge::None) {

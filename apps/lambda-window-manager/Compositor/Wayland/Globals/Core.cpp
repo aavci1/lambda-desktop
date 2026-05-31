@@ -700,6 +700,15 @@ bool applyXdgProtocolState(WaylandServer::Impl::Surface* surface) {
   return renderStateChanged;
 }
 
+bool validateXdgToplevelPendingSizeHints(WaylandServer::Impl::Surface* surface, wl_resource* fallback) {
+  auto* toplevel = surface && surface->server ? toplevelForSurface(surface->server, surface) : nullptr;
+  if (!toplevel || wm::toplevelPendingSizeHintsValid(toplevel)) return true;
+  wl_resource_post_error(toplevel->resource ? toplevel->resource : fallback,
+                         XDG_TOPLEVEL_ERROR_INVALID_SIZE,
+                         "client provided an invalid min or max size");
+  return false;
+}
+
 bool applyXdgConfigureState(WaylandServer::Impl::Surface* surface) {
   if (!surface || !surface->server) return false;
   for (auto const& xdgSurface : surface->server->xdgSurfaces_) {
@@ -1023,6 +1032,7 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
       return;
     }
   }
+  if (!validateXdgToplevelPendingSizeHints(surface, resource)) return;
   LayerSurfaceCommitResult layerCommit;
   bool flushLayerConfigure = false;
   if (surface->layerSurface) {
