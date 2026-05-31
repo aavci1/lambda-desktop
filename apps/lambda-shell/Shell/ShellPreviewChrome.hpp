@@ -16,13 +16,6 @@ namespace shell_preview {
 using lambda::LayerShellChromeOptions;
 using lambda::LayerShellChromeStyle;
 
-inline LayerShellChromeOptions defaultTopBarChrome() {
-  LayerShellChromeOptions chrome{};
-  chrome.style = LayerShellChromeStyle::BlurPanelBorder;
-  chrome.cornerRadius = lambda::CornerRadius{};
-  return chrome;
-}
-
 inline LayerShellChromeOptions defaultDockChrome() {
   LayerShellChromeOptions chrome{};
   chrome.style = LayerShellChromeStyle::BlurPanelBorder;
@@ -58,22 +51,6 @@ inline lambda::Element backdropLayer(float width,
               .size(width, height)
               .fill(chromeTintFill(chrome))
               .cornerRadius(corners)),
-  }.size(width, height);
-}
-
-inline lambda::Element wrapTopBar(lambda::Element content, float width) {
-  float const height = static_cast<float>(kTopBarHeight);
-  LayerShellChromeOptions const chrome = defaultTopBarChrome();
-  return lambda::ZStack{
-      .horizontalAlignment = lambda::Alignment::Stretch,
-      .verticalAlignment = lambda::Alignment::Stretch,
-      .children = lambda::children(
-          backdropLayer(width, height, chrome, chrome.cornerRadius),
-          lambda::Rectangle{}
-              .size(width, 1.f)
-              .position(0.f, height - 1.f)
-              .fill(chrome.glass.borderColor),
-          std::move(content).size(width, height)),
   }.size(width, height);
 }
 

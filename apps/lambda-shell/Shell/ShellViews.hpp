@@ -3,7 +3,6 @@
 #include "Shell/ShellModel.hpp"
 #include "Shell/UI/LambdaCommandLauncher.hpp"
 #include "Shell/UI/LambdaDock.hpp"
-#include "Shell/UI/LambdaTopBar.hpp"
 
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
@@ -14,29 +13,6 @@
 
 namespace lambda_shell {
 
-struct ShellTopBarView {
-  ShellModel& model;
-  std::function<void()> onOpenLauncher;
-
-  lambda::Element body() const {
-    auto const activeTitle = model.activeTitleSignal();
-    auto const timeText = model.timeTextSignal();
-    auto const topBarWidth = model.topBarWidthSignal();
-    lambda::Reactive::Bindable<float> barWidth{[topBarWidth] { return std::max(1.f, topBarWidth()); }};
-    auto const systemStatus = model.systemStatusSignal();
-    return lambda::Element{LambdaTopBar{TopBarProps{
-        .title = lambda::Reactive::Bindable<std::string>{[activeTitle] { return activeTitle(); }},
-        .timeText = timeText,
-        .width = barWidth,
-        .system = lambda::Reactive::Bindable<SystemStatus>{[systemStatus] { return systemStatus(); }},
-        .onOpenLauncher = onOpenLauncher,
-    }}}
-        .width(barWidth)
-        .height(static_cast<float>(kTopBarHeight))
-        .fill(lambda::Colors::transparent);
-  }
-};
-
 struct ShellDockView {
   ShellModel& model;
   std::function<void()> onOpenLauncher;
@@ -45,9 +21,17 @@ struct ShellDockView {
 
   lambda::Element body() const {
     auto const items = model.dockItemsSignal();
-    lambda::Reactive::Bindable<int> widthBinding{[items] { return dockWidth(items()); }};
+    auto const timeText = model.timeTextSignal();
+    auto const clockWidth = model.dockClockWidthSignal();
+    auto const systemStatus = model.systemStatusSignal();
+    lambda::Reactive::Bindable<int> widthBinding{[items, clockWidth] {
+      return dockWidth(items(), clockWidth());
+    }};
     return lambda::Element{LambdaDock{DockProps{
         .items = items,
+        .timeText = timeText,
+        .clockWidth = clockWidth,
+        .system = lambda::Reactive::Bindable<SystemStatus>{[systemStatus] { return systemStatus(); }},
         .hoverIndex = -1,
         .width = widthBinding,
         .onOpenLauncher = onOpenLauncher,

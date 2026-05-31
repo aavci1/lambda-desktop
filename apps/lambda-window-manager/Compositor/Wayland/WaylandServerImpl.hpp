@@ -311,7 +311,6 @@ struct WaylandServer::Impl {
   CompositorKeyboardConfig keyboardConfig_;
   int keyboardRepeatRate_ = 25;
   int keyboardRepeatDelayMs_ = 600;
-  std::int32_t topBarExclusiveZone_ = 0;
   std::int32_t dockReservedZone_ = 0;
   float shellPanelHideProgress_ = 0.f;
   float shellPanelHideStartProgress_ = 0.f;

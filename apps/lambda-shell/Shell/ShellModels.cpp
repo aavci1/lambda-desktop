@@ -62,6 +62,10 @@ bool appRunning(AppRegistryEntry const& app, std::vector<ShellWindowSnapshot> co
   });
 }
 
+bool usableWindowAppId(std::string_view appId) {
+  return !appId.empty() && appId != "unknown";
+}
+
 int recentBoost(AppRegistryEntry const& app, std::vector<std::string> const& recentAppIds) {
   for (std::size_t i = 0; i < recentAppIds.size(); ++i) {
     if (shellAppIdMatches(app.appId, recentAppIds[i])) return static_cast<int>(50u - std::min<std::size_t>(i, 50u));
@@ -301,6 +305,7 @@ std::vector<DockModelEntry> buildDockModel(std::vector<AppRegistryEntry> const& 
   }
 
   for (auto const& window : windows) {
+    if (!usableWindowAppId(window.appId)) continue;
     bool represented = std::any_of(entries.begin(), entries.end(), [&](auto const& entry) {
       return shellAppIdMatches(entry.appId, window.appId);
     });
@@ -642,17 +647,17 @@ ShellConfig parseShellConfig(std::string_view tomlText) {
       config.dockPosition = *value;
     }
     if (auto value = readTomlBool(*dock, "auto_hide")) config.dockAutoHide = *value;
+    if (auto value = readTomlInt(*dock, "bottom_gap"); value && *value >= 0 && *value <= 64) {
+      config.dockBottomGap = static_cast<int>(*value);
+    }
+    if (auto value = readTomlInt(*dock, "corner_radius"); value && *value >= 0 && *value <= 48) {
+      config.dockCornerRadius = static_cast<int>(*value);
+    }
+    if (auto value = readTomlString(*dock, "clock_format")) config.dockClockFormat = *value;
     if (auto value = readTomlBool(*dock, "show_running_unpinned")) config.showRunningUnpinned = *value;
     if (auto value = readTomlBool(*dock, "show_tooltips")) config.dockShowTooltips = *value;
     auto pins = readTomlStringArray(*dock, "pinned");
     if (!pins.empty()) config.dockPinned = std::move(pins);
-  }
-
-  if (auto* topBar = root["top_bar"].as_table()) {
-    if (auto value = readTomlString(*topBar, "clock_format")) config.topBarClockFormat = *value;
-    if (auto value = readTomlBool(*topBar, "show_active_title")) config.topBarShowActiveTitle = *value;
-    auto modules = readTomlStringArray(*topBar, "modules");
-    if (!modules.empty()) config.topBarModules = std::move(modules);
   }
 
   if (auto* quickSettings = root["quick_settings"].as_table()) {
@@ -710,14 +715,12 @@ std::string writeShellConfigToml(ShellConfig const& config) {
   out << "[dock]\n";
   out << "position = " << tomlQuote(config.dockPosition) << "\n";
   out << "auto_hide = " << (config.dockAutoHide ? "true" : "false") << "\n";
+  out << "bottom_gap = " << config.dockBottomGap << "\n";
+  out << "corner_radius = " << config.dockCornerRadius << "\n";
+  out << "clock_format = " << tomlQuote(config.dockClockFormat) << "\n";
   out << "show_running_unpinned = " << (config.showRunningUnpinned ? "true" : "false") << "\n";
   out << "show_tooltips = " << (config.dockShowTooltips ? "true" : "false") << "\n";
   out << "pinned = " << tomlStringArray(config.dockPinned) << "\n\n";
-
-  out << "[top_bar]\n";
-  out << "clock_format = " << tomlQuote(config.topBarClockFormat) << "\n";
-  out << "show_active_title = " << (config.topBarShowActiveTitle ? "true" : "false") << "\n";
-  out << "modules = " << tomlStringArray(config.topBarModules) << "\n\n";
 
   out << "[quick_settings]\n";
   out << "modules = " << tomlStringArray(config.quickSettingsModules) << "\n\n";

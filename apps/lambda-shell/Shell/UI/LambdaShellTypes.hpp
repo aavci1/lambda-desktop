@@ -14,22 +14,35 @@
 
 namespace lambda_shell {
 
-inline constexpr int kTopBarHeight = 36;
-inline constexpr int kDockBottom = 12;
+inline constexpr int kDockBottom = 8;
+inline constexpr int kDockCornerRadius = 18;
 inline constexpr int kDockCell = 56;
+inline constexpr int kDockClockMinWidth = 1;
+inline constexpr float kDockClockDateFontSize = 11.f;
+inline constexpr float kDockClockTimeFontSize = 17.f;
+inline constexpr float kDockClockDateFontWeight = 580.f;
+inline constexpr float kDockClockTimeFontWeight = 680.f;
+inline constexpr float kDockClockLeadingPaddingX = 4.f;
+inline constexpr float kDockClockTrailingPaddingX = 8.f;
+inline constexpr int kDockStatusColumns = 3;
+inline constexpr int kDockStatusRows = 2;
+inline constexpr int kDockStatusCell = 22;
+inline constexpr int kDockStatusIconSize = 18;
+inline constexpr int kDockStatusGridGap = 4;
 inline constexpr int kDockIconSize = 48;
 inline constexpr int kDockDotSize = 4;
 inline constexpr int kDockIconDotGap = 2;
-inline constexpr int kDockDotBelowPad = 1;
+inline constexpr int kDockDotBelowPad = 5;
 /// Space above the icon; equals gap + dot + padding below the dot.
 inline constexpr int kDockSlotMargin = kDockIconDotGap + kDockDotSize + kDockDotBelowPad;
 inline constexpr int kDockSlotHeight =
     kDockSlotMargin + kDockIconSize + kDockIconDotGap + kDockDotSize + kDockDotBelowPad;
-inline constexpr float kDockPaddingX = 12.f;
-inline constexpr float kDockPaddingTop = 5.f;
-inline constexpr float kDockPaddingBottom = 5.f;
+inline constexpr float kDockPaddingX = 10.f;
+inline constexpr float kDockPaddingTop = 0.f;
+inline constexpr float kDockPaddingBottom = 0.f;
 inline constexpr int kDockGap = 6;
-inline constexpr int kDockSeparatorWidth = 1;
+inline constexpr int kDockSeparatorWidth = 9;
+inline constexpr int kDockSeparatorLineWidth = 1;
 inline constexpr int kDockMenuContentWidth = 176;
 inline constexpr int kDockMenuContentHeight = 110;
 inline constexpr int kDockMenuPadding = 6;
@@ -70,7 +83,9 @@ struct LauncherLayout {
 };
 
 int dockItemWidth(DockItem const& item);
-int dockWidth(std::vector<DockItem> const& items);
+int dockItemsWidth(std::vector<DockItem> const& items);
+int dockStatusWidth(int clockWidth = kDockClockMinWidth);
+int dockWidth(std::vector<DockItem> const& items, int clockWidth = kDockClockMinWidth);
 int dockHeight();
 std::optional<std::size_t> dockItemIndexAt(std::vector<DockItem> const& items, double x, double y);
 
@@ -102,28 +117,25 @@ enum class StatusAvailability : std::uint8_t {
   Available,
 };
 
-struct TopBarStatusItem {
+struct DockletStatusItem {
   std::string id;
   lambda::IconName icon = lambda::IconName::Circle;
   std::string label;
   StatusAvailability availability = StatusAvailability::Unavailable;
   bool active = false;
 
-  bool operator==(TopBarStatusItem const&) const = default;
+  bool operator==(DockletStatusItem const&) const = default;
 };
 
-std::vector<TopBarStatusItem> topBarStatusItems(SystemStatus const& status);
-
-struct TopBarProps {
-  lambda::Reactive::Bindable<std::string> title;
-  lambda::Reactive::Bindable<std::string> timeText;
-  lambda::Reactive::Bindable<float> width{1.f};
-  lambda::Reactive::Bindable<SystemStatus> system{SystemStatus{}};
-  std::function<void()> onOpenLauncher;
-};
+std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status);
+std::string dockClockDateText(std::string_view timeText);
+std::string dockClockTimeText(std::string_view timeText);
 
 struct DockProps {
   lambda::Signal<std::vector<DockItem>> items;
+  lambda::Signal<std::string> timeText;
+  lambda::Signal<int> clockWidth;
+  lambda::Reactive::Bindable<SystemStatus> system{SystemStatus{}};
   int hoverIndex = -1;
   lambda::Reactive::Bindable<int> width{1};
   std::function<void()> onOpenLauncher;

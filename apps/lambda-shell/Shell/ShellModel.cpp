@@ -46,14 +46,17 @@ bool appIdsMatch(std::string_view a, std::string_view b) {
   return shellAppIdMatches(a, b) || shellAppIdMatches(b, a);
 }
 
+bool usableWindowAppId(std::string_view appId) {
+  return !appId.empty() && appId != "unknown";
+}
+
 std::string resolvedIconPath(std::string const& icon, std::string const& theme, int size) {
   auto path = resolveIconThemePath(icon, theme, size);
   return path.empty() ? std::string{} : path.string();
 }
 
 std::vector<std::string> dockIconCandidates(std::string const& icon,
-                                            std::string const& appId,
-                                            std::string const& kind) {
+                                            std::string const& appId) {
   std::vector<std::string> candidates;
   auto add = [&](std::string value) {
     if (value.empty()) return;
@@ -64,14 +67,6 @@ std::vector<std::string> dockIconCandidates(std::string const& icon,
 
   if (std::filesystem::path iconPath{icon}; iconPath.is_absolute()) {
     add(icon);
-  }
-
-  if (kind == "trash") {
-    add("user-trash");
-    add("user-trash-full");
-    add("folder-trash");
-    add("trash-empty");
-    return candidates;
   }
 
   if (shellAppIdMatches("settings", appId)) {
@@ -95,7 +90,8 @@ std::string resolvedDockIconPath(std::string const& icon,
                                  std::string const& kind,
                                  std::string const& theme,
                                  int size) {
-  for (auto const& candidate : dockIconCandidates(icon, appId, kind)) {
+  (void)kind;
+  for (auto const& candidate : dockIconCandidates(icon, appId)) {
     std::string path = resolvedIconPath(candidate, theme, size);
     if (!path.empty()) return path;
   }
@@ -107,26 +103,19 @@ int scaledIconPixelSize(int logicalSize, float dpiScale) {
   return std::max(1, static_cast<int>(std::ceil(static_cast<float>(logicalSize) * scale)));
 }
 
-std::vector<DockItem>::iterator unpinnedInsertPosition(std::vector<DockItem>& items) {
-  auto trash = std::find_if(items.begin(), items.end(), [](DockItem const& candidate) {
-    return candidate.kind == "trash";
-  });
-  if (trash == items.end()) return items.end();
-  if (trash != items.begin()) {
-    auto beforeTrash = std::prev(trash);
-    if (beforeTrash->kind == "separator") return beforeTrash;
-  }
-  return trash;
-}
-
 } // namespace
 
 std::string ShellModel::formatTimeText() {
+  return formatTimeText("%a %d %b, %H:%M");
+}
+
+std::string ShellModel::formatTimeText(std::string_view format) {
   char buffer[64]{};
   std::time_t now = std::time(nullptr);
   std::tm local{};
   localtime_r(&now, &local);
-  std::strftime(buffer, sizeof(buffer), "%a %d %b, %H:%M", &local);
+  std::string fmt = std::string(format.empty() ? std::string_view{"%a %d %b, %H:%M"} : format);
+  std::strftime(buffer, sizeof(buffer), fmt.c_str(), &local);
   return buffer;
 }
 
@@ -161,6 +150,8 @@ void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellCo
   showRunningUnpinned_ = config.showRunningUnpinned;
   iconTheme_ = config.iconTheme;
   iconSize_ = config.iconSize;
+  clockFormat_ = config.dockClockFormat;
+  timeText_.set(formatTimeText(clockFormat_));
   int const iconPixelSize = scaledIconPixelSize(iconSize_, dockDpiScale_);
   std::vector<DockItem> items;
   DockItem launcher;
@@ -194,21 +185,6 @@ void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellCo
     item.iconPath = resolvedDockIconPath(found->icon, item.appId, item.kind, iconTheme_, iconPixelSize);
     items.push_back(std::move(item));
   }
-  DockItem secondSeparator;
-  secondSeparator.id = "sep2";
-  secondSeparator.kind = "separator";
-  items.push_back(std::move(secondSeparator));
-
-  DockItem trash;
-  trash.id = "trash";
-  trash.kind = "trash";
-  trash.label = "Trash";
-  trash.appId = "trash";
-  trash.disabled = true;
-  trash.icon = "user-trash";
-  trash.iconPixelSize = iconPixelSize;
-  trash.iconPath = resolvedDockIconPath(trash.icon, trash.appId, trash.kind, iconTheme_, iconPixelSize);
-  items.push_back(std::move(trash));
   dockItems_.set(std::move(items));
   refreshLauncherResults();
 }
@@ -260,7 +236,7 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
   }
   std::string nextTitle;
   for (auto const& window : snapshot.windows) {
-    if (window.appId.empty()) continue;
+    if (!usableWindowAppId(window.appId)) continue;
     bool represented = false;
     for (auto& item : items) {
       if (item.kind != "app" || item.appId.empty()) continue;
@@ -291,7 +267,7 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
     item.iconPixelSize = scaledIconPixelSize(iconSize_, dockDpiScale_);
     item.iconPath = resolvedDockIconPath(icon, item.appId, item.kind, iconTheme_, item.iconPixelSize);
     if (item.focused) nextTitle = item.label;
-    items.insert(unpinnedInsertPosition(items), std::move(item));
+    items.push_back(std::move(item));
   }
 
   SystemStatus nextStatus{
@@ -319,9 +295,16 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
 }
 
 bool ShellModel::refreshTimeText() {
-  std::string next = formatTimeText();
+  std::string next = formatTimeText(clockFormat_);
   if (next == timeText_.peek()) return false;
   timeText_.set(std::move(next));
+  return true;
+}
+
+bool ShellModel::setDockClockWidth(int width) {
+  int const next = std::max(kDockClockMinWidth, width);
+  if (dockClockWidth_.peek() == next) return false;
+  dockClockWidth_.set(next);
   return true;
 }
 
@@ -360,15 +343,6 @@ void ShellModel::setLauncherSize(float width, float height) {
   }
   launcherWidth_.set(nextWidth);
   launcherHeight_.set(nextHeight);
-}
-
-bool ShellModel::setTopBarWidth(float width) {
-  float const nextWidth = std::max(1.f, width);
-  if (topBarWidth_.peek() == nextWidth) {
-    return false;
-  }
-  topBarWidth_.set(nextWidth);
-  return true;
 }
 
 void ShellModel::setQuery(std::string query) {

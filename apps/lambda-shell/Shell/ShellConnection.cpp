@@ -128,7 +128,7 @@ void ShellConnection::sendLine(std::string const& line) const {
 }
 
 void ShellConnection::sendHello(std::uint64_t requestId) const {
-  sendLine(lambda::shell::serializeShellHello(1, "0.2.0", {"topbar", "dock", "command-launcher"}, requestId));
+  sendLine(lambda::shell::serializeShellHello(1, "0.2.0", {"dock", "command-launcher"}, requestId));
 }
 
 void ShellConnection::claimLauncherModal(std::uint64_t requestId) const {

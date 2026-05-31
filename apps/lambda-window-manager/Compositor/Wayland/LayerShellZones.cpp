@@ -22,10 +22,8 @@ LayerShellReservedZones aggregateLayerShellReservedZones(
   LayerShellReservedZones zones;
   for (auto const& layer : layers) {
     if (!layer.nameSpace) continue;
-    if (std::string_view(layer.nameSpace) == "lambda.topbar") {
-      zones.topBar = std::max(zones.topBar, std::max(0, layer.exclusiveZone));
-    } else if (std::string_view(layer.nameSpace) == "lambda.dock" &&
-               hasAnchor(layer.anchor, kLayerShellAnchorBottom)) {
+    if (std::string_view(layer.nameSpace) == "lambda.dock" &&
+        hasAnchor(layer.anchor, kLayerShellAnchorBottom)) {
       zones.dock = std::max(zones.dock, layer.extent + std::max(0, layer.marginBottom));
     }
   }

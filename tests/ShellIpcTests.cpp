@@ -15,14 +15,14 @@ TEST_CASE("shell IPC escape and roundtrip launchApp") {
 
 TEST_CASE("shell IPC hello roundtrip") {
   std::string const line =
-      lambda::shell::serializeShellHello(1, "0.2.0", {"topbar", "dock", "command-launcher"});
+      lambda::shell::serializeShellHello(1, "0.2.0", {"dock", "command-launcher"});
   auto message = lambda::shell::parseLine(line);
   REQUIRE(message.has_value());
   REQUIRE(message->kind == lambda::shell::ShellMessageKind::ShellHello);
   REQUIRE(message->requestId == 0);
   REQUIRE(message->hello.protocolVersion == 1);
   REQUIRE(message->hello.shellVersion == "0.2.0");
-  REQUIRE(message->hello.capabilities.size() == 3);
+  REQUIRE(message->hello.capabilities.size() == 2);
 }
 
 TEST_CASE("shell IPC malformed lines do not crash") {

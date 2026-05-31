@@ -13,8 +13,7 @@ lambda_add_app(lambda-shell
     Shell/ShellModels.cpp
     Shell/UI/LambdaCommandLauncher.cpp
     Shell/UI/LambdaDock.cpp
-    Shell/UI/LambdaShellTypes.cpp
-    Shell/UI/LambdaTopBar.cpp)
+    Shell/UI/LambdaShellTypes.cpp)
 
 target_include_directories(lambda-shell PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR})

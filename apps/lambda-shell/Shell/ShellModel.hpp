@@ -7,6 +7,7 @@
 #include <ctime>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace lambda_shell {
@@ -29,12 +30,12 @@ public:
   bool launcherUiVisible() const { return launcherUiVisible_.peek(); }
   float launcherWidth() const { return launcherWidth_.peek(); }
   float launcherHeight() const { return launcherHeight_.peek(); }
-  float topBarWidth() const { return topBarWidth_.peek(); }
   std::string const& query() const { return query_.peek(); }
   int queryCursor() const { return queryCursor_.peek(); }
   int highlighted() const { return highlighted_.peek(); }
   std::string const& activeTitle() const { return activeTitle_.peek(); }
   std::string const& timeText() const { return timeText_.peek(); }
+  int dockClockWidth() const { return dockClockWidth_.peek(); }
   lambda_shell::SystemStatus const& systemStatus() const { return systemStatus_.peek(); }
   std::vector<DockItem> const& launcherResults() const { return launcherResults_.peek(); }
 
@@ -43,16 +44,17 @@ public:
   lambda::Signal<bool>& launcherUiVisibleSignal() { return launcherUiVisible_; }
   lambda::Signal<float>& launcherWidthSignal() { return launcherWidth_; }
   lambda::Signal<float>& launcherHeightSignal() { return launcherHeight_; }
-  lambda::Signal<float>& topBarWidthSignal() { return topBarWidth_; }
   lambda::Signal<std::string>& querySignal() { return query_; }
   lambda::Signal<int>& queryCursorSignal() { return queryCursor_; }
   lambda::Signal<int>& highlightedSignal() { return highlighted_; }
   lambda::Signal<std::string>& activeTitleSignal() { return activeTitle_; }
   lambda::Signal<std::string>& timeTextSignal() { return timeText_; }
+  lambda::Signal<int>& dockClockWidthSignal() { return dockClockWidth_; }
   lambda::Signal<SystemStatus>& systemStatusSignal() { return systemStatus_; }
   lambda::Signal<std::vector<DockItem>>& launcherResultsSignal() { return launcherResults_; }
 
   static std::string formatTimeText();
+  static std::string formatTimeText(std::string_view format);
 
   void resetDockItems();
   void setDockItems(std::vector<AppRegistryEntry> const& apps, ShellConfig const& config);
@@ -60,11 +62,11 @@ public:
   void setPreviewFocus(std::string_view appId);
   [[nodiscard]] SnapshotChanges applySnapshot(std::string_view json);
   [[nodiscard]] bool refreshTimeText();
+  [[nodiscard]] bool setDockClockWidth(int width);
   void openLauncher();
   void closeLauncher();
   void setLauncherUiVisible(bool visible);
   void setLauncherSize(float width, float height);
-  bool setTopBarWidth(float width);
   void setQuery(std::string query);
   void setHighlighted(int index);
   void moveHighlight(int delta);
@@ -89,18 +91,19 @@ private:
   lambda::Signal<bool> launcherUiVisible_{false};
   lambda::Signal<float> launcherWidth_{1.f};
   lambda::Signal<float> launcherHeight_{1.f};
-  lambda::Signal<float> topBarWidth_{1.f};
   lambda::Signal<std::string> query_;
   lambda::Signal<int> queryCursor_{0};
   lambda::Signal<int> highlighted_{0};
   lambda::Signal<std::string> activeTitle_;
   lambda::Signal<std::string> timeText_{formatTimeText()};
+  lambda::Signal<int> dockClockWidth_{kDockClockMinWidth};
   lambda::Signal<SystemStatus> systemStatus_;
   lambda::Signal<std::vector<DockItem>> launcherResults_;
   bool showRunningUnpinned_ = true;
   std::string iconTheme_;
   int iconSize_ = 48;
   float dockDpiScale_ = 1.f;
+  std::string clockFormat_ = "%a %d %b, %H:%M";
 };
 
 } // namespace lambda_shell

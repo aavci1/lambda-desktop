@@ -184,15 +184,13 @@ struct ShellConfig {
 
   std::string dockPosition = "bottom";
   bool dockAutoHide = false;
+  int dockBottomGap = 8;
+  int dockCornerRadius = 18;
+  std::string dockClockFormat = "%a %d %b, %H:%M";
   bool showRunningUnpinned = true;
   bool dockShowTooltips = true;
   std::vector<std::string> dockPinned{
       "lambda-files", "lambda-editor", "lambda-preview", "lambda-terminal", "lambda-settings", "firefox"};
-
-  std::string topBarClockFormat = "%a %d %b, %H:%M";
-  bool topBarShowActiveTitle = true;
-  std::vector<std::string> topBarModules{"network", "bluetooth", "volume", "battery", "notifications", "clipboard",
-                                         "clock"};
 
   std::vector<std::string> quickSettingsModules{"network", "bluetooth", "audio", "battery", "brightness",
                                                 "do_not_disturb"};

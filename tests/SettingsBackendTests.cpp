@@ -68,6 +68,9 @@ TEST_CASE("Settings Shell schema descriptors are unique and expose defaults") {
   auto defaults = lambda_settings::schemaDefaults(schema);
   CHECK(defaults.at("dock.pinned") ==
         "lambda-files,lambda-editor,lambda-preview,lambda-terminal,lambda-settings,firefox");
+  CHECK(defaults.at("dock.bottom_gap") == "8");
+  CHECK(defaults.at("dock.corner_radius") == "18");
+  CHECK(defaults.at("dock.clock_format") == "%a %d %b, %H:%M");
   CHECK(defaults.at("appearance.icon_size") == "48");
   CHECK(defaults.at("clipboard_history.persist") == "false");
   CHECK(defaults.at("launcher.empty_query") == "recommended");
@@ -142,8 +145,9 @@ unknown_appearance = "keep"
 [dock]
 pinned = ["lambda-files", "lambda-terminal"]
 show_running_unpinned = true
-[top_bar]
-modules = ["notifications", "clock"]
+bottom_gap = 6
+corner_radius = 20
+clock_format = "%H:%M"
 [clipboard_history]
 enabled = true
 max_entries = 100
@@ -157,7 +161,9 @@ max_results = 12
   auto loaded = lambda_settings::loadShellSettings(input);
   CHECK(loaded.values.at("appearance.icon_theme") == "Adwaita");
   CHECK(loaded.values.at("dock.pinned") == "lambda-files,lambda-terminal");
-  CHECK(loaded.values.at("top_bar.modules") == "notifications,clock");
+  CHECK(loaded.values.at("dock.bottom_gap") == "6");
+  CHECK(loaded.values.at("dock.corner_radius") == "20");
+  CHECK(loaded.values.at("dock.clock_format") == "%H:%M");
   CHECK(loaded.values.at("clipboard_history.max_entries") == "100");
   CHECK(loaded.values.at("notifications.do_not_disturb") == "false");
   CHECK(loaded.values.at("launcher.max_results") == "12");
@@ -165,8 +171,10 @@ max_results = 12
   std::string output = lambda_settings::writeShellSettings(input, {
       {"appearance.icon_theme", "Lambda"},
       {"dock.pinned", "lambda-terminal,lambda-settings"},
+      {"dock.bottom_gap", "8"},
+      {"dock.corner_radius", "18"},
+      {"dock.clock_format", "%a %d %b, %H:%M"},
       {"dock.show_running_unpinned", "false"},
-      {"top_bar.modules", "[\"clock\", \"notifications\"]"},
       {"clipboard_history.enabled", "false"},
       {"clipboard_history.max_entries", "25"},
       {"notifications.do_not_disturb", "true"},
@@ -263,6 +271,8 @@ TEST_CASE("Settings file helpers resolve create load and save owner configs") {
   CHECK(createdShell.error.empty());
   CHECK(std::filesystem::exists(shellPath));
   CHECK(createdShell.document.values.at("dock.position") == "bottom");
+  CHECK(createdShell.document.values.at("dock.bottom_gap") == "8");
+  CHECK(createdShell.document.values.at("dock.clock_format") == "%a %d %b, %H:%M");
 
   auto savedShell = lambda_settings::saveShellSettingsFile({
       {"dock.show_running_unpinned", "false"},

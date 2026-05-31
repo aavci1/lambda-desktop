@@ -108,18 +108,6 @@ TEST_CASE("Shell model launcher query editing is cursor aware") {
   CHECK(model.queryCursor() == 11);
 }
 
-TEST_CASE("Shell model tracks top bar width from layer resize") {
-  lambda_shell::ShellModel model;
-
-  CHECK(model.topBarWidth() == 1.f);
-  CHECK(model.setTopBarWidth(1440.f));
-  CHECK(model.topBarWidth() == 1440.f);
-  CHECK_FALSE(model.setTopBarWidth(1440.f));
-  CHECK(model.topBarWidth() == 1440.f);
-  CHECK(model.setTopBarWidth(0.f));
-  CHECK(model.topBarWidth() == 1.f);
-}
-
 TEST_CASE("Shell model applies structured snapshots to dock status title and system status") {
   lambda_shell::ShellModel model;
   model.resetDockItems();
@@ -154,10 +142,8 @@ TEST_CASE("Shell model applies structured snapshots to dock status title and sys
   CHECK(terminalRunning);
   CHECK(editorUnpinned);
   auto const editor = std::find(dockOrder.begin(), dockOrder.end(), "org.example.Editor");
-  auto const trash = std::find(dockOrder.begin(), dockOrder.end(), "trash");
   REQUIRE(editor != dockOrder.end());
-  REQUIRE(trash != dockOrder.end());
-  CHECK(editor < trash);
+  CHECK(std::find(dockOrder.begin(), dockOrder.end(), "trash") == dockOrder.end());
 
   std::vector<std::string> sent;
   for (auto const& item : model.dockItems()) {
@@ -211,8 +197,10 @@ TEST_CASE("Shell model dock items come from config pins and app registry") {
   CHECK(model.dockItems()[2].icon == terminalIcon.string());
   CHECK(model.dockItems()[2].iconPath == terminalIcon.string());
   CHECK(model.launcherResults()[0].iconPath == terminalIcon.string());
-  CHECK(model.dockItems().back().kind == "trash");
-  CHECK(model.dockItems().back().disabled);
+  CHECK(model.dockItems().back().kind == "app");
+  CHECK(std::none_of(model.dockItems().begin(), model.dockItems().end(), [](auto const& item) {
+    return item.kind == "trash";
+  }));
 
   std::vector<std::string> sent;
   model.activateItem(model.dockItems()[2], [&](std::string const& line) { sent.push_back(line); }, 7);
@@ -243,6 +231,32 @@ TEST_CASE("Shell model dock items come from config pins and app registry") {
   }
 
   std::filesystem::remove_all(iconRoot);
+}
+
+TEST_CASE("Shell model ignores placeholder window identities in dock snapshots") {
+  lambda_shell::ShellModel model;
+  model.resetDockItems();
+
+  auto changes = model.applySnapshot(R"({
+    "type":"lambda.windowManager.snapshot",
+    "windows":[
+      {"id":21,"appId":"unknown","title":"unknown","state":"normal","focused":false},
+      {"id":22,"appId":"toggle-demo","title":"Lambda - Toggle demo","state":"normal","focused":true}
+    ],
+    "system":{}
+  })");
+  CHECK(changes.dockItems);
+
+  int toggleCount = 0;
+  for (auto const& item : model.dockItems()) {
+    CHECK(item.appId != "unknown");
+    if (item.appId == "toggle-demo") {
+      ++toggleCount;
+      CHECK(item.running);
+      CHECK(item.focused);
+    }
+  }
+  CHECK(toggleCount == 1);
 }
 
 TEST_CASE("Shell model merges alias app ids into pinned dock items") {
@@ -305,7 +319,7 @@ TEST_CASE("Shell model updates dock icon physical size from DPI scale") {
   model.setDockItems(apps, config);
   bool sawIcon = false;
   for (auto const& item : model.dockItems()) {
-    if (item.kind == "app" || item.kind == "trash") {
+    if (item.kind == "app") {
       CHECK(item.iconPixelSize == 48);
       sawIcon = true;
     }
@@ -314,7 +328,7 @@ TEST_CASE("Shell model updates dock icon physical size from DPI scale") {
 
   CHECK(model.setDockDpiScale(1.5f));
   for (auto const& item : model.dockItems()) {
-    if (item.kind == "app" || item.kind == "trash") {
+    if (item.kind == "app") {
       CHECK(item.iconPixelSize == 72);
     }
   }
@@ -381,13 +395,10 @@ TEST_CASE("Shell model resolves dock-specific themed icon fallbacks") {
   auto dataHome = root / "data-home";
   auto settingsSmallIcon = dataHome / "icons" / "Lambda" / "32x32" / "apps" / "preferences-system.png";
   auto settingsLargeIcon = dataHome / "icons" / "Lambda" / "48x48" / "apps" / "systemsettings.png";
-  auto trashIcon = dataHome / "icons" / "Lambda" / "48x48" / "places" / "user-trash.png";
   std::filesystem::create_directories(settingsSmallIcon.parent_path());
   std::filesystem::create_directories(settingsLargeIcon.parent_path());
-  std::filesystem::create_directories(trashIcon.parent_path());
   std::ofstream(settingsSmallIcon) << "png";
   std::ofstream(settingsLargeIcon) << "png";
-  std::ofstream(trashIcon) << "png";
 
   auto const dataHomeString = dataHome.string();
   setenv("XDG_DATA_HOME", dataHomeString.c_str(), 1);
@@ -411,11 +422,9 @@ TEST_CASE("Shell model resolves dock-specific themed icon fallbacks") {
   REQUIRE(settingsItem != model.dockItems().end());
   CHECK(settingsItem->iconPath == settingsLargeIcon.string());
 
-  auto trashItem = std::find_if(model.dockItems().begin(), model.dockItems().end(), [](auto const& item) {
+  CHECK(std::none_of(model.dockItems().begin(), model.dockItems().end(), [](auto const& item) {
     return item.kind == "trash";
-  });
-  REQUIRE(trashItem != model.dockItems().end());
-  CHECK(trashItem->iconPath == trashIcon.string());
+  }));
 
   std::filesystem::remove_all(root);
 }

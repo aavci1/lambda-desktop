@@ -26,8 +26,8 @@ bool offStatus(std::string_view value) {
   return text == "off" || text == "disabled" || text == "muted" || text == "0%" || text == "0";
 }
 
-TopBarStatusItem unavailableItem(std::string id, lambda::IconName icon) {
-  TopBarStatusItem item;
+DockletStatusItem unavailableItem(std::string id, lambda::IconName icon) {
+  DockletStatusItem item;
   item.id = std::move(id);
   item.icon = icon;
   item.availability = StatusAvailability::Unavailable;
@@ -40,12 +40,26 @@ int dockItemWidth(DockItem const& item) {
   return item.kind == "separator" ? kDockSeparatorWidth : kDockCell;
 }
 
-int dockWidth(std::vector<DockItem> const& items) {
-  int width = static_cast<int>(kDockPaddingX * 2.f);
+int dockItemsWidth(std::vector<DockItem> const& items) {
+  int width = 0;
   for (std::size_t i = 0; i < items.size(); ++i) {
     width += dockItemWidth(items[i]);
     if (i + 1 < items.size()) width += kDockGap;
   }
+  return width;
+}
+
+int dockStatusWidth(int clockWidth) {
+  int const statusGridWidth =
+      kDockStatusColumns * kDockStatusCell + (kDockStatusColumns - 1) * kDockStatusGridGap;
+  return kDockSeparatorWidth + kDockGap + statusGridWidth + kDockGap + kDockSeparatorWidth + kDockGap +
+         std::max(kDockClockMinWidth, clockWidth);
+}
+
+int dockWidth(std::vector<DockItem> const& items, int clockWidth) {
+  int width = static_cast<int>(kDockPaddingX * 2.f) + dockItemsWidth(items);
+  if (!items.empty()) width += kDockGap;
+  width += dockStatusWidth(clockWidth);
   return width;
 }
 
@@ -129,12 +143,12 @@ bool launcherPointerInsideContent(int width,
   return inField || launcherResultAt(width, launcherOpen, results, x, y).has_value();
 }
 
-std::vector<TopBarStatusItem> topBarStatusItems(SystemStatus const& status) {
-  std::vector<TopBarStatusItem> items;
+std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status) {
+  std::vector<DockletStatusItem> items;
   items.reserve(4);
 
   if (!unavailableStatus(status.wifi)) {
-    TopBarStatusItem item;
+    DockletStatusItem item;
     item.id = "network";
     item.icon = offStatus(status.wifi) ? lambda::IconName::WifiOff : lambda::IconName::Wifi;
     item.label = offStatus(status.wifi) ? std::string{} : status.wifi;
@@ -142,7 +156,7 @@ std::vector<TopBarStatusItem> topBarStatusItems(SystemStatus const& status) {
     item.active = !offStatus(status.wifi);
     items.push_back(std::move(item));
   } else if (!unavailableStatus(status.network)) {
-    TopBarStatusItem item;
+    DockletStatusItem item;
     item.id = "network";
     item.icon = offStatus(status.network) ? lambda::IconName::WifiOff : lambda::IconName::NetworkWifi;
     item.availability = StatusAvailability::Available;
@@ -155,7 +169,7 @@ std::vector<TopBarStatusItem> topBarStatusItems(SystemStatus const& status) {
   if (unavailableStatus(status.bluetooth)) {
     items.push_back(unavailableItem("bluetooth", lambda::IconName::BluetoothDisabled));
   } else {
-    TopBarStatusItem item;
+    DockletStatusItem item;
     item.id = "bluetooth";
     item.icon = offStatus(status.bluetooth) ? lambda::IconName::BluetoothDisabled : lambda::IconName::BluetoothConnected;
     item.availability = StatusAvailability::Available;
@@ -166,7 +180,7 @@ std::vector<TopBarStatusItem> topBarStatusItems(SystemStatus const& status) {
   if (unavailableStatus(status.volume)) {
     items.push_back(unavailableItem("volume", lambda::IconName::VolumeOff));
   } else {
-    TopBarStatusItem item;
+    DockletStatusItem item;
     item.id = "volume";
     item.icon = offStatus(status.volume) ? lambda::IconName::VolumeOff : lambda::IconName::VolumeUp;
     item.label = offStatus(status.volume) ? std::string{} : status.volume;
@@ -178,7 +192,7 @@ std::vector<TopBarStatusItem> topBarStatusItems(SystemStatus const& status) {
   if (unavailableStatus(status.battery)) {
     items.push_back(unavailableItem("battery", lambda::IconName::BatteryUnknown));
   } else {
-    TopBarStatusItem item;
+    DockletStatusItem item;
     item.id = "battery";
     item.icon = offStatus(status.battery) ? lambda::IconName::BatteryAlert : lambda::IconName::BatteryAndroid4;
     item.label = offStatus(status.battery) ? std::string{} : status.battery;
@@ -188,6 +202,16 @@ std::vector<TopBarStatusItem> topBarStatusItems(SystemStatus const& status) {
   }
 
   return items;
+}
+
+std::string dockClockDateText(std::string_view timeText) {
+  std::size_t const split = timeText.find(", ");
+  return split == std::string_view::npos ? std::string{timeText} : std::string{timeText.substr(0, split)};
+}
+
+std::string dockClockTimeText(std::string_view timeText) {
+  std::size_t const split = timeText.find(", ");
+  return split == std::string_view::npos ? std::string{} : std::string{timeText.substr(split + 2)};
 }
 
 } // namespace lambda_shell

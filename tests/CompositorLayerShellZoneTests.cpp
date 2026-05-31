@@ -4,9 +4,8 @@
 
 #include <vector>
 
-TEST_CASE("layer shell reserved zones aggregate top bar and dock") {
+TEST_CASE("layer shell reserved zones aggregate dock") {
   std::vector<lambda::compositor::LayerShellReservedZoneInput> layers{
-      {.nameSpace = "lambda.topbar", .exclusiveZone = 36},
       {.nameSpace = "lambda.dock",
        .exclusiveZone = 0,
        .anchor = lambda::compositor::kLayerShellAnchorBottom,
@@ -14,7 +13,6 @@ TEST_CASE("layer shell reserved zones aggregate top bar and dock") {
        .extent = 64},
   };
   auto const zones = lambda::compositor::aggregateLayerShellReservedZones(layers);
-  CHECK(zones.topBar == 36);
   CHECK(zones.dock == 72);
 }
 
@@ -23,7 +21,6 @@ TEST_CASE("layer shell reserved zones ignore unrelated namespaces") {
       {.nameSpace = "com.example.panel", .exclusiveZone = 48},
   };
   auto const zones = lambda::compositor::aggregateLayerShellReservedZones(layers);
-  CHECK(zones.topBar == 0);
   CHECK(zones.dock == 0);
 }
 

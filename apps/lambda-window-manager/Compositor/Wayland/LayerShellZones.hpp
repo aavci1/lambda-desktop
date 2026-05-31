@@ -20,7 +20,6 @@ struct LayerShellReservedZoneInput {
 };
 
 struct LayerShellReservedZones {
-  std::int32_t topBar = 0;
   std::int32_t dock = 0;
 };
 

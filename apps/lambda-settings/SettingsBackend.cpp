@@ -173,12 +173,12 @@ void setShellTomlValue(toml::table& table, std::string const& key, std::string c
   else if (key == "appearance.reduced_motion") setBool("appearance", "reduced_motion");
   else if (key == "dock.position") setString("dock", "position");
   else if (key == "dock.auto_hide") setBool("dock", "auto_hide");
+  else if (key == "dock.bottom_gap") setInt("dock", "bottom_gap");
+  else if (key == "dock.corner_radius") setInt("dock", "corner_radius");
+  else if (key == "dock.clock_format") setString("dock", "clock_format");
   else if (key == "dock.show_running_unpinned") setBool("dock", "show_running_unpinned");
   else if (key == "dock.show_tooltips") setBool("dock", "show_tooltips");
   else if (key == "dock.pinned") setArray("dock", "pinned");
-  else if (key == "top_bar.clock_format") setString("top_bar", "clock_format");
-  else if (key == "top_bar.show_active_title") setBool("top_bar", "show_active_title");
-  else if (key == "top_bar.modules") setArray("top_bar", "modules");
   else if (key == "quick_settings.modules") setArray("quick_settings", "modules");
   else if (key == "notifications.enabled") setBool("notifications", "enabled");
   else if (key == "notifications.do_not_disturb") setBool("notifications", "do_not_disturb");
@@ -331,6 +331,12 @@ std::vector<SettingSchema> shellSettingsSchema() {
        .applyMode = ApplyMode::HotReload, .enumValues = {"left", "right", "bottom"}, .defaultValue = "bottom"},
       {.id = "dock.auto_hide", .label = "Dock auto-hide", .type = SettingType::Boolean,
        .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
+      {.id = "dock.bottom_gap", .label = "Dock bottom gap", .type = SettingType::Integer,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "8"},
+      {.id = "dock.corner_radius", .label = "Dock corner radius", .type = SettingType::Integer,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "18"},
+      {.id = "dock.clock_format", .label = "Clock format", .type = SettingType::String,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "%a %d %b, %H:%M"},
       {.id = "dock.show_running_unpinned", .label = "Show running unpinned apps", .type = SettingType::Boolean,
        .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
       {.id = "dock.show_tooltips", .label = "Dock tooltips", .type = SettingType::Boolean,
@@ -338,12 +344,6 @@ std::vector<SettingSchema> shellSettingsSchema() {
       {.id = "dock.pinned", .label = "Pinned apps", .type = SettingType::String,
        .applyMode = ApplyMode::HotReload,
        .defaultValue = "lambda-files,lambda-editor,lambda-preview,lambda-terminal,lambda-settings,firefox"},
-      {.id = "top_bar.clock_format", .label = "Clock format", .type = SettingType::String,
-       .applyMode = ApplyMode::HotReload, .defaultValue = "%a %d %b, %H:%M"},
-      {.id = "top_bar.show_active_title", .label = "Show active title", .type = SettingType::Boolean,
-       .applyMode = ApplyMode::HotReload, .defaultValue = "true"},
-      {.id = "top_bar.modules", .label = "Top bar modules", .type = SettingType::String,
-       .applyMode = ApplyMode::HotReload, .defaultValue = "network,bluetooth,volume,battery,notifications,clipboard,clock"},
       {.id = "quick_settings.modules", .label = "Quick settings modules", .type = SettingType::String,
        .applyMode = ApplyMode::HotReload, .defaultValue = "network,bluetooth,audio,battery,brightness,do_not_disturb"},
       {.id = "notifications.enabled", .label = "Notifications", .type = SettingType::Boolean,
@@ -507,14 +507,12 @@ SettingsDocument loadShellSettings(std::string_view tomlText) {
   if (auto* dock = table["dock"].as_table()) {
     setIf("dock.position", tomlString(*dock, "position"));
     setIf("dock.auto_hide", tomlBool(*dock, "auto_hide"));
+    setIf("dock.bottom_gap", tomlNumber(*dock, "bottom_gap"));
+    setIf("dock.corner_radius", tomlNumber(*dock, "corner_radius"));
+    setIf("dock.clock_format", tomlString(*dock, "clock_format"));
     setIf("dock.show_running_unpinned", tomlBool(*dock, "show_running_unpinned"));
     setIf("dock.show_tooltips", tomlBool(*dock, "show_tooltips"));
     setIf("dock.pinned", tomlStringList(*dock, "pinned"));
-  }
-  if (auto* topBar = table["top_bar"].as_table()) {
-    setIf("top_bar.clock_format", tomlString(*topBar, "clock_format"));
-    setIf("top_bar.show_active_title", tomlBool(*topBar, "show_active_title"));
-    setIf("top_bar.modules", tomlStringList(*topBar, "modules"));
   }
   if (auto* quickSettings = table["quick_settings"].as_table()) {
     setIf("quick_settings.modules", tomlStringList(*quickSettings, "modules"));

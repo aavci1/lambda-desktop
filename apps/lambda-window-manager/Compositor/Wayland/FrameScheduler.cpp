@@ -46,8 +46,7 @@ bool hasVisibleFullscreenToplevel(WaylandServer::Impl const& server) {
 
 bool hiddenFullscreenShellPanel(WaylandServer::Impl const& server, WaylandServer::Impl::Surface const* surface) {
   return surfaceIsLayerSurface(surface) && surface->layerSurface && server.shellPanelHideProgress_ >= 0.999f &&
-         (surface->layerSurface->nameSpace == "lambda.topbar" ||
-          surface->layerSurface->nameSpace == "lambda.dock");
+         surface->layerSurface->nameSpace == "lambda.dock";
 }
 
 void updateShellPanelAnimation(WaylandServer::Impl& server, std::uint32_t timeMs, bool animationsEnabled) {

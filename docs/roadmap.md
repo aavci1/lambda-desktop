@@ -41,7 +41,7 @@ Deleted/superseded docs:
 ## Ownership Boundaries
 
 - Window Manager owns KMS/Wayland composition, output/scale, window state/focus, input routing, layer-shell placement, compositor chrome, screenshots, compositor-drawn screenshot UI, and protocol validation.
-- Shell owns persistent desktop chrome: top bar, dock, command launcher, app presentation, quick settings/status presentation, notifications, clipboard-history UI/policy, Shell preferences, and user-facing desktop navigation.
+- Shell owns persistent desktop chrome: dock, command launcher, app presentation, status docklets/quick settings, notifications, clipboard-history UI/policy, Shell preferences, and user-facing desktop navigation.
 - Settings owns GUI editing for owner config files and truthful system/about status. The owning process remains the runtime authority.
 - Files owns safe local file management, trash-first delete, selection, clipboard file operations, open-with UI, file icons, and current-folder refresh/watch behavior.
 - Terminal owns pty/libvterm behavior, scrollback, keyboard/input encoding, selection/copy/paste, terminal rendering, terminal preferences, and terminal desktop integration.
@@ -192,17 +192,17 @@ Deferred:
 
 Current implementation:
 
-- `lambda-shell` creates layer-shell top bar, dock, command launcher, and dock menu surfaces.
+- `lambda-shell` creates layer-shell dock, command launcher, and dock menu surfaces.
 - Shell IPC uses request IDs and structured parse/serialization helpers.
 - Shell exits cleanly when the Window Manager IPC is unavailable or disconnects.
 - Shared app registry discovers local Lambda executables and installed `.desktop` entries, with app-id aliases and launch resolution shared by Shell and Window Manager.
 - Dock pins load from Shell config; running unpinned apps appear; dock click launches, focuses, or restores; dock context menu supports new window, pin/unpin, and quit where wired.
 - Icon theme lookup is used by dock and launcher with Material glyph fallback.
-- Top-bar status rendering shows real values when present and unavailable/unknown values honestly. The current Window Manager snapshot still reports system providers as unknown.
+- Docklet status rendering shows real values when present and unavailable/unknown values honestly. The current Window Manager snapshot still reports system providers as unknown.
 - Quick-status popup exists, but provider controls are disabled/unavailable.
 - Notification and clipboard-history models/config/policies exist and are tested, but live UI is not implemented.
 - Advanced launcher provider models for apps, windows, Settings panels, Shell actions, empty states, error states, and ranking exist; production launcher still renders and activates dock/app `DockItem` results.
-- Shell config is generated, parsed, hot-reloaded, and covers appearance, dock, top bar, quick settings, notifications, clipboard history, and launcher policy.
+- Shell config is generated, parsed, hot-reloaded, and covers appearance, dock, quick settings, notifications, clipboard history, and launcher policy.
 
 Open gate:
 
@@ -231,24 +231,22 @@ Provider model requirements:
 - Providers expose typed snapshots with availability: unavailable, read-only, or writable.
 - Visible state must be real or explicitly unavailable; never show fake connected, charged, unmuted, or active values.
 - Provider failures must not freeze Shell.
-- Slow providers should update independently so one missing backend does not block the top bar or quick settings.
-- Shell config controls top-bar module order through `top_bar.modules`.
+- Slow providers should update independently so one missing backend does not block docklets or quick settings.
 - Shell config controls quick-settings order through `quick_settings.modules`.
 
 Provider backends:
 
-- Clock: honor `top_bar.clock_format`, update conservatively, and avoid redraws when formatted text is unchanged.
+- Clock: honor `dock.clock_format`, update conservatively, and avoid redraws when formatted text is unchanged.
 - Battery/power: read `/sys/class/power_supply` first; optionally use UPower later for richer state. Show absent battery as unavailable. Show percentage and charging/discharging/full only from real state. Battery is initially read-only; power mode waits for a real backend.
 - Brightness: read `/sys/class/backlight`; show unavailable when absent; show read-only when writable access or privileged backend is missing. Enable a slider only with a real write path such as logind/udev policy or a small privileged helper.
 - Audio: use PipeWire/WirePlumber APIs, with `wpctl` as an optional first fallback. Read default sink volume and mute state. Add volume slider and mute toggle only when control is real. Microphone mute and output picker can come later.
 - Network/Wi-Fi: use NetworkManager D-Bus. Show unavailable when NetworkManager or usable interfaces are absent. Distinguish wired, Wi-Fi, disconnected, connecting, connected, and SSID. First useful control is Wi-Fi enable/disable; connection selection/password entry belongs in Settings.
 - Bluetooth: use BlueZ D-Bus. Show unavailable when BlueZ/adapters are absent. Show powered state and connected device count/name. Toggle adapter power only when supported; pairing/device management belongs in Settings.
-- Notifications: provide top-bar affordance/count/DND state, banners, notification center/history, dismissal, clear-all, timeout/history/previews policy, and later freedesktop notification receive path.
-- Clipboard history: provide top-bar affordance, picker, selected-entry paste or write-back-to-clipboard, clear history, max entries, max text bytes, persistence policy, and primary-selection policy. Live clipboard observation is still missing.
+- Notifications: provide docklet affordance/count/DND state, banners, notification center/history, dismissal, clear-all, timeout/history/previews policy, and later freedesktop notification receive path.
+- Clipboard history: provide docklet affordance, picker, selected-entry paste or write-back-to-clipboard, clear history, max entries, max text bytes, persistence policy, and primary-selection policy. Live clipboard observation is still missing.
 
-Top-bar UI requirements:
+Docklet UI requirements:
 
-- Respect `top_bar.modules`.
 - Support at least network/Wi-Fi, Bluetooth, volume, battery, notifications, clipboard, and clock.
 - Each status item should be individually clickable where it has a detail surface.
 - Icons should be driven by typed provider state.
@@ -298,7 +296,7 @@ Current implementation:
 - Display edits selected output and scale config.
 - Keyboard edits keyboard layout/repeat and screenshot/close shortcuts.
 - Desktop edits animations, hardware cursor, cursor theme/size, idle blank timeout, and screenshot shortcuts.
-- Dock & Panel edits Shell dock/top-bar/quick-settings values.
+- Dock & Panel edits Shell dock and quick-settings values.
 - Notifications edits Shell notification and clipboard-history config.
 - About/System shows real or explicitly unavailable values.
 - Save/revert/reset/error UX exists; restart-required rows are visible.
@@ -436,7 +434,7 @@ Optional later apps:
 Manual validation coverage inherited from the old readiness specs:
 
 - Window Manager: build/unit checks, TTY launch, Shell launch, protocol smoke, Lambda apps, browser/GTK/Qt/foot real-app matrix, screenshots, fullscreen/restore, video/mpv pacing, hardware overlay/scanout traces, config reload/restart matrix, idle CPU, and compositor crash/disconnect behavior.
-- Shell: build/unit checks, launch/failure behavior, app registry discovery, dock launch/focus/restore, launcher keyboard behavior, top-bar status, quick settings, notification workflows, clipboard-history workflows, config reload, and Lambda/external app validation.
+- Shell: build/unit checks, launch/failure behavior, app registry discovery, dock launch/focus/restore, launcher keyboard behavior, docklet status, quick settings, notification workflows, clipboard-history workflows, config reload, and Lambda/external app validation.
 - Settings: build/unit checks, launch, Appearance, Display, Keyboard, Desktop, Dock & Panel, Notifications, About/System, save/revert/reset, restart-required rows, and owner-config persistence.
 - Files: build/unit checks, launch, browsing places/root/outside-home/permission-denied/large/hidden/external-change cases, selection, safe operations, trash, clipboard/DnD behavior, open-with behavior, grid/list/sort/search behavior, and preference persistence.
 - Terminal: build/unit checks, launch, shell workflows, full-screen apps, scrollback, selection/clipboard, key input, Unicode/color/attributes, resize/performance traces, and preferences.

@@ -24,7 +24,7 @@ struct ShellDesktopView {
 
   lambda::Element body() const {
     auto const open = model.launcherOpenSignal();
-    int const dockW = dockWidth(model.dockItems());
+    int const dockW = dockWidth(model.dockItems(), model.dockClockWidth());
     float const dockH = static_cast<float>(dockHeight());
     float const dockX = (width - static_cast<float>(dockW)) * 0.5f;
     float const dockY = height - dockH - static_cast<float>(kDockBottom);
@@ -37,10 +37,6 @@ struct ShellDesktopView {
                              lambda::Color{0.14f, 0.20f, 0.33f, 1.f},
                              {0.f, 0.f},
                              {1.f, 1.f})));
-
-    layers.push_back(shell_preview::wrapTopBar(
-        lambda::Element{ShellTopBarView{model, onOpenLauncher}},
-        width));
 
     layers.push_back(shell_preview::wrapDock(
             lambda::Element{ShellDockView{

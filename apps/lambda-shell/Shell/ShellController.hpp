@@ -37,10 +37,12 @@ private:
   void mountProductionViews();
   void mountPreviewView();
   void requestRedraws();
-  void requestTopBarRedraw();
   void requestDockRedraw();
   void requestDockMenuRedraw();
   void requestLauncherRedraw();
+  [[nodiscard]] int measureDockClockWidth();
+  [[nodiscard]] bool updateDockClockWidth();
+  void resizeDockWindowIfNeeded();
   void handleIpcLine(std::string_view line);
   void checkShellConfigReload();
   void syncLauncherWindow();
@@ -61,12 +63,10 @@ private:
   lambda::Application& app_;
   ShellModel& model_;
   ShellConnection ipc_;
-  std::optional<unsigned int> topBarHandle_;
   std::optional<unsigned int> dockHandle_;
   std::optional<unsigned int> dockMenuHandle_;
   std::optional<unsigned int> launcherHandle_;
   std::optional<unsigned int> previewHandle_;
-  lambda::Window* topBarWindow_ = nullptr;
   lambda::Window* dockWindow_ = nullptr;
   lambda::Window* dockMenuWindow_ = nullptr;
   lambda::Window* launcherWindow_ = nullptr;
@@ -90,8 +90,9 @@ private:
   std::string lastSnapshotLine_;
 };
 
-lambda::WindowConfig topBarWindowConfig();
-lambda::WindowConfig dockWindowConfig(int width);
+lambda::WindowConfig dockWindowConfig(int width,
+                                      int bottomGap = kDockBottom,
+                                      int cornerRadius = kDockCornerRadius);
 lambda::WindowConfig dockMenuWindowConfig();
 lambda::WindowConfig launcherWindowConfig();
 

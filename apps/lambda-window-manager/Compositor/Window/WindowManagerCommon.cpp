@@ -73,8 +73,7 @@ bool hasVisibleFullscreenToplevel(WaylandServer::Impl const* server) {
 
 bool fullscreenHiddenShellPanel(WaylandServer::Impl::Surface const* surface) {
   return surfaceIsLayerSurface(surface) && surface->layerSurface &&
-         (surface->layerSurface->nameSpace == "lambda.topbar" ||
-          surface->layerSurface->nameSpace == "lambda.dock");
+         surface->layerSurface->nameSpace == "lambda.dock";
 }
 
 WaylandServer::Impl::Surface* aboveWindowLayerAt(WaylandServer::Impl* server, float x, float y) {
@@ -184,7 +183,7 @@ std::int32_t externalTitleBarHeight(WaylandServer::Impl* server, WaylandServer::
 }
 
 std::int32_t topInsetForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
-  return (server ? server->topBarExclusiveZone_ : 0) + externalTitleBarHeight(server, surface);
+  return externalTitleBarHeight(server, surface);
 }
 
 ResizeEdge resizeEdgesFromXdg(std::uint32_t edges) {

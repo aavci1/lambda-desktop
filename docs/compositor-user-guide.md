@@ -63,9 +63,8 @@ Start the desktop shell from another TTY after the window manager is running:
 
 Expected shell behavior:
 
-- A glass top bar appears and reserves vertical work area.
 - A glass dock appears at the bottom.
-- `Super+Space`, the top-bar Lambda label, or the dock launcher icon opens the shell command launcher.
+- `Super+Space` or the dock launcher icon opens the shell command launcher.
 - The dock reflects running/focused application state reported by `lambda-window-manager`.
 
 Clients can connect without setting `WAYLAND_DISPLAY` if they use the Lambda demo helper. For other Wayland clients, use the display name written to:

@@ -42,7 +42,7 @@ case_catalog() {
 lambda-settings|required|Lambda Settings app with system titlebar glass.
 lambda-files|required|Lambda Files app with integrated titlebar glass.
 lambda-terminal|required|Lambda Terminal app with black glass terminal background.
-shell|required|Lambda Shell topbar, dock, launcher, and focus integration.
+shell|required|Lambda Shell dock, launcher, status docklets, and focus integration.
 terminal|required|Mature Wayland terminal, preferably foot.
 browser|required|Pure Wayland browser, preferably Firefox with MOZ_ENABLE_WAYLAND=1.
 gtk|required|GTK app with text input and menus/popovers.
@@ -184,14 +184,14 @@ if case_selected "shell"; then
   if [[ "$INCLUDE_SHELL" -eq 1 || "$SELECTED_CASE" == "shell" ]]; then
     if [[ -x "$(lambda_exe lambda-shell)" || "$BUILD" -eq 1 ]]; then
       add_case "shell" "required" "lambda-shell" "$(lambda_cmd lambda-shell)" \
-        "Shell should show topbar/dock, launch/focus/restore apps, and remain stable while other apps are tested."
+        "Shell should show dock/status docklets, launch/focus/restore apps, and remain stable while other apps are tested."
     else
       add_missing "shell" "required" "$(lambda_exe lambda-shell)" \
         "Build lambda-shell or rerun without --no-build."
     fi
   else
     add_case "shell" "required" "already-running" ":" \
-      "Validate the already-running shell manually: topbar, dock, launcher, focus/restore, and no idle redraw loop."
+      "Validate the already-running shell manually: dock, launcher, status docklets, focus/restore, and no idle redraw loop."
   fi
 fi
 

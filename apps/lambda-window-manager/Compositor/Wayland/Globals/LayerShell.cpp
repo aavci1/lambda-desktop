@@ -169,8 +169,7 @@ void refreshShellReservedZones(WaylandServer::Impl* server) {
     });
   }
   LayerShellReservedZones const zones = aggregateLayerShellReservedZones(inputs);
-  if (zones.topBar == server->topBarExclusiveZone_ && zones.dock == server->dockReservedZone_) return;
-  server->topBarExclusiveZone_ = zones.topBar;
+  if (zones.dock == server->dockReservedZone_) return;
   server->dockReservedZone_ = zones.dock;
   ++server->contentSerial_;
   server->notifyShellStateChanged();

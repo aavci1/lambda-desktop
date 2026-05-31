@@ -44,6 +44,22 @@ TEST_CASE("Shell dock model combines pinned apps and running windows") {
   CHECK_FALSE(dock[2].pinned);
 }
 
+TEST_CASE("Shell dock model ignores placeholder window identities") {
+  std::vector<lambda_shell::AppRegistryEntry> pinned{
+      {.appId = "terminal", .name = "Terminal", .icon = "terminal"},
+  };
+  std::vector<lambda_shell::ShellWindowSnapshot> windows{
+      {.id = 21, .appId = "unknown", .title = "unknown"},
+      {.id = 22, .appId = "toggle-demo", .title = "Lambda - Toggle demo", .focused = true},
+  };
+
+  auto dock = lambda_shell::buildDockModel(pinned, windows);
+  REQUIRE(dock.size() == 2);
+  CHECK(dock[0].appId == "terminal");
+  CHECK(dock[1].appId == "toggle-demo");
+  CHECK(dock[1].focused);
+}
+
 TEST_CASE("Shell dock click behavior launches focuses or restores") {
   CHECK(lambda_shell::dockClickAction({.appId = "files"}).kind == lambda_shell::DockClickKind::LaunchApp);
   CHECK(lambda_shell::dockClickAction({.appId = "files", .running = true}).kind ==
@@ -264,8 +280,8 @@ TEST_CASE("Shell status modules classify available unknown and unavailable value
   CHECK(modules[7].label == "custom");
 }
 
-TEST_CASE("Shell top bar status items expose real and unavailable states") {
-  auto unavailable = lambda_shell::topBarStatusItems({});
+TEST_CASE("Shell docklet status items expose real and unavailable states") {
+  auto unavailable = lambda_shell::dockletStatusItems({});
   REQUIRE(unavailable.size() == 4);
   CHECK(unavailable[0].id == "network");
   CHECK(unavailable[0].availability == lambda_shell::StatusAvailability::Unavailable);
@@ -279,7 +295,7 @@ TEST_CASE("Shell top bar status items expose real and unavailable states") {
       .volume = "55%",
       .battery = "88%",
   };
-  auto items = lambda_shell::topBarStatusItems(status);
+  auto items = lambda_shell::dockletStatusItems(status);
   REQUIRE(items.size() == 4);
   CHECK(items[0].id == "network");
   CHECK(items[0].label == "Lambda");
@@ -344,7 +360,9 @@ TEST_CASE("Shell config parses defaults and invalid fallback") {
                                    "firefox",
                                });
   CHECK(defaults.iconSize == 48);
-  CHECK(defaults.topBarModules.back() == "clock");
+  CHECK(defaults.dockBottomGap == 8);
+  CHECK(defaults.dockCornerRadius == 18);
+  CHECK(defaults.dockClockFormat == "%a %d %b, %H:%M");
   CHECK(defaults.clipboardHistoryEnabled);
   CHECK(defaults.clipboardHistoryMaxEntries == 100);
   CHECK(defaults.notificationHistoryLimit == 100);
@@ -358,10 +376,10 @@ reduced_motion = true
 [dock]
 pinned = ["lambda-terminal", "lambda-files"]
 auto_hide = true
-show_running_unpinned = false
-[top_bar]
+bottom_gap = 6
+corner_radius = 20
 clock_format = "%H:%M"
-modules = ["notifications", "clock"]
+show_running_unpinned = false
 [quick_settings]
 modules = ["audio", "battery"]
 [clipboard_history]
@@ -383,9 +401,10 @@ max_results = 4
   CHECK(parsed.reducedMotion);
   CHECK(parsed.dockPinned == std::vector<std::string>{"lambda-terminal", "lambda-files"});
   CHECK(parsed.dockAutoHide);
+  CHECK(parsed.dockBottomGap == 6);
+  CHECK(parsed.dockCornerRadius == 20);
+  CHECK(parsed.dockClockFormat == "%H:%M");
   CHECK_FALSE(parsed.showRunningUnpinned);
-  CHECK(parsed.topBarClockFormat == "%H:%M");
-  CHECK(parsed.topBarModules == std::vector<std::string>{"notifications", "clock"});
   CHECK(parsed.quickSettingsModules == std::vector<std::string>{"audio", "battery"});
   CHECK_FALSE(parsed.clipboardHistoryEnabled);
   CHECK(parsed.clipboardHistoryMaxEntries == 5);
@@ -404,6 +423,8 @@ icon_size = -1
 [dock]
 pinned = []
 position = "floating"
+bottom_gap = -1
+corner_radius = 99
 [clipboard_history]
 enabled = maybe
 max_entries = -1
@@ -426,9 +447,7 @@ symbolic_icon_theme = 'same'
 [dock]
 position = 'left'
 pinned = ['lambda-terminal', 'lambda-settings']
-[top_bar]
 clock_format = '%H:%M'
-modules = ['notifications', 'clock']
 [quick_settings]
 modules = ['audio', 'battery']
 [launcher]
@@ -439,8 +458,7 @@ empty_query = 'apps'
   CHECK(parsed.symbolicIconTheme == "same");
   CHECK(parsed.dockPosition == "left");
   CHECK(parsed.dockPinned == std::vector<std::string>{"lambda-terminal", "lambda-settings"});
-  CHECK(parsed.topBarClockFormat == "%H:%M");
-  CHECK(parsed.topBarModules == std::vector<std::string>{"notifications", "clock"});
+  CHECK(parsed.dockClockFormat == "%H:%M");
   CHECK(parsed.quickSettingsModules == std::vector<std::string>{"audio", "battery"});
   CHECK(parsed.launcherEmptyQuery == "apps");
 }
