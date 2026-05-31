@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/Presentation.hpp"
 
+#include "Compositor/Wayland/PresentationState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "presentation-time-server-protocol.h"
@@ -27,7 +28,11 @@ void presentationFeedback(wl_client* client, wl_resource* resource, wl_resource*
   auto feedback = std::make_unique<WaylandServer::Impl::PresentationFeedback>();
   feedback->server = server;
   feedback->surface = surface;
-  wl_resource* feedbackResource = wl_resource_create(client, &wp_presentation_feedback_interface, 2, id);
+  wl_resource* feedbackResource =
+      wl_resource_create(client,
+                         &wp_presentation_feedback_interface,
+                         presentationResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource))),
+                         id);
   if (!feedbackResource) {
     wl_client_post_no_memory(client);
     return;
@@ -46,7 +51,7 @@ struct wp_presentation_interface const presentationImpl{
 
 
 void bindPresentationImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &wp_presentation_interface, std::min(version, 2u), id);
+  wl_resource* resource = wl_resource_create(client, &wp_presentation_interface, presentationResourceVersion(version), id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;

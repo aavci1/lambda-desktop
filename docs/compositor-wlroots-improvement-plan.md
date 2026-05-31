@@ -28,6 +28,7 @@
 | P8 | WM-COMP-9 XDG toplevel request and configure parity | Verified slice | XDG toplevel client-owned title/app-id/parent state now resets on null-buffer unmap | XDG toplevel reset tests plus compositor suite pass | No manual gate needed for this protocol-lifecycle slice |
 | P9 | WM-COMP-10 XDG activation token lifecycle | Verified | Activation tokens are single-use, validate serial/focus constraints, and expire after the wlroots-style 30 second lifetime | XDG activation, seat serial, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle workstream |
 | P10 | WM-COMP-11 Pointer constraints synced state | Verified | Pointer constraints now use committed region/cursor-hint state and wlroots-style oneshot deactivation cleanup | Pointer constraint, subsurface, compositor, and broader feasible suites pass | No manual gate needed for this protocol-state workstream |
+| P11 | WM-COMP-12 Presentation-time resource versioning | Verified | Presentation feedback resources now use the client-bound manager version, capped by the implemented protocol version | Presentation helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -409,6 +410,33 @@
 - Input-region changes on the constrained surface update the effective pointer constraint region on commit.
 - Automated helper and compositor tests cover pending/current pointer constraint state and existing pointer/compositor behavior continues to pass.
 
+## WM-COMP-12 Presentation-Time Resource Versioning
+
+**Why this matters:** wlroots creates `wp_presentation_feedback` resources using the version of the bound `wp_presentation` manager. Lambda currently hardcodes feedback resources to version 2 even when the client bound an older manager version.
+
+**Goal:** keep presentation-time resource versions and no-memory handling aligned with the client-bound protocol object.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Presentation.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/PresentationState.hpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: create feedback resources at the bound presentation version and centralize the implemented version cap.
+
+**Step 1 inventory:**
+
+- wlroots uses `wl_resource_get_version(presentation_resource)` when creating `wp_presentation_feedback`.
+- Lambda creates every feedback resource at version 2 regardless of the manager resource version. Its manager bind already posts no-memory on allocation failure, so that path only needs to use the same version helper.
+
+**Acceptance criteria:**
+
+- Feedback resources use the client-bound presentation manager version, capped by the implemented protocol version.
+- Presentation manager binding continues to post no-memory on allocation failure.
+- Automated helper tests cover version selection and existing presentation/compositor tests continue to pass.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -475,3 +503,5 @@
 | 2026-05-31 | WM-COMP-11 | Verified slice | Added pointer constraint pending/current region and cursor-hint state, cached it with synchronized subsurface commits, dropped cached state on constraint destruction, rebuilt effective regions from committed surface input state, and confined pointer movement to the committed effective region. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*pointer constraint*"`, `./build/tests/lambda_tests --test-case="*subsurface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-11 | In progress | Lifecycle comparison found wlroots destroys the server-side oneshot pointer constraint after sending deactivation and leaves the protocol resource inert. Lambda only marked the object defunct. Implementing inert-resource removal for deactivated oneshot constraints. |
 | 2026-05-31 | WM-COMP-11 | Verified | Deactivated oneshot pointer constraints now make the protocol resource inert and remove the server-side constraint object after sending the unlocked/unconfined event. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*pointer constraint*"`, `./build/tests/lambda_tests --test-case="*subsurface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-12 | In progress | Presentation-time comparison found wlroots creates feedback resources using the bound manager version. Lambda already checks manager-bind allocation failure, so implementing the resource-version slice and centralizing the implemented version cap. |
+| 2026-05-31 | WM-COMP-12 | Verified | Added a presentation version helper and used it for both manager binding and feedback resource creation so feedback resources inherit the client-bound version. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*presentation*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

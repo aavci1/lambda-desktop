@@ -1,4 +1,5 @@
 #include "Compositor/Presenter.hpp"
+#include "Compositor/Wayland/PresentationState.hpp"
 
 #include <doctest/doctest.h>
 
@@ -39,6 +40,12 @@ TEST_CASE("mock presenter tracks Vulkan presentation feedback ids") {
   CHECK(timings[0].presentId == 3);
   CHECK(timings[1].actualPresentTime == 2000);
   CHECK(presenter.lastVulkanPresentId() == 4);
+}
+
+TEST_CASE("presentation feedback resources use the bound manager version") {
+  CHECK(presentationResourceVersion(1) == 1);
+  CHECK(presentationResourceVersion(2) == 2);
+  CHECK(presentationResourceVersion(3) == kPresentationVersion);
 }
 
 TEST_CASE("forceVulkanDisplayPresenter respects environment flag") {
