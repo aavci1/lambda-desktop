@@ -123,12 +123,13 @@ ChromeButton chromeButtonAt(WaylandServer::Impl const* server,
                             WaylandServer::Impl::Surface const* surface,
                             float x,
                             float y,
-                            bool cutoutMode) {
+                            bool cutoutMode,
+                            std::int32_t frameWidth) {
   if (!surface || !serverSideDecorated(server, surface)) return ChromeButton::None;
   auto const& chrome = server->chromeConfig_;
   float const windowX = static_cast<float>(surface->windowX);
   float const windowY = static_cast<float>(surface->windowY);
-  float const width = static_cast<float>(displayWidth(surface));
+  float const width = static_cast<float>(std::max(0, frameWidth));
   float const titleBarHeight = static_cast<float>(chrome.titleBarHeight);
   float const top = windowY - (cutoutMode ? 0.f : titleBarHeight);
   ChromeControlRects const rects = chromeControlRects(chrome, windowX, top, width, titleBarHeight);
@@ -150,12 +151,22 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
   bool const bound = withChrome && surfaceIsXdgToplevel(surface) && cutoutsBound(server, surface);
   bool const rejected = withChrome && surfaceIsXdgToplevel(surface) && cutoutsRejected(server, surface);
   bool const cutoutMode = decorated && bound && !rejected;
-  ChromeButton const hovered = chromeButtonAt(server, surface, server->pointerX_, server->pointerY_, cutoutMode);
   bool const xdgToplevel = surfaceIsXdgToplevel(surface);
-  std::int32_t const width = displayWidth(surface);
-  std::int32_t const height = displayHeight(surface);
   std::int32_t const committedWidth = committedDisplayWidthForSurface(surface);
   std::int32_t const committedHeight = committedDisplayHeightForSurface(surface);
+  std::int32_t width = displayWidth(surface);
+  std::int32_t height = displayHeight(surface);
+  bool const pendingUncommittedFrame =
+      xdgToplevel &&
+      (surface->awaitingConfigureCommit ||
+       surface->resizeConfigureInFlight ||
+       surface->pendingResizeConfigure);
+  if (pendingUncommittedFrame && committedWidth > 0 && committedHeight > 0) {
+    width = committedWidth;
+    height = committedHeight;
+  }
+  ChromeButton const hovered =
+      chromeButtonAt(server, surface, server->pointerX_, server->pointerY_, cutoutMode, width);
   bool const cropToWindowGeometry = canCropToXdgWindowGeometry(surface);
   std::int32_t const bufferScale = std::max(1, surface->scale);
   bool const fullscreen = fullscreenToplevel(surface);

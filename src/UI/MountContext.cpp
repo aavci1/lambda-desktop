@@ -62,6 +62,27 @@ bool sameTextBox(Rect const& a, Rect const& b) noexcept {
          std::fabs(a.height - b.height) <= epsilon;
 }
 
+bool sameLayoutScalar(float a, float b) noexcept {
+  constexpr float epsilon = 0.01f;
+  if (a == b) {
+    return true;
+  }
+  if (!std::isfinite(a) || !std::isfinite(b)) {
+    return false;
+  }
+  return std::fabs(a - b) <= epsilon;
+}
+
+bool sameTextLayoutGeometry(TextLayoutOptions const& options,
+                            Rect const& a,
+                            Rect const& b) noexcept {
+  if (!canUseDirectTextLayout(options)) {
+    return sameTextBox(a, b);
+  }
+  return sameLayoutScalar(directTextMaxWidth(options, a),
+                          directTextMaxWidth(options, b));
+}
+
 float finiteOrZero(float value) {
   return std::isfinite(value) ? std::max(0.f, value) : 0.f;
 }
@@ -117,6 +138,12 @@ LayoutConstraints fixedConstraints(Size size) {
 
 void relayoutToFixedSizeIfNeeded(scenegraph::SceneNode& node, Size const& size) {
   LayoutConstraints const constraints = fixedConstraints(size);
+  Size const currentSize = node.size();
+  if (sameLayoutScalar(currentSize.width, size.width) &&
+      sameLayoutScalar(currentSize.height, size.height)) {
+    node.setLayoutConstraints(constraints);
+    return;
+  }
   (void)node.relayout(constraints, false);
   node.setLayoutConstraints(constraints);
 }
@@ -410,7 +437,7 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
     Rect const currentBox{0.f, 0.f, finiteOrZero(currentSize.width), finiteOrZero(currentSize.height)};
     rawNode->setSize(Size{currentBox.width, currentBox.height});
     if (currentText == lastText && currentColor == lastColor && currentFont == lastFont &&
-        sameTextBox(currentBox, lastBox)) {
+        sameTextLayoutGeometry(options, currentBox, lastBox)) {
       return;
     }
     rawNode->setLayout(canUseDirectTextLayout(options)

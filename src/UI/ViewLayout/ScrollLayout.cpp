@@ -3,6 +3,7 @@
 #include "Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace lambda::layout {
@@ -23,8 +24,13 @@ float indicatorTrackLength(float viewportExtent, bool reserveTrailing) {
 }
 
 float indicatorThumbLength(float viewportExtent, float contentExtent, float trackLength) {
-  return std::clamp((viewportExtent / contentExtent) * trackLength,
-                    ScrollIndicatorStyle::minLength, trackLength);
+  if (!std::isfinite(viewportExtent) || !std::isfinite(contentExtent) ||
+      !std::isfinite(trackLength) || viewportExtent <= 0.f || contentExtent <= 0.f ||
+      trackLength <= 0.f) {
+    return 0.f;
+  }
+  float const minLength = std::min(ScrollIndicatorStyle::minLength, trackLength);
+  return std::clamp((viewportExtent / contentExtent) * trackLength, minLength, trackLength);
 }
 
 } // namespace

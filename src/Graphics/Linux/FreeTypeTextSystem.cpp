@@ -17,7 +17,9 @@
 #include <filesystem>
 #include <functional>
 #include <initializer_list>
+#include <iterator>
 #include <limits.h>
+#include <list>
 #include <map>
 #include <optional>
 #include <stdexcept>
@@ -179,10 +181,18 @@ struct FreeTypeTextSystem::Impl {
   std::vector<hb_font_t*> hbFonts;
   std::unordered_map<std::string, std::uint32_t> ids;
   std::unordered_map<std::string, std::uint32_t> idsByPath;
-  std::unordered_map<std::string, std::shared_ptr<TextLayout const>> layoutCache;
-  std::vector<std::string> layoutCacheOrder;
-  std::unordered_map<std::string, std::shared_ptr<ShapedParagraph const>> shapedCache;
-  std::vector<std::string> shapedCacheOrder;
+  struct LayoutCacheEntry {
+    std::shared_ptr<TextLayout const> layout;
+    std::list<std::string>::iterator order;
+  };
+  struct ShapedCacheEntry {
+    std::shared_ptr<ShapedParagraph const> paragraph;
+    std::list<std::string>::iterator order;
+  };
+  std::unordered_map<std::string, LayoutCacheEntry> layoutCache;
+  std::list<std::string> layoutCacheOrder;
+  std::unordered_map<std::string, ShapedCacheEntry> shapedCache;
+  std::list<std::string> shapedCacheOrder;
 
   Impl() {
     if (!FcInit()) {
@@ -240,47 +250,43 @@ struct FreeTypeTextSystem::Impl {
   void cacheLayout(std::string key, std::shared_ptr<TextLayout const> layout) {
     constexpr std::size_t kMaxLayoutCacheEntries = 1024;
     if (auto it = layoutCache.find(key); it != layoutCache.end()) {
-      it->second = std::move(layout);
-      promoteLayout(key);
+      it->second.layout = std::move(layout);
+      promoteLayout(it);
       return;
     }
-    layoutCache.emplace(key, std::move(layout));
-    layoutCacheOrder.push_back(std::move(key));
-    while (layoutCacheOrder.size() > kMaxLayoutCacheEntries) {
+    layoutCacheOrder.push_back(key);
+    auto orderIt = std::prev(layoutCacheOrder.end());
+    layoutCache.emplace(std::move(key), LayoutCacheEntry{std::move(layout), orderIt});
+    while (layoutCache.size() > kMaxLayoutCacheEntries) {
       layoutCache.erase(layoutCacheOrder.front());
-      layoutCacheOrder.erase(layoutCacheOrder.begin());
+      layoutCacheOrder.pop_front();
     }
   }
 
-  void promoteLayout(std::string const& key) {
-    auto orderIt = std::find(layoutCacheOrder.begin(), layoutCacheOrder.end(), key);
-    if (orderIt == layoutCacheOrder.end()) return;
-    std::string promoted = std::move(*orderIt);
-    layoutCacheOrder.erase(orderIt);
-    layoutCacheOrder.push_back(std::move(promoted));
+  void promoteLayout(std::unordered_map<std::string, LayoutCacheEntry>::iterator it) {
+    if (it == layoutCache.end()) return;
+    layoutCacheOrder.splice(layoutCacheOrder.end(), layoutCacheOrder, it->second.order);
   }
 
   void cacheShaped(std::string key, std::shared_ptr<ShapedParagraph const> paragraph) {
     constexpr std::size_t kMaxShapedCacheEntries = 256;
     if (auto it = shapedCache.find(key); it != shapedCache.end()) {
-      it->second = std::move(paragraph);
-      promoteShaped(key);
+      it->second.paragraph = std::move(paragraph);
+      promoteShaped(it);
       return;
     }
-    shapedCache.emplace(key, std::move(paragraph));
-    shapedCacheOrder.push_back(std::move(key));
-    while (shapedCacheOrder.size() > kMaxShapedCacheEntries) {
+    shapedCacheOrder.push_back(key);
+    auto orderIt = std::prev(shapedCacheOrder.end());
+    shapedCache.emplace(std::move(key), ShapedCacheEntry{std::move(paragraph), orderIt});
+    while (shapedCache.size() > kMaxShapedCacheEntries) {
       shapedCache.erase(shapedCacheOrder.front());
-      shapedCacheOrder.erase(shapedCacheOrder.begin());
+      shapedCacheOrder.pop_front();
     }
   }
 
-  void promoteShaped(std::string const& key) {
-    auto orderIt = std::find(shapedCacheOrder.begin(), shapedCacheOrder.end(), key);
-    if (orderIt == shapedCacheOrder.end()) return;
-    std::string promoted = std::move(*orderIt);
-    shapedCacheOrder.erase(orderIt);
-    shapedCacheOrder.push_back(std::move(promoted));
+  void promoteShaped(std::unordered_map<std::string, ShapedCacheEntry>::iterator it) {
+    if (it == shapedCache.end()) return;
+    shapedCacheOrder.splice(shapedCacheOrder.end(), shapedCacheOrder, it->second.order);
   }
 };
 
@@ -375,8 +381,8 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
     if (!options.suppressCacheStats) {
       debug::perf::recordTextLayoutCacheHit();
     }
-    d->promoteLayout(cacheKey);
-    return it->second;
+    d->promoteLayout(it);
+    return it->second.layout;
   }
   if (!options.suppressCacheStats) {
     debug::perf::recordTextLayoutCacheMiss();
@@ -435,8 +441,8 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
 
   std::shared_ptr<Impl::ShapedParagraph const> paragraph;
   if (auto shapedIt = d->shapedCache.find(shapeKey); shapedIt != d->shapedCache.end()) {
-    d->promoteShaped(shapeKey);
-    paragraph = shapedIt->second;
+    d->promoteShaped(shapedIt);
+    paragraph = shapedIt->second.paragraph;
   } else {
     std::vector<AttributedRun> runs = text.runs;
     if (runs.empty()) {

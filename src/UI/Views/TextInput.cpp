@@ -70,6 +70,26 @@ TextLayoutOptions textInputLayoutOptions(bool multiline) {
   return options;
 }
 
+bool sameLayoutScalar(float a, float b) noexcept {
+  if (a == b) {
+    return true;
+  }
+  if (!std::isfinite(a) || !std::isfinite(b)) {
+    return false;
+  }
+  return std::fabs(a - b) <= 0.01f;
+}
+
+bool sameTextInputLayoutBox(bool multiline, Rect const& a, Rect const& b) noexcept {
+  if (!sameLayoutScalar(a.x, b.x) || !sameLayoutScalar(a.y, b.y)) {
+    return false;
+  }
+  if (!multiline) {
+    return true;
+  }
+  return sameLayoutScalar(a.width, b.width);
+}
+
 AttributedString attributedText(TextInput const& input,
                                 ResolvedTextInputStyle const& style) {
   std::string const text = input.value.get();
@@ -132,10 +152,17 @@ Size textInputFrameSize(TextInput const& input, ResolvedTextInputStyle const& st
     maxTextWidth = 0.f;
   }
 
-  TextLayoutOptions const options = textInputLayoutOptions(input.multiline);
-  Size measured = textSystem.measure(attributedText(input, style), maxTextWidth, options);
-  measured.width += 2.f * padX;
-  measured.height += 2.f * padY;
+  bool const assignedSingleLineWidth =
+      !input.multiline && std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f;
+  Size measured{};
+  if (assignedSingleLineWidth) {
+    measured.width = constraints.maxWidth;
+  } else {
+    TextLayoutOptions const options = textInputLayoutOptions(input.multiline);
+    measured = textSystem.measure(attributedText(input, style), maxTextWidth, options);
+    measured.width += 2.f * padX;
+    measured.height += 2.f * padY;
+  }
 
   if (input.multiline) {
     if (input.multilineHeight.fixed > 0.f) {
@@ -183,6 +210,34 @@ void setTextLayout(scenegraph::TextNode& node, TextInput const& input,
   if (layoutResult) {
     *layoutResult = detail::makeTextEditLayoutResult(
         layout, static_cast<int>(input.value.get().size()), box.width);
+  }
+}
+
+void setTextLayoutIfNeeded(scenegraph::TextNode& node,
+                           TextInput const& input,
+                           ResolvedTextInputStyle const& style,
+                           TextSystem& textSystem,
+                           Size frameSize,
+                           std::shared_ptr<detail::TextEditLayoutResult> const& layoutResult,
+                           std::shared_ptr<std::string> const& lastLayoutText,
+                           std::shared_ptr<Rect> const& lastLayoutBox) {
+  Rect const box = textBox(frameSize, style);
+  node.setBounds(box);
+  std::string const currentText = input.value.get();
+  if (lastLayoutText && lastLayoutBox &&
+      currentText == *lastLayoutText &&
+      sameTextInputLayoutBox(input.multiline, box, *lastLayoutBox)) {
+    if (layoutResult) {
+      layoutResult->contentWidth = std::max(0.f, box.width);
+    }
+    return;
+  }
+  setTextLayout(node, input, style, textSystem, frameSize, layoutResult);
+  if (lastLayoutText) {
+    *lastLayoutText = currentText;
+  }
+  if (lastLayoutBox) {
+    *lastLayoutBox = box;
   }
 }
 
@@ -284,6 +339,8 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
       }};
   auto layoutResult = std::make_shared<detail::TextEditLayoutResult>();
   setTextLayout(*rawText, *this, resolved, ctx.textSystem(), *frameSize, layoutResult);
+  auto lastLayoutText = std::make_shared<std::string>(valueState.peek());
+  auto lastLayoutBox = std::make_shared<Rect>(textBox(*frameSize, resolved));
 
   auto interaction = std::make_unique<InteractionData>();
   if (ComponentKey const* scopeKey = detail::currentInteractionScopeKey()) {
@@ -440,25 +497,28 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   TextSystem* textSystem = &ctx.textSystem();
   rawWrapper->setLayoutConstraints(ctx.constraints());
   rawWrapper->setRelayout([rawWrapper, rawText, rawSelectionLayer, rawCaretLayer, input = *this, resolved,
-                           frameSize, layoutResult, textSystem](LayoutConstraints const& constraints) mutable {
+                           frameSize, layoutResult, textSystem, lastLayoutText,
+                           lastLayoutBox](LayoutConstraints const& constraints) mutable {
     *frameSize = textInputFrameSize(input, resolved, constraints, *textSystem);
     rawWrapper->setSize(*frameSize);
     rawSelectionLayer->setBounds(Rect{0.f, 0.f, frameSize->width, frameSize->height});
     rawCaretLayer->setBounds(Rect{0.f, 0.f, frameSize->width, frameSize->height});
-    setTextLayout(*rawText, input, resolved, *textSystem, *frameSize, layoutResult);
+    setTextLayoutIfNeeded(*rawText, input, resolved, *textSystem, *frameSize,
+                          layoutResult, lastLayoutText, lastLayoutBox);
   });
 
   Reactive::withOwner(ctx.owner(), [rawWrapper, rawText, rawSelectionLayer, rawCaretLayer,
                                     valueState, selectionState, focusState, caretOpacity,
                                     input = *this,
                                     resolved, frameSize, layoutResult, textSystem = &ctx.textSystem(),
+                                    lastLayoutText, lastLayoutBox,
                                     requestRedraw = ctx.redrawCallback()] {
     Reactive::onCleanup([caretOpacity] {
       caretOpacity.stop();
     });
     Reactive::Effect([rawWrapper, rawText, rawSelectionLayer, rawCaretLayer, valueState,
                       selectionState, focusState, caretOpacity, input, resolved, frameSize,
-                      layoutResult, textSystem, requestRedraw] {
+                      layoutResult, textSystem, lastLayoutText, lastLayoutBox, requestRedraw] {
       std::string const& text = valueState.get();
       detail::TextEditSelection currentSelection = selectionState.get();
       detail::TextEditSelection const clamped =
@@ -466,7 +526,8 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
       if (!sameSelection(currentSelection, clamped)) {
         selectionState = clamped;
       }
-      setTextLayout(*rawText, input, resolved, *textSystem, *frameSize, layoutResult);
+      setTextLayoutIfNeeded(*rawText, input, resolved, *textSystem, *frameSize,
+                            layoutResult, lastLayoutText, lastLayoutBox);
       bool const focused = focusState.get();
       if (focused && !input.disabled) {
         caretOpacity.set(1.f, Transition::instant());

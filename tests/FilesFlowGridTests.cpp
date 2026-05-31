@@ -24,6 +24,7 @@
 #include "FilesListView.hpp"
 #include "FilesStore.hpp"
 #include "FilesTheme.hpp"
+#include "UI/ViewLayout/ScrollLayout.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -388,6 +389,20 @@ TEST_CASE("ScrollView viewport taps carry pointer modifiers") {
 
   REQUIRE(seen->size() == 1);
   CHECK(seen->front() == Modifiers::Alt);
+}
+
+TEST_CASE("ScrollView indicators fit very small tracks") {
+  lambda::layout::ScrollIndicatorMetrics const horizontal =
+      lambda::layout::makeHorizontalIndicator(Point{}, Size{18.5f, 40.f}, Size{69.f, 40.f}, false);
+
+  CHECK(horizontal.visible());
+  CHECK(horizontal.width == doctest::Approx(12.5f));
+
+  lambda::layout::ScrollIndicatorMetrics const vertical =
+      lambda::layout::makeVerticalIndicator(Point{}, Size{40.f, 18.5f}, Size{40.f, 69.f}, false);
+
+  CHECK(vertical.visible());
+  CHECK(vertical.height == doctest::Approx(12.5f));
 }
 
 TEST_CASE("FilesFlowGrid mounted row count follows entry count") {
@@ -1014,6 +1029,37 @@ TEST_CASE("FilesAppRoot main scroll view survives sidebar folder navigation") {
 
   scrollInteraction.onScroll(Vec2{0.f, -120.f});
   CHECK(content->position().y == doctest::Approx(-120.f));
+
+  std::filesystem::remove_all(sandbox);
+}
+
+TEST_CASE("FilesAppRoot survives resizing below its fixed sidebar width") {
+  std::filesystem::path const sandbox =
+      std::filesystem::temp_directory_path() / "lambda-files-tiny-resize-test";
+  std::filesystem::remove_all(sandbox);
+  std::filesystem::create_directories(sandbox / "Desktop");
+  std::filesystem::create_directories(sandbox / "Documents");
+  std::filesystem::create_directories(sandbox / "Downloads");
+
+  ::setenv("HOME", sandbox.string().c_str(), 1);
+
+  FakeTextSystem textSystem;
+  scenegraph::SceneGraph sceneGraph;
+  MountRoot root{std::make_unique<TypedRootHolder<FilesAppRoot>>(
+                     std::in_place, FilesAppRoot{nullptr}),
+                 textSystem,
+                 testEnvironment(),
+                 Size{420.f, 360.f}};
+
+  root.mount(sceneGraph);
+
+  for (Size const tinySize : {Size{260.f, 220.f},
+                             Size{180.f, 180.f},
+                             Size{120.f, 96.f}}) {
+    root.resize(tinySize, sceneGraph);
+    CHECK(sceneGraph.root().size().width >= 0.f);
+    CHECK(sceneGraph.root().size().height >= 0.f);
+  }
 
   std::filesystem::remove_all(sandbox);
 }
