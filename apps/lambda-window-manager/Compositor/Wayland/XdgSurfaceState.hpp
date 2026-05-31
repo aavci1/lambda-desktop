@@ -9,4 +9,8 @@ namespace lambda::compositor {
   return surfaceIsXdgToplevel(xdgSurface->surface) || surfaceIsXdgPopup(xdgSurface->surface);
 }
 
+[[nodiscard]] inline bool xdgSurfaceCreationHasExistingBuffer(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->bufferState.buffer != nullptr;
+}
+
 } // namespace lambda::compositor

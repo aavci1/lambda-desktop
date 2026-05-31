@@ -298,6 +298,9 @@ void WaylandServer::Impl::destroyXdgSurface(XdgSurface* surface) {
     for (auto& popup : popups_) {
       if (popup && popup->xdgSurface == surface) popup->xdgSurface = nullptr;
     }
+    if (surfaceIsXdgSurfaceBase(surface->surface)) {
+      surface->surface->role = SurfaceRole::None;
+    }
   }
   eraseResource(xdgSurfaces_, surface);
 }

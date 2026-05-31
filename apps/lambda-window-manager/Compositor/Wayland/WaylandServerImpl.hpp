@@ -30,6 +30,7 @@ namespace lambda::compositor {
 
 enum class SurfaceRole : std::uint8_t {
   None,
+  XdgSurface,
   XdgToplevel,
   XdgPopup,
   LayerSurface,
@@ -547,6 +548,10 @@ struct WaylandServer::Impl::BackgroundEffect {
 
 inline bool surfaceHasNoRole(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->role == SurfaceRole::None;
+}
+
+inline bool surfaceIsXdgSurfaceBase(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->role == SurfaceRole::XdgSurface;
 }
 
 inline bool surfaceIsXdgToplevel(WaylandServer::Impl::Surface const* surface) {

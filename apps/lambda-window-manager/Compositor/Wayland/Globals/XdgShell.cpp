@@ -636,6 +636,16 @@ void xdgWmBaseGetXdgSurface(wl_client* client, wl_resource* resource, std::uint3
                             wl_resource* surfaceResource) {
   auto* server = serverFrom(resource);
   auto* surface = resourceData<WaylandServer::Impl::Surface>(surfaceResource);
+  if (!surfaceHasNoRole(surface)) {
+    wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
+    return;
+  }
+  if (xdgSurfaceCreationHasExistingBuffer(surface)) {
+    wl_resource_post_error(resource,
+                           XDG_SURFACE_ERROR_UNCONFIGURED_BUFFER,
+                           "xdg_surface must not have a buffer at creation");
+    return;
+  }
   auto xdgSurface = std::make_unique<WaylandServer::Impl::XdgSurface>();
   xdgSurface->server = server;
   xdgSurface->surface = surface;
@@ -647,6 +657,7 @@ void xdgWmBaseGetXdgSurface(wl_client* client, wl_resource* resource, std::uint3
   }
   xdgSurface->resource = xdgResource;
   auto* raw = xdgSurface.get();
+  surface->role = SurfaceRole::XdgSurface;
   server->xdgSurfaces_.push_back(std::move(xdgSurface));
   wl_resource_set_implementation(xdgResource,
                                  &xdgSurfaceImpl,
@@ -678,7 +689,7 @@ void xdgSurfaceDestroy(wl_client*, wl_resource* resource) {
 
 void xdgSurfaceGetToplevel(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
-  if (!surfaceHasNoRole(xdgSurface->surface)) {
+  if (!surfaceIsXdgSurfaceBase(xdgSurface->surface)) {
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
     return;
   }
@@ -855,7 +866,7 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_INVALID_POSITIONER, "invalid xdg_popup positioner");
     return;
   }
-  if (!surfaceHasNoRole(xdgSurface->surface)) {
+  if (!surfaceIsXdgSurfaceBase(xdgSurface->surface)) {
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_ROLE, "wl_surface already has another role");
     return;
   }

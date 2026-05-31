@@ -116,6 +116,9 @@ TEST_CASE("xdg popup parent validation accepts only constructed xdg roles") {
   surface.role = lambda::compositor::SurfaceRole::None;
   CHECK_FALSE(lambda::compositor::xdgPopupParentHasValidRole(&parent));
 
+  surface.role = lambda::compositor::SurfaceRole::XdgSurface;
+  CHECK_FALSE(lambda::compositor::xdgPopupParentHasValidRole(&parent));
+
   surface.role = lambda::compositor::SurfaceRole::LayerSurface;
   CHECK_FALSE(lambda::compositor::xdgPopupParentHasValidRole(&parent));
 
@@ -138,6 +141,9 @@ TEST_CASE("xdg surface role object validation follows constructed xdg roles") {
   surface.role = lambda::compositor::SurfaceRole::None;
   CHECK_FALSE(lambda::compositor::xdgSurfaceHasConstructedRoleObject(&xdgSurface));
 
+  surface.role = lambda::compositor::SurfaceRole::XdgSurface;
+  CHECK_FALSE(lambda::compositor::xdgSurfaceHasConstructedRoleObject(&xdgSurface));
+
   surface.role = lambda::compositor::SurfaceRole::LayerSurface;
   CHECK_FALSE(lambda::compositor::xdgSurfaceHasConstructedRoleObject(&xdgSurface));
 
@@ -146,6 +152,14 @@ TEST_CASE("xdg surface role object validation follows constructed xdg roles") {
 
   surface.role = lambda::compositor::SurfaceRole::XdgPopup;
   CHECK(lambda::compositor::xdgSurfaceHasConstructedRoleObject(&xdgSurface));
+}
+
+TEST_CASE("xdg surface creation rejects surfaces with an existing buffer") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  CHECK_FALSE(lambda::compositor::xdgSurfaceCreationHasExistingBuffer(&surface));
+
+  surface.bufferState.buffer = reinterpret_cast<wl_resource*>(0x1);
+  CHECK(lambda::compositor::xdgSurfaceCreationHasExistingBuffer(&surface));
 }
 
 TEST_CASE("xdg popup topmost validation detects live child popups") {
