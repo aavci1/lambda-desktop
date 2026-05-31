@@ -1,5 +1,6 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
+#include "Compositor/Wayland/XdgSurfaceState.hpp"
 
 #include <doctest/doctest.h>
 
@@ -123,6 +124,28 @@ TEST_CASE("xdg popup parent validation accepts only constructed xdg roles") {
 
   surface.role = lambda::compositor::SurfaceRole::XdgPopup;
   CHECK(lambda::compositor::xdgPopupParentHasValidRole(&parent));
+}
+
+TEST_CASE("xdg surface role object validation follows constructed xdg roles") {
+  CHECK_FALSE(lambda::compositor::xdgSurfaceHasConstructedRoleObject(nullptr));
+
+  lambda::compositor::WaylandServer::Impl::XdgSurface xdgSurface{};
+  CHECK_FALSE(lambda::compositor::xdgSurfaceHasConstructedRoleObject(&xdgSurface));
+
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  xdgSurface.surface = &surface;
+
+  surface.role = lambda::compositor::SurfaceRole::None;
+  CHECK_FALSE(lambda::compositor::xdgSurfaceHasConstructedRoleObject(&xdgSurface));
+
+  surface.role = lambda::compositor::SurfaceRole::LayerSurface;
+  CHECK_FALSE(lambda::compositor::xdgSurfaceHasConstructedRoleObject(&xdgSurface));
+
+  surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
+  CHECK(lambda::compositor::xdgSurfaceHasConstructedRoleObject(&xdgSurface));
+
+  surface.role = lambda::compositor::SurfaceRole::XdgPopup;
+  CHECK(lambda::compositor::xdgSurfaceHasConstructedRoleObject(&xdgSurface));
 }
 
 TEST_CASE("xdg popup topmost validation detects live child popups") {

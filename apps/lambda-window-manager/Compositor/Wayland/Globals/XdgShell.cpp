@@ -9,6 +9,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Wayland/XdgPositionerState.hpp"
+#include "Compositor/Wayland/XdgSurfaceState.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
@@ -665,6 +666,13 @@ struct xdg_wm_base_interface const xdgWmBaseImpl{
 };
 
 void xdgSurfaceDestroy(wl_client*, wl_resource* resource) {
+  auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
+  if (xdgSurfaceHasConstructedRoleObject(xdgSurface)) {
+    wl_resource_post_error(resource,
+                           XDG_SURFACE_ERROR_DEFUNCT_ROLE_OBJECT,
+                           "xdg_surface was destroyed before its role object");
+    return;
+  }
   wl_resource_destroy(resource);
 }
 
@@ -903,6 +911,12 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
 void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t serial) {
   auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
   if (!xdgSurface) return;
+  if (!xdgSurfaceHasConstructedRoleObject(xdgSurface)) {
+    wl_resource_post_error(resource,
+                           XDG_SURFACE_ERROR_NOT_CONSTRUCTED,
+                           "xdg_surface must have a role object before ack_configure");
+    return;
+  }
   auto configure = std::find_if(xdgSurface->configureList.begin(),
                                 xdgSurface->configureList.end(),
                                 [serial](WaylandServer::Impl::XdgConfigure const& candidate) {
@@ -995,6 +1009,12 @@ struct xdg_surface_interface const xdgSurfaceImpl{
                               std::int32_t height) {
       auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
       if (!xdgSurface) return;
+      if (!xdgSurfaceHasConstructedRoleObject(xdgSurface)) {
+        wl_resource_post_error(resource,
+                               XDG_SURFACE_ERROR_NOT_CONSTRUCTED,
+                               "xdg_surface must have a role object before set_window_geometry");
+        return;
+      }
       if (!wm::xdgWindowGeometrySizeValid(width, height)) {
         wl_resource_post_error(resource,
                                XDG_SURFACE_ERROR_INVALID_SIZE,

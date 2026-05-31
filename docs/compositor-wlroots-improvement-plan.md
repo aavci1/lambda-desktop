@@ -24,6 +24,7 @@
 | P4 | WM-COMP-5 Seat serials and grab model | Verified | Data-device, clipboard, primary-selection, xdg grab, cursor serial validation, and dock-menu layer-shell lifecycle fixes are implemented and manually validated | Seat serial, popup grab, selection, layer-shell, and focus tests pass | Dock item right-click menu actions, app menus/popups, drag/drop, clipboard, and primary selection passed |
 | P5 | WM-COMP-6 DMABUF feedback and buffer lifetime | Verified | Automated protocol hardening is complete and target-hardware GPU-client/video validation passed | DMABUF validation and buffer release tests pass | User validation passed |
 | P6 | WM-COMP-7 XDG popup and positioner completeness | Verified | Positioner validation, popup lifecycle checks, and wlroots-style popup constraint adjustment are implemented and covered by automated tests | Popup lifecycle, positioner validation, popup geometry, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol/geometry workstream |
+| P7 | WM-COMP-8 XDG surface role and configure lifecycle | Verified slice | Added wlroots-style request rejection when xdg_surface has no constructed role object, plus defunct-role-object protection | XDG surface lifecycle, xdg popup, compositor suite, and broader feasible suite pass | No manual gate needed for the first protocol-lifecycle slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -270,6 +271,38 @@
 - `set_reactive`, `set_parent_size`, and `set_parent_configure` state is preserved for popup configure decisions.
 - Automated tests cover positioner validation/completeness rules and existing popup placement behavior remains unchanged.
 
+## WM-COMP-8 XDG Surface Role and Configure Lifecycle
+
+**Why this matters:** wlroots treats `xdg_surface` as a base role object with strict sequencing. Requests that depend on a toplevel/popup role are rejected before the role object exists, and the base `xdg_surface` cannot be destroyed while its role object is still alive. Lambda currently accepts some of these requests and tears down role links more permissively.
+
+**Goal:** make xdg_surface role-object and configure lifecycle rules explicit enough to prevent clients from entering states wlroots rejects.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgShell.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/WaylandServerImpl.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Core.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: reject `ack_configure` and `set_window_geometry` before a toplevel/popup role object exists, and reject `xdg_surface.destroy` while the role object still exists.
+2. Pending: compare wlroots' `get_xdg_surface` creation-time checks, especially existing-buffer rejection and base-role assignment, against Lambda's current role model.
+3. Pending: compare configure serial error reporting and commit-before-configure behavior against wlroots.
+4. Pending: run targeted xdg lifecycle tests and the broader feasible compositor suite after each slice.
+
+**Step 1 inventory:**
+
+- wlroots rejects `xdg_surface.ack_configure` with `XDG_SURFACE_ERROR_NOT_CONSTRUCTED` if no role object exists. Lambda currently proceeds to serial lookup.
+- wlroots rejects `xdg_surface.set_window_geometry` with `XDG_SURFACE_ERROR_NOT_CONSTRUCTED` if no role object exists. Lambda currently stores pending geometry.
+- wlroots rejects `xdg_surface.destroy` with `XDG_SURFACE_ERROR_DEFUNCT_ROLE_OBJECT` when a toplevel/popup role object is still alive. Lambda currently destroys/reset-links permissively.
+
+**Acceptance criteria:**
+
+- Role-dependent xdg_surface requests cannot mutate state before a role object exists.
+- The xdg_surface base object cannot be destroyed before its live role object.
+- Existing xdg popup, toplevel, and compositor tests continue to pass.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -310,3 +343,5 @@
 | 2026-05-31 | WM-COMP-7 | Verified slice | Added xdg popup lifecycle helpers, rejected `get_popup` when the parent xdg_surface has no xdg toplevel/popup role, and rejected `xdg_popup.destroy` when the popup still has live child popups. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg popup*"`, `./build/tests/lambda_tests --test-case="*popup*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
 | 2026-05-31 | WM-COMP-7 | In progress | Constraint-adjustment comparison found Lambda always clamped popups to the output, while wlroots computes the requested box first and only applies flip, slide, and resize according to `constraint_adjustment`. Implementing the compatible geometry slice. |
 | 2026-05-31 | WM-COMP-7 | Verified | Replaced unconditional popup output clamping with wlroots-style requested geometry plus ordered flip, slide, and resize constraint adjustment based on xdg_positioner flags. Existing popup placement remains unchanged when unconstrained; constrained popups now obey the client's requested adjustment policy. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*popup geometry*"`, `./build/tests/lambda_tests --test-case="*popup*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
+| 2026-05-31 | WM-COMP-8 | In progress | Inventory found missing wlroots-style xdg_surface role-object checks for `ack_configure`, `set_window_geometry`, and `xdg_surface.destroy`. Starting with the automatable request sequencing slice. |
+| 2026-05-31 | WM-COMP-8 | Verified slice | Added xdg_surface role-object validation helpers, rejected role-dependent `ack_configure` and `set_window_geometry` requests before a constructed xdg toplevel/popup role exists, and rejected `xdg_surface.destroy` before destroying the role object. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg surface*"`, `./build/tests/lambda_tests --test-case="*xdg popup*"`, `./build/tests/lambda_tests --test-case="*popup*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
