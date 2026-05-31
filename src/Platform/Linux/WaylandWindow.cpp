@@ -1251,6 +1251,14 @@ public:
 
   void requestAnimationFrame() override {
     if (framePending_ || !surface_ || !canSendWaylandRequests(shared_)) return;
+    if (resizeRedrawPending_ || pendingResizeEvent_) {
+      if (detail::resizeTraceEnabled()) {
+        LAMBDA_RESIZE_TRACE("wayland-window", "request-frame-batched-resize window=%u size=%dx%d\n",
+                     handle_, static_cast<int>(std::lround(size_.width)),
+                     static_cast<int>(std::lround(size_.height)));
+      }
+      return;
+    }
     framePending_ = true;
     if (detail::resizeTraceEnabled()) {
       LAMBDA_RESIZE_TRACE("wayland-window", "request-frame window=%u size=%dx%d\n",

@@ -53,11 +53,23 @@ void sendToplevelWmCapabilities(WaylandServer::Impl::XdgToplevel* toplevel) {
   wl_array_release(&capabilities);
 }
 
+std::uint32_t sendXdgSurfaceConfigure(WaylandServer::Impl* server,
+                                      WaylandServer::Impl::XdgSurface* xdgSurface,
+                                      WaylandServer::Impl::XdgConfigure configure) {
+  if (!server || !xdgSurface || !xdgSurface->resource) return 0;
+  std::uint32_t const serial = server->nextConfigureSerial_++;
+  configure.serial = serial;
+  xdgSurface->configureList.push_back(configure);
+  xdg_surface_send_configure(xdgSurface->resource, serial);
+  return serial;
+}
+
 std::uint32_t sendToplevelConfigureInternal(WaylandServer::Impl* server,
                                             WaylandServer::Impl::XdgToplevel* toplevel,
                                             std::int32_t width,
                                             std::int32_t height,
-                                            bool awaitSizedCommit) {
+                                            bool awaitSizedCommit,
+                                            std::optional<WindowGeometry> windowGeometry = std::nullopt) {
   if (!server || !toplevel || !toplevel->resource || !toplevel->xdgSurface || !toplevel->xdgSurface->resource) return 0;
   if (awaitSizedCommit) {
     if (auto* surface = toplevel->xdgSurface->surface; surface && width > 0 && height > 0) {
@@ -78,7 +90,18 @@ std::uint32_t sendToplevelConfigureInternal(WaylandServer::Impl* server,
   xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
   wl_array_release(&states);
   sendCutoutsConfigureIfNeeded(server, toplevel, width, height);
-  std::uint32_t const serial = server->nextConfigureSerial_;
+  WaylandServer::Impl::XdgConfigure configure{
+      .role = SurfaceRole::XdgToplevel,
+      .width = width,
+      .height = height,
+      .hasWindowGeometry = windowGeometry.has_value(),
+      .windowX = windowGeometry ? windowGeometry->x : 0,
+      .windowY = windowGeometry ? windowGeometry->y : 0,
+      .windowWidth = windowGeometry ? windowGeometry->width : 0,
+      .windowHeight = windowGeometry ? windowGeometry->height : 0,
+  };
+  std::uint32_t const serial = sendXdgSurfaceConfigure(server, toplevel->xdgSurface, configure);
+  if (serial == 0) return 0;
   if (auto* surface = toplevel->xdgSurface->surface) {
     surface->lastConfigureSerial = serial;
     if (lambda::detail::resizeTraceMetadataEnabled()) {
@@ -97,7 +120,6 @@ std::uint32_t sendToplevelConfigureInternal(WaylandServer::Impl* server,
                             height,
                             serial,
                             awaitSizedCommit ? 1 : 0);
-  xdg_surface_send_configure(toplevel->xdgSurface->resource, server->nextConfigureSerial_++);
   return serial;
 }
 
@@ -199,7 +221,13 @@ bool requestToplevelResizeConfigure(WaylandServer::Impl* server,
     return false;
   }
 
-  std::uint32_t const serial = sendToplevelConfigureInternal(server, toplevel, width, height, false);
+  std::uint32_t const serial =
+      sendToplevelConfigureInternal(server,
+                                    toplevel,
+                                    width,
+                                    height,
+                                    false,
+                                    WindowGeometry{.x = x, .y = y, .width = width, .height = height});
   if (serial == 0) return false;
   surface->resizeConfigureInFlight = true;
   surface->resizeConfigureAcked = false;
@@ -364,8 +392,9 @@ std::uint32_t monotonicMilliseconds() {
 void sendDecorationConfigure(WaylandServer::Impl::ToplevelDecoration* decoration) {
   zxdg_toplevel_decoration_v1_send_configure(decoration->resource, decoration->mode);
   if (decoration->toplevel && decoration->toplevel->xdgSurface && decoration->toplevel->xdgSurface->resource) {
-    xdg_surface_send_configure(decoration->toplevel->xdgSurface->resource,
-                               decoration->server->nextConfigureSerial_++);
+    sendXdgSurfaceConfigure(decoration->server,
+                            decoration->toplevel->xdgSurface,
+                            WaylandServer::Impl::XdgConfigure{});
   }
 }
 
@@ -670,7 +699,18 @@ void sendPopupConfigure(WaylandServer::Impl::XdgPopup* popup) {
                            popup->configuredY,
                            popup->configuredWidth,
                            popup->configuredHeight);
-  xdg_surface_send_configure(popup->xdgSurface->resource, popup->server->nextConfigureSerial_++);
+  sendXdgSurfaceConfigure(popup->server,
+                          popup->xdgSurface,
+                          WaylandServer::Impl::XdgConfigure{
+                              .role = SurfaceRole::XdgPopup,
+                              .width = popup->configuredWidth,
+                              .height = popup->configuredHeight,
+                              .hasWindowGeometry = true,
+                              .windowX = popup->configuredX,
+                              .windowY = popup->configuredY,
+                              .windowWidth = popup->configuredWidth,
+                              .windowHeight = popup->configuredHeight,
+                          });
 }
 
 void xdgPopupDestroy(wl_client*, wl_resource* resource) {
@@ -764,6 +804,32 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
 void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t serial) {
   auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
   if (!xdgSurface) return;
+  auto configure = std::find_if(xdgSurface->configureList.begin(),
+                                xdgSurface->configureList.end(),
+                                [serial](WaylandServer::Impl::XdgConfigure const& candidate) {
+                                  return candidate.serial == serial;
+                                });
+  if (configure == xdgSurface->configureList.end()) {
+    wl_resource_post_error(resource,
+                           XDG_SURFACE_ERROR_INVALID_SERIAL,
+                           "ack_configure received unknown serial %u",
+                           serial);
+    return;
+  }
+  WaylandServer::Impl::XdgConfigure const ackedConfigure = *configure;
+  std::optional<WaylandServer::Impl::XdgConfigure> ackedResizeConfigure;
+  if (auto* surface = xdgSurface->surface; surface && surface->resizeConfigureInFlight) {
+    auto resizeConfigure = std::find_if(xdgSurface->configureList.begin(),
+                                        configure + 1,
+                                        [surface](WaylandServer::Impl::XdgConfigure const& candidate) {
+                                          return candidate.serial == surface->resizeConfigureSerial;
+                                        });
+    if (resizeConfigure != configure + 1) {
+      ackedResizeConfigure = *resizeConfigure;
+    }
+  }
+  xdgSurface->configureList.erase(xdgSurface->configureList.begin(), configure + 1);
+  xdgSurface->pendingConfigure = ackedConfigure;
   xdgSurface->configured = true;
   if (auto* surface = xdgSurface->surface) {
     std::uint64_t now = 0;
@@ -771,8 +837,14 @@ void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t ser
       now = lambda::detail::resizeTraceTimestampNanoseconds();
       if (serial == surface->lastConfigureSerial) surface->lastConfigureAckNsec = now;
     }
-    if (surface->resizeConfigureInFlight && serial == surface->resizeConfigureSerial) {
+    if (surface->resizeConfigureInFlight && ackedResizeConfigure) {
       surface->resizeConfigureAcked = true;
+      if (ackedResizeConfigure->hasWindowGeometry) {
+        surface->resizeConfigureX = ackedResizeConfigure->windowX;
+        surface->resizeConfigureY = ackedResizeConfigure->windowY;
+        surface->resizeConfigureWidth = ackedResizeConfigure->windowWidth;
+        surface->resizeConfigureHeight = ackedResizeConfigure->windowHeight;
+      }
     }
     double const configureToAckMs =
         now > 0 && surface->lastConfigureSentNsec > 0 && now >= surface->lastConfigureSentNsec
@@ -784,8 +856,8 @@ void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t ser
                               static_cast<unsigned long long>(surface->id),
                               serial,
                               surface->lastConfigureSerial,
-                              surface->lastConfigureWidth,
-                              surface->lastConfigureHeight,
+                              ackedConfigure.width,
+                              ackedConfigure.height,
                               configureToAckMs);
   }
 

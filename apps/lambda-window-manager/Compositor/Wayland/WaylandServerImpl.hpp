@@ -56,6 +56,7 @@ struct WaylandServer::Impl {
   struct LayerSurface;
   struct PresentationFeedback;
   struct PendingPresentationBatch;
+  struct XdgConfigure;
   struct RelativePointer;
   struct PointerConstraint;
   struct PrimarySelectionDevice;
@@ -550,6 +551,18 @@ struct WaylandServer::Impl::LayerSurface {
   bool configured = false;
 };
 
+struct WaylandServer::Impl::XdgConfigure {
+  std::uint32_t serial = 0;
+  SurfaceRole role = SurfaceRole::None;
+  std::int32_t width = 0;
+  std::int32_t height = 0;
+  bool hasWindowGeometry = false;
+  std::int32_t windowX = 0;
+  std::int32_t windowY = 0;
+  std::int32_t windowWidth = 0;
+  std::int32_t windowHeight = 0;
+};
+
 struct WaylandServer::Impl::PresentationFeedback {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
@@ -721,6 +734,9 @@ struct WaylandServer::Impl::XdgSurface {
   wl_resource* resource = nullptr;
   Surface* surface = nullptr;
   bool configured = false;
+  std::vector<XdgConfigure> configureList;
+  std::optional<XdgConfigure> pendingConfigure;
+  std::optional<XdgConfigure> currentConfigure;
   bool windowGeometrySet = false;
   std::int32_t windowGeometryX = 0;
   std::int32_t windowGeometryY = 0;

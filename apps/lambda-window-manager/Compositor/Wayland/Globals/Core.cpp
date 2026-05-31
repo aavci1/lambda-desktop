@@ -395,8 +395,21 @@ std::int32_t committedWindowDisplayHeight(WaylandServer::Impl::Surface const* su
              : committedDisplayHeight(surface);
 }
 
+bool xdgSurfaceCommittedConfigureSerial(WaylandServer::Impl::Surface const* surface, std::uint32_t serial) {
+  if (!surface || !surface->server || serial == 0) return false;
+  return std::any_of(surface->server->xdgSurfaces_.begin(),
+                     surface->server->xdgSurfaces_.end(),
+                     [surface, serial](auto const& xdgSurface) {
+                       return xdgSurface &&
+                              xdgSurface->surface == surface &&
+                              xdgSurface->currentConfigure &&
+                              xdgSurface->currentConfigure->serial >= serial;
+                     });
+}
+
 bool clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
   if (!surface || !surface->resizeConfigureInFlight || !surface->resizeConfigureAcked) return false;
+  if (!xdgSurfaceCommittedConfigureSerial(surface, surface->resizeConfigureSerial)) return false;
   if (committedWindowDisplayWidth(surface) != surface->resizeConfigureWidth ||
       committedWindowDisplayHeight(surface) != surface->resizeConfigureHeight) {
     return false;
@@ -660,6 +673,30 @@ bool applyXdgProtocolState(WaylandServer::Impl::Surface* surface) {
   return renderStateChanged;
 }
 
+bool applyXdgConfigureState(WaylandServer::Impl::Surface* surface) {
+  if (!surface || !surface->server) return false;
+  for (auto const& xdgSurface : surface->server->xdgSurfaces_) {
+    if (!xdgSurface || xdgSurface->surface != surface || !xdgSurface->pendingConfigure) continue;
+    xdgSurface->currentConfigure = xdgSurface->pendingConfigure;
+    xdgSurface->pendingConfigure.reset();
+    LAMBDA_RESIZE_TRACE("compositor",
+                        "configure-commit-state surface=%llu serial=%u role=%u configure=%dx%d "
+                        "window=%d %d,%d %dx%d\n",
+                        static_cast<unsigned long long>(surface->id),
+                        xdgSurface->currentConfigure->serial,
+                        static_cast<unsigned int>(xdgSurface->currentConfigure->role),
+                        xdgSurface->currentConfigure->width,
+                        xdgSurface->currentConfigure->height,
+                        xdgSurface->currentConfigure->hasWindowGeometry ? 1 : 0,
+                        xdgSurface->currentConfigure->windowX,
+                        xdgSurface->currentConfigure->windowY,
+                        xdgSurface->currentConfigure->windowWidth,
+                        xdgSurface->currentConfigure->windowHeight);
+    return true;
+  }
+  return false;
+}
+
 bool surfaceHasPendingDamage(WaylandServer::Impl::Surface const* surface) {
   return surface &&
          (!surface->pendingSurfaceDamageRects.empty() || !surface->pendingBufferDamageRects.empty());
@@ -838,6 +875,26 @@ bool pendingViewportStateChanged(WaylandServer::Impl::Surface const* surface) {
          surface->pendingDestinationHeight != surface->destinationHeight;
 }
 
+bool surfaceHasActiveResizeSizing(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->server &&
+         (surface->server->resizeSurface_ == surface ||
+          surface->geometryAnimationActive ||
+          surface->resizeConfigureInFlight ||
+          surface->pendingResizeConfigure ||
+          surface->awaitingConfigureCommit);
+}
+
+bool shouldDeferAtomicResizeState(WaylandServer::Impl::Surface const* surface,
+                                  bool hasBufferAttach,
+                                  bool viewportChanged,
+                                  bool needsBufferRefresh) {
+  return surface &&
+         !hasBufferAttach &&
+         viewportChanged &&
+         !needsBufferRefresh &&
+         surfaceHasActiveResizeSizing(surface);
+}
+
 void traceCrashSurfaceCommit(WaylandServer::Impl::Surface* surface,
                              char const* kindName,
                              std::uint32_t kind,
@@ -905,19 +962,27 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   }
   surface->presentationFeedbacks = std::move(surface->pendingPresentationFeedbacks);
   surface->pendingPresentationFeedbacks.clear();
+  bool const viewportChanged = pendingViewportStateChanged(surface);
+  bool const damagePending = surfaceHasPendingDamage(surface);
+  bool const needsStateBufferRefresh = !hasBufferAttach && damagePending && surface->currentBuffer;
+  if (shouldDeferAtomicResizeState(surface, hasBufferAttach, viewportChanged, needsStateBufferRefresh)) {
+    traceResizeSurface("commit-state-defer-atomic-resize", surface);
+    clearPendingDamage(surface);
+    traceCrashSurfaceCommit(surface, "state", 0u, 0u);
+    return;
+  }
   bool const backgroundBlurChanged = applyBackgroundBlurState(surface);
   bool inputRegionChanged = false;
   bool const protocolRenderStateChanged =
       applySurfaceProtocolState(surface, hasBufferAttach, inputRegionChanged);
+  bool const xdgConfigureStateChanged = applyXdgConfigureState(surface);
   bool const xdgRenderStateChanged = applyXdgProtocolState(surface);
-  bool const viewportChanged = pendingViewportStateChanged(surface);
-  bool const damagePending = surfaceHasPendingDamage(surface);
 
   if (!hasBufferAttach) {
     bool serialBumped = false;
     bool const needsBufferRefresh = damagePending && surface->currentBuffer;
     if (!viewportChanged && !backgroundBlurChanged && !protocolRenderStateChanged && !xdgRenderStateChanged &&
-        !inputRegionChanged && !needsBufferRefresh &&
+        !xdgConfigureStateChanged && !inputRegionChanged && !needsBufferRefresh &&
         surface->presentationFeedbacks.empty()) {
       traceCrashSurfaceCommit(surface, "state", 0u, 0u);
       clearPendingDamage(surface);
@@ -970,7 +1035,8 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       maybeSendInitialCutoutsConfigure(surface->server, surface);
       traceResizeSurface("commit-state", surface);
     }
-    if ((backgroundBlurChanged || protocolRenderStateChanged || xdgRenderStateChanged || viewportChanged) && !serialBumped) {
+    if ((backgroundBlurChanged || protocolRenderStateChanged || xdgConfigureStateChanged ||
+         xdgRenderStateChanged || viewportChanged) && !serialBumped) {
       bumpSurfaceSerial(surface);
     }
     clearPendingDamage(surface);
