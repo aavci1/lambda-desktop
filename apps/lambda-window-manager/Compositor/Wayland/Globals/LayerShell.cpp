@@ -248,6 +248,7 @@ void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface) {
       .outputHeight = layerSurface->server->logicalOutputHeight(),
   });
   std::uint32_t const serial = layerSurface->server->nextConfigureSerial_++;
+  layerSurface->latestConfigureSerial = serial;
   layerSurface->pendingConfigures.push_back({
       .serial = serial,
       .width = size.width,

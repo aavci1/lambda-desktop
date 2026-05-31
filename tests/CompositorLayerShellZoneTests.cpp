@@ -123,6 +123,31 @@ TEST_CASE("layer shell pending state rejects omitted dimensions without opposing
   CHECK(layer.pending.sizeSet);
 }
 
+TEST_CASE("layer shell zero size is valid when opposing anchors commit with it") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::LayerSurface layer;
+  layer.width = 1;
+  layer.height = 1;
+  layer.anchor = kLayerShellAnchorBottom;
+  layer.pending.width = 0;
+  layer.pending.height = 0;
+  layer.pending.sizeSet = true;
+  layer.pending.anchor = kLayerShellAnchorTop | kLayerShellAnchorBottom |
+                         kLayerShellAnchorLeft | kLayerShellAnchorRight;
+  layer.pending.anchorSet = true;
+
+  LayerSurfaceCommitResult const result = applyLayerSurfacePendingState(&layer);
+
+  CHECK(result.valid);
+  CHECK(result.stateChanged);
+  CHECK(result.configureNeeded);
+  CHECK(layer.width == 0);
+  CHECK(layer.height == 0);
+  CHECK(layer.anchor == (kLayerShellAnchorTop | kLayerShellAnchorBottom |
+                         kLayerShellAnchorLeft | kLayerShellAnchorRight));
+}
+
 TEST_CASE("layer shell configure ack validates serials and applies on commit") {
   using namespace lambda::compositor;
 
@@ -131,9 +156,11 @@ TEST_CASE("layer shell configure ack validates serials and applies on commit") {
   layer.height = 36;
   layer.pendingConfigures.push_back({.serial = 11, .width = 640, .height = 32});
   layer.pendingConfigures.push_back({.serial = 12, .width = 800, .height = 32});
+  layer.latestConfigureSerial = 12;
 
-  CHECK_FALSE(ackLayerSurfaceConfigure(&layer, 10));
+  CHECK(ackLayerSurfaceConfigure(&layer, 10));
   CHECK_FALSE(layer.pending.configureAcked);
+  CHECK_FALSE(ackLayerSurfaceConfigure(&layer, 13));
 
   CHECK(ackLayerSurfaceConfigure(&layer, 11));
   CHECK(layer.configured);
@@ -163,6 +190,7 @@ TEST_CASE("layer shell map and unmap reset configure state") {
   layer.configureSerial = 42;
   layer.configureWidth = 640;
   layer.configureHeight = 32;
+  layer.latestConfigureSerial = 44;
   layer.pending.configureAcked = true;
   layer.pending.configureSerial = 43;
   layer.pending.configureWidth = 800;
@@ -180,10 +208,13 @@ TEST_CASE("layer shell map and unmap reset configure state") {
   CHECK(layer.configureSerial == 0);
   CHECK(layer.configureWidth == 0);
   CHECK(layer.configureHeight == 0);
+  CHECK(layer.latestConfigureSerial == 44);
   CHECK_FALSE(layer.pending.configureAcked);
   CHECK(layer.pending.configureSerial == 0);
   CHECK(layer.pending.configureWidth == 0);
   CHECK(layer.pending.configureHeight == 0);
   CHECK(layer.pendingConfigures.empty());
+  CHECK(ackLayerSurfaceConfigure(&layer, 44));
+  CHECK_FALSE(layer.pending.configureAcked);
   CHECK_FALSE(resetLayerSurfaceForUnmap(&layer));
 }

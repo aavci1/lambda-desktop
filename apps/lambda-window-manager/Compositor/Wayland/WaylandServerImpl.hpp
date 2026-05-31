@@ -722,6 +722,7 @@ struct WaylandServer::Impl::LayerSurface {
   std::uint32_t configureSerial = 0;
   std::uint32_t configureWidth = 0;
   std::uint32_t configureHeight = 0;
+  std::uint32_t latestConfigureSerial = 0;
   LayerSurfacePendingState pending;
   std::vector<LayerSurfaceConfigure> pendingConfigures;
   bool initialized = false;

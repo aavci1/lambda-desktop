@@ -50,6 +50,10 @@ bool ackLayerSurfaceConfigure(WaylandServer::Impl::LayerSurface* layerSurface,
                                   return item.serial == serial;
                                 });
   if (configure == layerSurface->pendingConfigures.end()) {
+    if (serial != 0 && layerSurface->latestConfigureSerial != 0 &&
+        serial <= layerSurface->latestConfigureSerial) {
+      return true;
+    }
     if (errorResource) {
       wl_resource_post_error(errorResource,
                              ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_SURFACE_STATE,

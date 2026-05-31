@@ -589,8 +589,8 @@ void ShellController::syncDockMenuOverlay() {
       makeQuitCallback(),
       [this] { closeDockMenu(); },
   });
-  dockMenuWindow_->resize({0.f, 0.f});
   dockMenuWindow_->setLayerShellOptions(menuLayer);
+  dockMenuWindow_->resize({0.f, 0.f});
   requestDockMenuRedraw();
 }
 

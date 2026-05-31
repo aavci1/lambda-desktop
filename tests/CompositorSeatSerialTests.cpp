@@ -25,17 +25,25 @@ TEST_CASE("seat serial ledger validates client surface and kind") {
   };
   std::array keyboardKinds{SeatSerialKind::KeyboardKey};
   std::array pointerPressOnly{SeatSerialKind::PointerButtonPress};
+  std::array selectionKinds{
+      SeatSerialKind::KeyboardEnter,
+      SeatSerialKind::KeyboardKey,
+      SeatSerialKind::PointerButtonPress,
+  };
 
   std::uint32_t const serial =
       issueSeatSerial(nextSerial, records, SeatSerialKind::PointerButtonPress, clientA, &surfaceA);
   std::uint32_t const releaseSerial =
       issueSeatSerial(nextSerial, records, SeatSerialKind::PointerButtonRelease, clientA, &surfaceA);
+  std::uint32_t const keyboardEnterSerial =
+      issueSeatSerial(nextSerial, records, SeatSerialKind::KeyboardEnter, clientA, &surfaceA);
 
   CHECK(seatSerialIsValid(records, serial, clientA, &surfaceA, pointerKinds));
   CHECK_FALSE(seatSerialIsValid(records, serial, clientB, &surfaceA, pointerKinds));
   CHECK_FALSE(seatSerialIsValid(records, serial, clientA, &surfaceB, pointerKinds));
   CHECK_FALSE(seatSerialIsValid(records, serial, clientA, &surfaceA, keyboardKinds));
   CHECK_FALSE(seatSerialIsValid(records, releaseSerial, clientA, &surfaceA, pointerPressOnly));
+  CHECK(seatSerialIsValid(records, keyboardEnterSerial, clientA, &surfaceA, selectionKinds));
   CHECK_FALSE(seatSerialIsValid(records, 0, clientA, &surfaceA, pointerKinds));
 }
 

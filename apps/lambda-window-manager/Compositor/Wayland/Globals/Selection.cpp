@@ -11,6 +11,7 @@
 #include <wayland-server-protocol.h>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 
 namespace lambda::compositor {
@@ -27,6 +28,30 @@ std::uint32_t dataDeviceVersion(WaylandServer::Impl::DataDevice const* device) {
 
 std::uint32_t resourceId(wl_resource* resource) {
   return resource ? wl_resource_get_id(resource) : 0u;
+}
+
+constexpr std::array<SeatSerialKind, 1> kDragStartSerialKinds{
+    SeatSerialKind::PointerButtonPress,
+};
+
+constexpr std::array<SeatSerialKind, 3> kSelectionSerialKinds{
+    SeatSerialKind::KeyboardEnter,
+    SeatSerialKind::KeyboardKey,
+    SeatSerialKind::PointerButtonPress,
+};
+
+bool validSerialForSurface(WaylandServer::Impl const* server,
+                           wl_client* client,
+                           WaylandServer::Impl::Surface const* surface,
+                           std::uint32_t serial,
+                           std::span<SeatSerialKind const> allowedKinds) {
+  if (!server || !client || !surface) return false;
+  return seatSerialIsValid(server, serial, client, surface, allowedKinds);
+}
+
+bool validSelectionSerial(WaylandServer::Impl const* server, wl_client* client, std::uint32_t serial) {
+  if (!server || !server->keyboardFocus_) return false;
+  return validSerialForSurface(server, client, server->keyboardFocus_, serial, kSelectionSerialKinds);
 }
 
 void primarySelectionManagerDestroy(wl_client*, wl_resource* resource) {
@@ -90,10 +115,14 @@ void sendPrimarySelectionForFocusImpl(WaylandServer::Impl* server) {
   }
 }
 
-void primarySelectionDeviceSetSelection(wl_client*, wl_resource* resource, wl_resource* sourceResource, std::uint32_t) {
+void primarySelectionDeviceSetSelection(wl_client* client,
+                                        wl_resource* resource,
+                                        wl_resource* sourceResource,
+                                        std::uint32_t serial) {
   auto* device = resourceData<WaylandServer::Impl::PrimarySelectionDevice>(resource);
   if (!device) return;
   auto* server = device->server;
+  if (!validSelectionSerial(server, client, serial)) return;
   auto* source = resourceData<WaylandServer::Impl::PrimarySelectionSource>(sourceResource);
   if (server->primarySelectionSource_ && server->primarySelectionSource_ != source &&
       server->primarySelectionSource_->resource) {
@@ -468,13 +497,14 @@ void dataDeviceStartDrag(wl_client* client,
                          wl_resource* sourceResource,
                          wl_resource* originResource,
                          wl_resource*,
-                         std::uint32_t) {
+                         std::uint32_t serial) {
   auto* device = resourceData<WaylandServer::Impl::DataDevice>(resource);
   if (!device) return;
   auto* server = device->server;
   auto* source = resourceData<WaylandServer::Impl::DataSource>(sourceResource);
   auto* origin = resourceData<WaylandServer::Impl::Surface>(originResource);
   if (!origin || wl_resource_get_client(origin->resource) != client) return;
+  if (!validSerialForSurface(server, client, origin, serial, kDragStartSerialKinds)) return;
   if (server->dndSource_) clearDndImpl(server);
   server->dndSource_ = source;
   server->dndOrigin_ = origin;
@@ -485,10 +515,14 @@ void dataDeviceStartDrag(wl_client* client,
   updateDndTargetImpl(server, surfaceAt(server, server->pointerX_, server->pointerY_), 0);
 }
 
-void dataDeviceSetSelection(wl_client*, wl_resource* resource, wl_resource* sourceResource, std::uint32_t) {
+void dataDeviceSetSelection(wl_client* client,
+                            wl_resource* resource,
+                            wl_resource* sourceResource,
+                            std::uint32_t serial) {
   auto* device = resourceData<WaylandServer::Impl::DataDevice>(resource);
   if (!device) return;
   auto* server = device->server;
+  if (!validSelectionSerial(server, client, serial)) return;
   auto* source = resourceData<WaylandServer::Impl::DataSource>(sourceResource);
   diagnostics::crashLog("data-set-selection device=%u source=%u old_source=%u",
                         resourceId(resource),

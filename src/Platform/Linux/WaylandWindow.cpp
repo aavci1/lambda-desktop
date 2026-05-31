@@ -392,6 +392,23 @@ std::uint32_t layerShellAnchor(LayerShellOptions const& options) {
   return anchor;
 }
 
+int roundedLayerShellDimension(float value) {
+  return std::max(0, static_cast<int>(std::lround(value)));
+}
+
+std::uint32_t layerShellProtocolWidth(Size const& size, LayerShellOptions const& options) {
+  int const width = roundedLayerShellDimension(size.width);
+  // Layer-shell size 0 is only valid on axes anchored to both opposing edges.
+  if (width == 0 && !(options.anchorLeft && options.anchorRight)) return 1u;
+  return static_cast<std::uint32_t>(width);
+}
+
+std::uint32_t layerShellProtocolHeight(Size const& size, LayerShellOptions const& options) {
+  int const height = roundedLayerShellDimension(size.height);
+  if (height == 0 && !(options.anchorTop && options.anchorBottom)) return 1u;
+  return static_cast<std::uint32_t>(height);
+}
+
 std::uint32_t colorToRgba(Color color) {
   auto channel = [&](float value) {
     return static_cast<std::uint32_t>(std::clamp(value, 0.f, 1.f) * 255.f + 0.5f);
@@ -907,8 +924,8 @@ public:
     size_ = newSize;
     if (layerSurface_) {
       zwlr_layer_surface_v1_set_size(layerSurface_,
-                                     static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.width)))),
-                                     static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.height)))));
+                                     layerShellProtocolWidth(size_, layerShellConfig_),
+                                     layerShellProtocolHeight(size_, layerShellConfig_));
       commitSurface();
       if (size_.width <= 0.f || size_.height <= 0.f) {
         return;
@@ -949,11 +966,10 @@ public:
     zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_,
                                                      layerShellConfig_.keyboardInteractive ? 1u : 0u);
     zwlr_layer_surface_v1_set_size(layerSurface_,
-                                   static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.width)))),
-                                   static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.height)))));
+                                   layerShellProtocolWidth(size_, layerShellConfig_),
+                                   layerShellProtocolHeight(size_, layerShellConfig_));
     updateBackgroundEffectRegion();
     updateLayerShellInputRegion();
-    detachHiddenLayerShellBufferIfNeeded();
     commitSurface();
   }
 
@@ -2255,25 +2271,6 @@ private:
     wl_region_destroy(region);
   }
 
-  void detachHiddenLayerShellBufferIfNeeded() {
-    if (!layerSurface_ || !surface_ || !canSendWaylandRequests(shared_)) {
-      return;
-    }
-    bool const emptyInputRegion = layerShellConfig_.inputRegion &&
-                                  layerShellConfig_.inputRegion->width <= 0 &&
-                                  layerShellConfig_.inputRegion->height <= 0;
-    bool const hiddenLayerShellSurface = emptyInputRegion &&
-                                         !layerShellConfig_.backgroundBlur &&
-                                         layerShellConfig_.chrome.style == LayerShellChromeStyle::None &&
-                                         background_.kind == WindowBackgroundKind::Transparent &&
-                                         size_.width <= 1.f &&
-                                         size_.height <= 1.f;
-    if (!hiddenLayerShellSurface) {
-      return;
-    }
-    wl_surface_attach(surface_, nullptr, 0, 0);
-  }
-
   bool wantsTransparentSurface() const {
     return background_.kind == WindowBackgroundKind::Glass ||
            background_.kind == WindowBackgroundKind::Transparent;
@@ -2291,8 +2288,8 @@ private:
                                                           ns.c_str());
     zwlr_layer_surface_v1_add_listener(layerSurface_, &layerSurfaceListener_, this);
     zwlr_layer_surface_v1_set_size(layerSurface_,
-                                   static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.width)))),
-                                   static_cast<std::uint32_t>(std::max(0, static_cast<int>(std::lround(size_.height)))));
+                                   layerShellProtocolWidth(size_, layerShellConfig_),
+                                   layerShellProtocolHeight(size_, layerShellConfig_));
     zwlr_layer_surface_v1_set_anchor(layerSurface_, layerShellAnchor(layerShellConfig_));
     zwlr_layer_surface_v1_set_margin(layerSurface_,
                                      layerShellConfig_.marginTop,
