@@ -38,6 +38,10 @@ enum class SurfaceRole : std::uint8_t {
 struct WaylandServer::Impl {
   struct Surface;
   struct SurfaceViewportState;
+  struct SurfaceRegionState;
+  struct SurfacePendingRegionState;
+  struct SurfaceDamageState;
+  struct SurfacePendingDamageState;
   struct Subsurface;
   struct XdgPositioner;
   struct XdgSurface;
@@ -335,6 +339,29 @@ struct WaylandServer::Impl::SurfaceViewportState {
   bool destinationSet = false;
 };
 
+struct WaylandServer::Impl::SurfaceRegionState {
+  std::vector<CommittedSurfaceSnapshot::RegionRect> opaqueRegionRects;
+  bool inputRegionInfinite = true;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> inputRegionRects;
+};
+
+struct WaylandServer::Impl::SurfacePendingRegionState {
+  std::vector<CommittedSurfaceSnapshot::RegionRect> opaqueRegionRects;
+  bool opaqueRegionSet = false;
+  bool inputRegionInfinite = true;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> inputRegionRects;
+  bool inputRegionSet = false;
+};
+
+struct WaylandServer::Impl::SurfaceDamageState {
+  std::vector<CommittedSurfaceSnapshot::RegionRect> bufferRects;
+};
+
+struct WaylandServer::Impl::SurfacePendingDamageState {
+  std::vector<CommittedSurfaceSnapshot::RegionRect> surfaceRects;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> bufferRects;
+};
+
 struct WaylandServer::Impl::Surface {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
@@ -435,17 +462,10 @@ struct WaylandServer::Impl::Surface {
   SurfaceBackgroundEffectSnapshot pendingBackgroundEffectState;
   bool backgroundBlurPending = false;
   bool backgroundEffectStatePending = false;
-  std::vector<CommittedSurfaceSnapshot::RegionRect> opaqueRegionRects;
-  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingOpaqueRegionRects;
-  bool pendingOpaqueRegionSet = false;
-  bool inputRegionInfinite = true;
-  bool pendingInputRegionInfinite = true;
-  std::vector<CommittedSurfaceSnapshot::RegionRect> inputRegionRects;
-  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingInputRegionRects;
-  bool pendingInputRegionSet = false;
-  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingSurfaceDamageRects;
-  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingBufferDamageRects;
-  std::vector<CommittedSurfaceSnapshot::RegionRect> committedBufferDamageRects;
+  SurfaceRegionState regionState;
+  SurfacePendingRegionState pendingRegionState;
+  SurfaceDamageState damageState;
+  SurfacePendingDamageState pendingDamageState;
   Viewport* viewport = nullptr;
   FractionalScale* fractionalScale = nullptr;
   LayerSurface* layerSurface = nullptr;

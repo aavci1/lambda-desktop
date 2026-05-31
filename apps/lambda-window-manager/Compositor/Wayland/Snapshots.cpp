@@ -230,8 +230,8 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .lastConfigureAckNsec = surface->lastConfigureAckNsec,
       .lastCommitNsec = surface->lastCommitNsec,
       .backgroundBlurRects = surface->backgroundBlurRects,
-      .opaqueRegionRects = surface->opaqueRegionRects,
-      .bufferDamageRects = surface->committedBufferDamageRects,
+      .opaqueRegionRects = surface->regionState.opaqueRegionRects,
+      .bufferDamageRects = surface->damageState.bufferRects,
       .rgbaPixels = surface->rgbaPixels,
       .shmPixels = surface->shmPixels,
       .shmPixelBytes = surface->shmPixelBytes,
@@ -384,7 +384,7 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
 	      .activeSizing = false,
 	      .serial = surface->serial,
 	      .backgroundBlurRects = {},
-	      .bufferDamageRects = surface->committedBufferDamageRects,
+	      .bufferDamageRects = surface->damageState.bufferRects,
 	      .rgbaPixels = surface->rgbaPixels,
 	      .shmPixels = surface->shmPixels,
 	      .shmPixelBytes = surface->shmPixelBytes,
@@ -487,7 +487,7 @@ void WaylandServer::Impl::consumeSurfaceDamage(std::uint64_t surfaceId, std::uin
                               [surfaceId](auto const& candidate) { return candidate->id == surfaceId; });
   if (surface == surfaces_.end() || !*surface) return;
   if ((*surface)->serial == serial) {
-    (*surface)->committedBufferDamageRects.clear();
+    (*surface)->damageState.bufferRects.clear();
   }
 }
 

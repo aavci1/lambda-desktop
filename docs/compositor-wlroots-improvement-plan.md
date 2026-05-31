@@ -17,7 +17,7 @@
 
 | Priority | Workstream | Status | Current step | Automated gate | Manual gate |
 | --- | --- | --- | --- | --- | --- |
-| P0 | WM-COMP-1 Surface commit state core | In progress | Viewport pending/current state migrated and verified; next move region and damage state | Existing compositor tests plus new state-transition tests | Settings app resize on DP-1 HiDPI; system titlebar and content stay in sync |
+| P0 | WM-COMP-1 Surface commit state core | In progress | Region and damage state migrated and verified; next move buffer scale, transform, offset, and attachment state | Existing compositor tests plus new state-transition tests | Settings app resize on DP-1 HiDPI; system titlebar and content stay in sync |
 | P1 | WM-COMP-2 Layer shell configure and state correctness | Planned | Starts after WM-COMP-1 reaches its automated or manual gate | Layer-shell protocol and geometry tests | Dock/topbar visual behavior if geometry changes affect shell chrome |
 | P2 | WM-COMP-3 Subsurface state, order, and synchronized commits | Planned | Starts after WM-COMP-2 reaches its gate | Subsurface commit/order/hit-test tests | Real apps with popovers or embedded subsurfaces if automated coverage is incomplete |
 | P3 | WM-COMP-4 Scene and output damage architecture | Planned | Starts after WM-COMP-3 reaches its gate | Snapshot/damage tests plus render scheduler tests | DP-1 resize trace, real-app flicker check, video/browser pacing |
@@ -43,7 +43,7 @@
 
 1. Done: inventory existing pending/current surface fields and update this plan with the exact migration order.
 2. Done: add a small state object or transaction helper for core `wl_surface` commit data without changing behavior.
-3. In progress: move buffer, scale, transform, offset, damage, opaque region, input region, viewport source, and viewport destination into the explicit pending/current path. Viewport source/destination is now migrated.
+3. In progress: move buffer, scale, transform, offset, damage, opaque region, input region, viewport source, and viewport destination into the explicit pending/current path. Viewport source/destination, opaque/input regions, and damage state are migrated.
 4. Move role-synchronized xdg state reads so snapshots and compositor chrome consume one committed view of a surface.
 5. Add tests for state-only commits, buffer plus viewport atomicity, frame callback delivery, and configure-ack commit behavior.
 6. Run targeted compositor tests and the feasible full test suite.
@@ -213,3 +213,5 @@
 | 2026-05-31 | WM-COMP-1 | Planned | Created the ordered plan. Next step is the surface pending/current state inventory and migration skeleton. |
 | 2026-05-31 | WM-COMP-1 | In progress | Completed Step 1 inventory. Implementing Step 2 as a narrow, automated migration skeleton before moving protocol fields. |
 | 2026-05-31 | WM-COMP-1 | Verified | Migrated viewport source/destination into explicit committed and pending state, centralized committed display-size helpers, and added an automated test that pending viewport state cannot affect committed display size. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*Compositor*"` and full `./build/tests/lambda_tests` passed. |
+| 2026-05-31 | WM-COMP-1 | In progress | Starting the region and damage state migration: opaque region, input region, pending surface damage, pending buffer damage, and committed buffer damage. |
+| 2026-05-31 | WM-COMP-1 | Verified | Migrated opaque/input regions and surface/buffer damage into explicit committed and pending state objects. Added automated tests that pending region and pending damage state do not affect committed consumers before commit. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*Compositor*"` and full `./build/tests/lambda_tests` passed. |

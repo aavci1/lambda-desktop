@@ -120,14 +120,45 @@ TEST_CASE("surface input region defaults to full surface and can exclude points"
 
   CHECK(lambda::compositor::wm::inputRegionContains(&surface, 500.f, 500.f));
 
-  surface.inputRegionInfinite = false;
-  surface.inputRegionRects.push_back({.x = 10, .y = 20, .width = 30, .height = 40});
+  surface.regionState.inputRegionInfinite = false;
+  surface.regionState.inputRegionRects.push_back({.x = 10, .y = 20, .width = 30, .height = 40});
 
   CHECK(lambda::compositor::wm::inputRegionContains(&surface, 10.f, 20.f));
   CHECK(lambda::compositor::wm::inputRegionContains(&surface, 39.9f, 59.9f));
   CHECK_FALSE(lambda::compositor::wm::inputRegionContains(&surface, 9.9f, 20.f));
   CHECK_FALSE(lambda::compositor::wm::inputRegionContains(&surface, 40.f, 20.f));
   CHECK_FALSE(lambda::compositor::wm::inputRegionContains(&surface, 10.f, 60.f));
+}
+
+TEST_CASE("surface pending region state does not affect committed input region") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+
+  surface.pendingRegionState.inputRegionInfinite = false;
+  surface.pendingRegionState.inputRegionRects.push_back({.x = 10, .y = 20, .width = 30, .height = 40});
+  surface.pendingRegionState.inputRegionSet = true;
+
+  CHECK(lambda::compositor::wm::inputRegionContains(&surface, 500.f, 500.f));
+
+  surface.regionState.inputRegionInfinite = surface.pendingRegionState.inputRegionInfinite;
+  surface.regionState.inputRegionRects = surface.pendingRegionState.inputRegionRects;
+
+  CHECK(lambda::compositor::wm::inputRegionContains(&surface, 10.f, 20.f));
+  CHECK_FALSE(lambda::compositor::wm::inputRegionContains(&surface, 500.f, 500.f));
+}
+
+TEST_CASE("surface pending damage state is separate from committed damage") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+
+  surface.pendingDamageState.bufferRects.push_back({.x = 0, .y = 0, .width = 20, .height = 10});
+
+  CHECK(surface.damageState.bufferRects.empty());
+
+  surface.damageState.bufferRects = surface.pendingDamageState.bufferRects;
+  surface.pendingDamageState.bufferRects.clear();
+
+  REQUIRE(surface.damageState.bufferRects.size() == 1);
+  CHECK(surface.damageState.bufferRects[0].width == 20);
+  CHECK(surface.pendingDamageState.bufferRects.empty());
 }
 
 TEST_CASE("surface viewport pending state does not affect committed display size") {

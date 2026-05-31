@@ -262,22 +262,22 @@ void surfaceDamage(wl_client*, wl_resource* resource, std::int32_t x, std::int32
                    std::int32_t width, std::int32_t height) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   if (!surface) return;
-  appendRegionRect(surface->pendingSurfaceDamageRects, normalizedRegionRect(x, y, width, height));
+  appendRegionRect(surface->pendingDamageState.surfaceRects, normalizedRegionRect(x, y, width, height));
 }
 
 void surfaceSetOpaqueRegion(wl_client*, wl_resource* resource, wl_resource* regionResource) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   if (!surface) return;
-  surface->pendingOpaqueRegionRects = copyRegionRects(regionResource);
-  surface->pendingOpaqueRegionSet = true;
+  surface->pendingRegionState.opaqueRegionRects = copyRegionRects(regionResource);
+  surface->pendingRegionState.opaqueRegionSet = true;
 }
 
 void surfaceSetInputRegion(wl_client*, wl_resource* resource, wl_resource* regionResource) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   if (!surface) return;
-  surface->pendingInputRegionInfinite = regionResource == nullptr;
-  surface->pendingInputRegionRects = copyRegionRects(regionResource);
-  surface->pendingInputRegionSet = true;
+  surface->pendingRegionState.inputRegionInfinite = regionResource == nullptr;
+  surface->pendingRegionState.inputRegionRects = copyRegionRects(regionResource);
+  surface->pendingRegionState.inputRegionSet = true;
 }
 
 WaylandServer::Impl::ShmBuffer* shmBufferFor(WaylandServer::Impl* server, wl_resource* resource) {
@@ -678,13 +678,13 @@ bool applyXdgConfigureState(WaylandServer::Impl::Surface* surface) {
 
 bool surfaceHasPendingDamage(WaylandServer::Impl::Surface const* surface) {
   return surface &&
-         (!surface->pendingSurfaceDamageRects.empty() || !surface->pendingBufferDamageRects.empty());
+         (!surface->pendingDamageState.surfaceRects.empty() || !surface->pendingDamageState.bufferRects.empty());
 }
 
 void clearPendingDamage(WaylandServer::Impl::Surface* surface) {
   if (!surface) return;
-  surface->pendingSurfaceDamageRects.clear();
-  surface->pendingBufferDamageRects.clear();
+  surface->pendingDamageState.surfaceRects.clear();
+  surface->pendingDamageState.bufferRects.clear();
 }
 
 RegionRect clippedBufferRect(RegionRect rect, std::int32_t width, std::int32_t height) {
@@ -702,26 +702,27 @@ RegionRect clippedBufferRect(RegionRect rect, std::int32_t width, std::int32_t h
 
 void appendCommittedBufferDamage(WaylandServer::Impl::Surface* surface) {
   if (!surface || surface->width <= 0 || surface->height <= 0) return;
-  if (surface->pendingSurfaceDamageRects.empty() && surface->pendingBufferDamageRects.empty()) return;
+  if (surface->pendingDamageState.surfaceRects.empty() && surface->pendingDamageState.bufferRects.empty()) return;
 
   constexpr std::size_t kMaxCommittedDamageRects = 32;
   auto appendFullBufferDamage = [&] {
-    surface->committedBufferDamageRects.clear();
-    appendRegionRect(surface->committedBufferDamageRects,
+    surface->damageState.bufferRects.clear();
+    appendRegionRect(surface->damageState.bufferRects,
                      RegionRect{0, 0, surface->width, surface->height});
   };
 
   // wl_surface.damage is in surface coordinates and can interact with scale,
   // transform, and viewport state. Preserve correctness by treating it as full
   // buffer damage; wl_surface.damage_buffer carries exact buffer-space rects.
-  if (!surface->pendingSurfaceDamageRects.empty()) {
+  if (!surface->pendingDamageState.surfaceRects.empty()) {
     appendFullBufferDamage();
     return;
   }
 
-  for (RegionRect const& rect : surface->pendingBufferDamageRects) {
-    appendRegionRect(surface->committedBufferDamageRects, clippedBufferRect(rect, surface->width, surface->height));
-    if (surface->committedBufferDamageRects.size() > kMaxCommittedDamageRects) {
+  for (RegionRect const& rect : surface->pendingDamageState.bufferRects) {
+    appendRegionRect(surface->damageState.bufferRects,
+                     clippedBufferRect(rect, surface->width, surface->height));
+    if (surface->damageState.bufferRects.size() > kMaxCommittedDamageRects) {
       appendFullBufferDamage();
       return;
     }
@@ -777,22 +778,22 @@ bool applySurfaceProtocolState(WaylandServer::Impl::Surface* surface,
     surface->pendingBufferOffsetSet = false;
   }
 
-  if (surface->pendingOpaqueRegionSet) {
-    if (!regionsEqual(surface->opaqueRegionRects, surface->pendingOpaqueRegionRects)) {
-      surface->opaqueRegionRects = surface->pendingOpaqueRegionRects;
+  if (surface->pendingRegionState.opaqueRegionSet) {
+    if (!regionsEqual(surface->regionState.opaqueRegionRects, surface->pendingRegionState.opaqueRegionRects)) {
+      surface->regionState.opaqueRegionRects = surface->pendingRegionState.opaqueRegionRects;
       renderStateChanged = true;
     }
-    surface->pendingOpaqueRegionSet = false;
+    surface->pendingRegionState.opaqueRegionSet = false;
   }
 
-  if (surface->pendingInputRegionSet) {
-    if (surface->inputRegionInfinite != surface->pendingInputRegionInfinite ||
-        !regionsEqual(surface->inputRegionRects, surface->pendingInputRegionRects)) {
-      surface->inputRegionInfinite = surface->pendingInputRegionInfinite;
-      surface->inputRegionRects = surface->pendingInputRegionRects;
+  if (surface->pendingRegionState.inputRegionSet) {
+    if (surface->regionState.inputRegionInfinite != surface->pendingRegionState.inputRegionInfinite ||
+        !regionsEqual(surface->regionState.inputRegionRects, surface->pendingRegionState.inputRegionRects)) {
+      surface->regionState.inputRegionInfinite = surface->pendingRegionState.inputRegionInfinite;
+      surface->regionState.inputRegionRects = surface->pendingRegionState.inputRegionRects;
       inputRegionChanged = true;
     }
-    surface->pendingInputRegionSet = false;
+    surface->pendingRegionState.inputRegionSet = false;
   }
 
   return renderStateChanged;
@@ -1117,7 +1118,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     surface->pendingResizeConfigureWidth = 0;
     surface->pendingResizeConfigureHeight = 0;
     surface->dmabufBuffer = nullptr;
-    surface->committedBufferDamageRects.clear();
+    surface->damageState.bufferRects.clear();
     bumpSurfaceSerial(surface);
     traceResizeSurface("commit-empty", surface);
     traceCrashSurfaceCommit(surface, "empty", 0u, 0u);
@@ -1149,7 +1150,7 @@ void surfaceDamageBuffer(wl_client*, wl_resource* resource, std::int32_t x, std:
                          std::int32_t width, std::int32_t height) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   if (!surface) return;
-  appendRegionRect(surface->pendingBufferDamageRects, normalizedRegionRect(x, y, width, height));
+  appendRegionRect(surface->pendingDamageState.bufferRects, normalizedRegionRect(x, y, width, height));
 }
 
 void surfaceOffset(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y) {

@@ -157,8 +157,8 @@ inline bool shellAppIdMatches(std::string const& requested, std::string const& a
 bool containsPoint(float x, float y, float left, float top, float right, float bottom);
 inline bool inputRegionContains(WaylandServer::Impl::Surface const* surface, float localX, float localY) {
   if (!surface) return false;
-  if (surface->inputRegionInfinite) return true;
-  return std::any_of(surface->inputRegionRects.begin(), surface->inputRegionRects.end(),
+  if (surface->regionState.inputRegionInfinite) return true;
+  return std::any_of(surface->regionState.inputRegionRects.begin(), surface->regionState.inputRegionRects.end(),
                      [&](CommittedSurfaceSnapshot::RegionRect const& rect) {
                        return localX >= static_cast<float>(rect.x) &&
                               localY >= static_cast<float>(rect.y) &&
