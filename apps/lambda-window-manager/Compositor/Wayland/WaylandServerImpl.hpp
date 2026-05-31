@@ -44,6 +44,7 @@ struct WaylandServer::Impl {
   struct SurfacePendingDamageState;
   struct SurfaceBufferState;
   struct SurfacePendingBufferState;
+  struct SurfacePendingCommitState;
   struct SurfaceXdgRoleState;
   struct Subsurface;
   struct XdgPositioner;
@@ -386,6 +387,20 @@ struct WaylandServer::Impl::SurfacePendingBufferState {
   bool offsetSet = false;
 };
 
+struct WaylandServer::Impl::SurfacePendingCommitState {
+  SurfacePendingBufferState bufferState;
+  SurfaceViewportState viewportState;
+  bool viewportChanged = false;
+  SurfacePendingRegionState regionState;
+  SurfacePendingDamageState damageState;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> pendingBackgroundBlurRects;
+  SurfaceBackgroundEffectSnapshot pendingBackgroundEffectState;
+  bool backgroundBlurPending = false;
+  bool backgroundEffectStatePending = false;
+  std::vector<PresentationFeedback*> pendingPresentationFeedbacks;
+  std::vector<wl_resource*> pendingFrameCallbacks;
+};
+
 struct WaylandServer::Impl::SurfaceXdgRoleState {
   bool windowGeometrySet = false;
   WindowGeometry windowGeometry;
@@ -486,7 +501,9 @@ struct WaylandServer::Impl::Surface {
   Subsurface* subsurfaceRole = nullptr;
   std::vector<PresentationFeedback*> pendingPresentationFeedbacks;
   std::vector<PresentationFeedback*> presentationFeedbacks;
+  std::vector<wl_resource*> pendingFrameCallbacks;
   std::vector<wl_resource*> frameCallbacks;
+  std::optional<SurfacePendingCommitState> cachedSubsurfaceCommit;
 };
 
 struct WaylandServer::Impl::Region {
@@ -786,6 +803,13 @@ bool applySubsurfacePendingPosition(WaylandServer::Impl::Subsurface* subsurface)
 bool applySubsurfacePendingOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* parent);
 bool applySubsurfacePendingOrder(std::vector<WaylandServer::Impl::Subsurface*> subsurfaces,
                                  WaylandServer::Impl::Surface* parent);
+bool subsurfaceIsEffectivelySynchronized(WaylandServer::Impl::Subsurface const* subsurface);
+bool cacheSynchronizedSubsurfaceCommit(WaylandServer::Impl::Surface* surface);
+bool surfaceHasCachedSubsurfaceCommit(WaylandServer::Impl::Surface const* surface);
+bool restoreCachedSubsurfaceCommit(WaylandServer::Impl::Surface* surface);
+WaylandServer::Impl::SurfacePendingCommitState takeSurfacePendingCommit(WaylandServer::Impl::Surface* surface);
+void restoreSurfacePendingCommit(WaylandServer::Impl::Surface* surface,
+                                 WaylandServer::Impl::SurfacePendingCommitState&& state);
 bool setSubsurfacePendingPlaceAbove(WaylandServer::Impl::Subsurface* subsurface,
                                     WaylandServer::Impl::Surface* siblingSurface,
                                     wl_resource* errorResource = nullptr);

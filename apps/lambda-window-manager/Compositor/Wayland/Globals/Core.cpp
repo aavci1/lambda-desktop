@@ -14,11 +14,16 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <utility>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
 namespace lambda::compositor {
 namespace {
+
+void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
+                               wl_resource* resource,
+                               bool allowSynchronizedSubsurfaceCache);
 
 void inertDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -192,6 +197,15 @@ void subsurfaceSetDesync(wl_client*, wl_resource* resource) {
   auto* subsurface = resourceData<WaylandServer::Impl::Subsurface>(resource);
   if (!subsurface) return;
   subsurface->synchronized = false;
+  if (!subsurfaceIsEffectivelySynchronized(subsurface) &&
+      subsurface->surface &&
+      surfaceHasCachedSubsurfaceCommit(subsurface->surface)) {
+    auto livePending = takeSurfacePendingCommit(subsurface->surface);
+    if (restoreCachedSubsurfaceCommit(subsurface->surface)) {
+      commitSurfacePendingState(subsurface->surface, subsurface->surface->resource, false);
+    }
+    restoreSurfacePendingCommit(subsurface->surface, std::move(livePending));
+  }
 }
 
 struct wl_subsurface_interface const subsurfaceImpl{
@@ -285,7 +299,7 @@ void surfaceFrame(wl_client* client, wl_resource* resource, std::uint32_t id) {
     wl_client_post_no_memory(client);
     return;
   }
-  surface->frameCallbacks.push_back(callback);
+  surface->pendingFrameCallbacks.push_back(callback);
 }
 
 void surfaceDamage(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y,
@@ -956,8 +970,37 @@ void bumpSurfaceSerial(WaylandServer::Impl::Surface* surface) {
   }
 }
 
-void surfaceCommit(wl_client*, wl_resource* resource) {
-  auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
+void commitCachedSubsurfaceState(WaylandServer::Impl::Surface* surface) {
+  if (!surface || !surfaceHasCachedSubsurfaceCommit(surface)) return;
+  auto livePending = takeSurfacePendingCommit(surface);
+  if (restoreCachedSubsurfaceCommit(surface)) {
+    commitSurfacePendingState(surface, surface->resource, false);
+  }
+  restoreSurfacePendingCommit(surface, std::move(livePending));
+}
+
+void releaseCachedSubsurfaceCommits(WaylandServer::Impl::Surface* parent) {
+  if (!parent || !parent->server) return;
+  auto releaseLayer = [&](SubsurfaceStackLayer layer) {
+    auto subsurfaces = orderedSubsurfacesForParent(parent->server, parent, layer);
+    for (auto const* subsurface : subsurfaces) {
+      if (!subsurface || !subsurface->surface) continue;
+      commitCachedSubsurfaceState(subsurface->surface);
+      releaseCachedSubsurfaceCommits(subsurface->surface);
+    }
+  };
+  releaseLayer(SubsurfaceStackLayer::Below);
+  releaseLayer(SubsurfaceStackLayer::Above);
+}
+
+void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
+                               wl_resource* resource,
+                               bool allowSynchronizedSubsurfaceCache) {
+  if (!surface) return;
+  if (allowSynchronizedSubsurfaceCache && cacheSynchronizedSubsurfaceCommit(surface)) {
+    traceCrashSurfaceCommit(surface, "state", 0u, 0u);
+    return;
+  }
   bool const hasBufferAttach = surface->pendingBufferState.bufferAttached;
   bool const hasNonNullBufferAttach = hasBufferAttach && surface->pendingBufferState.buffer != nullptr;
   bool const hasNullBufferAttach = hasBufferAttach && surface->pendingBufferState.buffer == nullptr;
@@ -1002,6 +1045,10 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
   }
   surface->presentationFeedbacks = std::move(surface->pendingPresentationFeedbacks);
   surface->pendingPresentationFeedbacks.clear();
+  surface->frameCallbacks.insert(surface->frameCallbacks.end(),
+                                 surface->pendingFrameCallbacks.begin(),
+                                 surface->pendingFrameCallbacks.end());
+  surface->pendingFrameCallbacks.clear();
   bool const viewportChanged = pendingViewportStateChanged(surface);
   bool const damagePending = surfaceHasPendingDamage(surface);
   bool const needsStateBufferRefresh = !hasBufferAttach && damagePending && surface->bufferState.buffer;
@@ -1027,6 +1074,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       if (flushLayerConfigure) surface->server->flushClients();
       traceCrashSurfaceCommit(surface, "state", 0u, 0u);
       clearPendingDamage(surface);
+      releaseCachedSubsurfaceCommits(surface);
       return;
     }
     if (needsBufferRefresh) {
@@ -1084,6 +1132,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     if (flushLayerConfigure) surface->server->flushClients();
     clearPendingDamage(surface);
     traceCrashSurfaceCommit(surface, "state", 0u, 0u);
+    releaseCachedSubsurfaceCommits(surface);
     return;
   }
 
@@ -1191,6 +1240,11 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     traceCrashSurfaceCommit(surface, "empty", 0u, 0u);
   }
   clearPendingDamage(surface);
+  releaseCachedSubsurfaceCommits(surface);
+}
+
+void surfaceCommit(wl_client*, wl_resource* resource) {
+  commitSurfacePendingState(resourceData<WaylandServer::Impl::Surface>(resource), resource, true);
 }
 
 void surfaceSetBufferScale(wl_client*, wl_resource* resource, std::int32_t scale) {

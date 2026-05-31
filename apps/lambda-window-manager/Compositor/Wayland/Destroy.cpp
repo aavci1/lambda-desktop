@@ -220,6 +220,19 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
     wp_presentation_feedback_send_discarded(feedback->resource);
     wl_resource_destroy(feedback->resource);
   }
+  if (surface->cachedSubsurfaceCommit) {
+    std::vector<PresentationFeedback*> cachedFeedbacks =
+        std::move(surface->cachedSubsurfaceCommit->pendingPresentationFeedbacks);
+    for (auto* feedback : cachedFeedbacks) {
+      if (!feedback || !feedback->resource) continue;
+      wp_presentation_feedback_send_discarded(feedback->resource);
+      wl_resource_destroy(feedback->resource);
+    }
+    for (wl_resource* callback : surface->cachedSubsurfaceCommit->pendingFrameCallbacks) {
+      wl_resource_destroy(callback);
+    }
+    surface->cachedSubsurfaceCommit.reset();
+  }
   std::vector<PresentationFeedback*> committedFeedbacks = std::move(surface->presentationFeedbacks);
   surface->presentationFeedbacks.clear();
   for (auto* feedback : committedFeedbacks) {
@@ -239,6 +252,10 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
     wl_resource_destroy(callback);
   }
   surface->frameCallbacks.clear();
+  for (wl_resource* callback : surface->pendingFrameCallbacks) {
+    wl_resource_destroy(callback);
+  }
+  surface->pendingFrameCallbacks.clear();
   for (wl_resource* buffer : surface->pendingBufferReleases) {
     if (buffer) wl_buffer_send_release(buffer);
   }
@@ -334,6 +351,11 @@ void WaylandServer::Impl::destroyShmBuffer(ShmBuffer* buffer) {
         surface->pendingBufferState.buffer = nullptr;
         surface->pendingBufferState.bufferAttached = false;
       }
+      if (surface->cachedSubsurfaceCommit &&
+          surface->cachedSubsurfaceCommit->bufferState.buffer == buffer->resource) {
+        surface->cachedSubsurfaceCommit->bufferState.buffer = nullptr;
+        surface->cachedSubsurfaceCommit->bufferState.bufferAttached = false;
+      }
       if (surface->bufferState.buffer == buffer->resource) {
         surface->bufferState.buffer = nullptr;
         surface->shmPixels = nullptr;
@@ -373,6 +395,11 @@ void WaylandServer::Impl::destroyDmabufBuffer(DmabufBuffer* buffer) {
       if (surface->pendingBufferState.buffer == bufferResource) {
         surface->pendingBufferState.buffer = nullptr;
         surface->pendingBufferState.bufferAttached = false;
+      }
+      if (surface->cachedSubsurfaceCommit &&
+          surface->cachedSubsurfaceCommit->bufferState.buffer == bufferResource) {
+        surface->cachedSubsurfaceCommit->bufferState.buffer = nullptr;
+        surface->cachedSubsurfaceCommit->bufferState.bufferAttached = false;
       }
       if (surface->bufferState.buffer == bufferResource) {
         surface->bufferState.buffer = nullptr;
@@ -445,6 +472,9 @@ void WaylandServer::Impl::destroyPresentationFeedback(PresentationFeedback* feed
     };
     eraseFeedback(feedback->surface->pendingPresentationFeedbacks);
     eraseFeedback(feedback->surface->presentationFeedbacks);
+    if (feedback->surface->cachedSubsurfaceCommit) {
+      eraseFeedback(feedback->surface->cachedSubsurfaceCommit->pendingPresentationFeedbacks);
+    }
   }
   if (feedback) {
     for (auto& batch : pendingPresentationBatches_) {

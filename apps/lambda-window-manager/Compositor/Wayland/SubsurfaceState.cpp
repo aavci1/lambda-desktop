@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 namespace lambda::compositor {
@@ -8,6 +9,7 @@ namespace {
 
 using Subsurface = WaylandServer::Impl::Subsurface;
 using Surface = WaylandServer::Impl::Surface;
+using SurfacePendingCommitState = WaylandServer::Impl::SurfacePendingCommitState;
 
 std::vector<Subsurface*> subsurfacePointers(WaylandServer::Impl* server) {
   std::vector<Subsurface*> result;
@@ -105,6 +107,98 @@ bool setPendingPlacement(std::vector<Subsurface*> const& subsurfaces,
   return true;
 }
 
+bool viewportPendingChanged(Surface const* surface) {
+  if (!surface) return false;
+  return surface->pendingViewportState.sourceSet != surface->viewportState.sourceSet ||
+         surface->pendingViewportState.sourceX != surface->viewportState.sourceX ||
+         surface->pendingViewportState.sourceY != surface->viewportState.sourceY ||
+         surface->pendingViewportState.sourceWidth != surface->viewportState.sourceWidth ||
+         surface->pendingViewportState.sourceHeight != surface->viewportState.sourceHeight ||
+         surface->pendingViewportState.destinationSet != surface->viewportState.destinationSet ||
+         surface->pendingViewportState.destinationWidth != surface->viewportState.destinationWidth ||
+         surface->pendingViewportState.destinationHeight != surface->viewportState.destinationHeight;
+}
+
+void clearSurfacePendingCommit(Surface* surface) {
+  if (!surface) return;
+  surface->pendingBufferState = {};
+  surface->pendingViewportState = surface->viewportState;
+  surface->pendingRegionState = {};
+  surface->pendingDamageState = {};
+  surface->pendingBackgroundBlurRects.clear();
+  surface->pendingBackgroundEffectState = {};
+  surface->backgroundBlurPending = false;
+  surface->backgroundEffectStatePending = false;
+  surface->pendingPresentationFeedbacks.clear();
+  surface->pendingFrameCallbacks.clear();
+}
+
+void releaseSupersededCachedBuffer(SurfacePendingCommitState const& cached,
+                                   SurfacePendingCommitState const& incoming) {
+  if (!cached.bufferState.bufferAttached ||
+      !incoming.bufferState.bufferAttached ||
+      !cached.bufferState.buffer ||
+      cached.bufferState.buffer == incoming.bufferState.buffer) {
+    return;
+  }
+  wl_buffer_send_release(cached.bufferState.buffer);
+}
+
+void mergePendingCommitState(SurfacePendingCommitState& cached,
+                             SurfacePendingCommitState&& incoming) {
+  releaseSupersededCachedBuffer(cached, incoming);
+  if (incoming.bufferState.bufferAttached) {
+    cached.bufferState.buffer = incoming.bufferState.buffer;
+    cached.bufferState.bufferAttached = true;
+  }
+  if (incoming.bufferState.scaleSet) {
+    cached.bufferState.scale = incoming.bufferState.scale;
+    cached.bufferState.scaleSet = true;
+  }
+  if (incoming.bufferState.transformSet) {
+    cached.bufferState.transform = incoming.bufferState.transform;
+    cached.bufferState.transformSet = true;
+  }
+  if (incoming.bufferState.offsetSet) {
+    cached.bufferState.offsetX = incoming.bufferState.offsetX;
+    cached.bufferState.offsetY = incoming.bufferState.offsetY;
+    cached.bufferState.offsetSet = true;
+  }
+  if (incoming.viewportChanged) {
+    cached.viewportState = incoming.viewportState;
+    cached.viewportChanged = true;
+  }
+  if (incoming.regionState.opaqueRegionSet) {
+    cached.regionState.opaqueRegionRects = std::move(incoming.regionState.opaqueRegionRects);
+    cached.regionState.opaqueRegionSet = true;
+  }
+  if (incoming.regionState.inputRegionSet) {
+    cached.regionState.inputRegionInfinite = incoming.regionState.inputRegionInfinite;
+    cached.regionState.inputRegionRects = std::move(incoming.regionState.inputRegionRects);
+    cached.regionState.inputRegionSet = true;
+  }
+  cached.damageState.surfaceRects.insert(cached.damageState.surfaceRects.end(),
+                                         incoming.damageState.surfaceRects.begin(),
+                                         incoming.damageState.surfaceRects.end());
+  cached.damageState.bufferRects.insert(cached.damageState.bufferRects.end(),
+                                        incoming.damageState.bufferRects.begin(),
+                                        incoming.damageState.bufferRects.end());
+  if (incoming.backgroundBlurPending) {
+    cached.pendingBackgroundBlurRects = std::move(incoming.pendingBackgroundBlurRects);
+    cached.backgroundBlurPending = true;
+  }
+  if (incoming.backgroundEffectStatePending) {
+    cached.pendingBackgroundEffectState = incoming.pendingBackgroundEffectState;
+    cached.backgroundEffectStatePending = true;
+  }
+  cached.pendingPresentationFeedbacks.insert(cached.pendingPresentationFeedbacks.end(),
+                                             incoming.pendingPresentationFeedbacks.begin(),
+                                             incoming.pendingPresentationFeedbacks.end());
+  cached.pendingFrameCallbacks.insert(cached.pendingFrameCallbacks.end(),
+                                      incoming.pendingFrameCallbacks.begin(),
+                                      incoming.pendingFrameCallbacks.end());
+}
+
 } // namespace
 
 bool applySubsurfacePendingPosition(WaylandServer::Impl::Subsurface* subsurface) {
@@ -132,6 +226,73 @@ bool applySubsurfacePendingOrder(std::vector<WaylandServer::Impl::Subsurface*> s
 
 bool applySubsurfacePendingOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* parent) {
   return applySubsurfacePendingOrder(subsurfacePointers(server), parent);
+}
+
+bool subsurfaceIsEffectivelySynchronized(WaylandServer::Impl::Subsurface const* subsurface) {
+  for (auto const* current = subsurface; current;) {
+    if (current->synchronized) return true;
+    Surface const* parent = current->parent;
+    if (!surfaceIsSubsurface(parent)) return false;
+    current = parent->subsurfaceRole;
+  }
+  return false;
+}
+
+SurfacePendingCommitState takeSurfacePendingCommit(WaylandServer::Impl::Surface* surface) {
+  SurfacePendingCommitState state;
+  if (!surface) return state;
+  state.bufferState = surface->pendingBufferState;
+  state.viewportState = surface->pendingViewportState;
+  state.viewportChanged = viewportPendingChanged(surface);
+  state.regionState = std::move(surface->pendingRegionState);
+  state.damageState = std::move(surface->pendingDamageState);
+  state.pendingBackgroundBlurRects = std::move(surface->pendingBackgroundBlurRects);
+  state.pendingBackgroundEffectState = surface->pendingBackgroundEffectState;
+  state.backgroundBlurPending = surface->backgroundBlurPending;
+  state.backgroundEffectStatePending = surface->backgroundEffectStatePending;
+  state.pendingPresentationFeedbacks = std::move(surface->pendingPresentationFeedbacks);
+  state.pendingFrameCallbacks = std::move(surface->pendingFrameCallbacks);
+  clearSurfacePendingCommit(surface);
+  return state;
+}
+
+void restoreSurfacePendingCommit(WaylandServer::Impl::Surface* surface,
+                                 SurfacePendingCommitState&& state) {
+  if (!surface) return;
+  surface->pendingBufferState = state.bufferState;
+  surface->pendingViewportState = state.viewportChanged ? state.viewportState : surface->viewportState;
+  surface->pendingRegionState = std::move(state.regionState);
+  surface->pendingDamageState = std::move(state.damageState);
+  surface->pendingBackgroundBlurRects = std::move(state.pendingBackgroundBlurRects);
+  surface->pendingBackgroundEffectState = state.pendingBackgroundEffectState;
+  surface->backgroundBlurPending = state.backgroundBlurPending;
+  surface->backgroundEffectStatePending = state.backgroundEffectStatePending;
+  surface->pendingPresentationFeedbacks = std::move(state.pendingPresentationFeedbacks);
+  surface->pendingFrameCallbacks = std::move(state.pendingFrameCallbacks);
+}
+
+bool cacheSynchronizedSubsurfaceCommit(WaylandServer::Impl::Surface* surface) {
+  if (!surface || !surface->subsurfaceRole || !subsurfaceIsEffectivelySynchronized(surface->subsurfaceRole)) {
+    return false;
+  }
+  SurfacePendingCommitState incoming = takeSurfacePendingCommit(surface);
+  if (surface->cachedSubsurfaceCommit) {
+    mergePendingCommitState(*surface->cachedSubsurfaceCommit, std::move(incoming));
+  } else {
+    surface->cachedSubsurfaceCommit = std::move(incoming);
+  }
+  return true;
+}
+
+bool surfaceHasCachedSubsurfaceCommit(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->cachedSubsurfaceCommit.has_value();
+}
+
+bool restoreCachedSubsurfaceCommit(WaylandServer::Impl::Surface* surface) {
+  if (!surface || !surface->cachedSubsurfaceCommit) return false;
+  restoreSurfacePendingCommit(surface, std::move(*surface->cachedSubsurfaceCommit));
+  surface->cachedSubsurfaceCommit.reset();
+  return true;
 }
 
 bool setSubsurfacePendingPlaceAbove(WaylandServer::Impl::Subsurface* subsurface,

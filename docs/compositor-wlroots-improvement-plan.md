@@ -19,8 +19,8 @@
 | --- | --- | --- | --- | --- | --- |
 | P0 | WM-COMP-1 Surface commit state core | Deferred | Manual validation still shows momentary non-synced Settings resize frames on DP-1 HiDPI; failed buffer-retention experiment was dropped | Existing committed state-transition tests pass | Deferred by user request before deeper rendering-architecture work |
 | P1 | WM-COMP-2 Layer shell configure and state correctness | Verified | Implemented pending/current layer state, configure serial validation, mapped/unmapped state, initial commit enforcement, and layer-shell v4 binding | `lambda_tests` layer/compositor suites and broader feasible suite pass | No manual gate needed for this protocol-state slice |
-| P2 | WM-COMP-3 Subsurface state, order, and synchronized commits | In progress | Pending/current subsurface position and committed sibling ordering are verified; next step is synchronized commit caching | Subsurface commit/order/hit-test tests | Real apps with popovers or embedded subsurfaces if automated coverage is incomplete |
-| P3 | WM-COMP-4 Scene and output damage architecture | Planned | Starts after WM-COMP-3 reaches its gate | Snapshot/damage tests plus render scheduler tests | DP-1 resize trace, real-app flicker check, video/browser pacing |
+| P2 | WM-COMP-3 Subsurface state, order, and synchronized commits | Verified | Implemented pending/current position, committed sibling ordering, synchronized commit caching, and desync cache release | `lambda_tests` subsurface/compositor suites and broader feasible suite pass | No manual gate needed for this protocol-state slice |
+| P3 | WM-COMP-4 Scene and output damage architecture | Planned | Starts after WM-COMP-3 commit is pushed | Snapshot/damage tests plus render scheduler tests | DP-1 resize trace, real-app flicker check, video/browser pacing |
 | P4 | WM-COMP-5 Seat serials and grab model | Planned | Starts after WM-COMP-4 reaches its gate | Seat serial, popup grab, selection, and focus tests | Popups, drag/drop, clipboard, and menu behavior in real apps |
 | P5 | WM-COMP-6 DMABUF feedback and buffer lifetime | Planned | Starts after WM-COMP-5 reaches its gate | DMABUF validation and buffer release tests where possible | GPU-client/video validation on target hardware |
 
@@ -36,6 +36,7 @@
 - `apps/lambda-window-manager/Compositor/Wayland/Globals/Core.cpp`
 - `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgShell.cpp`
 - `apps/lambda-window-manager/Compositor/Wayland/Globals/LayerShell.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/SubsurfaceState.cpp`
 - `apps/lambda-window-manager/Compositor/Wayland/Snapshots.cpp`
 - `tests/`
 
@@ -115,11 +116,12 @@
 
 1. Done: inventory current subsurface support and missing protocol requests. Current position mutates live state immediately, `place_above`/`place_below` are no-ops, `set_sync`/`set_desync` are no-ops, and snapshots/input traverse creation order.
 2. Done: added pending/current position and sibling order state.
-3. Partially done: implemented `place_above` and `place_below` against pending sibling order and wired `set_sync`/`set_desync` to role state. Synchronized commit caching remains.
-4. Cache synchronized subsurface commits until the parent commits.
+3. Done: implemented `place_above` and `place_below` against pending sibling order and wired `set_sync`/`set_desync` to role state.
+4. Done: cache synchronized subsurface commits until the parent commits; `set_desync` releases cached commits immediately when no synchronized ancestor remains.
 5. Done: updated snapshots and hit testing to use committed subsurface order.
-6. Partially done: added tests for pending position, pending sibling placement, committed ordering, and existing coordinate hit testing. Synchronized commit release and desynchronized immediate commit tests remain.
-7. Done for this slice: build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*subsurface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed.
+6. Done: added tests for pending position, pending sibling placement, committed ordering, effective synchronization through ancestors, synchronized commit caching, and existing coordinate hit testing.
+7. Done: moved frame callbacks into pending commit state so synchronized commits cannot emit callbacks before release.
+8. Done: build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*subsurface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed.
 
 **Acceptance criteria:**
 
@@ -231,3 +233,4 @@
 | 2026-05-31 | WM-COMP-2 | Verified | Implemented wlroots-style layer-shell pending/current state, configure serial validation, invalid initial buffer commit rejection, mapped/unmapped state reset on null-buffer unmap, committed-state exclusive-zone recomputation, and layer-shell v4 binding. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*layer*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
 | 2026-05-31 | WM-COMP-3 | In progress | Inventory found immediate live subsurface position updates, no-op sibling ordering requests, no-op sync/desync requests, and creation-order snapshot/input traversal. Starting with pending/current position and committed sibling ordering because it is automatable. |
 | 2026-05-31 | WM-COMP-3 | Verified slice | Added pending/current subsurface position, pending/current sibling stack order, `place_above`/`place_below` validation, committed-order snapshot/input traversal, ancestor-parent rejection, and tests for position/order behavior. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*subsurface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
+| 2026-05-31 | WM-COMP-3 | Verified | Added synchronized subsurface commit caching, recursive parent-commit release through nested subsurfaces, desync release when no synchronized ancestor remains, pending frame callbacks, cached-state cleanup on destroy, and tests for effective synchronization and cached pending state. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*subsurface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |

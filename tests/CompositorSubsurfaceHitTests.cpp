@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <utility>
 #include <vector>
 
 namespace {
@@ -94,4 +95,91 @@ TEST_CASE("subsurface sibling placement is pending until parent commit") {
   CHECK(currentOrder[0] == &childC);
   CHECK(currentOrder[1] == &childA);
   CHECK(currentOrder[2] == &childB);
+}
+
+TEST_CASE("subsurface synchronization follows ancestor chain") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::Surface parentSurface;
+  WaylandServer::Impl::Surface childSurface;
+  WaylandServer::Impl::Subsurface parentRole;
+  WaylandServer::Impl::Subsurface childRole;
+  parentSurface.role = SurfaceRole::Subsurface;
+  parentSurface.subsurfaceRole = &parentRole;
+  parentRole.surface = &parentSurface;
+  parentRole.synchronized = true;
+  childRole.surface = &childSurface;
+  childRole.parent = &parentSurface;
+  childRole.synchronized = false;
+
+  CHECK(subsurfaceIsEffectivelySynchronized(&parentRole));
+  CHECK(subsurfaceIsEffectivelySynchronized(&childRole));
+
+  parentRole.synchronized = false;
+  CHECK_FALSE(subsurfaceIsEffectivelySynchronized(&childRole));
+}
+
+TEST_CASE("synchronized subsurface commit caches pending surface state") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::Surface surface;
+  WaylandServer::Impl::Subsurface subsurface;
+  surface.subsurfaceRole = &subsurface;
+  subsurface.surface = &surface;
+  subsurface.synchronized = true;
+  surface.pendingBufferState.scale = 2;
+  surface.pendingBufferState.scaleSet = true;
+  surface.pendingViewportState.destinationSet = true;
+  surface.pendingViewportState.destinationWidth = 120;
+  surface.pendingViewportState.destinationHeight = 80;
+  surface.pendingDamageState.surfaceRects.push_back({.x = 0, .y = 0, .width = 10, .height = 10});
+  surface.pendingFrameCallbacks.push_back(nullptr);
+
+  CHECK(cacheSynchronizedSubsurfaceCommit(&surface));
+  REQUIRE(surface.cachedSubsurfaceCommit.has_value());
+  CHECK_FALSE(surface.pendingBufferState.scaleSet);
+  CHECK_FALSE(surface.pendingViewportState.destinationSet);
+  CHECK(surface.pendingDamageState.surfaceRects.empty());
+  CHECK(surface.pendingFrameCallbacks.empty());
+
+  surface.pendingBufferState.transform = WL_OUTPUT_TRANSFORM_90;
+  surface.pendingBufferState.transformSet = true;
+  auto livePending = takeSurfacePendingCommit(&surface);
+  REQUIRE(restoreCachedSubsurfaceCommit(&surface));
+  CHECK(surface.pendingBufferState.scaleSet);
+  CHECK(surface.pendingBufferState.scale == 2);
+  CHECK(surface.pendingViewportState.destinationSet);
+  CHECK(surface.pendingViewportState.destinationWidth == 120);
+  CHECK(surface.pendingDamageState.surfaceRects.size() == 1);
+  CHECK(surface.pendingFrameCallbacks.size() == 1);
+
+  restoreSurfacePendingCommit(&surface, std::move(livePending));
+  CHECK(surface.pendingBufferState.transformSet);
+  CHECK(surface.pendingBufferState.transform == WL_OUTPUT_TRANSFORM_90);
+  CHECK_FALSE(surface.cachedSubsurfaceCommit.has_value());
+}
+
+TEST_CASE("subsurface commit caches while an ancestor is synchronized") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::Surface parentSurface;
+  WaylandServer::Impl::Surface childSurface;
+  WaylandServer::Impl::Subsurface parentRole;
+  WaylandServer::Impl::Subsurface childRole;
+  parentSurface.role = SurfaceRole::Subsurface;
+  parentSurface.subsurfaceRole = &parentRole;
+  parentRole.surface = &parentSurface;
+  parentRole.synchronized = true;
+  childSurface.subsurfaceRole = &childRole;
+  childRole.surface = &childSurface;
+  childRole.parent = &parentSurface;
+  childRole.synchronized = false;
+  childSurface.pendingBufferState.scale = 3;
+  childSurface.pendingBufferState.scaleSet = true;
+
+  CHECK(cacheSynchronizedSubsurfaceCommit(&childSurface));
+  REQUIRE(childSurface.cachedSubsurfaceCommit.has_value());
+  CHECK(childSurface.cachedSubsurfaceCommit->bufferState.scaleSet);
+  CHECK(childSurface.cachedSubsurfaceCommit->bufferState.scale == 3);
+  CHECK_FALSE(childSurface.pendingBufferState.scaleSet);
 }
