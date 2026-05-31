@@ -5,6 +5,7 @@
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/XdgSurfaceState.hpp"
+#include "Compositor/Wayland/XdgToplevelState.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "presentation-time-server-protocol.h"
@@ -709,6 +710,30 @@ bool validateXdgToplevelPendingSizeHints(WaylandServer::Impl::Surface* surface, 
   return false;
 }
 
+void markXdgToplevelMapped(WaylandServer::Impl::Surface* surface) {
+  auto* toplevel = surface && surface->server ? toplevelForSurface(surface->server, surface) : nullptr;
+  if (!toplevel || toplevel->mapped) return;
+  toplevel->mapped = true;
+  surface->server->notifyShellStateChanged();
+}
+
+void resetXdgToplevelForUnmap(WaylandServer::Impl::Surface* surface) {
+  auto* toplevel = surface && surface->server ? toplevelForSurface(surface->server, surface) : nullptr;
+  if (!toplevel) return;
+
+  bool changed = toplevel->mapped || toplevel->parent != nullptr;
+  WaylandServer::Impl::XdgToplevel* replacementParent = xdgToplevelRetainedParent(toplevel->parent);
+  for (auto& child : surface->server->toplevels_) {
+    if (child && child.get() != toplevel && child->parent == toplevel) {
+      child->parent = replacementParent;
+      changed = true;
+    }
+  }
+  toplevel->parent = nullptr;
+  toplevel->mapped = false;
+  if (changed) surface->server->notifyShellStateChanged();
+}
+
 bool applyXdgConfigureState(WaylandServer::Impl::Surface* surface) {
   if (!surface || !surface->server) return false;
   for (auto const& xdgSurface : surface->server->xdgSurfaces_) {
@@ -1194,6 +1219,7 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
         applyLayerGeometry(surface->layerSurface);
         if (markLayerSurfaceMapped(surface->layerSurface)) refreshShellReservedZones(surface->server);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
+        markXdgToplevelMapped(surface);
         surface->dmabufBuffer = nullptr;
         appendCommittedBufferDamage(surface);
         bumpSurfaceSerial(surface);
@@ -1225,6 +1251,7 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
         applyLayerGeometry(surface->layerSurface);
         if (markLayerSurfaceMapped(surface->layerSurface)) refreshShellReservedZones(surface->server);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
+        markXdgToplevelMapped(surface);
         surface->dmabufBuffer = dmabufBuffer;
         appendCommittedBufferDamage(surface);
         bumpSurfaceSerial(surface);
@@ -1239,6 +1266,7 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
     }
     if (releaseCurrentBufferImmediately) wl_buffer_send_release(surface->bufferState.buffer);
   } else {
+    resetXdgToplevelForUnmap(surface);
     surface->rgbaPixels.reset();
     surface->shmPixels = nullptr;
     surface->shmPixelBytes = 0;

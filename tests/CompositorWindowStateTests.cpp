@@ -237,6 +237,30 @@ TEST_CASE("xdg toplevel title validation follows strict UTF-8") {
   CHECK_FALSE(lambda::compositor::xdgToplevelTitleUtf8Valid(bytes({0xE2, 0x82})));
 }
 
+TEST_CASE("xdg toplevel parent retention requires a mapped toplevel parent") {
+  lambda::compositor::WaylandServer::Impl::XdgToplevel parent{};
+  CHECK_FALSE(lambda::compositor::xdgToplevelMapped(&parent));
+  CHECK(lambda::compositor::xdgToplevelRetainedParent(&parent) == nullptr);
+
+  lambda::compositor::WaylandServer::Impl::XdgSurface xdgSurface{};
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  parent.xdgSurface = &xdgSurface;
+  xdgSurface.surface = &surface;
+  surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
+
+  parent.mapped = false;
+  CHECK_FALSE(lambda::compositor::xdgToplevelMapped(&parent));
+  CHECK(lambda::compositor::xdgToplevelRetainedParent(&parent) == nullptr);
+
+  parent.mapped = true;
+  CHECK(lambda::compositor::xdgToplevelMapped(&parent));
+  CHECK(lambda::compositor::xdgToplevelRetainedParent(&parent) == &parent);
+
+  surface.role = lambda::compositor::SurfaceRole::XdgSurface;
+  CHECK_FALSE(lambda::compositor::xdgToplevelMapped(&parent));
+  CHECK(lambda::compositor::xdgToplevelRetainedParent(&parent) == nullptr);
+}
+
 TEST_CASE("xdg popup topmost validation detects live child popups") {
   lambda::compositor::WaylandServer::Impl::Surface parentSurface{};
   lambda::compositor::WaylandServer::Impl::Surface unrelatedSurface{};

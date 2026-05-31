@@ -1101,7 +1101,7 @@ void xdgToplevelSetParent(wl_client*, wl_resource* resource, wl_resource* parent
                            "xdg_toplevel parent would create a cycle");
     return;
   }
-  toplevel->parent = parent;
+  toplevel->parent = xdgToplevelRetainedParent(parent);
   if (toplevel->server) toplevel->server->notifyShellStateChanged();
 }
 

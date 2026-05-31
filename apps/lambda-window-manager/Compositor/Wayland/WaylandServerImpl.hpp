@@ -997,6 +997,7 @@ struct WaylandServer::Impl::XdgToplevel {
   wl_resource* resource = nullptr;
   XdgSurface* xdgSurface = nullptr;
   XdgToplevel* parent = nullptr;
+  bool mapped = false;
   std::string title;
   std::string appId;
   std::int32_t minWidth = 0;

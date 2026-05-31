@@ -14,6 +14,19 @@ namespace lambda::compositor {
          toplevel->xdgSurface->configured;
 }
 
+[[nodiscard]] inline bool xdgToplevelMapped(WaylandServer::Impl::XdgToplevel const* toplevel) {
+  return toplevel &&
+         toplevel->mapped &&
+         toplevel->xdgSurface &&
+         toplevel->xdgSurface->surface &&
+         surfaceIsXdgToplevel(toplevel->xdgSurface->surface);
+}
+
+[[nodiscard]] inline WaylandServer::Impl::XdgToplevel* xdgToplevelRetainedParent(
+    WaylandServer::Impl::XdgToplevel* parent) {
+  return xdgToplevelMapped(parent) ? parent : nullptr;
+}
+
 [[nodiscard]] inline bool xdgToplevelTitleUtf8Valid(std::string_view text) {
   auto inRange = [](unsigned char value, unsigned char low, unsigned char high) {
     return low <= value && value <= high;
