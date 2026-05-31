@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/Globals/LinuxDmabuf.hpp"
 
 #include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Wayland/DmabufValidation.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include <Lambda/Graphics/VulkanContext.hpp>
@@ -15,7 +16,6 @@
 #include <wayland-server-protocol.h>
 
 #include <algorithm>
-#include <array>
 #include <cerrno>
 #include <cstring>
 #include <memory>
@@ -37,13 +37,6 @@ struct DmabufFormatModifier {
   std::uint64_t modifier = 0;
 };
 
-constexpr std::array<std::uint32_t, 4> kSupportedDmabufFormats{
-    DRM_FORMAT_ARGB8888,
-    DRM_FORMAT_XRGB8888,
-    DRM_FORMAT_ABGR8888,
-    DRM_FORMAT_XBGR8888,
-};
-
 std::optional<DmabufPlane> findPlane(WaylandServer::Impl::DmabufParams const* params, std::uint32_t index) {
   auto found = std::find_if(params->planes.begin(), params->planes.end(),
                             [index](DmabufPlane const& plane) { return plane.index == index; });
@@ -51,16 +44,29 @@ std::optional<DmabufPlane> findPlane(WaylandServer::Impl::DmabufParams const* pa
   return *found;
 }
 
-std::optional<std::uint32_t> bytesPerPixel(std::uint32_t format) {
-  switch (format) {
-  case DRM_FORMAT_ARGB8888:
-  case DRM_FORMAT_XRGB8888:
-  case DRM_FORMAT_ABGR8888:
-  case DRM_FORMAT_XBGR8888:
-    return 4u;
-  default:
-    return std::nullopt;
+std::vector<DmabufPlaneLayout> planeLayoutsFor(WaylandServer::Impl::DmabufParams const* params) {
+  std::vector<DmabufPlaneLayout> layouts;
+  layouts.reserve(params->planes.size());
+  for (DmabufPlane const& plane : params->planes) {
+    layouts.push_back({
+        .index = plane.index,
+        .offset = plane.offset,
+        .stride = plane.stride,
+        .modifier = plane.modifier,
+    });
   }
+  return layouts;
+}
+
+std::optional<std::uint64_t> planeByteSize(int fd) {
+  if (fd < 0) return 0u;
+  off_t const current = lseek(fd, 0, SEEK_CUR);
+  off_t const size = lseek(fd, 0, SEEK_END);
+  if (current >= 0) {
+    (void)lseek(fd, current, SEEK_SET);
+  }
+  if (size < 0) return std::nullopt;
+  return static_cast<std::uint64_t>(size);
 }
 
 VkFormat vkFormatForDmabufFormat(std::uint32_t drmFormat) {
@@ -134,33 +140,49 @@ bool validateDmabufParams(WaylandServer::Impl::DmabufParams* params, std::int32_
                            "zwp_linux_buffer_params_v1 was already used");
     return false;
   }
-  if (width <= 0 || height <= 0) {
+
+  std::optional<std::uint64_t> byteSize;
+  if (params->planes.size() == 1 && params->planes.front().index == 0) {
+    byteSize = planeByteSize(params->planes.front().fd);
+  }
+  DmabufLayoutValidationResult const layout =
+      validateSinglePlaneDmabufLayout(width, height, format, planeLayoutsFor(params), byteSize);
+  switch (layout.error) {
+  case DmabufLayoutValidationError::None:
+    break;
+  case DmabufLayoutValidationError::InvalidDimensions:
     wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_DIMENSIONS,
                            "dmabuf dimensions must be positive");
     return false;
-  }
-  if (!isSupportedDmabufFormat(format)) {
+  case DmabufLayoutValidationError::UnsupportedFormat:
     wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_FORMAT,
                            "unsupported dmabuf format 0x%08x", format);
     return false;
-  }
-  if (!findPlane(params, 0).has_value()) {
+  case DmabufLayoutValidationError::MissingPlane0:
     wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
                            "dmabuf plane 0 is required");
     return false;
-  }
-  if (params->planes.size() != 1) {
+  case DmabufLayoutValidationError::UnsupportedPlaneCount:
     wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
                            "only single-plane RGB dmabufs are currently supported");
     return false;
-  }
-  DmabufPlane const& plane = params->planes.front();
-  auto bpp = bytesPerPixel(format);
-  if (!bpp || plane.stride < static_cast<std::uint32_t>(width) * *bpp) {
+  case DmabufLayoutValidationError::StrideTooSmall:
     wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_OUT_OF_BOUNDS,
                            "dmabuf plane stride is too small");
     return false;
+  case DmabufLayoutValidationError::LayoutOverflow:
+    wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_OUT_OF_BOUNDS,
+                           "dmabuf plane layout overflows addressable byte range");
+    return false;
+  case DmabufLayoutValidationError::OutOfBounds:
+    wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_OUT_OF_BOUNDS,
+                           "dmabuf plane requires %llu bytes but fd has %llu bytes",
+                           static_cast<unsigned long long>(layout.requiredBytes),
+                           static_cast<unsigned long long>(*byteSize));
+    return false;
   }
+
+  DmabufPlane const& plane = params->planes.front();
   if (!isSupportedDmabufModifier(format, plane.modifier)) {
     wl_resource_post_error(params->resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_FORMAT,
                            "unsupported dmabuf modifier 0x%016llx",
@@ -324,7 +346,7 @@ struct zwp_linux_dmabuf_feedback_v1_interface const linuxDmabufFeedbackImpl{
 
 std::vector<DmabufFormatModifier> supportedDmabufFormatTable(WaylandServer::Impl const* server) {
   std::vector<DmabufFormatModifier> table;
-  for (std::uint32_t format : kSupportedDmabufFormats) {
+  for (std::uint32_t format : kSupportedSinglePlaneDmabufFormats) {
     for (std::uint64_t modifier : advertisedDmabufModifiersForFormat(server, format)) {
       table.push_back({
           .format = format,
@@ -469,8 +491,7 @@ void sendDmabufFormat(wl_resource* resource, WaylandServer::Impl const* server, 
 } // namespace
 
 bool isSupportedDmabufFormat(std::uint32_t format) {
-  return std::find(kSupportedDmabufFormats.begin(), kSupportedDmabufFormats.end(), format) !=
-         kSupportedDmabufFormats.end();
+  return isSupportedSinglePlaneDmabufFormat(format);
 }
 
 void bindLinuxDmabuf(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
@@ -483,7 +504,7 @@ void bindLinuxDmabuf(wl_client* client, void* data, std::uint32_t version, std::
   wl_resource_set_implementation(resource, &linuxDmabufImpl, data, nullptr);
   if (resourceVersion < 4u) {
     auto* server = static_cast<WaylandServer::Impl const*>(data);
-    for (std::uint32_t format : kSupportedDmabufFormats) {
+    for (std::uint32_t format : kSupportedSinglePlaneDmabufFormats) {
       sendDmabufFormat(resource, server, format);
     }
   }

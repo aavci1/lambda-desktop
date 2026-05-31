@@ -22,7 +22,7 @@
 | P2 | WM-COMP-3 Subsurface state, order, and synchronized commits | Verified | Implemented pending/current position, committed sibling ordering, synchronized commit caching, and desync cache release | `lambda_tests` subsurface/compositor suites and broader feasible suite pass | No manual gate needed for this protocol-state slice |
 | P3 | WM-COMP-4 Scene and output damage architecture | Verified | Conservative scene damage, damage-aware atomic dirty skipping, and presented-scene frame callbacks are implemented | Snapshot/damage tests plus render scheduler tests pass | DP-1 resize, cursor, dock, and flicker validation passed |
 | P4 | WM-COMP-5 Seat serials and grab model | Verified | Data-device, clipboard, primary-selection, xdg grab, cursor serial validation, and dock-menu layer-shell lifecycle fixes are implemented and manually validated | Seat serial, popup grab, selection, layer-shell, and focus tests pass | Dock item right-click menu actions, app menus/popups, drag/drop, clipboard, and primary selection passed |
-| P5 | WM-COMP-6 DMABUF feedback and buffer lifetime | Planned | Starts after WM-COMP-5 commit lands | DMABUF validation and buffer release tests where possible | GPU-client/video validation on target hardware |
+| P5 | WM-COMP-6 DMABUF feedback and buffer lifetime | In progress | Pure dmabuf layout and fd-size validation is implemented; next split renderer feedback from scanout preference | DMABUF validation and buffer release tests where possible | GPU-client/video validation on target hardware |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -213,11 +213,19 @@
 
 **Implementation steps:**
 
-1. Inventory renderer-supported formats/modifiers and scanout-supported formats/modifiers.
+1. Done: inventory renderer-supported formats/modifiers and scanout-supported formats/modifiers.
 2. Distinguish renderer feedback from direct-scanout feedback where the protocol allows it.
-3. Validate dmabuf params before creating committed buffers.
+3. Verified slice: added reusable single-plane dmabuf layout validation, overflow-safe required byte-span calculation, fd-size bounds checks when available, and automated tests for invalid dimensions, formats, planes, strides, and bounds.
 4. Tie `wl_buffer.release` to the actual render or scanout lifetime.
 5. Add tests for invalid dmabuf params and buffer release ordering where local test infrastructure can exercise it.
+
+**Step 1 inventory:**
+
+- Lambda currently advertises/imports only single-plane RGB dmabufs: `DRM_FORMAT_ARGB8888`, `DRM_FORMAT_XRGB8888`, `DRM_FORMAT_ABGR8888`, and `DRM_FORMAT_XBGR8888`.
+- Renderer feedback is derived from Vulkan sampled-image modifier support plus compositor modifier preferences. Direct scanout/overlay support is queried separately in the KMS presenter, but the feedback path does not yet distinguish renderer-safe formats from scanout-preferred formats.
+- Parameter validation already rejects reused params, non-positive dimensions, unsupported formats, missing plane 0, multiple planes, too-small stride, and unsupported advertised modifiers.
+- Current validation gaps: no reusable layout validator, no overflow-safe `offset + stride * height` calculation, no fd-size bounds check before creating the `wl_buffer`, and no automated dmabuf validation tests.
+- Buffer release already defers retained dmabufs while KMS reports overlay buffers in use, but release ordering still needs dedicated tests after the validation slice.
 
 **Acceptance criteria:**
 
@@ -255,3 +263,4 @@
 | 2026-05-31 | WM-COMP-5 | Waiting for user validation | User validation found that right-clicking dock items disconnected the shell while opening the menu. Root cause was a dock-menu layer-shell transition that sent size `0x0` while the surface still had non-opposing hidden anchors, which wlroots-style layer-shell validation correctly rejects. Fixed the shell to switch to the visible opposing anchors before requesting compositor-sized `0x0`, and hardened the Wayland client backend to send `1px` on any axis where zero would be invalid for the current anchors. Manual validation needed before commit: dock item right-click menu plus the previous clipboard/menu/DnD checks. |
 | 2026-05-31 | WM-COMP-5 | Waiting for user validation | Follow-up validation found that clicking New Window from the dock menu opened the requested app, then disconnected the shell with `unknown layer-shell configure serial`. Root cause was hiding the menu by attaching a null buffer, which unmapped the layer surface and cleared outstanding configures while a previously sent configure could still be queued to the shell. Fixed the shell client to keep hidden menu surfaces mapped as transparent, empty-input `1x1` surfaces, and made the compositor tolerate already-issued stale layer-shell acks while still rejecting never-issued future serials. Manual validation needed before commit: dock item right-click menu actions plus the previous clipboard/menu/DnD checks. |
 | 2026-05-31 | WM-COMP-5 | Verified | User validation passed after the dock-menu lifecycle fixes. Build passed for `lambda_tests`, `lambda-window-manager`, and `lambda-shell`; `./build/tests/lambda_tests --test-case="*layer shell*"`, `./build/tests/lambda_tests --test-case="*seat serial*"`, `./build/tests/lambda_tests --test-case="LambdaDock*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
+| 2026-05-31 | WM-COMP-6 | Verified slice | Inventory found single-plane RGB dmabuf support, renderer-derived feedback, separate KMS scanout capability checks, and missing layout/fd-size validation. Added `DmabufValidation` with overflow-safe layout checks and fd-size bounds validation before `wl_buffer` creation. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*dmabuf*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
