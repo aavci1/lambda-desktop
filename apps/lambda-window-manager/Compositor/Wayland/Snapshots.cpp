@@ -260,15 +260,34 @@ void appendSubsurfaceSnapshots(WaylandServer::Impl const* server,
                                std::vector<CommittedSurfaceSnapshot>& snapshots,
                                WaylandServer::Impl::Surface const* parent,
                                std::int32_t parentX,
-                               std::int32_t parentY) {
-  for (auto const& subsurface : server->subsurfaces_) {
-    if (!subsurface || subsurface->parent != parent || !subsurface->surface) continue;
-    WaylandServer::Impl::Surface const* surface = subsurface->surface;
-    if (!surfaceIsRenderable(surface)) continue;
-    std::int32_t const x = parentX + subsurface->x;
-    std::int32_t const y = parentY + subsurface->y;
+                               std::int32_t parentY,
+                               SubsurfaceStackLayer layer);
+
+void appendSubsurfaceTree(WaylandServer::Impl const* server,
+                          std::vector<CommittedSurfaceSnapshot>& snapshots,
+                          WaylandServer::Impl::Subsurface const* subsurface,
+                          std::int32_t parentX,
+                          std::int32_t parentY) {
+  if (!subsurface || !subsurface->surface) return;
+  WaylandServer::Impl::Surface const* surface = subsurface->surface;
+  std::int32_t const x = parentX + subsurface->x;
+  std::int32_t const y = parentY + subsurface->y;
+  appendSubsurfaceSnapshots(server, snapshots, surface, x, y, SubsurfaceStackLayer::Below);
+  if (surfaceIsRenderable(surface)) {
     snapshots.push_back(snapshotForSurface(server, surface, x, y, false));
-    appendSubsurfaceSnapshots(server, snapshots, surface, x, y);
+  }
+  appendSubsurfaceSnapshots(server, snapshots, surface, x, y, SubsurfaceStackLayer::Above);
+}
+
+void appendSubsurfaceSnapshots(WaylandServer::Impl const* server,
+                               std::vector<CommittedSurfaceSnapshot>& snapshots,
+                               WaylandServer::Impl::Surface const* parent,
+                               std::int32_t parentX,
+                               std::int32_t parentY,
+                               SubsurfaceStackLayer layer) {
+  for (auto const* subsurface : orderedSubsurfacesForParent(server, parent, layer)) {
+    if (!subsurface || !surfaceIsRenderable(subsurface->surface)) continue;
+    appendSubsurfaceTree(server, snapshots, subsurface, parentX, parentY);
   }
 }
 
@@ -317,6 +336,12 @@ void appendRenderableSurface(WaylandServer::Impl const* server,
   if (!wm::surfaceEligibleForPresentation(surface)) return;
   if (shellPanelFullyHidden(server, surface)) return;
   std::int32_t const presentationOffsetY = shellPanelPresentationOffsetY(server, surface);
+  appendSubsurfaceSnapshots(server,
+                            snapshots,
+                            surface,
+                            static_cast<std::int32_t>(wm::surfaceBufferOriginX(surface)),
+                            static_cast<std::int32_t>(wm::surfaceBufferOriginY(surface)) + presentationOffsetY,
+                            SubsurfaceStackLayer::Below);
   if (surfaceIsRenderable(surface)) {
     snapshots.push_back(snapshotForSurface(server, surface, surface->windowX, surface->windowY + presentationOffsetY, true));
   }
@@ -324,7 +349,8 @@ void appendRenderableSurface(WaylandServer::Impl const* server,
                             snapshots,
                             surface,
                             static_cast<std::int32_t>(wm::surfaceBufferOriginX(surface)),
-                            static_cast<std::int32_t>(wm::surfaceBufferOriginY(surface)) + presentationOffsetY);
+                            static_cast<std::int32_t>(wm::surfaceBufferOriginY(surface)) + presentationOffsetY,
+                            SubsurfaceStackLayer::Above);
 }
 
 } // namespace

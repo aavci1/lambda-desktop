@@ -166,14 +166,33 @@ void subsurfaceDestroy(wl_client*, wl_resource* resource) {
 void subsurfaceSetPosition(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y) {
   auto* subsurface = resourceData<WaylandServer::Impl::Subsurface>(resource);
   if (!subsurface) return;
-  subsurface->x = x;
-  subsurface->y = y;
+  subsurface->pendingX = x;
+  subsurface->pendingY = y;
 }
 
-void subsurfacePlaceAbove(wl_client*, wl_resource*, wl_resource*) {}
-void subsurfacePlaceBelow(wl_client*, wl_resource*, wl_resource*) {}
-void subsurfaceSetSync(wl_client*, wl_resource*) {}
-void subsurfaceSetDesync(wl_client*, wl_resource*) {}
+void subsurfacePlaceAbove(wl_client*, wl_resource* resource, wl_resource* siblingResource) {
+  auto* subsurface = resourceData<WaylandServer::Impl::Subsurface>(resource);
+  auto* sibling = resourceData<WaylandServer::Impl::Surface>(siblingResource);
+  (void)setSubsurfacePendingPlaceAbove(subsurface, sibling, resource);
+}
+
+void subsurfacePlaceBelow(wl_client*, wl_resource* resource, wl_resource* siblingResource) {
+  auto* subsurface = resourceData<WaylandServer::Impl::Subsurface>(resource);
+  auto* sibling = resourceData<WaylandServer::Impl::Surface>(siblingResource);
+  (void)setSubsurfacePendingPlaceBelow(subsurface, sibling, resource);
+}
+
+void subsurfaceSetSync(wl_client*, wl_resource* resource) {
+  auto* subsurface = resourceData<WaylandServer::Impl::Subsurface>(resource);
+  if (!subsurface) return;
+  subsurface->synchronized = true;
+}
+
+void subsurfaceSetDesync(wl_client*, wl_resource* resource) {
+  auto* subsurface = resourceData<WaylandServer::Impl::Subsurface>(resource);
+  if (!subsurface) return;
+  subsurface->synchronized = false;
+}
 
 struct wl_subsurface_interface const subsurfaceImpl{
     .destroy = subsurfaceDestroy,
@@ -200,11 +219,22 @@ void subcompositorGetSubsurface(wl_client* client,
     wl_resource_post_error(resource, WL_SUBCOMPOSITOR_ERROR_BAD_SURFACE, "wl_surface already has another role");
     return;
   }
+  for (auto* ancestor = parent; surfaceIsSubsurface(ancestor);) {
+    auto* role = ancestor->subsurfaceRole;
+    if (!role || !role->parent) break;
+    ancestor = role->parent;
+    if (ancestor == surface) {
+      wl_resource_post_error(resource, WL_SUBCOMPOSITOR_ERROR_BAD_SURFACE, "wl_surface cannot be an ancestor of its parent");
+      return;
+    }
+  }
 
   auto subsurface = std::make_unique<WaylandServer::Impl::Subsurface>();
   subsurface->server = server;
   subsurface->surface = surface;
   subsurface->parent = parent;
+  subsurface->order = server->nextSubsurfaceOrder_++;
+  subsurface->pendingOrder = subsurface->order;
   wl_resource* subsurfaceResource = wl_resource_create(client, &wl_subsurface_interface, 1, id);
   if (!subsurfaceResource) {
     wl_client_post_no_memory(client);
@@ -958,6 +988,11 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       flushLayerConfigure = true;
     }
   }
+  bool subsurfaceStateChanged = false;
+  if (surface->subsurfaceRole) {
+    subsurfaceStateChanged |= applySubsurfacePendingPosition(surface->subsurfaceRole);
+  }
+  subsurfaceStateChanged |= applySubsurfacePendingOrder(surface->server, surface);
   std::vector<WaylandServer::Impl::PresentationFeedback*> supersededFeedbacks =
       std::move(surface->presentationFeedbacks);
   surface->presentationFeedbacks.clear();
@@ -988,7 +1023,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     bool const needsBufferRefresh = damagePending && surface->bufferState.buffer;
     if (!viewportChanged && !backgroundBlurChanged && !protocolRenderStateChanged && !xdgRenderStateChanged &&
         !xdgConfigureStateChanged && !inputRegionChanged && !needsBufferRefresh && !layerCommit.stateChanged &&
-        surface->presentationFeedbacks.empty()) {
+        !subsurfaceStateChanged && surface->presentationFeedbacks.empty()) {
       if (flushLayerConfigure) surface->server->flushClients();
       traceCrashSurfaceCommit(surface, "state", 0u, 0u);
       clearPendingDamage(surface);
@@ -1042,7 +1077,8 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       traceResizeSurface("commit-state", surface);
     }
     if ((backgroundBlurChanged || protocolRenderStateChanged || xdgConfigureStateChanged ||
-         xdgRenderStateChanged || viewportChanged || layerCommit.stateChanged) && !serialBumped) {
+         xdgRenderStateChanged || viewportChanged || layerCommit.stateChanged || subsurfaceStateChanged) &&
+        !serialBumped) {
       bumpSurfaceSerial(surface);
     }
     if (flushLayerConfigure) surface->server->flushClients();

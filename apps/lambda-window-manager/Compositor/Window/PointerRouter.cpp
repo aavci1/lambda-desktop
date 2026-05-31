@@ -36,22 +36,28 @@ WaylandServer::Impl::Surface* subsurfaceAt(WaylandServer::Impl* server,
                                            float x,
                                            float y) {
   if (!server || !parent) return nullptr;
-  for (auto it = server->subsurfaces_.rbegin(); it != server->subsurfaces_.rend(); ++it) {
-    auto const& subsurface = *it;
-    if (!subsurface || subsurface->parent != parent || !subsurface->surface) continue;
-    WaylandServer::Impl::Surface* surface = subsurface->surface;
-    std::int32_t const width = displayWidth(surface);
-    std::int32_t const height = displayHeight(surface);
-    if (width <= 0 || height <= 0) continue;
-    float const left = parentX + static_cast<float>(subsurface->x);
-    float const top = parentY + static_cast<float>(subsurface->y);
-    float const right = left + static_cast<float>(width);
-    float const bottom = top + static_cast<float>(height);
-    if (!containsPoint(x, y, left, top, right, bottom)) continue;
-    if (!inputRegionContains(surface, x - left, y - top)) continue;
-    if (WaylandServer::Impl::Surface* nested = subsurfaceAt(server, surface, left, top, x, y)) return nested;
-    return surface;
-  }
+  auto hitLayer = [&](SubsurfaceStackLayer layer) -> WaylandServer::Impl::Surface* {
+    auto subsurfaces = orderedSubsurfacesForParent(server, parent, layer);
+    for (auto it = subsurfaces.rbegin(); it != subsurfaces.rend(); ++it) {
+      auto const* subsurface = *it;
+      if (!subsurface || !subsurface->surface) continue;
+      WaylandServer::Impl::Surface* surface = subsurface->surface;
+      std::int32_t const width = displayWidth(surface);
+      std::int32_t const height = displayHeight(surface);
+      if (width <= 0 || height <= 0) continue;
+      float const left = parentX + static_cast<float>(subsurface->x);
+      float const top = parentY + static_cast<float>(subsurface->y);
+      float const right = left + static_cast<float>(width);
+      float const bottom = top + static_cast<float>(height);
+      if (!containsPoint(x, y, left, top, right, bottom)) continue;
+      if (!inputRegionContains(surface, x - left, y - top)) continue;
+      if (WaylandServer::Impl::Surface* nested = subsurfaceAt(server, surface, left, top, x, y)) return nested;
+      return surface;
+    }
+    return nullptr;
+  };
+  if (WaylandServer::Impl::Surface* above = hitLayer(SubsurfaceStackLayer::Above)) return above;
+  if (WaylandServer::Impl::Surface* below = hitLayer(SubsurfaceStackLayer::Below)) return below;
   return nullptr;
 }
 

@@ -1,4 +1,8 @@
+#include "Compositor/Wayland/WaylandServerImpl.hpp"
+
 #include <doctest/doctest.h>
+
+#include <vector>
 
 namespace {
 
@@ -31,4 +35,63 @@ TEST_CASE("nested subsurface coordinates accumulate") {
   float const nestedLeft = 10.f + 5.f;
   float const nestedTop = 10.f + 5.f;
   CHECK(containsPoint(21.f, 21.f, nestedLeft, nestedTop, nestedLeft + 20.f, nestedTop + 20.f));
+}
+
+TEST_CASE("subsurface position is pending until the subsurface commits") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::Subsurface subsurface;
+  subsurface.x = 4;
+  subsurface.y = 5;
+  subsurface.pendingX = 40;
+  subsurface.pendingY = 50;
+
+  CHECK(subsurface.x == 4);
+  CHECK(subsurface.y == 5);
+
+  CHECK(applySubsurfacePendingPosition(&subsurface));
+  CHECK(subsurface.x == 40);
+  CHECK(subsurface.y == 50);
+  CHECK_FALSE(applySubsurfacePendingPosition(&subsurface));
+}
+
+TEST_CASE("subsurface sibling placement is pending until parent commit") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::Surface parent;
+  WaylandServer::Impl::Surface childSurfaceA;
+  WaylandServer::Impl::Surface childSurfaceB;
+  WaylandServer::Impl::Surface childSurfaceC;
+  WaylandServer::Impl::Subsurface childA;
+  WaylandServer::Impl::Subsurface childB;
+  WaylandServer::Impl::Subsurface childC;
+  childA.parent = &parent;
+  childA.surface = &childSurfaceA;
+  childA.order = 1;
+  childA.pendingOrder = 1;
+  childB.parent = &parent;
+  childB.surface = &childSurfaceB;
+  childB.order = 2;
+  childB.pendingOrder = 2;
+  childC.parent = &parent;
+  childC.surface = &childSurfaceC;
+  childC.order = 3;
+  childC.pendingOrder = 3;
+  std::vector<WaylandServer::Impl::Subsurface*> mutableChildren{&childA, &childB, &childC};
+  std::vector<WaylandServer::Impl::Subsurface const*> children{&childA, &childB, &childC};
+
+  REQUIRE(setSubsurfacePendingPlaceBelow(mutableChildren, &childC, &childSurfaceA));
+  auto currentOrder = orderedSubsurfacesForParent(children, &parent, SubsurfaceStackLayer::Above);
+  REQUIRE(currentOrder.size() == 3);
+  CHECK(currentOrder[0] == &childA);
+  CHECK(currentOrder[1] == &childB);
+  CHECK(currentOrder[2] == &childC);
+
+  CHECK(childC.pendingOrder < childA.pendingOrder);
+  CHECK(applySubsurfacePendingOrder(mutableChildren, &parent));
+  currentOrder = orderedSubsurfacesForParent(children, &parent, SubsurfaceStackLayer::Above);
+  REQUIRE(currentOrder.size() == 3);
+  CHECK(currentOrder[0] == &childC);
+  CHECK(currentOrder[1] == &childA);
+  CHECK(currentOrder[2] == &childB);
 }

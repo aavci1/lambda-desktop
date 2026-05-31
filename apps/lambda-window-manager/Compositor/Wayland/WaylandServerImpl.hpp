@@ -313,6 +313,7 @@ struct WaylandServer::Impl {
   float pointerX_ = 32.f;
   float pointerY_ = 32.f;
   std::uint64_t nextSurfaceId_ = 1;
+  std::uint64_t nextSubsurfaceOrder_ = 1;
   std::uint64_t contentSerial_ = 1;
   std::uint64_t nextActivationTokenId_ = 1;
   std::uint32_t nextConfigureSerial_ = 1;
@@ -562,6 +563,11 @@ inline std::int32_t surfaceCommittedDisplayHeight(WaylandServer::Impl::Surface c
   return std::max(1, surfaceTransformedBufferHeight(surface) / std::max(1, surface->bufferState.scale));
 }
 
+enum class SubsurfaceStackLayer : std::uint8_t {
+  Below,
+  Above,
+};
+
 struct WaylandServer::Impl::Subsurface {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
@@ -569,6 +575,13 @@ struct WaylandServer::Impl::Subsurface {
   Surface* parent = nullptr;
   std::int32_t x = 0;
   std::int32_t y = 0;
+  std::int32_t pendingX = 0;
+  std::int32_t pendingY = 0;
+  SubsurfaceStackLayer stackLayer = SubsurfaceStackLayer::Above;
+  SubsurfaceStackLayer pendingStackLayer = SubsurfaceStackLayer::Above;
+  std::uint64_t order = 0;
+  std::uint64_t pendingOrder = 0;
+  bool synchronized = true;
 };
 
 struct WaylandServer::Impl::Viewport {
@@ -769,6 +782,32 @@ LayerSurfaceCommitResult applyLayerSurfacePendingState(WaylandServer::Impl::Laye
                                                        wl_resource* errorResource = nullptr);
 bool markLayerSurfaceMapped(WaylandServer::Impl::LayerSurface* layerSurface);
 bool resetLayerSurfaceForUnmap(WaylandServer::Impl::LayerSurface* layerSurface);
+bool applySubsurfacePendingPosition(WaylandServer::Impl::Subsurface* subsurface);
+bool applySubsurfacePendingOrder(WaylandServer::Impl* server, WaylandServer::Impl::Surface* parent);
+bool applySubsurfacePendingOrder(std::vector<WaylandServer::Impl::Subsurface*> subsurfaces,
+                                 WaylandServer::Impl::Surface* parent);
+bool setSubsurfacePendingPlaceAbove(WaylandServer::Impl::Subsurface* subsurface,
+                                    WaylandServer::Impl::Surface* siblingSurface,
+                                    wl_resource* errorResource = nullptr);
+bool setSubsurfacePendingPlaceAbove(std::vector<WaylandServer::Impl::Subsurface*> subsurfaces,
+                                    WaylandServer::Impl::Subsurface* subsurface,
+                                    WaylandServer::Impl::Surface* siblingSurface,
+                                    wl_resource* errorResource = nullptr);
+bool setSubsurfacePendingPlaceBelow(WaylandServer::Impl::Subsurface* subsurface,
+                                    WaylandServer::Impl::Surface* siblingSurface,
+                                    wl_resource* errorResource = nullptr);
+bool setSubsurfacePendingPlaceBelow(std::vector<WaylandServer::Impl::Subsurface*> subsurfaces,
+                                    WaylandServer::Impl::Subsurface* subsurface,
+                                    WaylandServer::Impl::Surface* siblingSurface,
+                                    wl_resource* errorResource = nullptr);
+std::vector<WaylandServer::Impl::Subsurface const*> orderedSubsurfacesForParent(
+    WaylandServer::Impl const* server,
+    WaylandServer::Impl::Surface const* parent,
+    SubsurfaceStackLayer layer);
+std::vector<WaylandServer::Impl::Subsurface const*> orderedSubsurfacesForParent(
+    std::vector<WaylandServer::Impl::Subsurface const*> subsurfaces,
+    WaylandServer::Impl::Surface const* parent,
+    SubsurfaceStackLayer layer);
 void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs);
 void establishPopupGrab(WaylandServer::Impl* server,
                         WaylandServer::Impl::XdgPopup* popup,
