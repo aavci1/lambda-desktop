@@ -146,6 +146,8 @@ struct WaylandServer::Impl {
   void setPreferredScale(float scale);
   void setDmabufFormatModifierPreferences(std::vector<DmabufFormatModifierPreference> preferences);
   void setRetainedDmabufBufferIds(std::vector<std::uint64_t> bufferIds);
+  [[nodiscard]] bool bufferReleaseIsRetained(wl_resource* buffer) const;
+  void queueOrphanedBufferRelease(wl_resource* buffer);
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
   [[nodiscard]] bool hasActiveResizePacing() const noexcept;
@@ -250,6 +252,7 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<DmabufBuffer>> dmabufBuffers_;
   std::vector<DmabufFormatModifierPreference> dmabufFormatModifierPreferences_;
   std::vector<std::uint64_t> retainedDmabufBufferIds_;
+  std::vector<wl_resource*> orphanedBufferReleases_;
   std::uint64_t nextDmabufBufferId_ = 1;
   std::vector<std::unique_ptr<ToplevelDecoration>> toplevelDecorations_;
   std::vector<std::unique_ptr<XxCutouts>> cutouts_;

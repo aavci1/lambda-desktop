@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
+#include "Compositor/Wayland/BufferRelease.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "presentation-time-server-protocol.h"
@@ -231,21 +232,51 @@ bool isRetainedDmabufBuffer(WaylandServer::Impl const& server, wl_resource* reso
                               id) != server.retainedDmabufBufferIds_.end();
 }
 
+std::vector<PendingBufferReleaseRecord> bufferReleaseRecordsFor(WaylandServer::Impl const& server,
+                                                                std::vector<wl_resource*> const& queue) {
+  std::vector<PendingBufferReleaseRecord> records;
+  records.reserve(queue.size());
+  for (wl_resource* buffer : queue) {
+    if (!buffer) continue;
+    records.push_back({
+        .token = reinterpret_cast<std::uintptr_t>(buffer),
+        .dmabufBufferId = dmabufBufferIdForResource(server, buffer),
+    });
+  }
+  return records;
+}
+
+std::uint64_t releaseBufferQueue(WaylandServer::Impl const& server, std::vector<wl_resource*>& queue) {
+  std::vector<PendingBufferReleaseRecord> const records = bufferReleaseRecordsFor(server, queue);
+  BufferReleasePlan const plan = planBufferReleases(records, server.retainedDmabufBufferIds_);
+  queue.clear();
+  queue.reserve(plan.retained.size());
+  for (PendingBufferReleaseRecord const& record : plan.retained) {
+    queue.push_back(reinterpret_cast<wl_resource*>(record.token));
+  }
+  for (PendingBufferReleaseRecord const& record : plan.releasable) {
+    wl_buffer_send_release(reinterpret_cast<wl_resource*>(record.token));
+  }
+  return plan.releasable.size();
+}
+
+bool WaylandServer::Impl::bufferReleaseIsRetained(wl_resource* buffer) const {
+  return isRetainedDmabufBuffer(*this, buffer);
+}
+
+void WaylandServer::Impl::queueOrphanedBufferRelease(wl_resource* buffer) {
+  if (!buffer) return;
+  if (std::find(orphanedBufferReleases_.begin(), orphanedBufferReleases_.end(), buffer) ==
+      orphanedBufferReleases_.end()) {
+    orphanedBufferReleases_.push_back(buffer);
+  }
+}
+
 void WaylandServer::Impl::releasePendingBuffers() {
-  std::uint64_t releaseCount = 0;
+  std::uint64_t releaseCount = releaseBufferQueue(*this, orphanedBufferReleases_);
   for (auto const& surface : surfaces_) {
     if (!surface || surface->pendingBufferReleases.empty()) continue;
-    std::vector<wl_resource*> releases = std::move(surface->pendingBufferReleases);
-    surface->pendingBufferReleases.clear();
-    for (wl_resource* buffer : releases) {
-      if (!buffer) continue;
-      if (isRetainedDmabufBuffer(*this, buffer)) {
-        surface->pendingBufferReleases.push_back(buffer);
-        continue;
-      }
-      wl_buffer_send_release(buffer);
-      ++releaseCount;
-    }
+    releaseCount += releaseBufferQueue(*this, surface->pendingBufferReleases);
   }
   if (releaseCount > 0) {
     LAMBDA_RESIZE_TRACE("compositor",

@@ -15,6 +15,15 @@
 
 namespace lambda::compositor {
 
+void releaseOrDeferBufferRelease(WaylandServer::Impl* server, wl_resource* buffer) {
+  if (!server || !buffer) return;
+  if (server->bufferReleaseIsRetained(buffer)) {
+    server->queueOrphanedBufferRelease(buffer);
+    return;
+  }
+  wl_buffer_send_release(buffer);
+}
+
 bool resetXdgPopupRole(WaylandServer::Impl* server,
                        WaylandServer::Impl::XdgPopup* popup,
                        bool sendPopupDone) {
@@ -256,11 +265,11 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   }
   surface->pendingFrameCallbacks.clear();
   for (wl_resource* buffer : surface->pendingBufferReleases) {
-    if (buffer) wl_buffer_send_release(buffer);
+    releaseOrDeferBufferRelease(this, buffer);
   }
   surface->pendingBufferReleases.clear();
   if (surface->bufferState.buffer && surface->dmabufBuffer) {
-    wl_buffer_send_release(surface->bufferState.buffer);
+    releaseOrDeferBufferRelease(this, surface->bufferState.buffer);
   }
   clearSeatSerialsForSurface(this, surface);
   eraseResource(surfaces_, surface);
@@ -367,6 +376,10 @@ void WaylandServer::Impl::destroyShmBuffer(ShmBuffer* buffer) {
       releases.erase(std::remove(releases.begin(), releases.end(), buffer->resource), releases.end());
     }
   }
+  orphanedBufferReleases_.erase(std::remove(orphanedBufferReleases_.begin(),
+                                            orphanedBufferReleases_.end(),
+                                            buffer->resource),
+                                orphanedBufferReleases_.end());
   if (buffer->data) munmap(buffer->data, static_cast<std::size_t>(buffer->size));
   if (buffer->fd >= 0) close(buffer->fd);
   eraseResource(shmBuffers_, buffer);
@@ -421,6 +434,12 @@ void WaylandServer::Impl::destroyDmabufBuffer(DmabufBuffer* buffer) {
   for (auto& plane : buffer->planes) {
     if (plane.fd >= 0) close(plane.fd);
     plane.fd = -1;
+  }
+  if (bufferResource) {
+    orphanedBufferReleases_.erase(std::remove(orphanedBufferReleases_.begin(),
+                                              orphanedBufferReleases_.end(),
+                                              bufferResource),
+                                  orphanedBufferReleases_.end());
   }
   eraseResource(dmabufBuffers_, buffer);
 }
