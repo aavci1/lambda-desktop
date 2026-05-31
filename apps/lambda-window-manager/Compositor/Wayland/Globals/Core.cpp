@@ -361,14 +361,14 @@ std::int32_t committedDisplayHeight(WaylandServer::Impl::Surface const* surface)
 }
 
 std::int32_t committedWindowDisplayWidth(WaylandServer::Impl::Surface const* surface) {
-  return surface && surface->xdgWindowGeometrySet
-             ? surface->xdgWindowGeometryWidth
+  return surface && surface->xdgRoleState.windowGeometrySet
+             ? surface->xdgRoleState.windowGeometry.width
              : committedDisplayWidth(surface);
 }
 
 std::int32_t committedWindowDisplayHeight(WaylandServer::Impl::Surface const* surface) {
-  return surface && surface->xdgWindowGeometrySet
-             ? surface->xdgWindowGeometryHeight
+  return surface && surface->xdgRoleState.windowGeometrySet
+             ? surface->xdgRoleState.windowGeometry.height
              : committedDisplayHeight(surface);
 }
 
@@ -558,9 +558,9 @@ bool applyViewportState(WaylandServer::Impl::Surface* surface) {
     return true;
   }
 
-  if (surface->xdgWindowGeometrySet) {
-    surface->frameWidth = surface->xdgWindowGeometryWidth;
-    surface->frameHeight = surface->xdgWindowGeometryHeight;
+  if (surface->xdgRoleState.windowGeometrySet) {
+    surface->frameWidth = surface->xdgRoleState.windowGeometry.width;
+    surface->frameHeight = surface->xdgRoleState.windowGeometry.height;
   } else if (surface->viewportState.destinationSet) {
     surface->frameWidth = surface->viewportState.destinationWidth;
     surface->frameHeight = surface->viewportState.destinationHeight;
@@ -629,11 +629,13 @@ bool applyXdgProtocolState(WaylandServer::Impl::Surface* surface) {
     xdgSurface->windowGeometryHeight = xdgSurface->pendingWindowGeometryHeight;
     xdgSurface->windowGeometrySet = true;
     xdgSurface->pendingWindowGeometrySet = false;
-    surface->xdgWindowGeometrySet = true;
-    surface->xdgWindowGeometryX = xdgSurface->windowGeometryX;
-    surface->xdgWindowGeometryY = xdgSurface->windowGeometryY;
-    surface->xdgWindowGeometryWidth = xdgSurface->windowGeometryWidth;
-    surface->xdgWindowGeometryHeight = xdgSurface->windowGeometryHeight;
+    surface->xdgRoleState.windowGeometrySet = true;
+    surface->xdgRoleState.windowGeometry = WindowGeometry{
+        .x = xdgSurface->windowGeometryX,
+        .y = xdgSurface->windowGeometryY,
+        .width = xdgSurface->windowGeometryWidth,
+        .height = xdgSurface->windowGeometryHeight,
+    };
   }
 
   if (auto* toplevel = toplevelForSurface(surface->server, surface)) {

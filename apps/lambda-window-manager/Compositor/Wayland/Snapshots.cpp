@@ -75,17 +75,18 @@ bool fullscreenToplevel(WaylandServer::Impl::Surface const* surface) {
 
 bool canCropToXdgWindowGeometry(WaylandServer::Impl::Surface const* surface) {
   if (!surface ||
-      !surface->xdgWindowGeometrySet ||
+      !surface->xdgRoleState.windowGeometrySet ||
       surface->viewportState.sourceSet ||
       surface->viewportState.destinationSet) {
     return false;
   }
   if (surface->bufferState.transform != WL_OUTPUT_TRANSFORM_NORMAL) return false;
   std::int32_t const scale = std::max(1, surface->bufferState.scale);
-  std::int32_t const sourceX = surface->xdgWindowGeometryX * scale;
-  std::int32_t const sourceY = surface->xdgWindowGeometryY * scale;
-  std::int32_t const sourceWidth = surface->xdgWindowGeometryWidth * scale;
-  std::int32_t const sourceHeight = surface->xdgWindowGeometryHeight * scale;
+  WindowGeometry const& windowGeometry = surface->xdgRoleState.windowGeometry;
+  std::int32_t const sourceX = windowGeometry.x * scale;
+  std::int32_t const sourceY = windowGeometry.y * scale;
+  std::int32_t const sourceWidth = windowGeometry.width * scale;
+  std::int32_t const sourceHeight = windowGeometry.height * scale;
   return sourceX >= 0 &&
          sourceY >= 0 &&
          sourceWidth > 0 &&
@@ -151,17 +152,18 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       chromeButtonAt(server, surface, server->pointerX_, server->pointerY_, cutoutMode, width);
   bool const cropToWindowGeometry = canCropToXdgWindowGeometry(surface);
   std::int32_t const bufferScale = std::max(1, surface->bufferState.scale);
+  WindowGeometry const& xdgWindowGeometry = surface->xdgRoleState.windowGeometry;
   bool const fullscreen = fullscreenToplevel(surface);
-  float const sourceX = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryX * bufferScale)
+  float const sourceX = cropToWindowGeometry ? static_cast<float>(xdgWindowGeometry.x * bufferScale)
                                              : surface->viewportState.sourceSet ? surface->viewportState.sourceX : 0.f;
-  float const sourceY = cropToWindowGeometry ? static_cast<float>(surface->xdgWindowGeometryY * bufferScale)
+  float const sourceY = cropToWindowGeometry ? static_cast<float>(xdgWindowGeometry.y * bufferScale)
                                              : surface->viewportState.sourceSet ? surface->viewportState.sourceY : 0.f;
   float const sourceWidth = cropToWindowGeometry
-                                ? static_cast<float>(surface->xdgWindowGeometryWidth * bufferScale)
+                                ? static_cast<float>(xdgWindowGeometry.width * bufferScale)
                                 : surface->viewportState.sourceSet ? surface->viewportState.sourceWidth
                                                                     : static_cast<float>(surface->width);
   float const sourceHeight = cropToWindowGeometry
-                                 ? static_cast<float>(surface->xdgWindowGeometryHeight * bufferScale)
+                                 ? static_cast<float>(xdgWindowGeometry.height * bufferScale)
                                  : surface->viewportState.sourceSet ? surface->viewportState.sourceHeight
                                                                      : static_cast<float>(surface->height);
   std::int32_t const titleBarHeight = decorated && !cutoutMode && !fullscreen ? server->chromeConfig_.titleBarHeight : 0;

@@ -44,6 +44,7 @@ struct WaylandServer::Impl {
   struct SurfacePendingDamageState;
   struct SurfaceBufferState;
   struct SurfacePendingBufferState;
+  struct SurfaceXdgRoleState;
   struct Subsurface;
   struct XdgPositioner;
   struct XdgSurface;
@@ -384,6 +385,11 @@ struct WaylandServer::Impl::SurfacePendingBufferState {
   bool offsetSet = false;
 };
 
+struct WaylandServer::Impl::SurfaceXdgRoleState {
+  bool windowGeometrySet = false;
+  WindowGeometry windowGeometry;
+};
+
 struct WaylandServer::Impl::Surface {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
@@ -410,11 +416,7 @@ struct WaylandServer::Impl::Surface {
   std::int32_t height = 0;
   std::int32_t frameWidth = 0;
   std::int32_t frameHeight = 0;
-  bool xdgWindowGeometrySet = false;
-  std::int32_t xdgWindowGeometryX = 0;
-  std::int32_t xdgWindowGeometryY = 0;
-  std::int32_t xdgWindowGeometryWidth = 0;
-  std::int32_t xdgWindowGeometryHeight = 0;
+  SurfaceXdgRoleState xdgRoleState;
   SurfaceViewportState viewportState;
   SurfaceViewportState pendingViewportState;
   bool snapped = false;

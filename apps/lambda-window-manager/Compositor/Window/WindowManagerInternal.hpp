@@ -167,10 +167,14 @@ inline bool inputRegionContains(WaylandServer::Impl::Surface const* surface, flo
                      });
 }
 inline std::int32_t xdgWindowGeometryOffsetX(WaylandServer::Impl::Surface const* surface) {
-  return surface && surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryX : 0;
+  return surface && surface->xdgRoleState.windowGeometrySet
+             ? surface->xdgRoleState.windowGeometry.x
+             : 0;
 }
 inline std::int32_t xdgWindowGeometryOffsetY(WaylandServer::Impl::Surface const* surface) {
-  return surface && surface->xdgWindowGeometrySet ? surface->xdgWindowGeometryY : 0;
+  return surface && surface->xdgRoleState.windowGeometrySet
+             ? surface->xdgRoleState.windowGeometry.y
+             : 0;
 }
 inline float surfaceBufferOriginX(WaylandServer::Impl::Surface const* surface) {
   return surface ? static_cast<float>(surface->windowX - xdgWindowGeometryOffsetX(surface)) : 0.f;

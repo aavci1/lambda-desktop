@@ -225,11 +225,13 @@ TEST_CASE("xdg window geometry offsets surface-local input") {
   surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
   surface.windowX = 100;
   surface.windowY = 80;
-  surface.xdgWindowGeometrySet = true;
-  surface.xdgWindowGeometryX = 32;
-  surface.xdgWindowGeometryY = 24;
-  surface.xdgWindowGeometryWidth = 960;
-  surface.xdgWindowGeometryHeight = 640;
+  surface.xdgRoleState.windowGeometrySet = true;
+  surface.xdgRoleState.windowGeometry = lambda::compositor::WindowGeometry{
+      .x = 32,
+      .y = 24,
+      .width = 960,
+      .height = 640,
+  };
 
   CHECK(lambda::compositor::wm::surfaceBufferOriginX(&surface) == doctest::Approx(68.f));
   CHECK(lambda::compositor::wm::surfaceBufferOriginY(&surface) == doctest::Approx(56.f));

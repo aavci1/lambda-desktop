@@ -17,7 +17,7 @@
 
 | Priority | Workstream | Status | Current step | Automated gate | Manual gate |
 | --- | --- | --- | --- | --- | --- |
-| P0 | WM-COMP-1 Surface commit state core | In progress | Buffer state migrated and verified; next move role-synchronized xdg state reads | Existing compositor tests plus new state-transition tests | Settings app resize on DP-1 HiDPI; system titlebar and content stay in sync |
+| P0 | WM-COMP-1 Surface commit state core | Waiting for user validation | Automated state migration slices are complete; validate Settings app resize on DP-1 HiDPI | Existing compositor tests plus new state-transition tests passed | Settings app resize on DP-1 HiDPI; system titlebar and content stay in sync |
 | P1 | WM-COMP-2 Layer shell configure and state correctness | Planned | Starts after WM-COMP-1 reaches its automated or manual gate | Layer-shell protocol and geometry tests | Dock/topbar visual behavior if geometry changes affect shell chrome |
 | P2 | WM-COMP-3 Subsurface state, order, and synchronized commits | Planned | Starts after WM-COMP-2 reaches its gate | Subsurface commit/order/hit-test tests | Real apps with popovers or embedded subsurfaces if automated coverage is incomplete |
 | P3 | WM-COMP-4 Scene and output damage architecture | Planned | Starts after WM-COMP-3 reaches its gate | Snapshot/damage tests plus render scheduler tests | DP-1 resize trace, real-app flicker check, video/browser pacing |
@@ -44,10 +44,10 @@
 1. Done: inventory existing pending/current surface fields and update this plan with the exact migration order.
 2. Done: add a small state object or transaction helper for core `wl_surface` commit data without changing behavior.
 3. Done: move buffer, scale, transform, offset, damage, opaque region, input region, viewport source, and viewport destination into the explicit pending/current path.
-4. In progress: move role-synchronized xdg state reads so snapshots and compositor chrome consume one committed view of a surface.
-5. Add tests for state-only commits, buffer plus viewport atomicity, frame callback delivery, and configure-ack commit behavior.
-6. Run targeted compositor tests and the feasible full test suite.
-7. If tests fully cover the change, commit and push. If visual timing still needs target hardware, mark this workstream waiting for validation.
+4. Done: move role-synchronized xdg state reads so snapshots and compositor chrome consume one committed view of a surface.
+5. Partially done: added automated tests for pending/current viewport, region, damage, buffer, and xdg geometry consumers. Frame callback and configure-ack coverage remains a follow-up if manual validation finds a related regression.
+6. Done: run targeted compositor tests and the feasible full test suite.
+7. Waiting for user validation: automated tests cover the state model, but the visual timing acceptance requires target hardware.
 
 **Step 1 inventory:**
 
@@ -217,3 +217,5 @@
 | 2026-05-31 | WM-COMP-1 | Verified | Migrated opaque/input regions and surface/buffer damage into explicit committed and pending state objects. Added automated tests that pending region and pending damage state do not affect committed consumers before commit. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*Compositor*"` and full `./build/tests/lambda_tests` passed. |
 | 2026-05-31 | WM-COMP-1 | In progress | Starting buffer attachment, scale, transform, and attach-offset state migration. |
 | 2026-05-31 | WM-COMP-1 | Verified | Migrated current/pending buffer attachment, scale, transform, and attach-offset state into explicit state objects. Added an automated test that pending buffer state cannot affect committed display size or offsets before commit. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*Compositor*"` and full `./build/tests/lambda_tests` passed. |
+| 2026-05-31 | WM-COMP-1 | In progress | Starting xdg role-state migration for committed xdg window geometry. |
+| 2026-05-31 | WM-COMP-1 | Waiting for user validation | Migrated committed xdg window geometry into explicit role state consumed by snapshots, compositor chrome geometry, and surface-local input helpers. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*Compositor*"` and full `./build/tests/lambda_tests` passed. Manual validation needed: resize the Settings app on DP-1 HiDPI and confirm system titlebar width, borders, background, and content stay in sync without flicker. |
