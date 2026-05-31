@@ -536,6 +536,27 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   auto committedSurfaces = ctx.wayland.committedSurfaces();
   committedSurfaceCount = committedSurfaces.size();
   auto screenshotOverlay = ctx.wayland.screenshotSelectionOverlay();
+  std::optional<CommittedSurfaceSnapshot> softwareCursorSnapshot;
+  if (!ctx.appliedConfig.config.hardwareCursorEnabled || !ctx.hardwareCursorAvailable) {
+    softwareCursorSnapshot = ctx.wayland.cursorSurface();
+  }
+  bool const forceFullSceneDamage =
+      snapPreview.has_value() ||
+      screenshotOverlay.has_value() ||
+      ctx.screenshotFlashOpacity > 0.001f ||
+      !ctx.surfaceRenderState.closingSurfaces.empty();
+  SceneDamageResult const sceneDamage =
+      updateSceneDamage(ctx.surfaceRenderState.sceneDamage,
+                        committedSurfaces,
+                        softwareCursorSnapshot,
+                        ctx.wayland.logicalOutputWidth(),
+                        ctx.wayland.logicalOutputHeight(),
+                        forceFullSceneDamage);
+  LAMBDA_WINDOW_MANAGER_TRACE_PACING("scene-damage full=%d rects=%zu empty=%d surfaces=%zu\n",
+                            sceneDamage.fullOutput ? 1 : 0,
+                            sceneDamage.rectCount(),
+                            sceneDamage.empty() ? 1 : 0,
+                            committedSurfaces.size());
   bool const collectAgeProfile = ctx.detailedFrameProfile;
   std::uint64_t const renderSnapshotNsec = collectAgeProfile ? presentation::monotonicNanoseconds() : 0;
   auto ageMs = [renderSnapshotNsec](std::uint64_t thenNsec) {

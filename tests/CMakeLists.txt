@@ -62,6 +62,7 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
   list(APPEND _lambda_test_sources
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Chrome/WindowChromeRenderer.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Config/CompositorConfig.cpp
+    ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/SceneDamage.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Screenshot.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Surface/CommittedSurfacePainter.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Window/WindowGeometry.cpp
@@ -74,6 +75,7 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
     CompositorOutputSelectorTests.cpp
     CompositorPresentationFeedbackTests.cpp
     CompositorScreenshotTests.cpp
+    CompositorSceneDamageTests.cpp
     CompositorSnapshotBuilderTests.cpp
     CompositorSubsurfaceHitTests.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/LayerShellZones.cpp
