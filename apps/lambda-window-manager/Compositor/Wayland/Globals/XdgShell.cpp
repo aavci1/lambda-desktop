@@ -7,6 +7,7 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgPositionerState.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
@@ -500,11 +501,33 @@ void xdgWmBaseDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
+XdgPositionerRules positionerRules(WaylandServer::Impl::XdgPositioner const* positioner) {
+  if (!positioner) return {};
+  return {
+      .width = positioner->width,
+      .height = positioner->height,
+      .anchorRectWidth = positioner->anchorRectWidth,
+      .anchorRectHeight = positioner->anchorRectHeight,
+  };
+}
+
+bool positionerIsComplete(WaylandServer::Impl::XdgPositioner const* positioner) {
+  return xdgPositionerComplete(positionerRules(positioner));
+}
+
+void postInvalidPositionerInput(wl_resource* resource, char const* message) {
+  wl_resource_post_error(resource, XDG_POSITIONER_ERROR_INVALID_INPUT, "%s", message);
+}
+
 void xdgPositionerDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
 void xdgPositionerSetSize(wl_client*, wl_resource* resource, std::int32_t width, std::int32_t height) {
+  if (!xdgPositionerSizeInputValid(width, height)) {
+    postInvalidPositionerInput(resource, "xdg_positioner width and height must be positive");
+    return;
+  }
   auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
   positioner->width = width;
   positioner->height = height;
@@ -512,6 +535,10 @@ void xdgPositionerSetSize(wl_client*, wl_resource* resource, std::int32_t width,
 
 void xdgPositionerSetAnchorRect(wl_client*, wl_resource* resource, std::int32_t x, std::int32_t y,
                                 std::int32_t width, std::int32_t height) {
+  if (!xdgPositionerAnchorRectInputValid(width, height)) {
+    postInvalidPositionerInput(resource, "xdg_positioner anchor rectangle width and height must be non-negative");
+    return;
+  }
   auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
   positioner->anchorRectX = x;
   positioner->anchorRectY = y;
@@ -520,14 +547,27 @@ void xdgPositionerSetAnchorRect(wl_client*, wl_resource* resource, std::int32_t 
 }
 
 void xdgPositionerSetAnchor(wl_client*, wl_resource* resource, std::uint32_t anchor) {
+  if (!xdg_positioner_anchor_is_valid(anchor, static_cast<std::uint32_t>(wl_resource_get_version(resource)))) {
+    postInvalidPositionerInput(resource, "invalid xdg_positioner anchor value");
+    return;
+  }
   resourceData<WaylandServer::Impl::XdgPositioner>(resource)->anchor = anchor;
 }
 
 void xdgPositionerSetGravity(wl_client*, wl_resource* resource, std::uint32_t gravity) {
+  if (!xdg_positioner_gravity_is_valid(gravity, static_cast<std::uint32_t>(wl_resource_get_version(resource)))) {
+    postInvalidPositionerInput(resource, "invalid xdg_positioner gravity value");
+    return;
+  }
   resourceData<WaylandServer::Impl::XdgPositioner>(resource)->gravity = gravity;
 }
 
 void xdgPositionerSetConstraintAdjustment(wl_client*, wl_resource* resource, std::uint32_t adjustment) {
+  if (!xdg_positioner_constraint_adjustment_is_valid(adjustment,
+                                                    static_cast<std::uint32_t>(wl_resource_get_version(resource)))) {
+    postInvalidPositionerInput(resource, "invalid xdg_positioner constraint adjustment value");
+    return;
+  }
   resourceData<WaylandServer::Impl::XdgPositioner>(resource)->constraintAdjustment = adjustment;
 }
 
@@ -535,6 +575,25 @@ void xdgPositionerSetOffset(wl_client*, wl_resource* resource, std::int32_t x, s
   auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
   positioner->offsetX = x;
   positioner->offsetY = y;
+}
+
+void xdgPositionerSetReactive(wl_client*, wl_resource* resource) {
+  resourceData<WaylandServer::Impl::XdgPositioner>(resource)->reactive = true;
+}
+
+void xdgPositionerSetParentSize(wl_client*,
+                                wl_resource* resource,
+                                std::int32_t parentWidth,
+                                std::int32_t parentHeight) {
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
+  positioner->parentWidth = parentWidth;
+  positioner->parentHeight = parentHeight;
+}
+
+void xdgPositionerSetParentConfigure(wl_client*, wl_resource* resource, std::uint32_t serial) {
+  auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(resource);
+  positioner->hasParentConfigureSerial = true;
+  positioner->parentConfigureSerial = serial;
 }
 
 struct xdg_positioner_interface const positionerImpl{
@@ -545,16 +604,17 @@ struct xdg_positioner_interface const positionerImpl{
     .set_gravity = xdgPositionerSetGravity,
     .set_constraint_adjustment = xdgPositionerSetConstraintAdjustment,
     .set_offset = xdgPositionerSetOffset,
-    .set_reactive = [](wl_client*, wl_resource*) {},
-    .set_parent_size = [](wl_client*, wl_resource*, std::int32_t, std::int32_t) {},
-    .set_parent_configure = [](wl_client*, wl_resource*, std::uint32_t) {},
+    .set_reactive = xdgPositionerSetReactive,
+    .set_parent_size = xdgPositionerSetParentSize,
+    .set_parent_configure = xdgPositionerSetParentConfigure,
 };
 
 void xdgWmBaseCreatePositioner(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* server = serverFrom(resource);
   auto positioner = std::make_unique<WaylandServer::Impl::XdgPositioner>();
   positioner->server = server;
-  wl_resource* positionerResource = wl_resource_create(client, &xdg_positioner_interface, 6, id);
+  wl_resource* positionerResource =
+      wl_resource_create(client, &xdg_positioner_interface, wl_resource_get_version(resource), id);
   if (!positionerResource) {
     wl_client_post_no_memory(client);
     return;
@@ -703,6 +763,11 @@ void configurePopup(WaylandServer::Impl::XdgPopup* popup, WaylandServer::Impl::X
   surface->windowX = geometry.window.x;
   surface->windowY = geometry.window.y;
   setConfiguredFrameSize(surface, geometry.window.width, geometry.window.height);
+  popup->reactive = positioner->reactive;
+  popup->hasParentConfigureSerial = positioner->hasParentConfigureSerial;
+  popup->parentConfigureSerial = positioner->parentConfigureSerial;
+  popup->positionerParentWidth = positioner->parentWidth;
+  popup->positionerParentHeight = positioner->parentHeight;
   popup->configuredX = geometry.configureX;
   popup->configuredY = geometry.configureY;
   popup->configuredWidth = geometry.configureWidth;
@@ -748,6 +813,10 @@ void xdgPopupReposition(wl_client*, wl_resource* resource, wl_resource* position
   auto* popup = resourceData<WaylandServer::Impl::XdgPopup>(resource);
   auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(positionerResource);
   if (!popup || !positioner || popup->dismissed) return;
+  if (!positionerIsComplete(positioner)) {
+    wl_resource_post_error(resource, XDG_WM_BASE_ERROR_INVALID_POSITIONER, "invalid xdg_popup positioner");
+    return;
+  }
   configurePopup(popup, positioner);
   if (wl_resource_get_version(resource) >= XDG_POPUP_REPOSITIONED_SINCE_VERSION) {
     xdg_popup_send_repositioned(resource, token);
@@ -765,9 +834,7 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
                         wl_resource* parentResource, wl_resource* positionerResource) {
   auto* xdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(resource);
   auto* positioner = resourceData<WaylandServer::Impl::XdgPositioner>(positionerResource);
-  if (!xdgSurface || !xdgSurface->surface || !positioner ||
-      positioner->width <= 0 || positioner->height <= 0 ||
-      positioner->anchorRectWidth <= 0 || positioner->anchorRectHeight <= 0) {
+  if (!xdgSurface || !xdgSurface->surface || !positionerIsComplete(positioner)) {
     wl_resource_post_error(resource, XDG_WM_BASE_ERROR_INVALID_POSITIONER, "invalid xdg_popup positioner");
     return;
   }

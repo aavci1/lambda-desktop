@@ -1,4 +1,5 @@
 #include "Compositor/Window/WindowGeometry.hpp"
+#include "Compositor/Wayland/XdgPositionerState.hpp"
 
 #include <doctest/doctest.h>
 
@@ -285,6 +286,36 @@ TEST_CASE("compositor popup geometry clamps empty size to one pixel") {
   CHECK(popup.window.height == 1);
   CHECK(popup.configureWidth == 1);
   CHECK(popup.configureHeight == 1);
+}
+
+TEST_CASE("compositor xdg positioner validation mirrors wlroots request rules") {
+  CHECK(lambda::compositor::xdgPositionerSizeInputValid(1, 1));
+  CHECK_FALSE(lambda::compositor::xdgPositionerSizeInputValid(0, 1));
+  CHECK_FALSE(lambda::compositor::xdgPositionerSizeInputValid(1, 0));
+  CHECK_FALSE(lambda::compositor::xdgPositionerSizeInputValid(-1, 1));
+
+  CHECK(lambda::compositor::xdgPositionerAnchorRectInputValid(0, 0));
+  CHECK(lambda::compositor::xdgPositionerAnchorRectInputValid(32, 0));
+  CHECK_FALSE(lambda::compositor::xdgPositionerAnchorRectInputValid(-1, 0));
+  CHECK_FALSE(lambda::compositor::xdgPositionerAnchorRectInputValid(1, -1));
+}
+
+TEST_CASE("compositor xdg positioner completeness follows wlroots post-validation rule") {
+  lambda::compositor::XdgPositionerRules complete{
+      .width = 64,
+      .height = 32,
+      .anchorRectWidth = 1,
+      .anchorRectHeight = 0,
+  };
+  CHECK(lambda::compositor::xdgPositionerComplete(complete));
+
+  auto missingSize = complete;
+  missingSize.width = 0;
+  CHECK_FALSE(lambda::compositor::xdgPositionerComplete(missingSize));
+
+  auto missingAnchorWidth = complete;
+  missingAnchorWidth.anchorRectWidth = 0;
+  CHECK_FALSE(lambda::compositor::xdgPositionerComplete(missingAnchorWidth));
 }
 
 TEST_CASE("compositor popup screen geometry accumulates parent offsets") {

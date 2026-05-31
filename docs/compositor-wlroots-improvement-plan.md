@@ -23,6 +23,7 @@
 | P3 | WM-COMP-4 Scene and output damage architecture | Verified | Conservative scene damage, damage-aware atomic dirty skipping, and presented-scene frame callbacks are implemented | Snapshot/damage tests plus render scheduler tests pass | DP-1 resize, cursor, dock, and flicker validation passed |
 | P4 | WM-COMP-5 Seat serials and grab model | Verified | Data-device, clipboard, primary-selection, xdg grab, cursor serial validation, and dock-menu layer-shell lifecycle fixes are implemented and manually validated | Seat serial, popup grab, selection, layer-shell, and focus tests pass | Dock item right-click menu actions, app menus/popups, drag/drop, clipboard, and primary selection passed |
 | P5 | WM-COMP-6 DMABUF feedback and buffer lifetime | Verified | Automated protocol hardening is complete and target-hardware GPU-client/video validation passed | DMABUF validation and buffer release tests pass | User validation passed |
+| P6 | WM-COMP-7 XDG popup and positioner completeness | Verified slice | Added wlroots-aligned positioner request validation, stored reactive/parent metadata, fixed positioner resource versioning, and validated reposition completeness | Positioner validation, popup geometry, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol-validation slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -234,6 +235,41 @@
 - Buffer release timing does not allow clients to reuse buffers still needed by rendering or scanout.
 - Video and GPU-client validation passes on target hardware.
 
+## WM-COMP-7 XDG Popup and Positioner Completeness
+
+**Why this matters:** wlroots treats xdg positioners as explicit protocol objects with validated inputs, copied popup positioning rules, and completeness checks on both popup creation and reposition. Lambda has popup positioning and grab handling, but currently accepts some invalid positioner state too late, ignores `set_reactive`, `set_parent_size`, and `set_parent_configure`, and repositions popups without checking that the new positioner is complete.
+
+**Goal:** bring Lambda's xdg popup/positioner protocol behavior closer to wlroots while keeping the visual placement code isolated and testable.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgShell.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/WaylandServerImpl.hpp`
+- `apps/lambda-window-manager/Compositor/Window/WindowGeometry.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: added wlroots-aligned xdg positioner input validation, stored reactive/parent metadata, created positioner resources at the bound xdg-shell version, and validated complete positioners on popup creation and reposition.
+2. Pending: compare popup parent/topmost/destroy lifecycle semantics against wlroots and close any remaining protocol gaps that automated tests can cover.
+3. Pending: compare popup constraint adjustment behavior against wlroots' flip/slide/resize rules and decide whether Lambda's current clamp-only policy needs a compatible geometry implementation.
+4. Pending: run targeted popup/positioner tests and the broader feasible compositor suite after each slice.
+
+**Step 1 inventory:**
+
+- wlroots validates `set_size` immediately (`width > 0 && height > 0`) and posts `XDG_POSITIONER_ERROR_INVALID_INPUT` for invalid values. Lambda currently stores the values and only rejects some invalid state later during popup creation.
+- wlroots validates `set_anchor_rect` immediately (`width >= 0 && height >= 0`) and separately treats the positioner as incomplete until size and anchor width have been set. Lambda currently requires a positive anchor-rect height at popup creation, which is stricter than wlroots' current completeness check.
+- wlroots validates anchor, gravity, and constraint-adjustment enum values with the generated protocol validators. Lambda currently stores enum values directly.
+- wlroots stores `reactive`, `parent_size`, and `parent_configure_serial` in the positioner rules and copies them onto scheduled popup configure state. Lambda currently ignores those requests.
+- wlroots rejects incomplete positioners on both `get_popup` and `reposition`. Lambda currently validates only `get_popup`.
+
+**Acceptance criteria:**
+
+- Invalid xdg positioner setter inputs are rejected at request time.
+- Popup creation and reposition reject incomplete positioners consistently.
+- `set_reactive`, `set_parent_size`, and `set_parent_configure` state is preserved for popup configure decisions.
+- Automated tests cover positioner validation/completeness rules and existing popup placement behavior remains unchanged.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -268,3 +304,5 @@
 | 2026-05-31 | WM-COMP-6 | Verified slice | Split dmabuf feedback into scanout-preferred and renderer fallback tranches, stopped filtering legacy modifier events by KMS preferences, and fixed feedback event ordering to send tranche flags before tranche formats. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*dmabuf*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
 | 2026-05-31 | WM-COMP-6 | Verified slice | Release-lifetime inventory found that live surface queues respect KMS-retained dmabuf IDs, but `destroySurface` released pending/current buffers immediately. Added a server-level orphaned release queue so destroyed-surface retained dmabufs are held until KMS drops them, with tests for release planning. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*buffer release*"`, `./build/tests/lambda_tests --test-case="*dmabuf*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
 | 2026-05-31 | WM-COMP-6 | Verified | Rejected non-zero dmabuf buffer flags because the renderer does not yet implement `y_invert` or interlaced semantics; accepting them would produce incorrect output. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*dmabuf*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. User validation passed for target-hardware GPU-client/video and normal window use scenarios. |
+| 2026-05-31 | WM-COMP-7 | In progress | Inventory found missing wlroots-style xdg positioner setter validation, ignored reactive/parent metadata requests, hardcoded xdg_positioner resource versioning, and missing reposition completeness validation. Starting with the automated protocol-validation slice. |
+| 2026-05-31 | WM-COMP-7 | Verified slice | Added xdg_positioner request-time validation for size, anchor rectangle, anchor, gravity, and constraint-adjustment values; stored `set_reactive`, `set_parent_size`, and `set_parent_configure`; inherited the xdg_positioner resource version from the bound xdg_wm_base; and rejected incomplete positioners during popup reposition. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg positioner*"`, `./build/tests/lambda_tests --test-case="*popup*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |

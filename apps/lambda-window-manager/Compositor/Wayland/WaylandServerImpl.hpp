@@ -960,6 +960,11 @@ struct WaylandServer::Impl::XdgPositioner {
   std::uint32_t constraintAdjustment = XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_NONE;
   std::int32_t offsetX = 0;
   std::int32_t offsetY = 0;
+  bool reactive = false;
+  std::int32_t parentWidth = 0;
+  std::int32_t parentHeight = 0;
+  bool hasParentConfigureSerial = false;
+  std::uint32_t parentConfigureSerial = 0;
 };
 
 struct WaylandServer::Impl::XdgSurface {
@@ -1012,6 +1017,11 @@ struct WaylandServer::Impl::XdgPopup {
   std::int32_t configuredY = 0;
   std::int32_t configuredWidth = 1;
   std::int32_t configuredHeight = 1;
+  bool reactive = false;
+  std::int32_t positionerParentWidth = 0;
+  std::int32_t positionerParentHeight = 0;
+  bool hasParentConfigureSerial = false;
+  std::uint32_t parentConfigureSerial = 0;
   bool grabbed = false;
   bool dismissed = false;
 };
