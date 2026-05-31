@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/CursorShape.hpp"
 
+#include "Compositor/Wayland/CursorShapeState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "cursor-shape-v1-server-protocol.h"
@@ -94,6 +95,12 @@ struct wp_cursor_shape_device_v1_interface const cursorShapeDeviceImpl{
     .set_shape = cursorShapeDeviceSetShape,
 };
 
+void makeCursorShapeDeviceResourceInert(WaylandServer::Impl::CursorShapeDevice* device) {
+  if (!device || !device->resource) return;
+  wl_resource_set_user_data(device->resource, nullptr);
+  device->resource = nullptr;
+}
+
 void cursorShapeManagerGetPointer(wl_client* client, wl_resource* resource, std::uint32_t id,
                                   wl_resource* pointer) {
   auto* server = serverFrom(resource);
@@ -101,7 +108,10 @@ void cursorShapeManagerGetPointer(wl_client* client, wl_resource* resource, std:
   device->server = server;
   device->pointer = pointer;
   wl_resource* deviceResource =
-      wl_resource_create(client, &wp_cursor_shape_device_v1_interface, wl_resource_get_version(resource), id);
+      wl_resource_create(client,
+                         &wp_cursor_shape_device_v1_interface,
+                         cursorShapeResourceVersion(wl_resource_get_version(resource)),
+                         id);
   if (!deviceResource) {
     wl_client_post_no_memory(client);
     return;
@@ -115,12 +125,17 @@ void cursorShapeManagerGetPointer(wl_client* client, wl_resource* resource, std:
 struct wp_cursor_shape_manager_v1_interface const cursorShapeManagerImpl{
     .destroy = cursorShapeManagerDestroy,
     .get_pointer = cursorShapeManagerGetPointer,
+    .get_tablet_tool_v2 = nullptr,
 };
 
 
 void bindCursorShapeManagerImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &wp_cursor_shape_manager_v1_interface, std::min(version, 1u), id);
+      wl_resource_create(client, &wp_cursor_shape_manager_v1_interface, cursorShapeResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &cursorShapeManagerImpl, data, nullptr);
 }
 
@@ -129,6 +144,22 @@ void bindCursorShapeManagerImpl(wl_client* client, void* data, std::uint32_t ver
 
 void bindCursorShapeManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   bindCursorShapeManagerImpl(client, data, version, id);
+}
+
+void destroyCursorShapeDevicesForPointer(WaylandServer::Impl* server, wl_resource* pointerResource) {
+  if (!server || !pointerResource) return;
+
+  while (true) {
+    auto found = std::find_if(server->cursorShapeDevices_.begin(),
+                              server->cursorShapeDevices_.end(),
+                              [pointerResource](auto const& device) {
+                                return cursorShapeDeviceUsesPointer(device.get(), pointerResource);
+                              });
+    if (found == server->cursorShapeDevices_.end()) break;
+    auto* device = found->get();
+    makeCursorShapeDeviceResourceInert(device);
+    server->destroyCursorShapeDevice(device);
+  }
 }
 
 } // namespace lambda::compositor

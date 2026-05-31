@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/Seat.hpp"
 
+#include "Compositor/Wayland/Globals/CursorShape.hpp"
 #include "Compositor/Wayland/Globals/PointerExtensions.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
@@ -27,6 +28,7 @@ void seatDestroyResource(wl_resource* resource) {
 void pointerDestroyResource(wl_resource* resource) {
   if (auto* server = serverFrom(resource)) {
     removeResource(server->pointerResources_, resource);
+    destroyCursorShapeDevicesForPointer(server, resource);
     destroyPointerExtensionResourcesForPointer(server, resource);
   }
 }

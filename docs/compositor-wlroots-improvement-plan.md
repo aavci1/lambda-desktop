@@ -35,6 +35,7 @@
 | P15 | WM-COMP-16 XDG output runtime updates | Verified | XDG-output resources are tracked and receive logical-size updates when output scale changes, with wlroots-style done-event selection | XDG-output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P16 | WM-COMP-17 Output done-event batching | Verified | Runtime `wl_output.scale` and xdg-output logical-size updates are batched behind one `wl_output.done`, matching wlroots scheduling semantics | XDG-output/output helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P17 | WM-COMP-18 Pointer extension dependent-resource cleanup | Verified | Server-side relative-pointer and pointer-constraint objects are removed when their wl_pointer resource is destroyed, leaving protocol resources inert | Pointer-extension helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle slice |
+| P18 | WM-COMP-19 Cursor-shape dependent-resource cleanup | Verified | Cursor-shape device state is removed when the underlying wl_pointer resource is destroyed, leaving protocol resources inert | Cursor-shape helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -640,6 +641,39 @@
 - Extension protocol resources left alive after dependent pointer destruction are inert.
 - Resource version selection is centralized and covered by automated helper tests.
 
+## WM-COMP-19 Cursor-Shape Dependent-Resource Cleanup
+
+**Why this matters:** wlroots makes cursor-shape device resources inert when their dependent seat/pointer object goes away. Lambda currently keeps cursor-shape devices with a raw `wl_pointer` pointer, so a later `set_shape` request can inspect a destroyed pointer resource.
+
+**Goal:** remove server-side cursor-shape device state when the underlying `wl_pointer` resource is destroyed, and centralize cursor-shape version selection.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/CursorShape.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/CursorShape.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Seat.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/CursorShapeState.hpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: added cursor-shape version and dependent-pointer helpers.
+2. Done: used the helpers for cursor-shape resource creation and `wl_pointer` destruction cleanup.
+3. Done: ran targeted cursor-shape/compositor tests and the broader feasible suite.
+
+**Step 1 inventory:**
+
+- wlroots creates cursor-shape devices at the bound manager resource version and posts no-memory on bind/object allocation failure.
+- wlroots sets the cursor-shape device resource user data to null when dependent seat-client/pointer state is destroyed, leaving later resource destruction inert.
+- Lambda creates cursor-shape devices at the manager version, but lacks a manager bind no-memory guard and does not remove devices when `wl_pointer` is destroyed.
+
+**Acceptance criteria:**
+
+- Destroying a `wl_pointer` removes associated cursor-shape device server objects.
+- Cursor-shape protocol resources left alive after dependent pointer destruction are inert.
+- Manager bind allocation failure posts no-memory.
+- Resource version selection and dependent-pointer matching are covered by automated helper tests.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -720,3 +754,5 @@
 | 2026-05-31 | WM-COMP-17 | Verified | Batched runtime scale notifications by sending `wl_output.scale`, then xdg-output logical details with only wl_output done suppressed, then one final `wl_output.done` per output resource. Pre-v3 xdg-output resources still receive `zxdg_output_v1.done`. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*xdg output*,*output*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-18 | In progress | Pointer-extension comparison found wlroots removes server-side relative-pointer and pointer-constraint state when the underlying `wl_pointer` resource is destroyed, while leaving the extension protocol resource inert. Implementing pointer-resource cleanup helpers and shared version caps. |
 | 2026-05-31 | WM-COMP-18 | Verified | Added shared pointer-extension version helpers, matched extension objects by dependent `wl_pointer`, and changed `wl_pointer` destruction to inert and remove associated relative-pointer and pointer-constraint server objects instead of retaining null-pointer entries. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*pointer extension*,*pointer constraint*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-19 | In progress | Cursor-shape comparison found wlroots makes cursor-shape device resources inert when their dependent seat/pointer object is destroyed. Lambda retains cursor-shape devices with raw `wl_pointer` pointers. Implementing dependent-pointer cleanup and bind no-memory handling. |
+| 2026-05-31 | WM-COMP-19 | Verified | Added cursor-shape version and dependent-pointer helpers, guarded manager bind allocation failure, created devices at the capped manager version, and changed `wl_pointer` destruction to inert and remove associated cursor-shape devices. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*cursor shape*,*pointer extension*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
