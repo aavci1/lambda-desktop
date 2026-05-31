@@ -274,6 +274,7 @@ void appendSubsurfaceSnapshots(WaylandServer::Impl const* server,
 
 bool layerSurfaceAboveWindows(WaylandServer::Impl::Surface const* surface) {
   return surfaceIsLayerSurface(surface) && surface->layerSurface &&
+         surface->layerSurface->mapped &&
          surface->layerSurface->layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP;
 }
 
@@ -284,6 +285,7 @@ bool renderInPass(WaylandServer::Impl::Surface const* surface, bool aboveWindowL
 
 bool isDockLayer(WaylandServer::Impl::Surface const* surface) {
   return surfaceIsLayerSurface(surface) && surface->layerSurface &&
+         surface->layerSurface->mapped &&
          surface->layerSurface->nameSpace == "lambda.dock";
 }
 
@@ -340,9 +342,11 @@ std::vector<CommittedSurfaceSnapshot> WaylandServer::Impl::committedSurfaces() c
       std::stable_sort(passSurfaces.begin(), passSurfaces.end(),
                        [](WaylandServer::Impl::Surface const* a, WaylandServer::Impl::Surface const* b) {
                          std::uint32_t const layerA =
-                             a->layerSurface ? a->layerSurface->layer : ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+                             a->layerSurface ? a->layerSurface->layer
+                                             : static_cast<std::uint32_t>(ZWLR_LAYER_SHELL_V1_LAYER_TOP);
                          std::uint32_t const layerB =
-                             b->layerSurface ? b->layerSurface->layer : ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+                             b->layerSurface ? b->layerSurface->layer
+                                             : static_cast<std::uint32_t>(ZWLR_LAYER_SHELL_V1_LAYER_TOP);
                          return layerA < layerB;
                        });
     }

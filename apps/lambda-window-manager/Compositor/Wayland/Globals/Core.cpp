@@ -929,11 +929,34 @@ void bumpSurfaceSerial(WaylandServer::Impl::Surface* surface) {
 void surfaceCommit(wl_client*, wl_resource* resource) {
   auto* surface = resourceData<WaylandServer::Impl::Surface>(resource);
   bool const hasBufferAttach = surface->pendingBufferState.bufferAttached;
-  if (surface->layerSurface && !surface->layerSurface->configured && !hasBufferAttach) {
-    surface->layerSurface->configured = true;
-    sendLayerConfigure(surface->layerSurface);
-    surface->server->flushClients();
-    return;
+  bool const hasNonNullBufferAttach = hasBufferAttach && surface->pendingBufferState.buffer != nullptr;
+  bool const hasNullBufferAttach = hasBufferAttach && surface->pendingBufferState.buffer == nullptr;
+  LayerSurfaceCommitResult layerCommit;
+  bool flushLayerConfigure = false;
+  if (surface->layerSurface) {
+    layerCommit = applyLayerSurfacePendingState(surface->layerSurface, resource);
+    if (!layerCommit.valid) return;
+    if (layerCommit.stateChanged) {
+      bool const geometryChanged = applyLayerGeometry(surface->layerSurface);
+      refreshShellReservedZones(surface->server);
+      if (geometryChanged) ++surface->server->contentSerial_;
+    }
+    if (hasNullBufferAttach && resetLayerSurfaceForUnmap(surface->layerSurface)) {
+      refreshShellReservedZones(surface->server);
+    }
+    if (!surface->layerSurface->initialized && !hasBufferAttach) {
+      surface->layerSurface->initialized = true;
+      sendLayerConfigure(surface->layerSurface);
+      flushLayerConfigure = true;
+    } else if (hasNonNullBufferAttach && !surface->layerSurface->configured) {
+      wl_resource_post_error(surface->layerSurface->resource,
+                             ZWLR_LAYER_SHELL_V1_ERROR_ALREADY_CONSTRUCTED,
+                             "layer-shell surface committed a buffer before ack_configure");
+      return;
+    } else if (layerCommit.configureNeeded && surface->layerSurface->initialized) {
+      sendLayerConfigure(surface->layerSurface);
+      flushLayerConfigure = true;
+    }
   }
   std::vector<WaylandServer::Impl::PresentationFeedback*> supersededFeedbacks =
       std::move(surface->presentationFeedbacks);
@@ -964,8 +987,9 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
     bool serialBumped = false;
     bool const needsBufferRefresh = damagePending && surface->bufferState.buffer;
     if (!viewportChanged && !backgroundBlurChanged && !protocolRenderStateChanged && !xdgRenderStateChanged &&
-        !xdgConfigureStateChanged && !inputRegionChanged && !needsBufferRefresh &&
+        !xdgConfigureStateChanged && !inputRegionChanged && !needsBufferRefresh && !layerCommit.stateChanged &&
         surface->presentationFeedbacks.empty()) {
+      if (flushLayerConfigure) surface->server->flushClients();
       traceCrashSurfaceCommit(surface, "state", 0u, 0u);
       clearPendingDamage(surface);
       return;
@@ -1018,9 +1042,10 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
       traceResizeSurface("commit-state", surface);
     }
     if ((backgroundBlurChanged || protocolRenderStateChanged || xdgConfigureStateChanged ||
-         xdgRenderStateChanged || viewportChanged) && !serialBumped) {
+         xdgRenderStateChanged || viewportChanged || layerCommit.stateChanged) && !serialBumped) {
       bumpSurfaceSerial(surface);
     }
+    if (flushLayerConfigure) surface->server->flushClients();
     clearPendingDamage(surface);
     traceCrashSurfaceCommit(surface, "state", 0u, 0u);
     return;
@@ -1053,6 +1078,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         traceConfigureCommitLag("commit-match-shm", surface);
         clearMatchedConfigureCommit(surface);
         applyLayerGeometry(surface->layerSurface);
+        if (markLayerSurfaceMapped(surface->layerSurface)) refreshShellReservedZones(surface->server);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
         surface->dmabufBuffer = nullptr;
         appendCommittedBufferDamage(surface);
@@ -1083,6 +1109,7 @@ void surfaceCommit(wl_client*, wl_resource* resource) {
         traceConfigureCommitLag("commit-match-dmabuf", surface);
         clearMatchedConfigureCommit(surface);
         applyLayerGeometry(surface->layerSurface);
+        if (markLayerSurfaceMapped(surface->layerSurface)) refreshShellReservedZones(surface->server);
         maybeSendInitialCutoutsConfigure(surface->server, surface);
         surface->dmabufBuffer = dmabufBuffer;
         appendCommittedBufferDamage(surface);

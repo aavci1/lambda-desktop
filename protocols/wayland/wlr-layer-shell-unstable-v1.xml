@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="wlr_layer_shell_unstable_v1">
-  <interface name="zwlr_layer_shell_v1" version="1">
+  <interface name="zwlr_layer_shell_v1" version="4">
     <enum name="error">
       <entry name="role" value="0"/>
       <entry name="invalid_layer" value="1"/>
@@ -22,10 +22,11 @@
     <request name="destroy" type="destructor"/>
   </interface>
 
-  <interface name="zwlr_layer_surface_v1" version="1">
+  <interface name="zwlr_layer_surface_v1" version="4">
     <enum name="keyboard_interactivity">
       <entry name="none" value="0"/>
       <entry name="exclusive" value="1"/>
+      <entry name="on_demand" value="2" since="4"/>
     </enum>
     <enum name="error">
       <entry name="invalid_surface_state" value="0"/>
@@ -71,5 +72,8 @@
       <arg name="height" type="uint"/>
     </event>
     <event name="closed"/>
+    <request name="set_layer" since="2">
+      <arg name="layer" type="uint" enum="zwlr_layer_shell_v1.layer"/>
+    </request>
   </interface>
 </protocol>

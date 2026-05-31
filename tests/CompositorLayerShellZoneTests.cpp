@@ -1,4 +1,5 @@
 #include "Compositor/Wayland/LayerShellZones.hpp"
+#include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include <doctest/doctest.h>
 
@@ -60,4 +61,129 @@ TEST_CASE("layer shell configure size resolves output-relative dimensions") {
   });
   CHECK(floating.width == 0);
   CHECK(floating.height == 0);
+}
+
+TEST_CASE("layer shell pending state applies only on commit") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::LayerSurface layer;
+  layer.width = 120;
+  layer.height = 36;
+  layer.anchor = kLayerShellAnchorBottom;
+
+  layer.pending.width = 240;
+  layer.pending.height = 48;
+  layer.pending.sizeSet = true;
+  layer.pending.anchor = kLayerShellAnchorBottom | kLayerShellAnchorLeft | kLayerShellAnchorRight;
+  layer.pending.anchorSet = true;
+  layer.pending.exclusiveZone = 48;
+  layer.pending.exclusiveZoneSet = true;
+  layer.pending.marginBottom = 8;
+  layer.pending.marginSet = true;
+  layer.pending.keyboardInteractivity = ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE;
+  layer.pending.keyboardInteractivitySet = true;
+
+  CHECK(layer.width == 120);
+  CHECK(layer.height == 36);
+  CHECK(layer.anchor == kLayerShellAnchorBottom);
+
+  LayerSurfaceCommitResult const result = applyLayerSurfacePendingState(&layer);
+
+  CHECK(result.valid);
+  CHECK(result.stateChanged);
+  CHECK(result.configureNeeded);
+  CHECK(layer.width == 240);
+  CHECK(layer.height == 48);
+  CHECK(layer.anchor == (kLayerShellAnchorBottom | kLayerShellAnchorLeft | kLayerShellAnchorRight));
+  CHECK(layer.exclusiveZone == 48);
+  CHECK(layer.marginBottom == 8);
+  CHECK(layer.keyboardInteractivity == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE);
+  CHECK_FALSE(layer.pending.sizeSet);
+  CHECK_FALSE(layer.pending.anchorSet);
+  CHECK_FALSE(layer.pending.exclusiveZoneSet);
+  CHECK_FALSE(layer.pending.marginSet);
+  CHECK_FALSE(layer.pending.keyboardInteractivitySet);
+}
+
+TEST_CASE("layer shell pending state rejects omitted dimensions without opposing anchors") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::LayerSurface layer;
+  layer.width = 120;
+  layer.height = 36;
+  layer.anchor = kLayerShellAnchorTop;
+  layer.pending.width = 0;
+  layer.pending.height = 36;
+  layer.pending.sizeSet = true;
+
+  LayerSurfaceCommitResult const result = applyLayerSurfacePendingState(&layer);
+
+  CHECK_FALSE(result.valid);
+  CHECK(layer.width == 120);
+  CHECK(layer.pending.sizeSet);
+}
+
+TEST_CASE("layer shell configure ack validates serials and applies on commit") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::LayerSurface layer;
+  layer.width = 120;
+  layer.height = 36;
+  layer.pendingConfigures.push_back({.serial = 11, .width = 640, .height = 32});
+  layer.pendingConfigures.push_back({.serial = 12, .width = 800, .height = 32});
+
+  CHECK_FALSE(ackLayerSurfaceConfigure(&layer, 10));
+  CHECK_FALSE(layer.pending.configureAcked);
+
+  CHECK(ackLayerSurfaceConfigure(&layer, 11));
+  CHECK(layer.configured);
+  CHECK(layer.pending.configureAcked);
+  CHECK(layer.pending.configureSerial == 11);
+  CHECK(layer.pending.configureWidth == 640);
+  CHECK(layer.pending.configureHeight == 32);
+  REQUIRE(layer.pendingConfigures.size() == 1);
+  CHECK(layer.pendingConfigures.front().serial == 12);
+
+  LayerSurfaceCommitResult const result = applyLayerSurfacePendingState(&layer);
+
+  CHECK(result.valid);
+  CHECK(result.stateChanged);
+  CHECK(layer.configureSerial == 11);
+  CHECK(layer.configureWidth == 640);
+  CHECK(layer.configureHeight == 32);
+  CHECK_FALSE(layer.pending.configureAcked);
+}
+
+TEST_CASE("layer shell map and unmap reset configure state") {
+  using namespace lambda::compositor;
+
+  WaylandServer::Impl::LayerSurface layer;
+  layer.initialized = true;
+  layer.configured = true;
+  layer.configureSerial = 42;
+  layer.configureWidth = 640;
+  layer.configureHeight = 32;
+  layer.pending.configureAcked = true;
+  layer.pending.configureSerial = 43;
+  layer.pending.configureWidth = 800;
+  layer.pending.configureHeight = 32;
+  layer.pendingConfigures.push_back({.serial = 44, .width = 800, .height = 32});
+
+  CHECK(markLayerSurfaceMapped(&layer));
+  CHECK(layer.mapped);
+  CHECK_FALSE(markLayerSurfaceMapped(&layer));
+
+  CHECK(resetLayerSurfaceForUnmap(&layer));
+  CHECK_FALSE(layer.mapped);
+  CHECK_FALSE(layer.configured);
+  CHECK_FALSE(layer.initialized);
+  CHECK(layer.configureSerial == 0);
+  CHECK(layer.configureWidth == 0);
+  CHECK(layer.configureHeight == 0);
+  CHECK_FALSE(layer.pending.configureAcked);
+  CHECK(layer.pending.configureSerial == 0);
+  CHECK(layer.pending.configureWidth == 0);
+  CHECK(layer.pending.configureHeight == 0);
+  CHECK(layer.pendingConfigures.empty());
+  CHECK_FALSE(resetLayerSurfaceForUnmap(&layer));
 }

@@ -77,6 +77,7 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
     CompositorSnapshotBuilderTests.cpp
     CompositorSubsurfaceHitTests.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/LayerShellZones.cpp
+    ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/Wayland/LayerShellState.cpp
     ${PROJECT_SOURCE_DIR}/apps/lambda-window-manager/Compositor/PresenterEnv.cpp
     VulkanRenderTargetTests.cpp
   )

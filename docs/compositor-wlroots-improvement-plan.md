@@ -17,9 +17,9 @@
 
 | Priority | Workstream | Status | Current step | Automated gate | Manual gate |
 | --- | --- | --- | --- | --- | --- |
-| P0 | WM-COMP-1 Surface commit state core | Waiting for user validation | Automated state migration slices are complete; validate Settings app resize on DP-1 HiDPI | Existing compositor tests plus new state-transition tests passed | Settings app resize on DP-1 HiDPI; system titlebar and content stay in sync |
-| P1 | WM-COMP-2 Layer shell configure and state correctness | Planned | Starts after WM-COMP-1 reaches its automated or manual gate | Layer-shell protocol and geometry tests | Dock/topbar visual behavior if geometry changes affect shell chrome |
-| P2 | WM-COMP-3 Subsurface state, order, and synchronized commits | Planned | Starts after WM-COMP-2 reaches its gate | Subsurface commit/order/hit-test tests | Real apps with popovers or embedded subsurfaces if automated coverage is incomplete |
+| P0 | WM-COMP-1 Surface commit state core | Deferred | Manual validation still shows momentary non-synced Settings resize frames on DP-1 HiDPI; failed buffer-retention experiment was dropped | Existing committed state-transition tests pass | Deferred by user request before deeper rendering-architecture work |
+| P1 | WM-COMP-2 Layer shell configure and state correctness | Verified | Implemented pending/current layer state, configure serial validation, mapped/unmapped state, initial commit enforcement, and layer-shell v4 binding | `lambda_tests` layer/compositor suites and broader feasible suite pass | No manual gate needed for this protocol-state slice |
+| P2 | WM-COMP-3 Subsurface state, order, and synchronized commits | Planned | Starts after WM-COMP-2 commit is pushed | Subsurface commit/order/hit-test tests | Real apps with popovers or embedded subsurfaces if automated coverage is incomplete |
 | P3 | WM-COMP-4 Scene and output damage architecture | Planned | Starts after WM-COMP-3 reaches its gate | Snapshot/damage tests plus render scheduler tests | DP-1 resize trace, real-app flicker check, video/browser pacing |
 | P4 | WM-COMP-5 Seat serials and grab model | Planned | Starts after WM-COMP-4 reaches its gate | Seat serial, popup grab, selection, and focus tests | Popups, drag/drop, clipboard, and menu behavior in real apps |
 | P5 | WM-COMP-6 DMABUF feedback and buffer lifetime | Planned | Starts after WM-COMP-5 reaches its gate | DMABUF validation and buffer release tests where possible | GPU-client/video validation on target hardware |
@@ -47,7 +47,9 @@
 4. Done: move role-synchronized xdg state reads so snapshots and compositor chrome consume one committed view of a surface.
 5. Partially done: added automated tests for pending/current viewport, region, damage, buffer, and xdg geometry consumers. Frame callback and configure-ack coverage remains a follow-up if manual validation finds a related regression.
 6. Done: run targeted compositor tests and the feasible full test suite.
-7. Waiting for user validation: automated tests cover the state model, but the visual timing acceptance requires target hardware.
+7. Validation failed: user saw momentary non-synced frames without flicker during Settings resize on DP-1 HiDPI.
+8. Deferred: a frame-aware buffer-retention experiment was tested and did not remove the momentary non-synced frames, so that uncommitted patch was dropped.
+9. Deferred by user request: move on to WM-COMP-2 and return later for deeper rendering-architecture work.
 
 **Step 1 inventory:**
 
@@ -75,22 +77,26 @@
 
 - `apps/lambda-window-manager/Compositor/Wayland/Globals/LayerShell.cpp`
 - `apps/lambda-window-manager/Compositor/Wayland/WaylandServerImpl.hpp`
-- `apps/lambda-window-manager/Compositor/LayerShellZones.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/LayerShellState.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/LayerShellZones.cpp`
 - `tests/`
 
 **Implementation steps:**
 
-1. Add layer configure serial tracking and `ack_configure` validation.
-2. Move `set_size`, `set_anchor`, `set_margin`, `set_exclusive_zone`, `set_keyboard_interactivity`, and `set_layer` into pending layer state.
-3. Apply pending layer state only on the surface commit that commits the acknowledged configure state.
-4. Recompute exclusive zones and layer placement from committed state.
-5. Add tests for invalid serials, delayed acks, pending property changes, and dock/topbar geometry.
+1. Done: added layer configure serial tracking and `ack_configure` validation.
+2. Done: moved `set_size`, `set_anchor`, `set_margin`, `set_exclusive_zone`, `set_keyboard_interactivity`, and `set_layer` into pending layer state.
+3. Done: apply pending layer state on `wl_surface.commit`; initial buffer commits before configure acknowledgement are rejected.
+4. Done: recompute exclusive zones and layer placement from committed state.
+5. Done: track mapped/unmapped state; null-buffer unmap clears configure state and reserved zones ignore unmapped layer surfaces.
+6. Done: updated the local wlr-layer-shell XML to v4, including `on_demand` keyboard interactivity and `set_layer` v2, and bind server/client resources up to v4.
+7. Done: added tests for invalid serials, pending property changes, omitted dimensions without opposing anchors, configure acknowledgement state, and map/unmap reset behavior.
+8. Done: build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*layer*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed.
 
 **Acceptance criteria:**
 
 - Invalid layer-shell ack serials are rejected.
 - Layer placement and exclusive zones update from committed state, not request-time state.
-- Dock and topbar layout tests pass without relying on timing side effects.
+- Layer-shell geometry, reserved-zone, configure, and map/unmap tests pass without relying on timing side effects.
 
 ## WM-COMP-3 Subsurface State, Order, and Synchronized Commits
 
@@ -219,3 +225,6 @@
 | 2026-05-31 | WM-COMP-1 | Verified | Migrated current/pending buffer attachment, scale, transform, and attach-offset state into explicit state objects. Added an automated test that pending buffer state cannot affect committed display size or offsets before commit. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*Compositor*"` and full `./build/tests/lambda_tests` passed. |
 | 2026-05-31 | WM-COMP-1 | In progress | Starting xdg role-state migration for committed xdg window geometry. |
 | 2026-05-31 | WM-COMP-1 | Waiting for user validation | Migrated committed xdg window geometry into explicit role state consumed by snapshots, compositor chrome geometry, and surface-local input helpers. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*Compositor*"` and full `./build/tests/lambda_tests` passed. Manual validation needed: resize the Settings app on DP-1 HiDPI and confirm system titlebar width, borders, background, and content stay in sync without flicker. |
+| 2026-05-31 | WM-COMP-1 | Validation failed | User validation found momentary non-synced titlebar/content frames during resize, with no flicker. Next step is to trace and remove the remaining geometry split in the snapshot/render path. |
+| 2026-05-31 | WM-COMP-1 | Deferred | User requested deferring the remaining titlebar/content non-synced-frame issue and moving to the next plan item. The failed buffer-retention experiment was dropped before continuing. |
+| 2026-05-31 | WM-COMP-2 | Verified | Implemented wlroots-style layer-shell pending/current state, configure serial validation, invalid initial buffer commit rejection, mapped/unmapped state reset on null-buffer unmap, committed-state exclusive-zone recomputation, and layer-shell v4 binding. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*layer*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |

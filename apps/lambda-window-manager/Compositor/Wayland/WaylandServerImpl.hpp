@@ -595,6 +595,35 @@ struct WaylandServer::Impl::IdleInhibitor {
   Surface* surface = nullptr;
 };
 
+struct LayerSurfacePendingState {
+  bool sizeSet = false;
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+  bool anchorSet = false;
+  std::uint32_t anchor = 0;
+  bool exclusiveZoneSet = false;
+  std::int32_t exclusiveZone = 0;
+  bool keyboardInteractivitySet = false;
+  std::uint32_t keyboardInteractivity = 0;
+  bool marginSet = false;
+  std::int32_t marginTop = 0;
+  std::int32_t marginRight = 0;
+  std::int32_t marginBottom = 0;
+  std::int32_t marginLeft = 0;
+  bool layerSet = false;
+  std::uint32_t layer = ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+  bool configureAcked = false;
+  std::uint32_t configureSerial = 0;
+  std::uint32_t configureWidth = 0;
+  std::uint32_t configureHeight = 0;
+};
+
+struct LayerSurfaceConfigure {
+  std::uint32_t serial = 0;
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+};
+
 struct WaylandServer::Impl::LayerSurface {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
@@ -610,7 +639,20 @@ struct WaylandServer::Impl::LayerSurface {
   std::int32_t marginRight = 0;
   std::int32_t marginBottom = 0;
   std::int32_t marginLeft = 0;
+  std::uint32_t configureSerial = 0;
+  std::uint32_t configureWidth = 0;
+  std::uint32_t configureHeight = 0;
+  LayerSurfacePendingState pending;
+  std::vector<LayerSurfaceConfigure> pendingConfigures;
+  bool initialized = false;
   bool configured = false;
+  bool mapped = false;
+};
+
+struct LayerSurfaceCommitResult {
+  bool valid = true;
+  bool stateChanged = false;
+  bool configureNeeded = false;
 };
 
 struct WaylandServer::Impl::XdgConfigure {
@@ -717,9 +759,16 @@ std::int32_t displayWidth(WaylandServer::Impl::Surface const* surface);
 std::int32_t displayHeight(WaylandServer::Impl::Surface const* surface);
 void setConfiguredFrameSize(WaylandServer::Impl::Surface* surface, std::int32_t width, std::int32_t height);
 void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* surface);
-void applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface);
+bool applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface);
 void sendLayerConfigure(WaylandServer::Impl::LayerSurface* layerSurface);
 void refreshShellReservedZones(WaylandServer::Impl* server);
+bool ackLayerSurfaceConfigure(WaylandServer::Impl::LayerSurface* layerSurface,
+                              std::uint32_t serial,
+                              wl_resource* errorResource = nullptr);
+LayerSurfaceCommitResult applyLayerSurfacePendingState(WaylandServer::Impl::LayerSurface* layerSurface,
+                                                       wl_resource* errorResource = nullptr);
+bool markLayerSurfaceMapped(WaylandServer::Impl::LayerSurface* layerSurface);
+bool resetLayerSurfaceForUnmap(WaylandServer::Impl::LayerSurface* layerSurface);
 void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs);
 void establishPopupGrab(WaylandServer::Impl* server,
                         WaylandServer::Impl::XdgPopup* popup,

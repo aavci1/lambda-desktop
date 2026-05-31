@@ -2687,7 +2687,7 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
 	        wl_registry_bind(registry, name, &wp_fractional_scale_manager_v1_interface, 1));
 	  } else if (std::strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
 	    shared->layerShell = static_cast<zwlr_layer_shell_v1*>(
-	        wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 1));
+	        wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, std::min(version, 4u)));
 	  } else if (std::strcmp(interface, ext_background_effect_manager_v1_interface.name) == 0) {
 	    shared->backgroundEffectManager = static_cast<ext_background_effect_manager_v1*>(
 	        wl_registry_bind(registry, name, &ext_background_effect_manager_v1_interface, std::min(version, 4u)));

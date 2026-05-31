@@ -61,6 +61,7 @@ OutputGeometry snapOutputGeometryFor(WaylandServer::Impl const* server) {
 
 bool layerSurfaceAboveWindows(WaylandServer::Impl::Surface const* surface) {
   return surfaceIsLayerSurface(surface) && surface->layerSurface &&
+         surface->layerSurface->mapped &&
          surface->layerSurface->layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP;
 }
 
@@ -73,6 +74,7 @@ bool hasVisibleFullscreenToplevel(WaylandServer::Impl const* server) {
 
 bool fullscreenHiddenShellPanel(WaylandServer::Impl::Surface const* surface) {
   return surfaceIsLayerSurface(surface) && surface->layerSurface &&
+         surface->layerSurface->mapped &&
          surface->layerSurface->nameSpace == "lambda.dock";
 }
 

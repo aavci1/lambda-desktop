@@ -176,7 +176,7 @@ WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output))
       wl_global_create(display_, &wp_cursor_shape_manager_v1_interface, 1, this, bindCursorShapeManager);
   idleInhibitManagerGlobal_ =
       wl_global_create(display_, &zwp_idle_inhibit_manager_v1_interface, 1, this, bindIdleInhibitManager);
-  layerShellGlobal_ = wl_global_create(display_, &zwlr_layer_shell_v1_interface, 1, this, bindLayerShell);
+  layerShellGlobal_ = wl_global_create(display_, &zwlr_layer_shell_v1_interface, 4, this, bindLayerShell);
   presentationGlobal_ = wl_global_create(display_, &wp_presentation_interface, 2, this, bindPresentation);
   relativePointerManagerGlobal_ =
       wl_global_create(display_, &zwp_relative_pointer_manager_v1_interface, 1, this, bindRelativePointerManager);
