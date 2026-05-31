@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-05-27
+**Last updated:** 2026-05-31
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -55,7 +55,7 @@ Deleted/superseded docs:
 | Lambda v5 UI runtime | Shipped. Retained mount, reactive graph, `Bindable` modifiers, `For`/`Show`/`Switch`. |
 | App platforms | macOS Metal, Linux Wayland Vulkan, Linux KMS Vulkan. |
 | Examples | Demo and Lambda app targets build through CMake when examples are enabled. |
-| Window Manager | Core compositor is usable for dogfooding on the target hardware; remaining gate is broader real-app validation and visual polish. |
+| Window Manager | Core compositor is usable for dogfooding on the target hardware; remaining gate is deferred titlebar/content frame coherence, the rest of the wlroots comparison backlog, broader real-app validation, and visual polish. |
 | Shell | App registry, dock, IPC, config, icons, and status fallback exist; live notification/clipboard/provider work remains. |
 | Settings | Real owner-config editor exists; live apply depends on Window Manager/Shell hot-reload support. |
 | Files | Live file browser/manager exists; model layer is ahead of live UI for several commands. |
@@ -161,6 +161,7 @@ Current implementation:
 - Core idle behavior, Lambda app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, and real-app smoke tooling exist.
 - Screenshot full-output, active-window, and region capture are implemented with compositor-owned region UI.
 - Protocol work includes layer-shell, xdg-shell, xdg-output, viewporter, cursor-shape, fractional-scale, activation, presentation-time, relative pointer, pointer constraints, primary selection, clipboard/data-device, idle inhibit, and background-effect paths.
+- The active wlroots comparison plan has verified core surface-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output updates, pointer-extension cleanup, cursor-shape cleanup, and viewporter resource hygiene through WM-COMP-20.
 - Firefox dogfooding blockers addressed in the tested paths: xdg-popup lifecycle cleanup follows the wlroots-style inert-resource pattern, Firefox crash/recovery windows no longer grow on focus changes, fullscreen video can restore, and fullscreen preserves pre-fullscreen maximized/snapped/normal state.
 - Fullscreen shell-panel behavior exists for the current single-output desktop: panels leave the fullscreen area and restore afterward.
 - KMS presentation has a compositor frame queue, improved frame pacing, direct scanout/overlay paths for video, hardware-cursor motion that does not force scene redraws, and video overlay tracing for skipped-frame analysis.
@@ -169,9 +170,10 @@ Current implementation:
 
 Open gate:
 
-- Complete the visual consistency audit for system-titlebar and integrated-titlebar glass, shadow, border, and corner radius behavior.
+- Resolve the deferred system-titlebar/content frame-coherence issue: Settings resize on DP-1 HiDPI can still show momentary non-synced titlebar/content width even though borders stay synced and flicker is gone.
+- Finish the remaining wlroots comparison backlog in [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md): global resource hygiene, xdg toplevel configure-state parity, seat focus/grab workflow parity, data-device DnD lifecycle parity, layer-shell dynamic behavior, output-layout foundation, and a visual regression/real-app harness.
 - Continue resize/snap/maximize/restore validation across more apps; Firefox restore/fullscreen paths are fixed in the tested scenarios, but GTK/Qt/terminal coverage still needs a pass.
-- Re-test Shell panel behavior around fullscreen, window animations, launcher/dock popovers, and long-running browser/video sessions.
+- Re-test Shell panel behavior around fullscreen, window animations, launcher/dock popovers, dock context menus, and long-running browser/video sessions.
 - Complete live real-app validation with Lambda apps plus browser, GTK, Qt, `foot`, clipboard, menus/popups, maximize/restore/snap/minimize, screenshots, fullscreen video, mpv playback, and long idle sessions.
 - Keep popup grabs honest: config-gated until hardware validation says they can be enabled by default.
 - Keep unsupported touch/tablet behavior absent or clearly non-advertised.
@@ -179,13 +181,13 @@ Open gate:
 Validation:
 
 - Deterministic tests cover output selector, scale config, keybindings, config fallback, screenshot policy/regions/paths/PNG writing, frame geometry, snap/resize geometry, minimized focus restoration, fullscreen restore state, popup geometry, layer-shell zones, and surface input regions.
-- Manual target-hardware traces now cover Firefox stability, fullscreen video restore, mpv/video pacing, compositor CPU, hardware overlay/scanout decisions, and DP-1 terminal rendering.
+- Manual target-hardware traces now cover Firefox stability, fullscreen video restore, mpv/video pacing, compositor CPU, hardware overlay/scanout decisions, DP-1 terminal rendering, DP-1 HiDPI resize/flicker checks, dock context menus, clipboard/primary selection, and text drag/drop in the tested paths.
 - Full visual acceptance still requires target hardware; GPU/Wayland tests may not run in headless CI. SHM buffer-damage optimization still needs a real SHM partial-damage client before it can be counted as performance-validated.
 
 Deferred:
 
 - Session wrapper, auto-start, auto-restart, login, lock, logout, suspend/reboot UI.
-- Multi-output desktop layout.
+- Multi-output desktop layout. The wlroots comparison may add output-layout foundations, but enabling a real multi-output desktop remains deferred.
 - DPMS/panel power-off and richer power management.
 - XWayland.
 

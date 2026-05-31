@@ -6,7 +6,7 @@
 
 **Out of scope, deliberately:** display-manager functionality (greeter, PAM, login). Session lifecycle (the compositor *is* a session, it doesn't manage sessions). Lock screen. Logout. Full multi-monitor desktop layout. Tab grouping. Window gluing. Accessibility. Input methods. Touch-specific shell behaviors. Form factors beyond desktop. These are all real concerns and all explicitly outside this spec.
 
-**Next work:** see [roadmap.md](roadmap.md) for the current Window Manager readiness backlog and broader Lambda desktop project status.
+**Next work:** see [roadmap.md](roadmap.md) for the current Window Manager readiness backlog and broader Lambda desktop project status. The detailed direct-implementation parity backlog is tracked in [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md).
 
 ---
 
@@ -58,6 +58,15 @@ It does *not* use Lambda's `Window`, `Application`, `Element`/`View`, or `SceneG
 Wayland protocols implemented directly against `libwayland-server`. DRM via `libdrm`. Input via `libinput`. Keyboard layouts via `libxkbcommon`. DMABUF import via standard Vulkan extensions.
 
 This is a real cost — wlroots solves many edge cases we'll re-encounter — but it's the path that lets the compositor stay coherent with Lambda's design rather than adopting wlroots' opinions about scene graphs, output management, and surface state.
+
+The direct implementation must still be held against wlroots behavior. As of 2026-05-31, the verified comparison pass covers surface commit-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output runtime updates, pointer-extension cleanup, cursor-shape cleanup, and viewporter resource hygiene. Remaining spec work:
+
+- Resume the deferred frame-coherence issue when ready: system-titlebar and client content must render from one committed geometry model so Settings resize on DP-1 HiDPI cannot show momentary non-synced titlebar/content widths.
+- Finish remaining global resource hygiene for core, shell, and custom protocol globals: version caps, bind/object no-memory handling, and inert-resource cleanup.
+- Compare larger wlroots workflows that are not fully covered by narrow resource tests: xdg toplevel configure state, seat focus/grabs, data-device drag/drop lifecycle, dynamic layer-shell behavior, and output-layout foundations.
+- Build a repeatable visual/real-app validation harness for resize, dock/topbar, menus, fullscreen, browser/video, GTK/Qt, `foot`, and Lambda apps.
+
+The ordered implementation plan and validation gates live in [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md). The daily-driver gate lives in [roadmap.md](roadmap.md).
 
 ### 1.6 No X11 / no XWayland
 

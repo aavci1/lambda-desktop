@@ -37,6 +37,29 @@
 | P17 | WM-COMP-18 Pointer extension dependent-resource cleanup | Verified | Server-side relative-pointer and pointer-constraint objects are removed when their wl_pointer resource is destroyed, leaving protocol resources inert | Pointer-extension helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle slice |
 | P18 | WM-COMP-19 Cursor-shape dependent-resource cleanup | Verified | Cursor-shape device state is removed when the underlying wl_pointer resource is destroyed, leaving protocol resources inert | Cursor-shape helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle slice |
 | P19 | WM-COMP-20 Viewporter resource hygiene | Verified | Viewporter resource versioning and bind no-memory handling now align with wlroots | Viewporter helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
+| P20 | WM-COMP-21 Remaining global resource hygiene | Planned | Compare core globals, shell globals, custom globals, bind allocation handling, object version caps, and inert-resource cleanup patterns | Targeted helper tests plus compositor suite | No manual gate expected unless behavior changes |
+| P21 | WM-COMP-22 XDG toplevel configure-state parity | Planned | Compare remaining scheduled/pending/current toplevel state against wlroots and decide whether a larger synced-state migration is required | XDG toplevel/configure tests plus compositor suite | DP-1 Settings/system-titlebar resize if visible geometry changes |
+| P22 | WM-COMP-23 Seat focus and grab workflow parity | Planned | Compare wlroots seat focus, pointer grabs, keyboard grabs, popup grabs, cursor requests, and grab cancellation behavior | Seat/grab/popup/input tests plus compositor suite | Real app menu/popup validation if grab behavior changes |
+| P23 | WM-COMP-24 Data-device and drag/drop lifecycle parity | Planned | Compare data-source, data-offer, action negotiation, drop/leave/cancel, selection, and DnD serial interactions | Data-device/DnD/selection tests plus compositor suite | Manual DnD/file-transfer validation if payload behavior changes |
+| P24 | WM-COMP-25 Layer-shell dynamic behavior parity | Planned | Compare output changes, exclusive-zone recomputation, keyboard interactivity, mapping/unmapping, and popup/menu interactions | Layer-shell tests plus compositor suite | Shell dock/topbar/fullscreen validation if placement/focus behavior changes |
+| P25 | WM-COMP-26 Output layout and multi-output foundation | Planned | Design wlroots-style output-layout abstractions while v1 remains single-output, including enter/leave and xdg-output positions | Output/xdg-output/snapshot tests plus compositor suite | Target hardware multi-output gate before enabling multiple active outputs |
+| P26 | WM-COMP-27 Visual regression and real-app harness | Planned | Add repeatable resize/menu/fullscreen validation scripts and traces so manual regressions become easier to catch | Scripted smoke checks and deterministic helpers | Target hardware visual gate remains |
+
+## Remaining Work After 2026-05-31
+
+Default next implementation order is WM-COMP-21 through WM-COMP-27, unless the deferred WM-COMP-1 titlebar/content sync issue is explicitly resumed first.
+
+Deferred P0 work:
+
+- Resume WM-COMP-1 only when we are ready to change the rendering/frame architecture again. The remaining symptom is momentary non-synced system-titlebar/content width during Settings resize on DP-1 HiDPI. Borders are now in sync and flicker is gone. A previous buffer-retention experiment did not solve it and was dropped.
+- The next attempt should not stretch stale content. It should make the compositor build one frame model for chrome, borders, background, and client content from a single committed geometry snapshot, then render that model as one unit.
+- This needs target-hardware visual validation because current automated tests cover state coherence but not the exact visible frame race.
+
+Next comparison work:
+
+- Finish protocol resource hygiene on the remaining globals that were not part of WM-COMP-12 through WM-COMP-20.
+- Compare larger behavior workflows against wlroots: xdg toplevel configure state, seat focus/grabs, data-device DnD lifecycle, dynamic layer-shell behavior, and output-layout foundations.
+- Turn repeated manual regressions into scripts or trace-driven checks where possible, while keeping target-hardware visual validation for resize, popups, fullscreen, and real-app rendering.
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -706,6 +729,206 @@
 - Manager bind allocation failure posts no-memory.
 - Automated helper tests cover version selection.
 
+## WM-COMP-21 Remaining Global Resource Hygiene
+
+**Why this matters:** the recent resource-hygiene slices found the same small wlroots differences repeatedly: manager bind allocation failure, object creation failure, resource-version caps, and cleanup when dependent resources disappear. The remaining globals should be audited in one focused pass before moving to larger behavior changes.
+
+**Goal:** make the remaining global bind/object paths follow the same explicit version, no-memory, and inert-resource patterns already applied to presentation-time, fractional-scale, idle-inhibit, output, xdg-output, pointer extensions, cursor-shape, and viewporter.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Core.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Shm.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgShell.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/LayerShell.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Cutouts.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/BackgroundEffect.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Planned: inventory each remaining global against wlroots or, for Lambda custom protocols, against the same local resource-lifecycle rules.
+2. Planned: add small state/version helpers where repeated resource-version logic exists.
+3. Planned: guard manager bind and object allocation failures with `wl_client_post_no_memory`.
+4. Planned: make dependent-resource destruction leave protocol resources inert instead of retaining raw pointers where applicable.
+5. Planned: add targeted helper tests and run the compositor suite plus the broader feasible suite.
+
+**Acceptance criteria:**
+
+- Remaining manager bind paths do not dereference failed resource allocations.
+- New object resources are created at the capped bound-manager version where the protocol permits it.
+- Destroyed dependent resources cannot leave live server objects with stale raw resource pointers.
+- All changes are covered by automated helper or protocol-state tests.
+
+## WM-COMP-22 XDG Toplevel Configure-State Parity
+
+**Why this matters:** wlroots keeps xdg toplevel requested, scheduled, pending, and current state distinct. Lambda now handles many request and unmap-reset rules correctly, but the deferred titlebar/content issue suggests there may still be one visible geometry split between configure state, compositor chrome, and committed content.
+
+**Goal:** compare the remaining xdg toplevel configure pipeline against wlroots and either prove Lambda's current model is coherent or migrate the missing state into an explicit synced-state path.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgShell.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/WaylandServerImpl.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Snapshots.cpp`
+- `apps/lambda-window-manager/Compositor/Chrome/`
+- `apps/lambda-window-manager/Compositor/Window/`
+- `tests/`
+
+**Implementation steps:**
+
+1. Planned: compare wlroots' toplevel requested/scheduled/current configure fields to Lambda's xdg toplevel fields.
+2. Planned: identify every renderer/chrome/window-manager consumer of toplevel width, height, state, bounds, decoration mode, and window geometry.
+3. Planned: move any remaining request-time geometry reads into a single committed/scheduled view if needed.
+4. Planned: add automated tests for configure ack, unmap/remap, resize state, maximized/fullscreen/snap state, and chrome geometry consumers.
+5. Planned: if visible frame timing changes, request DP-1 Settings resize validation before commit.
+
+**Acceptance criteria:**
+
+- Configure acknowledgements and surface commits expose one coherent toplevel state to snapshots, chrome, hit testing, and window management.
+- System-titlebar and content geometry cannot diverge because they read different toplevel state groups.
+- Automated tests cover state transitions; target-hardware validation covers visible resize if rendering behavior changes.
+
+## WM-COMP-23 Seat Focus and Grab Workflow Parity
+
+**Why this matters:** WM-COMP-5 added a shared serial ledger and fixed several concrete grab/selection paths, but wlroots also has a broader seat model for focus changes, pointer grabs, keyboard grabs, popup grabs, cursor requests, and cancellation when surfaces disappear.
+
+**Goal:** audit the full seat workflow against wlroots so input focus and grabs stay valid across popup/menu operations, destroyed surfaces, keyboard navigation, and mixed client/compositor interactions.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Seat.cpp`
+- `apps/lambda-window-manager/Compositor/Window/PointerRouter.cpp`
+- `apps/lambda-window-manager/Compositor/Window/FocusStack.cpp`
+- `apps/lambda-window-manager/Compositor/Window/LayerShellInput.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgShell.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Planned: compare wlroots seat focus and grab lifecycle with Lambda's pointer, keyboard, popup, and layer-shell input paths.
+2. Planned: define cancellation rules for destroyed/unmapped focus surfaces and popup parents.
+3. Planned: verify cursor request validation still works during focus changes and grabs.
+4. Planned: add tests for grab start/end/cancel, destroyed-surface cleanup, popup/menu focus, and keyboard focus restoration.
+5. Planned: request manual app menu/dock menu validation if runtime grab behavior changes.
+
+**Acceptance criteria:**
+
+- Focus and grab state cannot keep stale surface/resource pointers after destroy or unmap.
+- Popup and menu interactions follow a single seat/grab model instead of ad hoc focus checks.
+- Cursor, keyboard, and pointer behavior remain correct in Firefox, Lambda apps, dock menus, and launcher popups.
+
+## WM-COMP-24 Data-Device and Drag/Drop Lifecycle Parity
+
+**Why this matters:** the current data-device path is usable for clipboard, primary selection, and text drag/drop, but wlroots has many lifecycle details around data sources, offers, action negotiation, leave/drop/cancel, and destroyed clients. These paths are easy to get mostly right and still fail with real applications.
+
+**Goal:** compare Lambda's data-device implementation to wlroots and close lifecycle gaps without expanding product scope beyond the payloads Lambda can currently support.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Selection.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Seat.cpp`
+- `apps/lambda-window-manager/Compositor/Window/PointerRouter.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Planned: inventory data-source, data-offer, data-device, drag icon, target enter/motion/leave/drop, and action negotiation behavior.
+2. Planned: compare cancellation and cleanup behavior for source/target/client/surface destruction.
+3. Planned: verify selection and DnD serial checks remain aligned with WM-COMP-5.
+4. Planned: add tests for offer lifecycle, action negotiation, leave/drop ordering, cancellation, and destroyed-resource cleanup.
+5. Planned: request manual validation if file payloads, external app DnD, or visible drag icons are changed.
+
+**Acceptance criteria:**
+
+- Data offers and sources become inert or are destroyed at the same lifecycle points as wlroots for supported paths.
+- Drag/drop action negotiation produces deterministic results and cleans up on cancel.
+- Clipboard, primary selection, text DnD, and compatible real-app transfers keep working.
+
+## WM-COMP-25 Layer-Shell Dynamic Behavior Parity
+
+**Why this matters:** WM-COMP-2 fixed the core configure/commit model and the dock-menu crashes, but wlroots' layer-shell behavior also covers dynamic output changes, exclusive-zone recomputation, keyboard interactivity, popup parenting, and map/unmap transitions. Shell topbar and dock stability depend on these details.
+
+**Goal:** audit dynamic layer-shell behavior and make dock/topbar/menu placement and focus robust across fullscreen, output-scale changes, shell restarts, and transient popup surfaces.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/LayerShell.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/LayerShellState.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/LayerShellZones.cpp`
+- `apps/lambda-window-manager/Compositor/Window/LayerShellInput.cpp`
+- `apps/lambda-window-manager/Compositor/Window/FullscreenShellPanels.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Planned: compare wlroots layer output assignment, configure scheduling, map/unmap, and exclusive-zone invalidation paths.
+2. Planned: audit keyboard interactivity behavior for none, exclusive, and on-demand modes.
+3. Planned: verify popup/menu interactions with layer surfaces and shell-owned transient surfaces.
+4. Planned: add tests for dynamic size/anchor/margin/layer changes, fullscreen panel reservations, focus, and output-scale updates.
+5. Planned: request manual Shell dock/topbar/fullscreen/menu validation if placement or focus behavior changes.
+
+**Acceptance criteria:**
+
+- Layer surfaces are placed and focused from committed state after dynamic changes.
+- Exclusive zones are recomputed only from mapped, committed layer surfaces.
+- Dock, topbar, launcher, quick-status, and dock menus remain stable during fullscreen and resize-heavy sessions.
+
+## WM-COMP-26 Output Layout and Multi-Output Foundation
+
+**Why this matters:** v1 intentionally runs one active output, but wlroots models outputs through an output layout and sends enter/leave plus xdg-output positions from that layout. Lambda's current single-output assumptions should be isolated before they become harder to unwind.
+
+**Goal:** introduce or document the internal seams needed for a future multi-output desktop without enabling multiple active outputs in the daily-driver gate.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/Output.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/XdgOutput.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/Snapshots.cpp`
+- `apps/lambda-window-manager/Compositor/Window/`
+- `apps/lambda-window-manager/Compositor/PresentationLoop.cpp`
+- `src/Platform/Linux/KmsOutput.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Planned: compare wlroots output-layout responsibilities with Lambda's selected-output runtime.
+2. Planned: separate single-output policy from data structures that should already carry logical output position, scale, and transform.
+3. Planned: add tests for output enter/leave selection, xdg-output logical position/size calculation, and layer/window placement on a logical layout.
+4. Planned: keep multiple active outputs disabled until there is an explicit product decision and target-hardware validation plan.
+
+**Acceptance criteria:**
+
+- Single-output behavior remains unchanged.
+- Output and xdg-output protocol paths can describe logical output position and effective size without hardcoded origin assumptions.
+- The roadmap still treats full multi-output desktop layout as deferred until manually validated.
+
+## WM-COMP-27 Visual Regression and Real-App Harness
+
+**Why this matters:** the most expensive regressions today are visible timing or app-specific behavior: resize sync, dock/menu stability, fullscreen panel behavior, and external app popups. Automated unit tests catch protocol state, but target-hardware visual workflows still need repeatable scripts and traces.
+
+**Goal:** make real-app validation less ad hoc by recording the exact manual workflows, adding scripted launch/trace helpers where possible, and keeping the pass/fail gates tied to visible behavior.
+
+**Expected code areas:**
+
+- `docs/`
+- `tools/` or existing compositor smoke scripts if present
+- `apps/lambda-window-manager/Compositor/` trace hooks only where needed
+- `tests/`
+
+**Implementation steps:**
+
+1. Planned: document the current real-app validation matrix for Settings, Files, Terminal, Shell, Firefox, GTK, Qt, `foot`, and mpv.
+2. Planned: add repeatable scripts for starting the compositor, launching clients, enabling relevant trace variables, and collecting logs.
+3. Planned: add deterministic tests for any trace parsing or validation helpers.
+4. Planned: keep visual pass/fail criteria explicit: no flicker, no non-synced chrome/content frames after the deferred fix, dock/topbar stable, menus do not crash Shell or compositor, fullscreen panels restore, cursor updates immediately.
+
+**Acceptance criteria:**
+
+- A future compositor change has a clear automated and manual validation checklist.
+- Trace collection is repeatable enough to compare before/after behavior on DP-1 HiDPI.
+- Manual validation requirements are documented before work that cannot be fully tested in automation is committed.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -790,3 +1013,4 @@
 | 2026-05-31 | WM-COMP-19 | Verified | Added cursor-shape version and dependent-pointer helpers, guarded manager bind allocation failure, created devices at the capped manager version, and changed `wl_pointer` destruction to inert and remove associated cursor-shape devices. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*cursor shape*,*pointer extension*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-20 | In progress | Viewporter comparison found Lambda already has commit-time viewport validation, but still hardcodes viewport object resources to version 1 and lacks manager bind no-memory handling. Implementing a shared version helper and bind guard. |
 | 2026-05-31 | WM-COMP-20 | Verified | Added a shared viewporter version helper, created `wp_viewport` objects at the capped manager-bound version, and guarded manager bind allocation failure. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*viewport*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-21+ | Planned | End-of-day wrap-up captured the remaining wlroots comparison workstreams: remaining global resource hygiene, xdg toplevel configure-state parity, full seat/grab workflow parity, data-device DnD lifecycle parity, dynamic layer-shell behavior, output-layout foundation, and visual regression/real-app harness work. |
