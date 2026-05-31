@@ -7,6 +7,7 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Wayland/XdgPositionerState.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "xdg-decoration-unstable-v1-server-protocol.h"
@@ -796,6 +797,13 @@ void sendPopupConfigure(WaylandServer::Impl::XdgPopup* popup) {
 }
 
 void xdgPopupDestroy(wl_client*, wl_resource* resource) {
+  auto* popup = resourceData<WaylandServer::Impl::XdgPopup>(resource);
+  if (xdgPopupHasLiveChild(popup ? popup->server : nullptr, popup)) {
+    wl_resource_post_error(resource,
+                           XDG_WM_BASE_ERROR_NOT_THE_TOPMOST_POPUP,
+                           "xdg_popup was destroyed while it was not the topmost popup");
+    return;
+  }
   wl_resource_destroy(resource);
 }
 
@@ -844,6 +852,12 @@ void xdgSurfaceGetPopup(wl_client* client, wl_resource* resource, std::uint32_t 
   }
 
   auto* parentXdgSurface = resourceData<WaylandServer::Impl::XdgSurface>(parentResource);
+  if (!xdgPopupParentHasValidRole(parentXdgSurface)) {
+    wl_resource_post_error(resource,
+                           XDG_WM_BASE_ERROR_INVALID_POPUP_PARENT,
+                           "xdg_popup parent must have an xdg role");
+    return;
+  }
   auto popup = std::make_unique<WaylandServer::Impl::XdgPopup>();
   popup->server = xdgSurface->server;
   popup->xdgSurface = xdgSurface;

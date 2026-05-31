@@ -1,7 +1,9 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
+#include "Compositor/Wayland/XdgPopupState.hpp"
 
 #include <doctest/doctest.h>
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -101,6 +103,58 @@ TEST_CASE("presentation eligibility excludes minimized toplevels and dismissed p
   CHECK(lambda::compositor::wm::surfaceEligibleForPresentation(&popup));
   popupRole.dismissed = true;
   CHECK_FALSE(lambda::compositor::wm::surfaceEligibleForPresentation(&popup));
+}
+
+TEST_CASE("xdg popup parent validation accepts only constructed xdg roles") {
+  CHECK(lambda::compositor::xdgPopupParentHasValidRole(nullptr));
+
+  lambda::compositor::WaylandServer::Impl::XdgSurface parent{};
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  parent.surface = &surface;
+
+  surface.role = lambda::compositor::SurfaceRole::None;
+  CHECK_FALSE(lambda::compositor::xdgPopupParentHasValidRole(&parent));
+
+  surface.role = lambda::compositor::SurfaceRole::LayerSurface;
+  CHECK_FALSE(lambda::compositor::xdgPopupParentHasValidRole(&parent));
+
+  surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
+  CHECK(lambda::compositor::xdgPopupParentHasValidRole(&parent));
+
+  surface.role = lambda::compositor::SurfaceRole::XdgPopup;
+  CHECK(lambda::compositor::xdgPopupParentHasValidRole(&parent));
+}
+
+TEST_CASE("xdg popup topmost validation detects live child popups") {
+  lambda::compositor::WaylandServer::Impl::Surface parentSurface{};
+  lambda::compositor::WaylandServer::Impl::Surface unrelatedSurface{};
+  lambda::compositor::WaylandServer::Impl::XdgSurface parentXdg{};
+  parentXdg.surface = &parentSurface;
+
+  lambda::compositor::WaylandServer::Impl::XdgPopup parent{};
+  parent.xdgSurface = &parentXdg;
+
+  lambda::compositor::WaylandServer::Impl::XdgPopup unrelated{};
+  unrelated.parentSurface = &unrelatedSurface;
+
+  lambda::compositor::WaylandServer::Impl::XdgPopup dismissedChild{};
+  dismissedChild.parentSurface = &parentSurface;
+  dismissedChild.dismissed = true;
+
+  std::array<lambda::compositor::WaylandServer::Impl::XdgPopup const*, 3> noLiveChild{
+      &parent,
+      &unrelated,
+      &dismissedChild,
+  };
+  CHECK_FALSE(lambda::compositor::xdgPopupHasLiveChild(noLiveChild, &parent));
+
+  lambda::compositor::WaylandServer::Impl::XdgPopup liveChild{};
+  liveChild.parentSurface = &parentSurface;
+  std::array<lambda::compositor::WaylandServer::Impl::XdgPopup const*, 2> withLiveChild{
+      &parent,
+      &liveChild,
+  };
+  CHECK(lambda::compositor::xdgPopupHasLiveChild(withLiveChild, &parent));
 }
 
 TEST_CASE("shell app id matching accepts built-in app aliases") {
