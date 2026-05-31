@@ -69,6 +69,7 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
     CompositorConfigTests.cpp
     CompositorDecorationStateTests.cpp
     CompositorFrameSchedulerTests.cpp
+    CompositorFractionalScaleTests.cpp
     CompositorWindowGeometryTests.cpp
     CompositorWindowFrameGeometryTests.cpp
     CompositorConfigHotReloadTests.cpp

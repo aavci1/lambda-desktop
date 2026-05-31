@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Wayland/FractionalScaleState.hpp"
 #include "Compositor/Wayland/Globals/Activation.hpp"
 #include "Compositor/Wayland/Globals/BackgroundEffect.hpp"
 #include "Compositor/Wayland/Globals/Core.hpp"
@@ -117,10 +118,6 @@ void initializeKeyboard(WaylandServer::Impl* server) {
     xkb_context_unref(server->xkbContext_);
     server->xkbContext_ = nullptr;
   }
-}
-
-std::uint32_t preferredScale120(float scale) {
-  return static_cast<std::uint32_t>(std::clamp(std::lround(scale * 120.f), 60l, 480l));
 }
 
 std::int32_t integerOutputScale(float scale) {
@@ -336,7 +333,7 @@ void WaylandServer::Impl::setPreferredScale(float scale) {
       wl_output_send_done(output);
     }
   }
-  std::uint32_t const preferred = preferredScale120(preferredScale_);
+  std::uint32_t const preferred = fractionalScalePreferredScale120(preferredScale_);
   for (auto const& fractionalScale : fractionalScales_) {
     if (fractionalScale && fractionalScale->resource) {
       wp_fractional_scale_v1_send_preferred_scale(fractionalScale->resource, preferred);

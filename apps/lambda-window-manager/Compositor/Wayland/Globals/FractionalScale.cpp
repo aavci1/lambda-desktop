@@ -1,20 +1,16 @@
 #include "Compositor/Wayland/Globals/FractionalScale.hpp"
 
+#include "Compositor/Wayland/FractionalScaleState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "fractional-scale-v1-server-protocol.h"
 
 #include <algorithm>
-#include <cmath>
 #include <memory>
 #include <wayland-server-core.h>
 
 namespace lambda::compositor {
 namespace {
-
-std::uint32_t preferredScale120(float scale) {
-  return static_cast<std::uint32_t>(std::max(1.f, scale) * 120.f + 0.5f);
-}
 
 void fractionalScaleManagerDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -48,7 +44,11 @@ void fractionalScaleManagerGetFractionalScale(wl_client* client, wl_resource* re
   auto fractionalScale = std::make_unique<WaylandServer::Impl::FractionalScale>();
   fractionalScale->server = server;
   fractionalScale->surface = surface;
-  wl_resource* fractionalScaleResource = wl_resource_create(client, &wp_fractional_scale_v1_interface, 1, id);
+  wl_resource* fractionalScaleResource =
+      wl_resource_create(client,
+                         &wp_fractional_scale_v1_interface,
+                         fractionalScaleResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource))),
+                         id);
   if (!fractionalScaleResource) {
     wl_client_post_no_memory(client);
     return;
@@ -58,7 +58,7 @@ void fractionalScaleManagerGetFractionalScale(wl_client* client, wl_resource* re
   surface->fractionalScale = raw;
   server->fractionalScales_.push_back(std::move(fractionalScale));
   wl_resource_set_implementation(fractionalScaleResource, &fractionalScaleImpl, raw, destroyResourceCallback<WaylandServer::Impl::FractionalScale, WaylandServer::Impl, &WaylandServer::Impl::destroyFractionalScale>);
-  wp_fractional_scale_v1_send_preferred_scale(fractionalScaleResource, preferredScale120(server->preferredScale_));
+  wp_fractional_scale_v1_send_preferred_scale(fractionalScaleResource, fractionalScalePreferredScale120(server->preferredScale_));
 }
 
 struct wp_fractional_scale_manager_v1_interface const fractionalScaleManagerImpl{
@@ -69,7 +69,11 @@ struct wp_fractional_scale_manager_v1_interface const fractionalScaleManagerImpl
 
 void bindFractionalScaleManagerImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &wp_fractional_scale_manager_v1_interface, std::min(version, 1u), id);
+      wl_resource_create(client, &wp_fractional_scale_manager_v1_interface, fractionalScaleResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &fractionalScaleManagerImpl, data, nullptr);
 }
 

@@ -29,6 +29,7 @@
 | P9 | WM-COMP-10 XDG activation token lifecycle | Verified | Activation tokens are single-use, validate serial/focus constraints, and expire after the wlroots-style 30 second lifetime | XDG activation, seat serial, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle workstream |
 | P10 | WM-COMP-11 Pointer constraints synced state | Verified | Pointer constraints now use committed region/cursor-hint state and wlroots-style oneshot deactivation cleanup | Pointer constraint, subsurface, compositor, and broader feasible suites pass | No manual gate needed for this protocol-state workstream |
 | P11 | WM-COMP-12 Presentation-time resource versioning | Verified | Presentation feedback resources now use the client-bound manager version, capped by the implemented protocol version | Presentation helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
+| P12 | WM-COMP-13 Fractional-scale consistency | Verified | Fractional-scale preferred-scale conversion is shared by initial and runtime events, including sub-1.0 scales | Fractional-scale helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -437,6 +438,36 @@
 - Presentation manager binding continues to post no-memory on allocation failure.
 - Automated helper tests cover version selection and existing presentation/compositor tests continue to pass.
 
+## WM-COMP-13 Fractional-Scale Consistency
+
+**Why this matters:** wlroots converts fractional-scale recommendations with `round(scale * 120)` for both existing and newly-created scale objects. Lambda had two helpers: runtime scale updates preserved sub-1.0 scales, while newly-created fractional-scale objects clamped the initial recommendation to at least 1.0.
+
+**Goal:** make initial and runtime `wp_fractional_scale_v1.preferred_scale` events use the same conversion and resource-version rules.
+
+**Expected code areas:**
+
+- `apps/lambda-window-manager/Compositor/Wayland/Globals/FractionalScale.cpp`
+- `apps/lambda-window-manager/Compositor/Wayland/FractionalScaleState.hpp`
+- `apps/lambda-window-manager/Compositor/Wayland/ServerLifecycle.cpp`
+- `tests/`
+
+**Implementation steps:**
+
+1. Done: centralize the fractional-scale version/conversion helpers and use them in both object creation and runtime output-scale updates.
+
+**Step 1 inventory:**
+
+- wlroots uses one conversion path equivalent to `round(scale * 120)` when notifying fractional-scale clients.
+- Lambda's `setPreferredScale` path clamps to the supported output range and sends 0.5 as 60, but `get_fractional_scale` used a local helper that sent 0.5 and 0.75 as 120.
+- Lambda's fractional-scale manager bind path also lacked a no-memory guard after `wl_resource_create`.
+
+**Acceptance criteria:**
+
+- New fractional-scale objects and existing fractional-scale resources receive matching preferred-scale values.
+- Sub-1.0 preferred scales are preserved down to Lambda's supported 0.5 minimum.
+- Manager bind allocation failure posts no-memory instead of dereferencing a null resource.
+- Automated helper tests cover the conversion and implemented protocol-version cap.
+
 ## Current Implementation Log
 
 | Date | Workstream | Status | Notes |
@@ -505,3 +536,5 @@
 | 2026-05-31 | WM-COMP-11 | Verified | Deactivated oneshot pointer constraints now make the protocol resource inert and remove the server-side constraint object after sending the unlocked/unconfined event. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*pointer constraint*"`, `./build/tests/lambda_tests --test-case="*subsurface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-12 | In progress | Presentation-time comparison found wlroots creates feedback resources using the bound manager version. Lambda already checks manager-bind allocation failure, so implementing the resource-version slice and centralizing the implemented version cap. |
 | 2026-05-31 | WM-COMP-12 | Verified | Added a presentation version helper and used it for both manager binding and feedback resource creation so feedback resources inherit the client-bound version. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*presentation*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-13 | In progress | Fractional-scale comparison found wlroots uses the same `scale * 120` conversion for all notifications, while Lambda clamped the initial object-created event to at least 1.0. Implementing a shared helper and bind no-memory guard. |
+| 2026-05-31 | WM-COMP-13 | Verified | Added a shared fractional-scale version/conversion helper, preserved sub-1.0 preferred scales on newly-created fractional-scale resources, reused the helper for runtime scale updates, and added bind no-memory handling. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*fractional scale*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
