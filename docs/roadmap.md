@@ -13,6 +13,7 @@ This document replaces the older roadmap, Lambda desktop readiness index, compon
 | --- | --- |
 | [roadmap.md](roadmap.md) | Current project status, Lambda desktop backlog, ownership boundaries, validation gates, and archived milestone notes |
 | [compositor.md](compositor.md) | Architecture/history reference for the compositor and framework/compositor boundary |
+| [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md) | Active wlroots comparison plan for compositor protocol, state, rendering, and validation improvements |
 | [compositor-user-guide.md](compositor-user-guide.md) | Build, configure, and run `lambda-window-manager` from a TTY |
 | [linux-development.md](linux-development.md) | Linux package setup and KMS/Vulkan development notes |
 | [conventions.md](conventions.md) | Repository layout, CMake, namespaces, platforms, examples |
