@@ -4,10 +4,12 @@
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgSurfaceState.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "presentation-time-server-protocol.h"
 #include "viewporter-server-protocol.h"
+#include "xdg-shell-server-protocol.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1004,6 +1006,23 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
   bool const hasBufferAttach = surface->pendingBufferState.bufferAttached;
   bool const hasNonNullBufferAttach = hasBufferAttach && surface->pendingBufferState.buffer != nullptr;
   bool const hasNullBufferAttach = hasBufferAttach && surface->pendingBufferState.buffer == nullptr;
+  if (hasNonNullBufferAttach) {
+    auto* xdgSurface = xdgSurfaceForSurface(surface->server, surface);
+    switch (xdgSurfaceBufferCommitReadiness(xdgSurface)) {
+    case XdgSurfaceBufferCommitReadiness::Ready:
+      break;
+    case XdgSurfaceBufferCommitReadiness::MissingRoleObject:
+      wl_resource_post_error(xdgSurface && xdgSurface->resource ? xdgSurface->resource : resource,
+                             XDG_SURFACE_ERROR_NOT_CONSTRUCTED,
+                             "xdg_surface must have a role object before committing a buffer");
+      return;
+    case XdgSurfaceBufferCommitReadiness::Unconfigured:
+      wl_resource_post_error(xdgSurface && xdgSurface->resource ? xdgSurface->resource : resource,
+                             XDG_SURFACE_ERROR_UNCONFIGURED_BUFFER,
+                             "xdg_surface committed a buffer before ack_configure");
+      return;
+    }
+  }
   LayerSurfaceCommitResult layerCommit;
   bool flushLayerConfigure = false;
   if (surface->layerSurface) {

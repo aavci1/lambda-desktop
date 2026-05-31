@@ -162,6 +162,27 @@ TEST_CASE("xdg surface creation rejects surfaces with an existing buffer") {
   CHECK(lambda::compositor::xdgSurfaceCreationHasExistingBuffer(&surface));
 }
 
+TEST_CASE("xdg surface buffer commits require role object and configure ack") {
+  using lambda::compositor::XdgSurfaceBufferCommitReadiness;
+
+  CHECK(lambda::compositor::xdgSurfaceBufferCommitReadiness(nullptr) == XdgSurfaceBufferCommitReadiness::Ready);
+
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  lambda::compositor::WaylandServer::Impl::XdgSurface xdgSurface{};
+  xdgSurface.surface = &surface;
+
+  surface.role = lambda::compositor::SurfaceRole::XdgSurface;
+  CHECK(lambda::compositor::xdgSurfaceBufferCommitReadiness(&xdgSurface) ==
+        XdgSurfaceBufferCommitReadiness::MissingRoleObject);
+
+  surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
+  CHECK(lambda::compositor::xdgSurfaceBufferCommitReadiness(&xdgSurface) ==
+        XdgSurfaceBufferCommitReadiness::Unconfigured);
+
+  xdgSurface.configured = true;
+  CHECK(lambda::compositor::xdgSurfaceBufferCommitReadiness(&xdgSurface) == XdgSurfaceBufferCommitReadiness::Ready);
+}
+
 TEST_CASE("xdg popup topmost validation detects live child popups") {
   lambda::compositor::WaylandServer::Impl::Surface parentSurface{};
   lambda::compositor::WaylandServer::Impl::Surface unrelatedSurface{};
