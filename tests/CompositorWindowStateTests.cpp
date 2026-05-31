@@ -186,6 +186,34 @@ TEST_CASE("xdg surface buffer commits require role object and configure ack") {
   CHECK(lambda::compositor::xdgSurfaceBufferCommitReadiness(&xdgSurface) == XdgSurfaceBufferCommitReadiness::Ready);
 }
 
+TEST_CASE("xdg surface configure state resets on unmap") {
+  lambda::compositor::WaylandServer::Impl::XdgSurface xdgSurface{};
+  CHECK_FALSE(lambda::compositor::resetXdgSurfaceConfigureStateForUnmap(&xdgSurface));
+
+  xdgSurface.configured = true;
+  xdgSurface.configureList.push_back(lambda::compositor::WaylandServer::Impl::XdgConfigure{
+      .serial = 12,
+      .role = lambda::compositor::SurfaceRole::XdgToplevel,
+      .width = 640,
+      .height = 480,
+  });
+  xdgSurface.pendingConfigure = lambda::compositor::WaylandServer::Impl::XdgConfigure{
+      .serial = 12,
+      .role = lambda::compositor::SurfaceRole::XdgToplevel,
+  };
+  xdgSurface.currentConfigure = lambda::compositor::WaylandServer::Impl::XdgConfigure{
+      .serial = 11,
+      .role = lambda::compositor::SurfaceRole::XdgToplevel,
+  };
+
+  CHECK(lambda::compositor::resetXdgSurfaceConfigureStateForUnmap(&xdgSurface));
+  CHECK_FALSE(xdgSurface.configured);
+  CHECK(xdgSurface.configureList.empty());
+  CHECK_FALSE(xdgSurface.pendingConfigure.has_value());
+  CHECK_FALSE(xdgSurface.currentConfigure.has_value());
+  CHECK_FALSE(lambda::compositor::resetXdgSurfaceConfigureStateForUnmap(&xdgSurface));
+}
+
 TEST_CASE("xdg toplevel interactive requests require a configured toplevel surface") {
   CHECK_FALSE(lambda::compositor::xdgToplevelSurfaceConfigured(nullptr));
 

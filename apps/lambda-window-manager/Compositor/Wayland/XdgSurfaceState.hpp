@@ -40,4 +40,17 @@ enum class XdgSurfaceBufferCommitReadiness : std::uint8_t {
   return XdgSurfaceBufferCommitReadiness::Ready;
 }
 
+inline bool resetXdgSurfaceConfigureStateForUnmap(WaylandServer::Impl::XdgSurface* xdgSurface) {
+  if (!xdgSurface) return false;
+  bool const changed = xdgSurface->configured ||
+                       !xdgSurface->configureList.empty() ||
+                       xdgSurface->pendingConfigure.has_value() ||
+                       xdgSurface->currentConfigure.has_value();
+  xdgSurface->configured = false;
+  xdgSurface->configureList.clear();
+  xdgSurface->pendingConfigure.reset();
+  xdgSurface->currentConfigure.reset();
+  return changed;
+}
+
 } // namespace lambda::compositor

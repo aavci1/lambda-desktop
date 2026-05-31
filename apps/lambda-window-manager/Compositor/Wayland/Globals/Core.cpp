@@ -1267,6 +1267,8 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
     if (releaseCurrentBufferImmediately) wl_buffer_send_release(surface->bufferState.buffer);
   } else {
     resetXdgToplevelForUnmap(surface);
+    bool const xdgSurfaceConfigureReset =
+        resetXdgSurfaceConfigureStateForUnmap(xdgSurfaceForSurface(surface->server, surface));
     surface->rgbaPixels.reset();
     surface->shmPixels = nullptr;
     surface->shmPixelBytes = 0;
@@ -1293,6 +1295,12 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
     surface->dmabufBuffer = nullptr;
     surface->damageState.bufferRects.clear();
     bumpSurfaceSerial(surface);
+    if (xdgSurfaceConfigureReset) {
+      if (auto* toplevel = toplevelForSurface(surface->server, surface)) {
+        sendToplevelStateConfigure(surface->server, toplevel);
+        surface->server->flushClients();
+      }
+    }
     traceResizeSurface("commit-empty", surface);
     traceCrashSurfaceCommit(surface, "empty", 0u, 0u);
   }
