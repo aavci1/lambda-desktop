@@ -64,10 +64,18 @@ void bindRelativePointerManagerImpl(wl_client* client, void* data, std::uint32_t
   wl_resource_set_implementation(resource, &relativePointerManagerImpl, data, nullptr);
 }
 
-void updatePointerConstraintActivation(WaylandServer::Impl* server, WaylandServer::Impl::PointerConstraint* constraint) {
-  if (!constraint || constraint->defunct || !constraint->resource || !constraint->surface || !constraint->pointer) return;
+void makePointerConstraintResourceInert(WaylandServer::Impl::PointerConstraint* constraint) {
+  if (!constraint || !constraint->resource) return;
+  wl_resource_set_user_data(constraint->resource, nullptr);
+  constraint->resource = nullptr;
+}
+
+bool updatePointerConstraintActivation(WaylandServer::Impl* server, WaylandServer::Impl::PointerConstraint* constraint) {
+  if (!constraint || constraint->defunct || !constraint->resource || !constraint->surface || !constraint->pointer) {
+    return false;
+  }
   bool const shouldActivate = server->pointerFocus_ == constraint->surface;
-  if (shouldActivate == constraint->active) return;
+  if (shouldActivate == constraint->active) return false;
 
   constraint->active = shouldActivate;
   if (constraint->kind == WaylandServer::Impl::PointerConstraint::Kind::Lock) {
@@ -83,14 +91,23 @@ void updatePointerConstraintActivation(WaylandServer::Impl* server, WaylandServe
       zwp_confined_pointer_v1_send_unconfined(constraint->resource);
     }
   }
-  if (!constraint->active && constraint->lifetime == ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT) {
+  if (pointerConstraintShouldDestroyAfterDeactivation(constraint)) {
     constraint->defunct = true;
+    makePointerConstraintResourceInert(constraint);
+    return true;
   }
+  return false;
 }
 
 void updatePointerConstraintsForFocusImpl(WaylandServer::Impl* server) {
-  for (auto const& constraint : server->pointerConstraints_) {
-    updatePointerConstraintActivation(server, constraint.get());
+  for (auto it = server->pointerConstraints_.begin(); it != server->pointerConstraints_.end();) {
+    auto* constraint = it->get();
+    if (updatePointerConstraintActivation(server, constraint)) {
+      server->destroyPointerConstraint(constraint);
+      it = server->pointerConstraints_.begin();
+    } else {
+      ++it;
+    }
   }
 }
 

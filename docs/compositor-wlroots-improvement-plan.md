@@ -27,7 +27,7 @@
 | P7 | WM-COMP-8 XDG surface role and configure lifecycle | Verified | XDG surface role sequencing, base-role creation checks, and buffer commit ordering now follow the wlroots rules covered by automated tests | XDG surface lifecycle, xdg popup, layer role, compositor suite, and broader feasible suite pass | No manual gate needed for this protocol-lifecycle workstream |
 | P8 | WM-COMP-9 XDG toplevel request and configure parity | Verified slice | XDG toplevel client-owned title/app-id/parent state now resets on null-buffer unmap | XDG toplevel reset tests plus compositor suite pass | No manual gate needed for this protocol-lifecycle slice |
 | P9 | WM-COMP-10 XDG activation token lifecycle | Verified | Activation tokens are single-use, validate serial/focus constraints, and expire after the wlroots-style 30 second lifetime | XDG activation, seat serial, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle workstream |
-| P10 | WM-COMP-11 Pointer constraints synced state | Verified slice | Pointer constraint region/cursor-hint state is committed through the surface commit path, including synchronized subsurface cached commits | Pointer constraint, subsurface, compositor, and broader feasible suites pass | No manual gate needed for this protocol-state slice |
+| P10 | WM-COMP-11 Pointer constraints synced state | Verified | Pointer constraints now use committed region/cursor-hint state and wlroots-style oneshot deactivation cleanup | Pointer constraint, subsurface, compositor, and broader feasible suites pass | No manual gate needed for this protocol-state workstream |
 
 ## WM-COMP-1 Surface Commit State Core
 
@@ -394,7 +394,7 @@
 **Implementation steps:**
 
 1. Done: add committed/pending pointer constraint region and cursor-hint state, apply it from the surface commit path, and use the effective committed region during confinement.
-2. Planned: review oneshot constraint deactivation/resource-inert behavior against wlroots after the region-state slice.
+2. Done: review oneshot constraint deactivation/resource-inert behavior against wlroots after the region-state slice.
 
 **Step 1 inventory:**
 
@@ -473,3 +473,5 @@
 | 2026-05-31 | WM-COMP-10 | Verified | Added wlroots-style 30 second activation token expiry, event-loop timer cleanup, and expired-token lookup rejection. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*activation*"`, `./build/tests/lambda_tests --test-case="*seat serial*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-11 | In progress | Pointer-constraints comparison found wlroots commits constraint regions and cursor hints through surface-synchronized state and computes confinement from the committed constraint region intersected with the surface input region. Implementing the synced-state slice. |
 | 2026-05-31 | WM-COMP-11 | Verified slice | Added pointer constraint pending/current region and cursor-hint state, cached it with synchronized subsurface commits, dropped cached state on constraint destruction, rebuilt effective regions from committed surface input state, and confined pointer movement to the committed effective region. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*pointer constraint*"`, `./build/tests/lambda_tests --test-case="*subsurface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
+| 2026-05-31 | WM-COMP-11 | In progress | Lifecycle comparison found wlroots destroys the server-side oneshot pointer constraint after sending deactivation and leaves the protocol resource inert. Lambda only marked the object defunct. Implementing inert-resource removal for deactivated oneshot constraints. |
+| 2026-05-31 | WM-COMP-11 | Verified | Deactivated oneshot pointer constraints now make the protocol resource inert and remove the server-side constraint object after sending the unlocked/unconfined event. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*pointer constraint*"`, `./build/tests/lambda_tests --test-case="*subsurface*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |

@@ -107,6 +107,12 @@ inline bool rebuildPointerConstraintEffectiveRegion(WaylandServer::Impl::Pointer
   return constraint && !constraint->defunct && (constraint->pendingRegionSet || constraint->pendingCursorHintSet);
 }
 
+[[nodiscard]] inline bool pointerConstraintShouldDestroyAfterDeactivation(
+    WaylandServer::Impl::PointerConstraint const* constraint) {
+  return constraint && !constraint->active &&
+         constraint->lifetime == ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT;
+}
+
 [[nodiscard]] inline WaylandServer::Impl::PointerConstraintCommitState takePointerConstraintPendingState(
     WaylandServer::Impl::PointerConstraint* constraint) {
   WaylandServer::Impl::PointerConstraintCommitState state;

@@ -262,6 +262,21 @@ TEST_CASE("pointer constraint cached commit state does not consume later pending
   CHECK(lambda::compositor::pointerConstraintRegionContainsLocalPoint(&constraint, 45.f, 45.f));
 }
 
+TEST_CASE("oneshot pointer constraints are destroyed after deactivation") {
+  lambda::compositor::WaylandServer::Impl::PointerConstraint persistent{};
+  persistent.lifetime = ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT;
+  persistent.active = false;
+  CHECK_FALSE(lambda::compositor::pointerConstraintShouldDestroyAfterDeactivation(&persistent));
+
+  lambda::compositor::WaylandServer::Impl::PointerConstraint oneshot{};
+  oneshot.lifetime = ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT;
+  oneshot.active = true;
+  CHECK_FALSE(lambda::compositor::pointerConstraintShouldDestroyAfterDeactivation(&oneshot));
+
+  oneshot.active = false;
+  CHECK(lambda::compositor::pointerConstraintShouldDestroyAfterDeactivation(&oneshot));
+}
+
 TEST_CASE("xdg popup parent validation accepts only constructed xdg roles") {
   CHECK(lambda::compositor::xdgPopupParentHasValidRole(nullptr));
 
