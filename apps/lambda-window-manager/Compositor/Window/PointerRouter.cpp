@@ -279,7 +279,7 @@ void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     return;
   }
 
-  std::uint32_t serial = server->nextInputSerial_++;
+  std::uint32_t serial = issueSeatSerialForSurface(server, SeatSerialKind::PointerEnter, next);
   WaylandServer::Impl::Surface* previous = server->pointerFocus_;
   if (previous) {
     for (wl_resource* pointer : server->pointerResources_) {
@@ -504,7 +504,7 @@ namespace lambda::compositor::wm {
 
 void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next) {
   if (server->keyboardFocus_ == next) return;
-  std::uint32_t serial = server->nextInputSerial_++;
+  std::uint32_t serial = issueSeatSerialForSurface(server, SeatSerialKind::KeyboardEnter, next);
   WaylandServer::Impl::Surface* previous = server->keyboardFocus_;
   if (previous) {
     for (wl_resource* keyboard : server->keyboardResources_) {
@@ -523,10 +523,12 @@ void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     std::uint32_t const latched = keyboardLatchedModifierMask(server);
     std::uint32_t const locked = keyboardLockedModifierMask(server);
     std::uint32_t const group = keyboardLayoutIndex(server);
+    std::uint32_t const modifiersSerial =
+        issueSeatSerialForSurface(server, SeatSerialKind::KeyboardModifiers, next);
     for (wl_resource* keyboard : server->keyboardResources_) {
       if (!resourceBelongsToSurfaceClient(keyboard, next)) continue;
       wl_keyboard_send_enter(keyboard, serial, next->resource, &keys);
-      wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, modifiers, latched, locked, group);
+      wl_keyboard_send_modifiers(keyboard, modifiersSerial, modifiers, latched, locked, group);
     }
     wl_array_release(&keys);
   }

@@ -263,6 +263,7 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   if (surface->bufferState.buffer && surface->dmabufBuffer) {
     wl_buffer_send_release(surface->bufferState.buffer);
   }
+  clearSeatSerialsForSurface(this, surface);
   eraseResource(surfaces_, surface);
   if (activatePrevious) activateMostRecentToplevel(this, 0);
 }

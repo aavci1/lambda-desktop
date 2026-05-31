@@ -21,7 +21,7 @@
 | P1 | WM-COMP-2 Layer shell configure and state correctness | Verified | Implemented pending/current layer state, configure serial validation, mapped/unmapped state, initial commit enforcement, and layer-shell v4 binding | `lambda_tests` layer/compositor suites and broader feasible suite pass | No manual gate needed for this protocol-state slice |
 | P2 | WM-COMP-3 Subsurface state, order, and synchronized commits | Verified | Implemented pending/current position, committed sibling ordering, synchronized commit caching, and desync cache release | `lambda_tests` subsurface/compositor suites and broader feasible suite pass | No manual gate needed for this protocol-state slice |
 | P3 | WM-COMP-4 Scene and output damage architecture | Verified | Conservative scene damage, damage-aware atomic dirty skipping, and presented-scene frame callbacks are implemented | Snapshot/damage tests plus render scheduler tests pass | DP-1 resize, cursor, dock, and flicker validation passed |
-| P4 | WM-COMP-5 Seat serials and grab model | Planned | Next active workstream | Seat serial, popup grab, selection, and focus tests | Popups, drag/drop, clipboard, and menu behavior in real apps |
+| P4 | WM-COMP-5 Seat serials and grab model | In progress | Seat serial ledger and cursor request validation verified; next step is xdg move/resize/popup grab validation through the shared helper | Seat serial, popup grab, selection, and focus tests | Popups, drag/drop, clipboard, and menu behavior in real apps |
 | P5 | WM-COMP-6 DMABUF feedback and buffer lifetime | Planned | Starts after WM-COMP-5 reaches its gate | DMABUF validation and buffer release tests where possible | GPU-client/video validation on target hardware |
 
 ## WM-COMP-1 Surface Commit State Core
@@ -176,10 +176,17 @@
 
 **Implementation steps:**
 
-1. Inventory all serial producers and consumers.
-2. Add per-client or per-seat serial validation helpers.
-3. Route popup grabs, pointer grabs, keyboard focus changes, cursor requests, data-device requests, and primary selection through the shared validation model.
+1. Done: inventory all serial producers and consumers.
+2. Done for pointer/cursor slice: add per-client/per-seat serial validation helpers, record input serial producers in a compact ledger, and validate `wl_pointer.set_cursor` plus cursor-shape `set_shape` against pointer enter/button serials for the currently focused pointer surface.
+3. In progress: route xdg popup grabs, xdg move/resize/menu requests, data-device requests, and primary selection through the shared validation model.
 4. Add tests for stale serials, wrong-client serials, popup grab lifetime, and selection validation.
+
+**Step 1 inventory:**
+
+- Serial producers: pointer enter, pointer button, keyboard enter, keyboard key, keyboard modifiers, data-device DnD enter, configure serials, and activation token serial setters.
+- Existing consumers: `wl_pointer.set_cursor`, cursor-shape `set_shape`, xdg popup `grab`, xdg toplevel `show_window_menu`, `move`, `resize`, data-device `start_drag`, data-device `set_selection`, primary-selection `set_selection`, and xdg-activation token/activate.
+- Current gaps: cursor requests do not share validation; `wl_pointer.set_cursor` ignores the serial entirely; cursor-shape accepts only the latest pointer-enter serial; popup/move/resize use ad hoc pointer-enter/button fields; DnD and selection ignore their supplied serials.
+- Migration order: introduce a compact seat serial ledger, use it for cursor requests first, then move xdg move/resize/popup grabs onto the helper, then validate data-device and primary-selection serials.
 
 **Acceptance criteria:**
 
@@ -238,3 +245,5 @@
 | 2026-05-31 | WM-COMP-4 | Verified slice | Added `SceneDamageState` and conservative scene damage computation for full-output fallback, old/new frame rects, stable buffer damage mapping, relative order changes, software cursor rects, and lightweight retained metadata. Wired render-frame tracing to the damage result without changing presentation behavior. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*scene damage*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
 | 2026-05-31 | WM-COMP-4 | Verified slice | Implemented damage-aware atomic dirty-frame skipping. Render-ahead damage state is now attached to `AtomicReadyFrame` and committed only when scheduled, so discarded prepared frames do not advance the damage baseline. The runtime clears `atomicFrameDirty` instead of rendering when scene damage is empty and there is no explicit animation, screenshot, snap-preview, config, software-input redraw, or hardware-cursor atomic update reason. User validation found cursor movement did not update until VT switch; fixed by treating hardware cursor movement as an explicit no-skip reason because atomic cursor coordinates are committed with the next KMS update. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*scene damage*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed after the cursor no-skip fix. Manual DP-1 HiDPI validation then passed for cursor movement, Settings resize, and dock/window flicker checks. |
 | 2026-05-31 | WM-COMP-4 | Verified | Carried presented surface IDs through `AtomicReadyFrame` and the non-atomic render path, then used those IDs for presentation feedback and frame callbacks so unpresented or invisible surfaces do not receive frame completion. Direct-scanout repeat frames clear the presented-surface set, avoiding synthetic callbacks while waiting for acquire fences. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*frame callbacks*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |
+| 2026-05-31 | WM-COMP-5 | In progress | Inventory found pointer enter/button, keyboard enter/key/modifier, DnD enter, configure, and activation serial producers. Serial consumers are currently split across cursor requests, cursor shape, xdg popup grabs, move/resize/menu, DnD, selection, primary selection, and activation. Starting with a compact seat serial ledger and cursor request validation because it is narrow and automatable. |
+| 2026-05-31 | WM-COMP-5 | Verified slice | Added a compact seat serial ledger, routed pointer enter/button, keyboard enter/key/modifier, and DnD enter serial production through it, cleared surface-owned serial records on destroy, and validated `wl_pointer.set_cursor` plus cursor-shape `set_shape` against pointer enter/button serials for the currently focused pointer surface. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*seat serial*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, and `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"` passed. |

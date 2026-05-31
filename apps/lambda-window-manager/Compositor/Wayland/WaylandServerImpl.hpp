@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <span>
@@ -34,6 +35,15 @@ enum class SurfaceRole : std::uint8_t {
   LayerSurface,
   Subsurface,
   Cursor,
+};
+
+enum class SeatSerialKind : std::uint8_t {
+  PointerEnter,
+  PointerButton,
+  KeyboardEnter,
+  KeyboardKey,
+  KeyboardModifiers,
+  DataDeviceEnter,
 };
 
 struct WaylandServer::Impl {
@@ -58,6 +68,7 @@ struct WaylandServer::Impl {
   struct DmabufBuffer;
   struct ToplevelDecoration;
   struct XxCutouts;
+  struct SeatSerialRecord;
   struct Region;
   struct BackgroundEffect;
   struct Viewport;
@@ -84,6 +95,12 @@ struct WaylandServer::Impl {
     float startY = 0.f;
     float currentX = 0.f;
     float currentY = 0.f;
+  };
+  struct SeatSerialRecord {
+    std::uint32_t serial = 0;
+    SeatSerialKind kind = SeatSerialKind::PointerEnter;
+    wl_client* client = nullptr;
+    Surface* surface = nullptr;
   };
 
   explicit Impl(WaylandOutputInfo output);
@@ -281,6 +298,7 @@ struct WaylandServer::Impl {
   std::uint32_t pointerEnterSerial_ = 0;
   std::uint32_t lastPointerButtonSerial_ = 0;
   Surface* lastPointerButtonSurface_ = nullptr;
+  std::deque<SeatSerialRecord> seatSerials_;
   float dragOffsetX_ = 0.f;
   float dragOffsetY_ = 0.f;
   std::optional<SnapTarget> dragSnapTarget_;
@@ -573,6 +591,32 @@ inline std::int32_t surfaceTransformedBufferHeight(WaylandServer::Impl::Surface 
   if (!surface) return 0;
   return surfaceBufferTransformSwapsAxes(surface->bufferState.transform) ? surface->width : surface->height;
 }
+
+std::uint32_t issueSeatSerial(WaylandServer::Impl* server,
+                              SeatSerialKind kind,
+                              wl_client* client,
+                              WaylandServer::Impl::Surface* surface);
+std::uint32_t issueSeatSerial(std::uint32_t& nextSerial,
+                              std::deque<WaylandServer::Impl::SeatSerialRecord>& records,
+                              SeatSerialKind kind,
+                              wl_client* client,
+                              WaylandServer::Impl::Surface* surface);
+std::uint32_t issueSeatSerialForSurface(WaylandServer::Impl* server,
+                                        SeatSerialKind kind,
+                                        WaylandServer::Impl::Surface* surface);
+bool seatSerialIsValid(WaylandServer::Impl const* server,
+                       std::uint32_t serial,
+                       wl_client* client,
+                       WaylandServer::Impl::Surface const* surface,
+                       std::span<SeatSerialKind const> allowedKinds);
+bool seatSerialIsValid(std::deque<WaylandServer::Impl::SeatSerialRecord> const& records,
+                       std::uint32_t serial,
+                       wl_client* client,
+                       WaylandServer::Impl::Surface const* surface,
+                       std::span<SeatSerialKind const> allowedKinds);
+void clearSeatSerialsForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface);
+void clearSeatSerialsForSurface(std::deque<WaylandServer::Impl::SeatSerialRecord>& records,
+                                WaylandServer::Impl::Surface const* surface);
 
 inline std::int32_t surfaceCommittedDisplayWidth(WaylandServer::Impl::Surface const* surface) {
   if (!surface) return 0;

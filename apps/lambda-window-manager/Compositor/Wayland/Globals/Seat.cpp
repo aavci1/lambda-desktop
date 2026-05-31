@@ -11,6 +11,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -65,9 +66,16 @@ int createKeymapFd(WaylandServer::Impl* server, std::uint32_t& size) {
   return -1;
 }
 
-void pointerSetCursor(wl_client*, wl_resource* resource, std::uint32_t, wl_resource* surfaceResource,
+constexpr std::array<SeatSerialKind, 2> kPointerCursorSerialKinds{
+    SeatSerialKind::PointerEnter,
+    SeatSerialKind::PointerButton,
+};
+
+void pointerSetCursor(wl_client* client, wl_resource* resource, std::uint32_t serial, wl_resource* surfaceResource,
                       std::int32_t hotspotX, std::int32_t hotspotY) {
   auto* server = serverFrom(resource);
+  if (!server || !server->pointerFocus_) return;
+  if (!seatSerialIsValid(server, serial, client, server->pointerFocus_, kPointerCursorSerialKinds)) return;
   if (!surfaceResource) {
     bool const changed = server->cursorSurface_ || server->cursorShape_ != CursorShape::Arrow;
     server->cursorSurface_ = nullptr;
@@ -146,11 +154,15 @@ void seatGetKeyboard(wl_client* client, wl_resource* resource, std::uint32_t id)
     std::uint32_t const latched = wm::keyboardLatchedModifierMask(server);
     std::uint32_t const locked = wm::keyboardLockedModifierMask(server);
     std::uint32_t const group = wm::keyboardLayoutIndex(server);
+    std::uint32_t const enterSerial =
+        issueSeatSerialForSurface(server, SeatSerialKind::KeyboardEnter, server->keyboardFocus_);
+    std::uint32_t const modifiersSerial =
+        issueSeatSerialForSurface(server, SeatSerialKind::KeyboardModifiers, server->keyboardFocus_);
     wl_keyboard_send_enter(keyboard,
-                           server->nextInputSerial_++,
+                           enterSerial,
                            server->keyboardFocus_->resource,
                            &keys);
-    wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, modifiers, latched, locked, group);
+    wl_keyboard_send_modifiers(keyboard, modifiersSerial, modifiers, latched, locked, group);
     wl_array_release(&keys);
   }
 }

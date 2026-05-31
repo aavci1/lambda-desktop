@@ -72,9 +72,11 @@ void sendKeyboardModifiers(WaylandServer::Impl* server) {
   std::uint32_t const latched = keyboardLatchedModifierMask(server);
   std::uint32_t const locked = keyboardLockedModifierMask(server);
   std::uint32_t const group = keyboardLayoutIndex(server);
+  std::uint32_t const serial =
+      issueSeatSerialForSurface(server, SeatSerialKind::KeyboardModifiers, server->keyboardFocus_);
   for (wl_resource* keyboard : server->keyboardResources_) {
     if (!resourceBelongsToSurfaceClient(keyboard, server->keyboardFocus_)) continue;
-    wl_keyboard_send_modifiers(keyboard, server->nextInputSerial_++, depressed, latched, locked, group);
+    wl_keyboard_send_modifiers(keyboard, serial, depressed, latched, locked, group);
   }
 }
 

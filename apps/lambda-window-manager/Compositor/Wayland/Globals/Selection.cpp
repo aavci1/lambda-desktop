@@ -446,7 +446,7 @@ void updateDndTargetImpl(WaylandServer::Impl* server, WaylandServer::Impl::Surfa
             wl_data_offer_send_offer(offerResource, mimeType.c_str());
           }
         }
-        std::uint32_t const serial = server->nextInputSerial_++;
+        std::uint32_t const serial = issueSeatSerialForSurface(server, SeatSerialKind::DataDeviceEnter, target);
         wl_fixed_t const x = wl_fixed_from_double(wm::surfaceLocalX(target, server->pointerX_));
         wl_fixed_t const y = wl_fixed_from_double(wm::surfaceLocalY(target, server->pointerY_));
         wl_data_device_send_enter(targetDevice->resource, serial, target->resource, x, y, offerResource);

@@ -407,7 +407,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
     updateCompositorCursorForPointer(this);
   }
   if (!pointerFocus_) return;
-  std::uint32_t serial = nextInputSerial_++;
+  std::uint32_t serial = issueSeatSerialForSurface(this, SeatSerialKind::PointerButton, pointerFocus_);
   lastPointerButtonSerial_ = pressed ? serial : 0;
   lastPointerButtonSurface_ = pressed ? pointerFocus_ : nullptr;
   for (wl_resource* pointer : pointerResources_) {
@@ -450,7 +450,7 @@ void WaylandServer::Impl::handleKeyboardKey(std::uint32_t key, bool pressed, std
   if (pressed && key == KEY_ESC && dismissTopPopup(this)) return;
   if (handleCompositorShortcut(this, key, pressed, timeMs)) return;
   if (!keyboardFocus_) return;
-  std::uint32_t serial = nextInputSerial_++;
+  std::uint32_t serial = issueSeatSerialForSurface(this, SeatSerialKind::KeyboardKey, keyboardFocus_);
   for (wl_resource* keyboard : keyboardResources_) {
     if (!resourceBelongsToSurfaceClient(keyboard, keyboardFocus_)) continue;
     wl_keyboard_send_key(keyboard,
