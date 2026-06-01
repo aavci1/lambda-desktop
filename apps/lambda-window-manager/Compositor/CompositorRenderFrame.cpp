@@ -5,6 +5,7 @@
 #include "Compositor/CompositorPresentation.hpp"
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Surface/CommittedSurfacePainter.hpp"
+#include "Compositor/Surface/CommittedSurfaceSnapshotState.hpp"
 #include "Compositor/Surface/SurfaceRenderer.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 
@@ -100,7 +101,7 @@ void drawScreenshotFlash(Canvas& canvas, WaylandServer const& wayland, float opa
                   ShadowStyle::none());
 }
 
-struct OverlaySurfaceSelection {
+struct HardwareScanoutSelection {
   std::size_t index = 0;
   platform::KmsAtomicPresenter::OverlayCandidate candidate{};
 };
@@ -116,6 +117,27 @@ void hashCombineFloat(std::uint64_t& seed, float value) {
 void hashCombineString(std::uint64_t& seed, std::string const& value) {
   hashCombine(seed, static_cast<std::uint64_t>(std::hash<std::string>{}(value)));
 }
+
+struct PrimaryReuseSignatureHasher {
+  std::uint64_t& seed;
+
+  void operator()(bool value) const {
+    hashCombine(seed, value ? 1u : 0u);
+  }
+
+  void operator()(float value) const {
+    hashCombineFloat(seed, value);
+  }
+
+  void operator()(std::string const& value) const {
+    hashCombineString(seed, value);
+  }
+
+  template <typename T>
+  void operator()(T value) const {
+    hashCombine(seed, static_cast<std::uint64_t>(value));
+  }
+};
 
 std::uint64_t primaryReuseSignature(std::vector<CommittedSurfaceSnapshot> const& surfaces,
                                     std::uint64_t overlaySurfaceId,
@@ -133,48 +155,10 @@ std::uint64_t primaryReuseSignature(std::vector<CommittedSurfaceSnapshot> const&
   hashCombine(seed, static_cast<std::uint64_t>(surfaces.size()));
   for (auto const& surface : surfaces) {
     bool const overlaySurface = surface.id == overlaySurfaceId;
+    PrimaryReuseSignatureHasher const hashSurfaceValue{seed};
     hashCombine(seed, surface.id);
-    hashCombine(seed, static_cast<std::uint64_t>(surface.x));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.y));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.width));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.height));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.committedWidth));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.committedHeight));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.bufferWidth));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.bufferHeight));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.bufferTransform));
-    hashCombineFloat(seed, surface.sourceX);
-    hashCombineFloat(seed, surface.sourceY);
-    hashCombineFloat(seed, surface.sourceWidth);
-    hashCombineFloat(seed, surface.sourceHeight);
-    hashCombine(seed, static_cast<std::uint64_t>(surface.destinationWidth));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.destinationHeight));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.titleBarHeight));
-    hashCombineString(seed, surface.title);
-    hashCombine(seed, surface.serverSideDecorated ? 1u : 0u);
-    hashCombine(seed, surface.cutoutsBound ? 1u : 0u);
-    hashCombine(seed, surface.cutoutsRejected ? 1u : 0u);
-    hashCombine(seed, surface.closeButtonHovered ? 1u : 0u);
-    hashCombine(seed, surface.closeButtonPressed ? 1u : 0u);
-    hashCombine(seed, surface.maximizeButtonHovered ? 1u : 0u);
-    hashCombine(seed, surface.maximizeButtonPressed ? 1u : 0u);
-    hashCombine(seed, surface.minimizeButtonHovered ? 1u : 0u);
-    hashCombine(seed, surface.minimizeButtonPressed ? 1u : 0u);
-    hashCombine(seed, surface.focused ? 1u : 0u);
-    hashCombine(seed, surface.activeSizing ? 1u : 0u);
-    hashCombine(seed, surface.pacingSizing ? 1u : 0u);
-    hashCombine(seed, surface.geometryAnimationGrowing ? 1u : 0u);
-    hashCombine(seed, static_cast<std::uint64_t>(surface.shadowClipTop));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.shadowClipBottom));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.windowClipTop));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.windowClipBottom));
-    hashCombine(seed, static_cast<std::uint64_t>(surface.backgroundBlurRects.size()));
-    for (auto const& rect : surface.backgroundBlurRects) {
-      hashCombine(seed, static_cast<std::uint64_t>(rect.x));
-      hashCombine(seed, static_cast<std::uint64_t>(rect.y));
-      hashCombine(seed, static_cast<std::uint64_t>(rect.width));
-      hashCombine(seed, static_cast<std::uint64_t>(rect.height));
-    }
+    visitCommittedSurfaceContentMapping(surface, hashSurfaceValue);
+    visitCommittedSurfaceFrameVisualState(surface, hashSurfaceValue);
     if (!overlaySurface) {
       hashCombine(seed, surface.serial);
       hashCombine(seed, surface.dmabufBufferId);
@@ -222,32 +206,32 @@ bool surfaceOpenAnimationComplete(SurfaceRenderState const& state,
   return frameTime - visual->second.firstSeen >= kSurfaceOpenAnimationDuration;
 }
 
-bool surfaceGeometryEligibleForOverlay(CommittedSurfaceSnapshot const& surface,
-                                       WaylandServer const& wayland,
-                                       SurfaceRenderState const& state,
-                                       std::chrono::steady_clock::time_point frameTime,
-                                       bool animationsEnabled) {
+bool surfaceEligibleForHardwareScanoutPlane(CommittedSurfaceSnapshot const& surface,
+                                            WaylandServer const& wayland,
+                                            SurfaceRenderState const& state,
+                                            std::chrono::steady_clock::time_point frameTime,
+                                            bool animationsEnabled) {
+  if (!surface.fullscreen) {
+    return false;
+  }
   if (surface.id == 0 || surface.dmabufBufferId == 0 || surface.dmabufFormat == 0 ||
       surface.dmabufPlanes.empty() || surface.dmabufPlanes.size() > 4) {
     return false;
   }
-  auto reject = [](char const*) {
-    return false;
-  };
   bool const usesCutoutChrome = surface.serverSideDecorated && surface.cutoutsBound && !surface.cutoutsRejected;
   if (usesCutoutChrome || surface.activeSizing ||
       surface.pacingSizing || surface.geometryAnimationGrowing || surface.windowClipTop > 0 ||
       surface.windowClipBottom > 0 || !surface.backgroundBlurRects.empty()) {
-    return reject("composited-frame");
+    return false;
   }
   if (surface.bufferTransform != 0 || surface.bufferWidth <= 0 || surface.bufferHeight <= 0 ||
       surface.width <= 0 || surface.height <= 0) {
-    return reject("geometry");
+    return false;
   }
   if (surface.x < 0 || surface.y < 0 ||
       surface.x + surface.width > wayland.logicalOutputWidth() ||
       surface.y + surface.height > wayland.logicalOutputHeight()) {
-    return reject("output-bounds");
+    return false;
   }
   double const sourceWidth = surface.sourceWidth > 0.f ? surface.sourceWidth : static_cast<double>(surface.bufferWidth);
   double const sourceHeight = surface.sourceHeight > 0.f ? surface.sourceHeight : static_cast<double>(surface.bufferHeight);
@@ -256,13 +240,13 @@ bool surfaceGeometryEligibleForOverlay(CommittedSurfaceSnapshot const& surface,
       sourceWidth <= 0.0 || sourceHeight <= 0.0 ||
       surface.sourceX + sourceWidth > static_cast<double>(surface.bufferWidth) + 0.5 ||
       surface.sourceY + sourceHeight > static_cast<double>(surface.bufferHeight) + 0.5) {
-    return reject("source");
+    return false;
   }
-  if (!surfaceOpenAnimationComplete(state, surface, frameTime, animationsEnabled)) return reject("open-animation");
+  if (!surfaceOpenAnimationComplete(state, surface, frameTime, animationsEnabled)) return false;
   return true;
 }
 
-std::uint64_t overlayCandidateSignature(CommittedSurfaceSnapshot const& surface,
+std::uint64_t scanoutCandidateSignature(CommittedSurfaceSnapshot const& surface,
                                         double outputScaleX,
                                         double outputScaleY) {
   std::uint64_t seed = 0x84222325cbf29ce4ull;
@@ -295,34 +279,34 @@ std::uint64_t overlayCandidateSignature(CommittedSurfaceSnapshot const& surface,
   return seed;
 }
 
-void rememberRejectedOverlayCandidate(SurfaceRenderState& state,
+void rememberRejectedScanoutCandidate(SurfaceRenderState& state,
                                       std::vector<CommittedSurfaceSnapshot> const& surfaces,
-                                      std::optional<OverlaySurfaceSelection> const& selection,
+                                      std::optional<HardwareScanoutSelection> const& selection,
                                       double outputScaleX,
                                       double outputScaleY) {
   if (!selection || selection->index >= surfaces.size()) return;
   CommittedSurfaceSnapshot const& surface = surfaces[selection->index];
   state.rejectedOverlaySignaturesBySurface[surface.id] =
-      overlayCandidateSignature(surface, outputScaleX, outputScaleY);
+      scanoutCandidateSignature(surface, outputScaleX, outputScaleY);
 }
 
-std::optional<OverlaySurfaceSelection>
-selectOverlaySurface(WaylandServer& wayland,
-                     std::vector<CommittedSurfaceSnapshot> const& surfaces,
-                     SurfaceRenderState const& state,
-                     platform::KmsAtomicPresenter const& atomicPresenter,
-                     std::chrono::steady_clock::time_point frameTime,
-                     bool animationsEnabled,
-                     double outputScaleX,
-                     double outputScaleY) {
+std::optional<std::size_t>
+selectHardwareScanoutSurfaceIndex(WaylandServer const& wayland,
+                                  std::vector<CommittedSurfaceSnapshot> const& surfaces,
+                                  SurfaceRenderState const& state,
+                                  platform::KmsAtomicPresenter const& atomicPresenter,
+                                  std::chrono::steady_clock::time_point frameTime,
+                                  bool animationsEnabled,
+                                  double outputScaleX,
+                                  double outputScaleY) {
   std::optional<std::size_t> selectedIndex;
   std::int64_t selectedArea = 0;
   for (std::size_t i = 0; i < surfaces.size(); ++i) {
     CommittedSurfaceSnapshot const& surface = surfaces[i];
-    if (!surfaceGeometryEligibleForOverlay(surface, wayland, state, frameTime, animationsEnabled)) continue;
+    if (!surfaceEligibleForHardwareScanoutPlane(surface, wayland, state, frameTime, animationsEnabled)) continue;
     auto const rejected = state.rejectedOverlaySignaturesBySurface.find(surface.id);
     if (rejected != state.rejectedOverlaySignaturesBySurface.end() &&
-        rejected->second == overlayCandidateSignature(surface, outputScaleX, outputScaleY)) {
+        rejected->second == scanoutCandidateSignature(surface, outputScaleX, outputScaleY)) {
       continue;
     }
     std::uint64_t const modifier = surface.dmabufPlanes.empty() || surface.dmabufPlanes.front().modifier == DRM_FORMAT_MOD_INVALID
@@ -344,9 +328,18 @@ selectOverlaySurface(WaylandServer& wayland,
       selectedArea = area;
     }
   }
-  if (!selectedIndex) return std::nullopt;
+  return selectedIndex;
+}
 
-  CommittedSurfaceSnapshot const& surface = surfaces[*selectedIndex];
+std::optional<HardwareScanoutSelection>
+buildHardwareScanoutSelection(WaylandServer& wayland,
+                              std::vector<CommittedSurfaceSnapshot> const& surfaces,
+                              std::size_t surfaceIndex,
+                              double outputScaleX,
+                              double outputScaleY) {
+  if (surfaceIndex >= surfaces.size()) return std::nullopt;
+
+  CommittedSurfaceSnapshot const& surface = surfaces[surfaceIndex];
   std::vector<int> fds = wayland.duplicateDmabufFds(surface.id);
   if (fds.size() != surface.dmabufPlanes.size()) {
     for (int fd : fds) {
@@ -382,7 +375,28 @@ selectOverlaySurface(WaylandServer& wayland,
     });
     fds[planeIndex] = -1;
   }
-  return OverlaySurfaceSelection{.index = *selectedIndex, .candidate = std::move(candidate)};
+  return HardwareScanoutSelection{.index = surfaceIndex, .candidate = std::move(candidate)};
+}
+
+std::optional<HardwareScanoutSelection>
+selectHardwareScanoutSurface(WaylandServer& wayland,
+                             std::vector<CommittedSurfaceSnapshot> const& surfaces,
+                             SurfaceRenderState const& state,
+                             platform::KmsAtomicPresenter const& atomicPresenter,
+                             std::chrono::steady_clock::time_point frameTime,
+                             bool animationsEnabled,
+                             double outputScaleX,
+                             double outputScaleY) {
+  auto const selectedIndex = selectHardwareScanoutSurfaceIndex(wayland,
+                                                              surfaces,
+                                                              state,
+                                                              atomicPresenter,
+                                                              frameTime,
+                                                              animationsEnabled,
+                                                              outputScaleX,
+                                                              outputScaleY);
+  if (!selectedIndex) return std::nullopt;
+  return buildHardwareScanoutSelection(wayland, surfaces, *selectedIndex, outputScaleX, outputScaleY);
 }
 
 platform::KmsAtomicPresenter::OverlayCandidate duplicateOverlayCandidate(
@@ -450,6 +464,7 @@ bool surfaceEligibleForFullscreenDirectScanout(CommittedSurfaceSnapshot const& s
                                                bool hardwareCursorAvailable,
                                                float screenshotFlashOpacity) {
   if (std::getenv("LAMBDA_COMPOSITOR_DISABLE_FULLSCREEN_DIRECT_SCANOUT")) return false;
+  if (!surface.fullscreen) return false;
   if (screenshotFlashOpacity > 0.001f) return false;
   if (surface.x != 0 || surface.y != 0 ||
       surface.width != wayland.logicalOutputWidth() ||
@@ -462,6 +477,53 @@ bool surfaceEligibleForFullscreenDirectScanout(CommittedSurfaceSnapshot const& s
   }
   if (!wayland.cursorSurface()) return true;
   return hardwareCursorEnabled && hardwareCursorAvailable && cursorState.hardwareVisible;
+}
+
+double renderMilliseconds(CompositorRenderFrameContext const& ctx,
+                          std::chrono::steady_clock::time_point renderStart) {
+  return ctx.detailedFrameProfile
+             ? presentation::LoopInstrumentation::milliseconds(renderStart, presentation::LoopInstrumentation::Clock::now())
+             : 0.0;
+}
+
+struct AtomicReadyFrameOptions {
+  bool overlayOnly = false;
+  bool directScanout = false;
+  std::shared_ptr<platform::KmsAtomicPresenter::OverlayCandidate> scanoutCandidate;
+};
+
+void storeAtomicReadyFrame(
+    CompositorRenderFrameContext& ctx,
+    std::uint32_t presentToken,
+    PresentationTiming presentationTiming,
+    std::size_t surfaceCount,
+    std::chrono::steady_clock::time_point frameTime,
+    std::chrono::steady_clock::time_point renderStart,
+    bool renderAheadFrame,
+    presentation::AtomicFrameProfile const& profile,
+    SceneDamageState&& sceneDamageState,
+    std::vector<std::uint64_t> const& frameCallbackSurfaceIds,
+    AtomicReadyFrameOptions options = {}) {
+  if (!ctx.atomicReadyFrame || !ctx.atomicFrameDirty || !ctx.lastKnownContentSerial) return;
+  *ctx.atomicReadyFrame = AtomicReadyFrame{
+      .ready = true,
+      .presentToken = presentToken,
+      .timing = presentationTiming,
+      .surfaceCount = surfaceCount,
+      .frameTime = frameTime,
+      .renderMs = renderMilliseconds(ctx, renderStart),
+      .renderedAhead = renderAheadFrame,
+      .overlayOnly = options.overlayOnly,
+      .directScanout = options.directScanout,
+      .contentSerial = ctx.wayland.contentSerial(),
+      .profile = profile,
+      .sceneDamageState = std::move(sceneDamageState),
+      .sceneDamageStateValid = true,
+      .frameCallbackSurfaceIds = frameCallbackSurfaceIds,
+      .scanoutCandidate = std::move(options.scanoutCandidate),
+  };
+  *ctx.atomicFrameDirty = false;
+  *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
 }
 
 } // namespace
@@ -526,28 +588,17 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     });
     ctx.frameProfile.maybeLog();
     ctx.loopStats.recordRender(renderStart);
-    if (atomicPresenter && ctx.atomicReadyFrame && ctx.atomicFrameDirty && ctx.lastKnownContentSerial) {
-      double const renderMs =
-          ctx.detailedFrameProfile
-              ? presentation::LoopInstrumentation::milliseconds(renderStart, presentation::LoopInstrumentation::Clock::now())
-              : 0.0;
-      *ctx.atomicReadyFrame = AtomicReadyFrame{
-          .ready = true,
-          .presentToken = presentToken,
-          .timing = presentationTiming,
-          .surfaceCount = committedSurfaceCount,
-          .frameTime = frameTime,
-          .renderMs = renderMs,
-          .renderedAhead = renderAheadFrame,
-          .contentSerial = ctx.wayland.contentSerial(),
-          .profile = atomicFrameProfile,
-          .sceneDamageState = std::move(frameSceneDamageState),
-          .sceneDamageStateValid = true,
-          .frameCallbackSurfaceIds = {},
-          .scanoutCandidate = nullptr,
-      };
-      *ctx.atomicFrameDirty = false;
-      *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
+    if (atomicPresenter) {
+      storeAtomicReadyFrame(ctx,
+                            presentToken,
+                            presentationTiming,
+                            committedSurfaceCount,
+                            frameTime,
+                            renderStart,
+                            renderAheadFrame,
+                            atomicFrameProfile,
+                            std::move(frameSceneDamageState),
+                            {});
     }
     if (!atomicPresenter) {
       ctx.surfaceRenderState.sceneDamage = std::move(frameSceneDamageState);
@@ -652,7 +703,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   std::unordered_set<std::uint64_t> liveSurfaceIds;
   liveSurfaceIds.reserve(committedSurfaces.size());
   std::uint64_t overlaySurfaceId = 0;
-  std::optional<OverlaySurfaceSelection> pendingOverlay;
+  std::optional<HardwareScanoutSelection> pendingOverlay;
   double outputScaleX = 1.0;
   double outputScaleY = 1.0;
   if (atomicPresenter && !snapPreview && !screenshotOverlay && ctx.surfaceRenderState.closingSurfaces.empty()) {
@@ -664,14 +715,14 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                        ? static_cast<double>(ctx.output.height()) /
                              static_cast<double>(ctx.wayland.logicalOutputHeight())
                        : 1.0;
-    pendingOverlay = selectOverlaySurface(ctx.wayland,
-                                          committedSurfaces,
-                                          ctx.surfaceRenderState,
-                                          *atomicPresenter,
-                                          frameTime,
-                                          ctx.appliedConfig.config.animationsEnabled,
-                                          outputScaleX,
-                                          outputScaleY);
+    pendingOverlay = selectHardwareScanoutSurface(ctx.wayland,
+                                                  committedSurfaces,
+                                                  ctx.surfaceRenderState,
+                                                  *atomicPresenter,
+                                                  frameTime,
+                                                  ctx.appliedConfig.config.animationsEnabled,
+                                                  outputScaleX,
+                                                  outputScaleY);
     overlaySurfaceId = pendingOverlay ? pendingOverlay->candidate.surfaceId : 0;
     if (!pendingOverlay) {
       atomicPresenter->clearPreparedOverlayCandidate();
@@ -725,30 +776,21 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
       });
       ctx.loopStats.recordRender(renderStart);
       ctx.wayland.setRetainedDmabufBufferIds(atomicPresenter->overlayBufferIdsInUse());
-      if (ctx.atomicReadyFrame && ctx.atomicFrameDirty && ctx.lastKnownContentSerial) {
-        double const renderMs =
-            ctx.detailedFrameProfile
-                ? presentation::LoopInstrumentation::milliseconds(renderStart, presentation::LoopInstrumentation::Clock::now())
-                : 0.0;
-        *ctx.atomicReadyFrame = AtomicReadyFrame{
-            .ready = true,
-            .presentToken = 0,
-            .timing = presentationTiming,
-            .surfaceCount = committedSurfaceCount,
-            .frameTime = frameTime,
-            .renderMs = renderMs,
-            .renderedAhead = renderAheadFrame,
-            .directScanout = true,
-            .contentSerial = ctx.wayland.contentSerial(),
-            .profile = atomicFrameProfile,
-            .sceneDamageState = std::move(frameSceneDamageState),
-            .sceneDamageStateValid = true,
-            .frameCallbackSurfaceIds = frameCallbackSurfaceIds,
-            .scanoutCandidate = directDeferred ? ownOverlayCandidate(std::move(directCandidate)) : nullptr,
-        };
-        *ctx.atomicFrameDirty = false;
-        *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
-      }
+      storeAtomicReadyFrame(ctx,
+                            0,
+                            presentationTiming,
+                            committedSurfaceCount,
+                            frameTime,
+                            renderStart,
+                            renderAheadFrame,
+                            atomicFrameProfile,
+                            std::move(frameSceneDamageState),
+                            frameCallbackSurfaceIds,
+                            AtomicReadyFrameOptions{
+                                .directScanout = true,
+                                .scanoutCandidate = directDeferred ? ownOverlayCandidate(std::move(directCandidate))
+                                                                   : nullptr,
+                            });
       LAMBDA_WINDOW_MANAGER_TRACE_PACING("direct-scanout surface=%llu buffer=%llu prepared=1 fullscreen=1\n",
                                 static_cast<unsigned long long>(candidateSurfaceId),
                                 static_cast<unsigned long long>(candidateBufferId));
@@ -798,36 +840,28 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
         });
         ctx.loopStats.recordRender(renderStart);
         ctx.wayland.setRetainedDmabufBufferIds(atomicPresenter->overlayBufferIdsInUse());
-        if (ctx.atomicReadyFrame && ctx.atomicFrameDirty && ctx.lastKnownContentSerial) {
-          double const renderMs =
-              ctx.detailedFrameProfile
-                  ? presentation::LoopInstrumentation::milliseconds(renderStart, presentation::LoopInstrumentation::Clock::now())
-                  : 0.0;
-          *ctx.atomicReadyFrame = AtomicReadyFrame{
-              .ready = true,
-              .presentToken = 0,
-              .timing = presentationTiming,
-              .surfaceCount = committedSurfaceCount,
-              .frameTime = frameTime,
-              .renderMs = renderMs,
-              .renderedAhead = renderAheadFrame,
-              .overlayOnly = true,
-              .contentSerial = ctx.wayland.contentSerial(),
-              .profile = atomicFrameProfile,
-              .sceneDamageState = std::move(frameSceneDamageState),
-              .sceneDamageStateValid = true,
-              .frameCallbackSurfaceIds = frameCallbackSurfaceIds,
-              .scanoutCandidate = overlayDeferred ? ownOverlayCandidate(std::move(pendingOverlay->candidate)) : nullptr,
-          };
-          *ctx.atomicFrameDirty = false;
-          *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
-        }
+        storeAtomicReadyFrame(ctx,
+                              0,
+                              presentationTiming,
+                              committedSurfaceCount,
+                              frameTime,
+                              renderStart,
+                              renderAheadFrame,
+                              atomicFrameProfile,
+                              std::move(frameSceneDamageState),
+                              frameCallbackSurfaceIds,
+                              AtomicReadyFrameOptions{
+                                  .overlayOnly = true,
+                                  .scanoutCandidate = overlayDeferred
+                                                          ? ownOverlayCandidate(std::move(pendingOverlay->candidate))
+                                                          : nullptr,
+                              });
         LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-overlay surface=%llu buffer=%llu prepared=1 overlayOnly=1\n",
                                   static_cast<unsigned long long>(candidateSurfaceId),
                                   static_cast<unsigned long long>(candidateBufferId));
         return;
       }
-      rememberRejectedOverlayCandidate(ctx.surfaceRenderState,
+      rememberRejectedScanoutCandidate(ctx.surfaceRenderState,
                                        committedSurfaces,
                                        pendingOverlay,
                                        outputScaleX,
@@ -920,7 +954,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                                   static_cast<unsigned long long>(overlaySurfaceId),
                                   static_cast<unsigned long long>(candidateBufferId));
       } else {
-        rememberRejectedOverlayCandidate(ctx.surfaceRenderState,
+        rememberRejectedScanoutCandidate(ctx.surfaceRenderState,
                                          committedSurfaces,
                                          pendingOverlay,
                                          outputScaleX,
@@ -936,28 +970,17 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   }
   atomicFrameProfile.presentMs = profileMs(phaseStart);
   atomicFrameProfile.totalMs = profileMs(frameProfileStart);
-  if (atomicPresenter && ctx.atomicReadyFrame && ctx.atomicFrameDirty && ctx.lastKnownContentSerial) {
-    double const renderMs =
-        ctx.detailedFrameProfile
-            ? presentation::LoopInstrumentation::milliseconds(renderStart, presentation::LoopInstrumentation::Clock::now())
-            : 0.0;
-    *ctx.atomicReadyFrame = AtomicReadyFrame{
-        .ready = true,
-        .presentToken = presentToken,
-        .timing = presentationTiming,
-        .surfaceCount = committedSurfaceCount,
-        .frameTime = frameTime,
-        .renderMs = renderMs,
-        .renderedAhead = renderAheadFrame,
-        .contentSerial = ctx.wayland.contentSerial(),
-        .profile = atomicFrameProfile,
-        .sceneDamageState = std::move(frameSceneDamageState),
-        .sceneDamageStateValid = true,
-        .frameCallbackSurfaceIds = frameCallbackSurfaceIds,
-        .scanoutCandidate = nullptr,
-    };
-    *ctx.atomicFrameDirty = false;
-    *ctx.lastKnownContentSerial = ctx.atomicReadyFrame->contentSerial;
+  if (atomicPresenter) {
+    storeAtomicReadyFrame(ctx,
+                          presentToken,
+                          presentationTiming,
+                          committedSurfaceCount,
+                          frameTime,
+                          renderStart,
+                          renderAheadFrame,
+                          atomicFrameProfile,
+                          std::move(frameSceneDamageState),
+                          frameCallbackSurfaceIds);
   } else if (!atomicPresenter) {
     if (!ctx.vulkanDisplayTimingSupportLogged && ctx.presenter.vulkanDisplayTimingAvailable()) {
       std::fprintf(stderr, "lambda-window-manager: Vulkan display timing available\n");

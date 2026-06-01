@@ -1,5 +1,7 @@
 #include "Compositor/SceneDamage.hpp"
 
+#include "Compositor/Surface/CommittedSurfaceSnapshotState.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
@@ -13,44 +15,6 @@ constexpr std::size_t kMaxDamageRects = 64;
 
 bool rectEmpty(RegionRect const& rect) {
   return rect.width <= 0 || rect.height <= 0;
-}
-
-bool rectsEqual(RegionRect const& lhs, RegionRect const& rhs) {
-  return lhs.x == rhs.x &&
-         lhs.y == rhs.y &&
-         lhs.width == rhs.width &&
-         lhs.height == rhs.height;
-}
-
-bool regionRectsEqual(std::vector<RegionRect> const& lhs,
-                      std::vector<RegionRect> const& rhs) {
-  return lhs.size() == rhs.size() &&
-         std::equal(lhs.begin(), lhs.end(), rhs.begin(), rectsEqual);
-}
-
-bool colorsEqual(Color const& lhs, Color const& rhs) {
-  return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b && lhs.a == rhs.a;
-}
-
-bool cornerRadiiEqual(CornerRadius const& lhs, CornerRadius const& rhs) {
-  return lhs.topLeft == rhs.topLeft &&
-         lhs.topRight == rhs.topRight &&
-         lhs.bottomRight == rhs.bottomRight &&
-         lhs.bottomLeft == rhs.bottomLeft;
-}
-
-bool backgroundEffectsEqual(SurfaceBackgroundEffectSnapshot const& lhs,
-                            SurfaceBackgroundEffectSnapshot const& rhs) {
-  return lhs.blurRadius == rhs.blurRadius &&
-         colorsEqual(lhs.baseColor, rhs.baseColor) &&
-         colorsEqual(lhs.tint, rhs.tint) &&
-         colorsEqual(lhs.borderColor, rhs.borderColor) &&
-         lhs.cornerRadiusSet == rhs.cornerRadiusSet &&
-         cornerRadiiEqual(lhs.cornerRadius, rhs.cornerRadius) &&
-         lhs.shape == rhs.shape &&
-         lhs.calloutPlacement == rhs.calloutPlacement &&
-         lhs.arrowWidth == rhs.arrowWidth &&
-         lhs.arrowHeight == rhs.arrowHeight;
 }
 
 RegionRect fullOutputRect(std::int32_t outputWidth, std::int32_t outputHeight) {
@@ -113,44 +77,12 @@ bool surfaceOrderChanged(std::vector<CommittedSurfaceSnapshot> const& previous,
 
 bool contentMappingEqual(CommittedSurfaceSnapshot const& lhs,
                          CommittedSurfaceSnapshot const& rhs) {
-  return lhs.x == rhs.x &&
-         lhs.y == rhs.y &&
-         lhs.width == rhs.width &&
-         lhs.height == rhs.height &&
-         lhs.bufferWidth == rhs.bufferWidth &&
-         lhs.bufferHeight == rhs.bufferHeight &&
-         lhs.bufferTransform == rhs.bufferTransform &&
-         lhs.sourceX == rhs.sourceX &&
-         lhs.sourceY == rhs.sourceY &&
-         lhs.sourceWidth == rhs.sourceWidth &&
-         lhs.sourceHeight == rhs.sourceHeight &&
-         lhs.destinationWidth == rhs.destinationWidth &&
-         lhs.destinationHeight == rhs.destinationHeight;
+  return committedSurfaceContentMappingEqual(lhs, rhs);
 }
 
 bool frameVisualEqual(CommittedSurfaceSnapshot const& lhs,
                       CommittedSurfaceSnapshot const& rhs) {
-  return rectsEqual(sceneSurfaceFrameRect(lhs), sceneSurfaceFrameRect(rhs)) &&
-         lhs.title == rhs.title &&
-         lhs.serverSideDecorated == rhs.serverSideDecorated &&
-         lhs.cutoutsBound == rhs.cutoutsBound &&
-         lhs.cutoutsRejected == rhs.cutoutsRejected &&
-         lhs.closeButtonHovered == rhs.closeButtonHovered &&
-         lhs.closeButtonPressed == rhs.closeButtonPressed &&
-         lhs.maximizeButtonHovered == rhs.maximizeButtonHovered &&
-         lhs.maximizeButtonPressed == rhs.maximizeButtonPressed &&
-         lhs.minimizeButtonHovered == rhs.minimizeButtonHovered &&
-         lhs.minimizeButtonPressed == rhs.minimizeButtonPressed &&
-         lhs.focused == rhs.focused &&
-         lhs.activeSizing == rhs.activeSizing &&
-         lhs.pacingSizing == rhs.pacingSizing &&
-         lhs.geometryAnimationGrowing == rhs.geometryAnimationGrowing &&
-         lhs.shadowClipTop == rhs.shadowClipTop &&
-         lhs.shadowClipBottom == rhs.shadowClipBottom &&
-         lhs.windowClipTop == rhs.windowClipTop &&
-         lhs.windowClipBottom == rhs.windowClipBottom &&
-         backgroundEffectsEqual(lhs.backgroundEffect, rhs.backgroundEffect) &&
-         regionRectsEqual(lhs.backgroundBlurRects, rhs.backgroundBlurRects);
+  return committedSurfaceFrameVisualStateEqual(lhs, rhs);
 }
 
 bool canMapBufferDamage(CommittedSurfaceSnapshot const& previous,
@@ -246,23 +178,12 @@ void storeDamageState(SceneDamageState& state,
 
 CommittedSurfaceSnapshot::RegionRect
 sceneSurfaceContentRect(CommittedSurfaceSnapshot const& surface) {
-  return RegionRect{
-      .x = surface.x,
-      .y = surface.y,
-      .width = std::max(0, surface.width),
-      .height = std::max(0, surface.height),
-  };
+  return committedSurfaceContentRect(surface);
 }
 
 CommittedSurfaceSnapshot::RegionRect
 sceneSurfaceFrameRect(CommittedSurfaceSnapshot const& surface) {
-  std::int32_t const titleBarHeight = std::max(0, surface.titleBarHeight);
-  return RegionRect{
-      .x = surface.x,
-      .y = surface.y - titleBarHeight,
-      .width = std::max(0, surface.width),
-      .height = std::max(0, surface.height + titleBarHeight),
-  };
+  return committedSurfaceFrameRect(surface);
 }
 
 SceneDamageResult updateSceneDamage(SceneDamageState& state,

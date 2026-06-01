@@ -209,6 +209,7 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .minimizeButtonHovered = hovered == ChromeButton::Minimize,
       .minimizeButtonPressed = server->minimizePressSurface_ == surface,
       .focused = server->keyboardFocus_ == surface,
+      .fullscreen = fullscreen,
       .activeSizing = server->resizeSurface_ == surface ||
                       surface->geometryAnimationActive ||
                       surface->awaitingConfigureCommit,

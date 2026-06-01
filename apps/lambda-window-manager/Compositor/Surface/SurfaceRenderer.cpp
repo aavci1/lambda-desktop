@@ -2,6 +2,7 @@
 
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Surface/CommittedSurfaceSnapshotState.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
@@ -61,61 +62,29 @@ void hashCornerRadius(std::uint64_t &hash, CornerRadius radius) {
   hashValue(hash, radius.bottomLeft);
 }
 
+struct SurfaceDrawSignatureHasher {
+  std::uint64_t& hash;
+
+  template <typename T>
+  void operator()(T const& value) const {
+    hashValue(hash, value);
+  }
+
+  void operator()(std::string const& value) const {
+    hashValue(hash, value.size());
+    hashCombine(hash, value.data(), value.size());
+  }
+};
+
 std::uint64_t surfaceDrawSignature(CommittedSurfaceSnapshot const &surface, CachedClientImage const &cached,
                                    Image const &image, ChromeConfig const &chrome) {
   std::uint64_t hash = 1469598103934665603ull;
+  SurfaceDrawSignatureHasher const hashSurfaceValue{hash};
   hashValue(hash, surface.id);
   hashValue(hash, surface.serial);
   hashValue(hash, surface.dmabufBufferId);
-  hashValue(hash, surface.width);
-  hashValue(hash, surface.height);
-  hashValue(hash, surface.committedWidth);
-  hashValue(hash, surface.committedHeight);
-  hashValue(hash, surface.bufferWidth);
-  hashValue(hash, surface.bufferHeight);
-  hashValue(hash, surface.bufferTransform);
-  hashValue(hash, surface.sourceX);
-  hashValue(hash, surface.sourceY);
-  hashValue(hash, surface.sourceWidth);
-  hashValue(hash, surface.sourceHeight);
-  hashValue(hash, surface.destinationWidth);
-  hashValue(hash, surface.destinationHeight);
-  hashValue(hash, surface.titleBarHeight);
-  hashValue(hash, surface.serverSideDecorated);
-  hashValue(hash, surface.cutoutsBound);
-  hashValue(hash, surface.cutoutsRejected);
-  hashValue(hash, surface.closeButtonHovered);
-  hashValue(hash, surface.closeButtonPressed);
-  hashValue(hash, surface.maximizeButtonHovered);
-  hashValue(hash, surface.maximizeButtonPressed);
-  hashValue(hash, surface.minimizeButtonHovered);
-  hashValue(hash, surface.minimizeButtonPressed);
-  hashValue(hash, surface.focused);
-  hashValue(hash, surface.activeSizing);
-  hashValue(hash, surface.geometryAnimationGrowing);
-  hashValue(hash, surface.shadowClipTop);
-  hashValue(hash, surface.shadowClipBottom);
-  hashValue(hash, surface.windowClipTop);
-  hashValue(hash, surface.windowClipBottom);
-  hashValue(hash, surface.backgroundEffect.blurRadius);
-  hashColor(hash, surface.backgroundEffect.baseColor);
-  hashColor(hash, surface.backgroundEffect.tint);
-  hashColor(hash, surface.backgroundEffect.borderColor);
-  hashValue(hash, surface.backgroundEffect.cornerRadiusSet);
-  hashCornerRadius(hash, surface.backgroundEffect.cornerRadius);
-  hashValue(hash, static_cast<std::uint8_t>(surface.backgroundEffect.shape));
-  hashValue(hash, static_cast<std::uint8_t>(surface.backgroundEffect.calloutPlacement));
-  hashValue(hash, surface.backgroundEffect.arrowWidth);
-  hashValue(hash, surface.backgroundEffect.arrowHeight);
-  hashValue(hash, surface.title.size());
-  hashCombine(hash, surface.title.data(), surface.title.size());
-  hashValue(hash, surface.backgroundBlurRects.size());
-  for (auto const &rect : surface.backgroundBlurRects) {
-    hashValue(hash, rect.x);
-    hashValue(hash, rect.y);
-    hashValue(hash, rect.width);
-    hashValue(hash, rect.height);
-  }
+  visitCommittedSurfaceContentShape(surface, hashSurfaceValue);
+  visitCommittedSurfaceFrameVisualState(surface, hashSurfaceValue);
   hashValue(hash, reinterpret_cast<std::uintptr_t>(&image));
   hashValue(hash, cached.serial);
   hashValue(hash, cached.dmabufBufferId);

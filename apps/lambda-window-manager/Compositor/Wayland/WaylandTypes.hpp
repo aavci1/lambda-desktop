@@ -125,6 +125,7 @@ struct CommittedSurfaceSnapshot {
   bool minimizeButtonHovered = false;
   bool minimizeButtonPressed = false;
   bool focused = false;
+  bool fullscreen = false;
   bool activeSizing = false;
   bool pacingSizing = false;
   bool geometryAnimationGrowing = false;

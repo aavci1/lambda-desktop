@@ -9,6 +9,7 @@ TEST_CASE("committed surface snapshot defaults describe empty buffer state") {
   CHECK(snapshot.bufferHeight == 0);
   CHECK(snapshot.bufferTransform == 0);
   CHECK(snapshot.dmabufFormat == 0);
+  CHECK_FALSE(snapshot.fullscreen);
   CHECK(snapshot.opaqueRegionRects.empty());
   CHECK(snapshot.dmabufPlanes.empty());
   CHECK(snapshot.backgroundEffect.tint.a == 0.f);
