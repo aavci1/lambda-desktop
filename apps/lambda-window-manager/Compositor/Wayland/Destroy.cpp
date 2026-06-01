@@ -2,6 +2,7 @@
 #include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Diagnostics/CrashLog.hpp"
+#include "Compositor/Window/WindowManagerInternal.hpp"
 #include "pointer-constraints-unstable-v1-server-protocol.h"
 #include "presentation-time-server-protocol.h"
 
@@ -21,6 +22,16 @@ void releaseOrDeferBufferRelease(WaylandServer::Impl* server, wl_resource* buffe
     return;
   }
   wl_buffer_send_release(buffer);
+}
+
+void detachPointerButtonGrabSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
+  if (!server || !surface || server->pointerButtonGrabSurface_ != surface) return;
+  wm::popupTrace("lambda-window-manager: pointer button grab surface detached surface=%llu client=%p count=%u\n",
+                 static_cast<unsigned long long>(surface->id),
+                 static_cast<void*>(server->pointerButtonGrabClient_),
+                 server->pointerButtonCount_);
+  server->pointerButtonGrabSurface_ = nullptr;
+  if (!server->pointerButtonGrabClient_) server->pointerButtonCount_ = 0;
 }
 
 bool resetXdgPopupRole(WaylandServer::Impl* server,
@@ -148,6 +159,7 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   bool const activatePrevious = keyboardFocus_ == surface && surfaceIsXdgToplevel(surface);
   removeSurfaceFromFocusOrder(this, surface);
   if (pointerFocus_ == surface) pointerFocus_ = nullptr;
+  detachPointerButtonGrabSurface(this, surface);
   if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
   if (dragSurface_ == surface) {
     dragSurface_ = nullptr;
@@ -315,6 +327,7 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
   if (surfaceIsXdgToplevel(surface)) {
     removeSurfaceFromFocusOrder(this, surface);
     if (pointerFocus_ == surface) pointerFocus_ = nullptr;
+    detachPointerButtonGrabSurface(this, surface);
     if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
     surface->role = SurfaceRole::None;
   }

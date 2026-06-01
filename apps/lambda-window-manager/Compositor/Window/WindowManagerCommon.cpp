@@ -275,6 +275,16 @@ void popupTrace(char const* fmt, ...) {
   va_end(args);
 }
 
+wl_client* popupGrabClient(WaylandServer::Impl* server) {
+  return server && server->popupGrabsEnabled_ && server->grabPopup_ && server->grabPopup_->resource
+             ? wl_resource_get_client(server->grabPopup_->resource)
+             : nullptr;
+}
+
+bool surfaceBelongsToClient(WaylandServer::Impl::Surface const* surface, wl_client* client) {
+  return surface && surface->resource && client && wl_resource_get_client(surface->resource) == client;
+}
+
 bool popupIsDescendantOf(WaylandServer::Impl* server,
                          WaylandServer::Impl::XdgPopup* popup,
                          WaylandServer::Impl::XdgPopup* ancestor) {
@@ -313,7 +323,7 @@ std::optional<WindowGeometry> popupScreenBounds(WaylandServer::Impl* server, Way
     bounds.y += parentPopup->configuredY;
     parent = parentPopup->parentSurface;
   }
-  if (!parent) return std::nullopt;
+  if (!parent) return bounds;
   if (displayWidth(parent) <= 0 || displayHeight(parent) <= 0) return std::nullopt;
 
   bounds.x += parent->windowX;
@@ -322,15 +332,14 @@ std::optional<WindowGeometry> popupScreenBounds(WaylandServer::Impl* server, Way
 }
 
 WaylandServer::Impl::Surface* popupAt(WaylandServer::Impl* server, float x, float y) {
+  wl_client* const grabClient = popupGrabClient(server);
   for (auto it = server->popups_.rbegin(); it != server->popups_.rend(); ++it) {
     WaylandServer::Impl::XdgPopup* popup = it->get();
     if (!popup || popup->dismissed || !popup->resource || !popup->xdgSurface || !popup->xdgSurface->surface) {
       continue;
     }
-    if (server->popupGrabsEnabled_ && server->grabPopup_ &&
-        popup != server->grabPopup_ && !popupIsDescendantOf(server, popup, server->grabPopup_)) {
-      continue;
-    }
+    WaylandServer::Impl::Surface* surface = popup->xdgSurface->surface;
+    if (grabClient && !surfaceBelongsToClient(surface, grabClient)) continue;
     auto const bounds = popupScreenBounds(server, popup);
     if (!bounds) continue;
     float const left = static_cast<float>(bounds->x);
@@ -338,8 +347,16 @@ WaylandServer::Impl::Surface* popupAt(WaylandServer::Impl* server, float x, floa
     float const right = left + static_cast<float>(bounds->width);
     float const bottom = top + static_cast<float>(bounds->height);
     if (containsPoint(x, y, left, top, right, bottom) &&
-        inputRegionContains(popup->xdgSurface->surface, x - left, y - top)) {
-      return popup->xdgSurface->surface;
+        inputRegionContains(surface, surfaceLocalX(surface, x), surfaceLocalY(surface, y))) {
+      if (WaylandServer::Impl::Surface* subsurface = subsurfaceAt(server,
+                                                                  surface,
+                                                                  surfaceBufferOriginX(surface),
+                                                                  surfaceBufferOriginY(surface),
+                                                                  x,
+                                                                  y)) {
+        return subsurface;
+      }
+      return surface;
     }
   }
   return nullptr;

@@ -78,10 +78,26 @@ using wm::surfaceLocalY;
 using wm::subsurfaceAt;
 using wm::surfaceUsesCutouts;
 
+namespace {
+
+wl_client* popupGrabClient(WaylandServer::Impl* server) {
+  return server && server->popupGrabsEnabled_ && server->grabPopup_ && server->grabPopup_->resource
+             ? wl_resource_get_client(server->grabPopup_->resource)
+             : nullptr;
+}
+
+bool surfaceBelongsToClient(WaylandServer::Impl::Surface const* surface, wl_client* client) {
+  return surface && surface->resource && client && wl_resource_get_client(surface->resource) == client;
+}
+
+} // namespace
+
 WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, float y) {
-  if (auto* layer = aboveWindowLayerAt(server, x, y)) return layer;
+  wl_client* const grabClient = popupGrabClient(server);
+  if (auto* layer = aboveWindowLayerAt(server, x, y)) {
+    return !grabClient || surfaceBelongsToClient(layer, grabClient) ? layer : nullptr;
+  }
   if (auto* popup = popupAt(server, x, y)) return popup;
-  if (server->popupGrabsEnabled_ && server->grabPopup_) return nullptr;
 
   for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
     WaylandServer::Impl::Surface* surface = it->get();
@@ -97,6 +113,7 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
     float const bottom = top + static_cast<float>(height);
     if (x >= left && x < right && y >= top && y < bottom) {
       if (!inputRegionContains(surface, surfaceLocalX(surface, x), surfaceLocalY(surface, y))) continue;
+      if (grabClient && !surfaceBelongsToClient(surface, grabClient)) return nullptr;
       if (surfaceUsesCutouts(server, surface)) {
         ChromeHitContext context{
             .surface = surface,
@@ -267,11 +284,34 @@ bool resourceBelongsToSurfaceClient(wl_resource* resource, WaylandServer::Impl::
 
 namespace lambda::compositor::wm {
 
+namespace {
+
+std::uint64_t traceSurfaceId(WaylandServer::Impl::Surface const* surface) {
+  return surface ? surface->id : 0;
+}
+
+std::uint64_t traceGrabPopupSurfaceId(WaylandServer::Impl const* server) {
+  return server && server->grabPopup_ && server->grabPopup_->xdgSurface && server->grabPopup_->xdgSurface->surface
+             ? server->grabPopup_->xdgSurface->surface->id
+             : 0;
+}
+
+} // namespace
+
 void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next, std::uint32_t timeMs) {
   if (server->pointerFocus_ == next) {
     if (!next) return;
     wl_fixed_t const x = wl_fixed_from_double(surfaceLocalX(next, server->pointerX_));
     wl_fixed_t const y = wl_fixed_from_double(surfaceLocalY(next, server->pointerY_));
+    popupTrace("lambda-window-manager: pointer focus motion surface=%llu role=%u local=%.1f,%.1f "
+               "global=%.1f,%.1f grab_popup=%llu\n",
+               static_cast<unsigned long long>(traceSurfaceId(next)),
+               static_cast<unsigned int>(next->role),
+               wl_fixed_to_double(x),
+               wl_fixed_to_double(y),
+               server->pointerX_,
+               server->pointerY_,
+               static_cast<unsigned long long>(traceGrabPopupSurfaceId(server)));
     for (wl_resource* pointer : server->pointerResources_) {
       if (!resourceBelongsToSurfaceClient(pointer, next)) continue;
       wl_pointer_send_motion(pointer, timeMs, x, y);
@@ -290,6 +330,14 @@ void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
     }
   }
   server->pointerFocus_ = next;
+  popupTrace("lambda-window-manager: pointer focus change previous=%llu next=%llu role=%u global=%.1f,%.1f "
+             "grab_popup=%llu\n",
+             static_cast<unsigned long long>(traceSurfaceId(previous)),
+             static_cast<unsigned long long>(traceSurfaceId(next)),
+             static_cast<unsigned int>(next ? next->role : SurfaceRole::None),
+             server->pointerX_,
+             server->pointerY_,
+             static_cast<unsigned long long>(traceGrabPopupSurfaceId(server)));
   clearCompositorCursorOverride(server);
   bool const cursorChanged = server->cursorSurface_ || server->cursorShape_ != CursorShape::Arrow;
   server->cursorSurface_ = nullptr;
@@ -316,6 +364,7 @@ using wm::popupIsDescendantOf;
 
 bool surfaceInGrabSubtree(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!server || !server->popupGrabsEnabled_ || !server->grabPopup_ || !surface) return false;
+  if (surfaceBelongsToClient(surface, popupGrabClient(server))) return true;
   if (server->grabPopup_->xdgSurface && surface == server->grabPopup_->xdgSurface->surface) return true;
   WaylandServer::Impl::XdgPopup* popup = popupForSurface(server, surface);
   return popup && popupIsDescendantOf(server, popup, server->grabPopup_);
@@ -363,18 +412,26 @@ using wm::setKeyboardFocus;
 
 namespace {
 
-constexpr std::array<SeatSerialKind, 2> kPopupGrabSerialKinds{
+constexpr std::array<SeatSerialKind, 6> kPopupGrabSerialKinds{
+    SeatSerialKind::PointerEnter,
     SeatSerialKind::PointerButtonPress,
+    SeatSerialKind::PointerButtonRelease,
+    SeatSerialKind::KeyboardEnter,
     SeatSerialKind::KeyboardKey,
+    SeatSerialKind::KeyboardModifiers,
 };
 
 bool validPopupGrabSerial(WaylandServer::Impl* server,
                           WaylandServer::Impl::XdgPopup* popup,
-                          WaylandServer::Impl::Surface* parent,
+                          WaylandServer::Impl::Surface*,
                           std::uint32_t serial) {
   if (!server || !popup || !popup->resource) return false;
   wl_client* const client = wl_resource_get_client(popup->resource);
-  return seatSerialIsValid(server, serial, client, parent, kPopupGrabSerialKinds);
+  if (seatSerialIsValid(server, serial, client, nullptr, kPopupGrabSerialKinds)) return true;
+
+  // wlroots accepts xdg-popup grab serials broadly; keep Firefox/GTK submenu
+  // grabs working even if the client reuses an older serial outside our ledger.
+  return serial != 0;
 }
 
 } // namespace
@@ -403,6 +460,12 @@ void establishPopupGrab(WaylandServer::Impl* server,
   }
 
   if (!validPopupGrabSerial(server, popup, parent, serial)) {
+    popupTrace("lambda-window-manager: xdg_popup grab invalid surface=%llu parent=%llu serial=%u\n",
+               static_cast<unsigned long long>(popup->xdgSurface && popup->xdgSurface->surface
+                                                   ? popup->xdgSurface->surface->id
+                                                   : 0),
+               static_cast<unsigned long long>(parent ? parent->id : 0),
+               serial);
     wl_resource_post_error(popup->resource, XDG_POPUP_ERROR_INVALID_GRAB, "invalid grab serial");
     return;
   }
@@ -469,7 +532,16 @@ WaylandServer::Impl::XdgPopup* topmostPopup(WaylandServer::Impl* server) {
 namespace lambda::compositor::wm {
 
 bool surfaceBelongsToPopup(WaylandServer::Impl::Surface* surface, WaylandServer::Impl::XdgPopup* popup) {
-  return surface && popup && popup->xdgSurface && surface == popup->xdgSurface->surface;
+  if (!surface || !popup || !popup->xdgSurface || !popup->xdgSurface->surface) return false;
+  WaylandServer::Impl::Surface* root = popup->xdgSurface->surface;
+  if (surface == root) return true;
+  for (WaylandServer::Impl::Surface* current = surface; surfaceIsSubsurface(current);) {
+    WaylandServer::Impl::Subsurface* role = current->subsurfaceRole;
+    if (!role || !role->parent) return false;
+    if (role->parent == root) return true;
+    current = role->parent;
+  }
+  return false;
 }
 
 } // namespace lambda::compositor::wm

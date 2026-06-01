@@ -25,7 +25,7 @@ struct CompositorKeyboardConfig {
 };
 
 struct CompositorInputConfig {
-  bool popupGrabs = false;
+  bool popupGrabs = true;
   CompositorKeyboardConfig keyboard;
 };
 

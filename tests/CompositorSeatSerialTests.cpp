@@ -39,7 +39,9 @@ TEST_CASE("seat serial ledger validates client surface and kind") {
       issueSeatSerial(nextSerial, records, SeatSerialKind::KeyboardEnter, clientA, &surfaceA);
 
   CHECK(seatSerialIsValid(records, serial, clientA, &surfaceA, pointerKinds));
+  CHECK(seatSerialIsValid(records, serial, clientA, nullptr, pointerKinds));
   CHECK_FALSE(seatSerialIsValid(records, serial, clientB, &surfaceA, pointerKinds));
+  CHECK_FALSE(seatSerialIsValid(records, serial, clientB, nullptr, pointerKinds));
   CHECK_FALSE(seatSerialIsValid(records, serial, clientA, &surfaceB, pointerKinds));
   CHECK_FALSE(seatSerialIsValid(records, serial, clientA, &surfaceA, keyboardKinds));
   CHECK_FALSE(seatSerialIsValid(records, releaseSerial, clientA, &surfaceA, pointerPressOnly));

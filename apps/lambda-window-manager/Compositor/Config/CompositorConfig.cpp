@@ -568,7 +568,7 @@ idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 base_downsample = 2
 
 [input]
-popup_grabs = false
+popup_grabs = true
 
 [input.keyboard]
 # Empty values use xkb/system defaults for that field.

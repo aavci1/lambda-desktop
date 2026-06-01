@@ -38,7 +38,7 @@ struct CompositorConfig {
   std::optional<ChromeConfig> darkChrome;
   CompositorKeyboardConfig keyboard;
   std::vector<WaylandServer::ShortcutBinding> shortcutBindings;
-  bool popupGrabs = false;
+  bool popupGrabs = true;
 };
 
 struct LoadedCompositorConfig {

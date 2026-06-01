@@ -70,7 +70,7 @@ TEST_CASE("compositor config creates a default file when missing") {
   CHECK(loaded.config.chrome.titleBarHeight == 28);
   CHECK(loaded.config.chrome.controlsWidth == 84);
   CHECK(loaded.config.rendering.backdropBlurBaseDownsample == 2);
-  CHECK_FALSE(loaded.config.popupGrabs);
+  CHECK(loaded.config.popupGrabs);
   CHECK(loaded.config.keyboard.layout.empty());
   CHECK(loaded.config.keyboard.repeatRate == 25);
   CHECK(loaded.config.keyboard.repeatDelayMs == 600);
@@ -80,7 +80,7 @@ TEST_CASE("compositor config creates a default file when missing") {
   CHECK(text.find("[input]") != std::string::npos);
   CHECK(text.find("[rendering.backdrop_blur]") != std::string::npos);
   CHECK(text.find("base_downsample = 2") != std::string::npos);
-  CHECK(text.find("popup_grabs = false") != std::string::npos);
+  CHECK(text.find("popup_grabs = true") != std::string::npos);
   CHECK(text.find("screenshot = [\"super+shift+3\", \"printscreen\", \"sysrq\"]") != std::string::npos);
   CHECK(text.find("screenshot_region = \"super+shift+4\"") != std::string::npos);
   CHECK(text.find("screenshot_active_window = [\"super+shift+5\", \"alt+printscreen\", \"alt+sysrq\"]") !=

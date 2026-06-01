@@ -110,6 +110,7 @@ If the cursor is visible but does not move, or no shortcuts work, check ACLs fir
 | `LAMBDA_WINDOW_MANAGER_PROFILE` | Aggregate frame-profile stats every ~2s. |
 | `LAMBDA_WINDOW_MANAGER_IDLE_PROFILE` | Poll/idle loop stats every ~2s. |
 | `LAMBDA_RESIZE_TRACE` | Log resize/configure traces (compositor + clients). |
+| `LAMBDA_WINDOW_MANAGER_POPUP_TRACE` | Log popup hit testing, grab, focus, and pointer-button routing traces. |
 | `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` | Enable Vulkan validation layers during development. |
 
 Typical TTY session:
@@ -161,7 +162,7 @@ idle_blank_timeout_seconds = 0 # 0 disables compositor-side idle blanking
 base_downsample = 2
 
 [input]
-popup_grabs = false
+popup_grabs = true
 
 [input.keyboard]
 # Empty values use xkb/system defaults for that field.
@@ -261,6 +262,8 @@ Config application policy:
 | `[chrome]`, `[chrome.glass]`, `[chrome.dark]` | Hot reload |
 | `[keybindings]` | Hot reload |
 
+`[input] popup_grabs` enables xdg-popup grab handling for application menus and context menus. It is on by default so popup input uses popup-first hit testing, same-client owner events, and implicit pointer-button delivery while transient menu surfaces are being recreated. Disable it only when isolating a client-side popup issue.
+
 ## Window Management
 
 Current shortcuts:
@@ -325,14 +328,14 @@ Set them before launching the compositor if you need to force a theme or size.
 - Single active output only. The selected output is configurable, but multi-monitor desktop layout is not implemented.
 - No display-manager, login, lock screen, workspaces, or XWayland.
 - Input device permissions are still manual unless your session grants ACLs.
-- Popup support works for the test demos and uses popup-first pointer hit testing. The popup demo has visible hover/click validation. Broader `foot`/GTK/Qt/browser menu behavior still needs real-app validation with app configs that actually open popups.
+- Popup support works for the test demos and uses popup-first pointer hit testing with xdg-popup grabs enabled by default. The popup demo has visible hover/click validation, and Firefox application/context menus have been manually validated for menu actions and click-open submenus. Broader GTK/Qt menu coverage is still useful.
 - Presentation-time feedback uses DRM vblank pacing timestamps, refresh intervals, and sequence counters when available. If the driver rejects vblank waits, the compositor falls back to compositor-clock timing.
 - Software idle blanking is available with `idle_blank_timeout_seconds`; `0` disables it. Active idle inhibitors prevent the compositor from blanking. DPMS/panel power-off is not implemented yet.
 
 ## Remaining Work
 
 - Real-app validation beyond `foot`, especially GTK, Qt, and browser clients.
-- Popup menu validation with real applications; full xdg-popup input-grab semantics remain deferred.
+- Broader popup/menu validation with GTK, Qt, and unusual nested/grabbed popup workflows.
 - Hardware validation of the new GBM/atomic-KMS page-flip completion path, then broader video/game validation of presentation-time feedback.
 - Adaptive sync and triple-buffering.
 - Proper input/session brokering instead of manual `/dev/input/event*` ACLs.

@@ -27,9 +27,18 @@ void seatDestroyResource(wl_resource* resource) {
 
 void pointerDestroyResource(wl_resource* resource) {
   if (auto* server = serverFrom(resource)) {
+    wl_client* const client = wl_resource_get_client(resource);
     removeResource(server->pointerResources_, resource);
     destroyCursorShapeDevicesForPointer(server, resource);
     destroyPointerExtensionResourcesForPointer(server, resource);
+    bool const clientStillHasPointer = std::ranges::any_of(server->pointerResources_, [client](wl_resource* pointer) {
+      return pointer && wl_resource_get_client(pointer) == client;
+    });
+    if (!clientStillHasPointer && server->pointerButtonGrabClient_ == client) {
+      server->pointerButtonGrabSurface_ = nullptr;
+      server->pointerButtonGrabClient_ = nullptr;
+      server->pointerButtonCount_ = 0;
+    }
   }
 }
 

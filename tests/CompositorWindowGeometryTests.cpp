@@ -397,6 +397,19 @@ TEST_CASE("compositor popup screen geometry accumulates parent offsets") {
   CHECK(popup->height == 180);
 }
 
+TEST_CASE("compositor popup screen geometry accepts a parentless root popup") {
+  std::array<lambda::compositor::WindowGeometry, 1> const chain{{
+      {.x = 320, .y = 180, .width = 240, .height = 160},
+  }};
+
+  auto popup = lambda::compositor::popupScreenGeometry(chain);
+  REQUIRE(popup);
+  CHECK(popup->x == 320);
+  CHECK(popup->y == 180);
+  CHECK(popup->width == 240);
+  CHECK(popup->height == 160);
+}
+
 TEST_CASE("compositor nested popup screen geometry accumulates every popup offset") {
   std::array<lambda::compositor::WindowGeometry, 3> const chain{{
       {.x = 100, .y = 100, .width = 400, .height = 300},

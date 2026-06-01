@@ -249,7 +249,7 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<XdgToplevel>> toplevels_;
   std::vector<std::unique_ptr<XdgPopup>> popups_;
   WaylandServer::Impl::XdgPopup* grabPopup_ = nullptr;
-  bool popupGrabsEnabled_ = false;
+  bool popupGrabsEnabled_ = true;
   std::vector<std::unique_ptr<ShmPool>> shmPools_;
   std::vector<std::unique_ptr<ShmBuffer>> shmBuffers_;
   std::vector<std::unique_ptr<DmabufParams>> dmabufParams_;
@@ -290,6 +290,9 @@ struct WaylandServer::Impl {
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;
   Surface* pointerFocus_ = nullptr;
+  Surface* pointerButtonGrabSurface_ = nullptr;
+  wl_client* pointerButtonGrabClient_ = nullptr;
+  std::uint32_t pointerButtonCount_ = 0;
   Surface* keyboardFocus_ = nullptr;
   Surface* commandLauncherModalSurface_ = nullptr;
   Surface* dragSurface_ = nullptr;

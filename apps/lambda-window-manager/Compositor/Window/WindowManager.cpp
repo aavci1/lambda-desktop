@@ -61,6 +61,7 @@ using wm::minimizeButtonAt;
 using wm::maximizeButtonAt;
 using wm::resizeOrCloseChromeAt;
 using wm::topChromeHitContext;
+using wm::popupTrace;
 using wm::toggleMaximizedToplevel;
 using wm::updateCompositorCursorForPointer;
 using wm::updateDrag;
@@ -97,6 +98,138 @@ void notePointerVisualStateChanged(WaylandServer::Impl* server, PointerVisualSta
       current.compositorCursorShape != previous.compositorCursorShape) {
     ++server->contentSerial_;
   }
+}
+
+wl_client* surfaceClient(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->resource ? wl_resource_get_client(surface->resource) : nullptr;
+}
+
+bool resourceBelongsToClient(wl_resource* resource, wl_client* client) {
+  return resource && client && wl_resource_get_client(resource) == client;
+}
+
+wl_client* popupGrabClient(WaylandServer::Impl* server) {
+  return server && server->popupGrabsEnabled_ && server->grabPopup_ && server->grabPopup_->resource
+             ? wl_resource_get_client(server->grabPopup_->resource)
+             : nullptr;
+}
+
+std::uint64_t surfaceId(WaylandServer::Impl::Surface const* surface) {
+  return surface ? surface->id : 0;
+}
+
+WaylandServer::Impl::Surface* popupGrabSurface(WaylandServer::Impl* server) {
+  return server && server->grabPopup_ && server->grabPopup_->xdgSurface
+             ? server->grabPopup_->xdgSurface->surface
+             : nullptr;
+}
+
+bool surfaceIsPopupTreeMember(WaylandServer::Impl::Surface const* surface) {
+  for (auto const* current = surface; current;) {
+    if (surfaceIsXdgPopup(current)) return true;
+    if (!surfaceIsSubsurface(current) || !current->subsurfaceRole) return false;
+    current = current->subsurfaceRole->parent;
+  }
+  return false;
+}
+
+WaylandServer::Impl::Surface* pointerButtonDeliverySurface(WaylandServer::Impl* server) {
+  if (!server) return nullptr;
+  return server->pointerButtonCount_ > 0 ? server->pointerButtonGrabSurface_ : server->pointerFocus_;
+}
+
+wl_client* pointerButtonDeliveryClient(WaylandServer::Impl* server,
+                                       WaylandServer::Impl::Surface const* deliverySurface) {
+  if (!server) return nullptr;
+  if (server->pointerButtonCount_ > 0 && server->pointerButtonGrabClient_) return server->pointerButtonGrabClient_;
+  return surfaceClient(deliverySurface ? deliverySurface : server->pointerFocus_);
+}
+
+bool sendPointerButtonToFocus(WaylandServer::Impl* server,
+                              std::uint32_t button,
+                              bool pressed,
+                              std::uint32_t timeMs) {
+  WaylandServer::Impl::Surface* focus = pointerButtonDeliverySurface(server);
+  wl_client* const client = pointerButtonDeliveryClient(server, focus);
+  if (!server || !client) {
+    popupTrace("lambda-window-manager: pointer button drop button=%u state=%s focus=%llu button_grab=%llu "
+               "client=%p count=%u\n",
+               button,
+               pressed ? "pressed" : "released",
+               static_cast<unsigned long long>(surfaceId(focus)),
+               static_cast<unsigned long long>(surfaceId(server ? server->pointerButtonGrabSurface_ : nullptr)),
+               static_cast<void*>(server ? server->pointerButtonGrabClient_ : nullptr),
+               server ? server->pointerButtonCount_ : 0);
+    return false;
+  }
+  std::uint32_t const previousCount = server->pointerButtonCount_;
+  wl_client* const previousClient = server->pointerButtonGrabClient_;
+  std::uint32_t serial = issueSeatSerial(server,
+                                         pressed ? SeatSerialKind::PointerButtonPress
+                                                 : SeatSerialKind::PointerButtonRelease,
+                                         client,
+                                         focus);
+  std::size_t sent = 0;
+  for (wl_resource* pointer : server->pointerResources_) {
+    if (!resourceBelongsToClient(pointer, client)) continue;
+    wl_pointer_send_button(pointer,
+                           serial,
+                           timeMs,
+                           button,
+                           pressed ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED);
+    if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
+    ++sent;
+  }
+  if (pressed) {
+    if (server->pointerButtonCount_ == 0) {
+      server->pointerButtonGrabSurface_ = focus;
+      server->pointerButtonGrabClient_ = client;
+    }
+    ++server->pointerButtonCount_;
+  } else if (server->pointerButtonCount_ > 0) {
+    --server->pointerButtonCount_;
+    if (server->pointerButtonCount_ == 0) {
+      server->pointerButtonGrabSurface_ = nullptr;
+      server->pointerButtonGrabClient_ = nullptr;
+    }
+  }
+  popupTrace("lambda-window-manager: pointer button send button=%u state=%s focus=%llu pointer_focus=%llu "
+             "button_grab=%llu client=%p->%p count=%u->%u sent=%zu serial=%u\n",
+             button,
+             pressed ? "pressed" : "released",
+             static_cast<unsigned long long>(surfaceId(focus)),
+             static_cast<unsigned long long>(surfaceId(server->pointerFocus_)),
+             static_cast<unsigned long long>(surfaceId(server->pointerButtonGrabSurface_)),
+             static_cast<void*>(previousClient),
+             static_cast<void*>(server->pointerButtonGrabClient_),
+             previousCount,
+             server->pointerButtonCount_,
+             sent,
+             serial);
+  return true;
+}
+
+bool handlePopupGrabPointerButton(WaylandServer::Impl* server,
+                                  std::uint32_t button,
+                                  bool pressed,
+                                  std::uint32_t timeMs) {
+  wl_client* const grabClient = popupGrabClient(server);
+  if (!grabClient) return false;
+  WaylandServer::Impl::Surface* focus = pointerButtonDeliverySurface(server);
+  if (pointerButtonDeliveryClient(server, focus) == grabClient) {
+    return sendPointerButtonToFocus(server, button, pressed, timeMs);
+  }
+  popupTrace("lambda-window-manager: xdg_popup grab dismiss button=%u state=%s focus=%llu pointer_focus=%llu "
+             "button_grab=%llu client=%p grab_popup=%llu\n",
+             button,
+             pressed ? "pressed" : "released",
+             static_cast<unsigned long long>(surfaceId(focus)),
+             static_cast<unsigned long long>(surfaceId(server->pointerFocus_)),
+             static_cast<unsigned long long>(surfaceId(server->pointerButtonGrabSurface_)),
+             static_cast<void*>(server->pointerButtonGrabClient_),
+             static_cast<unsigned long long>(surfaceId(popupGrabSurface(server))));
+  dismissTopPopup(server);
+  return true;
 }
 
 } // namespace
@@ -198,6 +331,23 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
 void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed, std::uint32_t timeMs) {
   if (handleScreenshotSelectionPointerButton(this, button, pressed, timeMs)) return;
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
+  Surface* deliverySurface = pointerButtonDeliverySurface(this);
+  wl_client* deliveryClient = pointerButtonDeliveryClient(this, deliverySurface);
+  popupTrace("lambda-window-manager: pointer button input button=%u state=%s pointer=%.1f,%.1f "
+             "target=%llu focus=%llu delivery=%llu button_grab=%llu client=%p count=%u grab_popup=%llu "
+             "popup_grabs=%u\n",
+             button,
+             pressed ? "pressed" : "released",
+             pointerX_,
+             pointerY_,
+             static_cast<unsigned long long>(surfaceId(target)),
+             static_cast<unsigned long long>(surfaceId(pointerFocus_)),
+             static_cast<unsigned long long>(surfaceId(deliverySurface)),
+             static_cast<unsigned long long>(surfaceId(pointerButtonGrabSurface_)),
+             static_cast<void*>(deliveryClient),
+             pointerButtonCount_,
+             static_cast<unsigned long long>(surfaceId(popupGrabSurface(this))),
+             popupGrabsEnabled_ ? 1u : 0u);
   if (button == BTN_LEFT && !pressed && dndSource_) {
     updateDndTarget(this, target, timeMs);
     bool completedDrop = false;
@@ -220,6 +370,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
     clearDnd(this, !completedDrop);
     return;
   }
+  if (handlePopupGrabPointerButton(this, button, pressed, timeMs)) return;
   if (pressed && dismissTopPopupOutside(this, target)) return;
   if (button == BTN_LEFT) {
     if (pressed) {
@@ -392,25 +543,14 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
   }
 
   if (pressed && target) {
-    raiseSurface(this, target);
-    setKeyboardFocus(this, target);
+    if (!surfaceIsPopupTreeMember(target)) {
+      raiseSurface(this, target);
+      setKeyboardFocus(this, target);
+    }
     sendPointerFocus(this, target, timeMs);
     updateCompositorCursorForPointer(this);
   }
-  if (!pointerFocus_) return;
-  std::uint32_t serial = issueSeatSerialForSurface(this,
-                                                  pressed ? SeatSerialKind::PointerButtonPress
-                                                          : SeatSerialKind::PointerButtonRelease,
-                                                  pointerFocus_);
-  for (wl_resource* pointer : pointerResources_) {
-    if (!resourceBelongsToSurfaceClient(pointer, pointerFocus_)) continue;
-    wl_pointer_send_button(pointer,
-                           serial,
-                           timeMs,
-                           button,
-                           pressed ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED);
-    if (wl_resource_get_version(pointer) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(pointer);
-  }
+  sendPointerButtonToFocus(this, button, pressed, timeMs);
 }
 void WaylandServer::Impl::handlePointerAxis(double dx, double dy, std::uint32_t timeMs) {
   if (!pointerFocus_) return;

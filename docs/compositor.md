@@ -186,7 +186,7 @@ Phase 2+ : iteration cycle starts to matter. A Wayland client test app needs to 
 
 ### 3.6 Logging
 
-The compositor writes logs to stderr. Run as `lambda-window-manager 2>&1 | tee compositor.log` to capture sessions. Additional runtime instrumentation is controlled by environment variables such as `LAMBDA_WINDOW_MANAGER_CPU_TRACE`, `LAMBDA_WINDOW_MANAGER_PACING_TRACE`, and `LAMBDA_RESIZE_TRACE`.
+The compositor writes logs to stderr. Run as `lambda-window-manager 2>&1 | tee compositor.log` to capture sessions. Additional runtime instrumentation is controlled by environment variables such as `LAMBDA_WINDOW_MANAGER_CPU_TRACE`, `LAMBDA_WINDOW_MANAGER_PACING_TRACE`, `LAMBDA_RESIZE_TRACE`, and `LAMBDA_WINDOW_MANAGER_POPUP_TRACE`.
 
 Avoid log spam in hot paths unless it is guarded by one of the instrumentation variables.
 
@@ -484,7 +484,7 @@ Total new code this phase: ~1850 LOC.
 
 ## 6. Phase 3: Input and window management
 
-**Status:** input, chrome, and stacking window management are in progress and hardware-smoked. The compositor exposes real pointer and keyboard seat capabilities, forwards pointer/key events to the focused Wayland surface, draws client-provided cursor surfaces, raises windows on click, supports titlebar drag, corner resize, half-screen snapping with drag-unsnap, double-click-titlebar maximize/restore, compositor shortcuts, title text, macOS-inspired rounded/shadowed server-side chrome, a click-on-release close button, and a compositor-owned command launcher. Compositor-owned cursors use the system Xcursor theme. Safe first-stage xdg-popup support is implemented without popup input grabs after the first experimental grab path froze the test laptop.
+**Status:** input, chrome, and stacking window management are in progress and hardware-smoked. The compositor exposes real pointer and keyboard seat capabilities, forwards pointer/key events to the focused Wayland surface, draws client-provided cursor surfaces, raises windows on click, supports titlebar drag, corner resize, half-screen snapping with drag-unsnap, double-click-titlebar maximize/restore, compositor shortcuts, title text, macOS-inspired rounded/shadowed server-side chrome, a click-on-release close button, and a compositor-owned command launcher. Compositor-owned cursors use the system Xcursor theme. xdg-popup support now includes popup-first hit testing, default-on config-gated popup grabs, same-client owner-event routing, outside-click/Escape dismissal, and implicit pointer-button delivery for transient menu surfaces; Firefox application/context menus have been manually validated.
 
 ### 6.1 Goal
 
@@ -506,7 +506,7 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 - xdg_decoration_v1 for server-side decoration negotiation.
 - Window chrome drawn via Lambda Canvas: title bar with app name, left-side close button, rounded corners, and soft shadow.
 - Compositor shortcuts: Super+Q to close focused window; Super+Tab to cycle focus; Super+Left/Super+Right to snap; Super+Up to maximize; Super+Down to restore snapped/maximized windows; Ctrl+Alt+Backspace to terminate the compositor.
-- xdg_popup support (right-click menus, dropdown menus in apps need this). First-stage popup creation, positioning, configure, rendering, reposition, non-grabbing `grab` acknowledgement, outside-click dismissal, and Escape dismissal are implemented. `wl_subcompositor` is also exposed because real clients such as `foot` require it before popup/menu testing can proceed. Full input-grab semantics remain intentionally deferred until the non-grab path is hardware-smoked.
+- xdg_popup support (right-click menus, dropdown menus in apps need this). Popup creation, positioning, configure, rendering, reposition, popup-first input hit testing, default-on config-gated popup grabs, same-client owner-event routing, outside-click dismissal, Escape dismissal, and implicit pointer-button delivery across transient menu surface teardown are implemented. `wl_subcompositor` is also exposed because real clients such as `foot` require it before popup/menu testing can proceed.
 
 ### 6.3 Out of scope for phase 3
 
@@ -555,7 +555,7 @@ Window management state is held in the compositor, not in Wayland. Wayland tells
 - ✓ Snap-to-half works from Super+Left/Super+Right; titlebar edge/corner drag supports half/quarter snap previews; dragging from a snapped/maximized titlebar restores the previous size without losing the cursor/titlebar grab.
 - ✓ Double-clicking the titlebar maximizes/restores the window.
 - ✓ Super+Q closes the focused window; the compositor close button sends xdg_toplevel close on click release.
-- ◐ xdg-popup-based menus appear and dismiss correctly. The smoke demo creates, renders, repositions, outside-click-dismisses, and Escape-dismisses popups without an input grab; full popup input-grab semantics and broader real-app menu validation remain pending.
+- ✓ xdg-popup-based menus appear, dismiss, and route hover/click input correctly. The smoke demo creates, renders, repositions, outside-click-dismisses, and Escape-dismisses popups, and Firefox application/context menus have been manually validated for menu actions and click-open submenus. Broader GTK/Qt menu validation remains useful.
 - ◐ A non-trivial third-party client works: `foot` launches and basic terminal interaction works, including `Ctrl+C` routing to the terminal. Right-click menu behavior still needs broader validation.
 
 ### 6.7 LOC estimate
@@ -628,7 +628,7 @@ Potential exception: `wp_presentation_time` requires precise vblank timestamps f
 - ✓ A purpose-built test layer-shell client renders at the top layer.
 - ◐ A purpose-built presentation-time client receives `clock_id`, `sync_output`, and presented feedback after its committed frame is presented; the default GBM/atomic-KMS path is wired to DRM page-flip completion events and still needs hardware smoke validation.
 - ✓ A purpose-built relative-pointer client receives relative motion deltas while its window has pointer focus.
-- ◐ A purpose-built popup client can create, render, and dismiss a positioned popup without taking an input grab; full popup input-grab semantics remain pending.
+- ✓ A purpose-built popup client can create, render, reposition, and dismiss positioned popups; app popup grabs are supported by the shared seat serial/grab path and Firefox menus have been manually validated.
 - ◐ A purpose-built activation client can request an activation token and ask the compositor to raise/focus another window.
 - ✓ A purpose-built pointer-constraints client receives pointer-lock activation and relative motion while the virtual pointer stays locked.
 - ✓ A purpose-built primary-selection client can set a UTF-8 text primary selection and receive it back through the compositor.
@@ -780,7 +780,7 @@ This section is updated as work progresses. Entries record completion of each ph
 |-------|--------|---------|-----------|-------|
 | Phase 1: First pixels | Atomic KMS backend compiling | 2026-05-16 | - | Blue background, VT switching, and explicit compositor termination were verified on the earlier Vulkan-display path. The compositor now defaults to GBM scanout buffers plus atomic KMS page flips; hardware smoke validation is pending. Ctrl+C is ignored by the compositor so terminal clients can use it, while kernel-log, CPU-idle, and kill-path checks remain pending. |
 | Phase 2: Wayland server, one client | SHM + dma-buf smoke passed | 2026-05-16 | - | Wayland display, `wl_compositor`, `wl_subcompositor`, `wl_shm`, `wl_output`, stub `wl_seat`, `xdg_wm_base`, `xdg-decoration`, linux-dmabuf protocol handling, SHM surface drawing, basic subsurface drawing, dma-buf demo drawing, and Lambda app smoke are verified on hardware; direct Vulkan sampling hardening remains. |
-| Phase 3: Input + window management | Stacking WM active | 2026-05-16 | - | Focus, chrome, move/resize, snap, shortcuts, popup-first hit testing, and config-gated xdg-popup grabs (`popup_grabs`, default off) are in tree. Hardware validation of grabs on real apps remains. |
+| Phase 3: Input + window management | Stacking WM active | 2026-05-16 | - | Focus, chrome, move/resize, snap, shortcuts, popup-first hit testing, and config-gated xdg-popup grabs (`popup_grabs`, default on) are in tree. Firefox app/context menu grabs have been manually validated; broader GTK/Qt coverage remains useful. |
 | Phase 4: Protocol ecosystem | Compatibility protocols in progress | 2026-05-17 | - | `zxdg_output_manager_v1`, `wp_viewporter`, `wp_cursor_shape_v1`, `zwp_idle_inhibit_manager_v1`, `zwlr_layer_shell_v1`, `wp_presentation_time`, `zwp_relative_pointer_v1`, `zwp_pointer_constraints_v1`, `zwp_primary_selection_v1`, `wl_data_device_manager` clipboard/DnD, `wp_fractional_scale_v1`, and `xdg_activation_v1` are exposed. Current Wayland globals, including core surfaces and xdg-shell/decoration, live in `apps/lambda-window-manager/Compositor/Wayland/Globals/`; window/input-management lives in `apps/lambda-window-manager/Compositor/Window/WindowManager.cpp`; server lifecycle, snapshots, frame scheduling, and destroy cleanup live in dedicated `apps/lambda-window-manager/Compositor/Wayland/` files. |
 | Phase 5: Animation + polish | Initial polish in progress | 2026-05-17 | - | New toplevels fade/scale in, closed surfaces fade out, snap/maximize geometry changes animate through intermediate client configures, titlebar drag-to-edge/corner shows an animated snap preview after a short dwell, live resize avoids stale-content scaling and reduces Vulkan swapchain churn, hot-reloaded config can set the background color/gradient/image, cursor theme/size, disable animations/hardware cursor, or override compositor shortcuts, compositor default/cursor-shape cursors use the system Xcursor theme with no built-in cursor artwork, compatible cursor images use a KMS cursor plane, the compositor default presentation path uses GBM/atomic KMS with page-flip completion events, and user/testing docs exist; adaptive sync/triple buffering and install/session docs remain pending. |
 

@@ -1,6 +1,6 @@
 # Compositor wlroots improvement plan
 
-**Last updated:** 2026-05-31
+**Last updated:** 2026-06-01
 **Status:** Active implementation plan.
 **Scope:** Compare Lambda Window Manager protocol and compositor workflows against wlroots, then implement the highest-value fixes in priority order without importing wlroots as a dependency.
 
@@ -39,15 +39,15 @@
 | P19 | WM-COMP-20 Viewporter resource hygiene | Verified | Viewporter resource versioning and bind no-memory handling now align with wlroots | Viewporter helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
 | P20 | WM-COMP-21 Remaining global resource hygiene | Planned | Compare core globals, shell globals, custom globals, bind allocation handling, object version caps, and inert-resource cleanup patterns | Targeted helper tests plus compositor suite | No manual gate expected unless behavior changes |
 | P21 | WM-COMP-22 XDG toplevel configure-state parity | Planned | Compare remaining scheduled/pending/current toplevel state against wlroots and decide whether a larger synced-state migration is required | XDG toplevel/configure tests plus compositor suite | DP-1 Settings/system-titlebar resize if visible geometry changes |
-| P22 | WM-COMP-23 Seat focus and grab workflow parity | Planned | Compare wlroots seat focus, pointer grabs, keyboard grabs, popup grabs, cursor requests, and grab cancellation behavior | Seat/grab/popup/input tests plus compositor suite | Real app menu/popup validation if grab behavior changes |
+| P22 | WM-COMP-23 Seat focus and grab workflow parity | Verified slice | Firefox popup/menu path audited and fixed: popup-first hit testing, same-client popup grab routing, implicit pointer-button client grabs across popup teardown, and popup keyboard-focus isolation are implemented and manually validated. Broader seat-grab parity remains planned. | Seat serial, popup, config, and compositor-focused tests pass | Firefox app/context menu actions and click-open submenus passed |
 | P23 | WM-COMP-24 Data-device and drag/drop lifecycle parity | Planned | Compare data-source, data-offer, action negotiation, drop/leave/cancel, selection, and DnD serial interactions | Data-device/DnD/selection tests plus compositor suite | Manual DnD/file-transfer validation if payload behavior changes |
 | P24 | WM-COMP-25 Layer-shell dynamic behavior parity | Planned | Compare output changes, exclusive-zone recomputation, keyboard interactivity, mapping/unmapping, and popup/menu interactions | Layer-shell tests plus compositor suite | Shell dock/topbar/fullscreen validation if placement/focus behavior changes |
 | P25 | WM-COMP-26 Output layout and multi-output foundation | Planned | Design wlroots-style output-layout abstractions while v1 remains single-output, including enter/leave and xdg-output positions | Output/xdg-output/snapshot tests plus compositor suite | Target hardware multi-output gate before enabling multiple active outputs |
 | P26 | WM-COMP-27 Visual regression and real-app harness | Planned | Add repeatable resize/menu/fullscreen validation scripts and traces so manual regressions become easier to catch | Scripted smoke checks and deterministic helpers | Target hardware visual gate remains |
 
-## Remaining Work After 2026-05-31
+## Remaining Work After 2026-06-01
 
-Default next implementation order is WM-COMP-21 through WM-COMP-27, unless the deferred WM-COMP-1 titlebar/content sync issue is explicitly resumed first.
+Default next implementation order is WM-COMP-21, WM-COMP-22, the remaining WM-COMP-23 seat/grab parity, then WM-COMP-24 through WM-COMP-27, unless the deferred WM-COMP-1 titlebar/content sync issue is explicitly resumed first.
 
 Deferred P0 work:
 
@@ -806,11 +806,13 @@ Next comparison work:
 
 **Implementation steps:**
 
-1. Planned: compare wlroots seat focus and grab lifecycle with Lambda's pointer, keyboard, popup, and layer-shell input paths.
-2. Planned: define cancellation rules for destroyed/unmapped focus surfaces and popup parents.
-3. Planned: verify cursor request validation still works during focus changes and grabs.
-4. Planned: add tests for grab start/end/cancel, destroyed-surface cleanup, popup/menu focus, and keyboard focus restoration.
-5. Planned: request manual app menu/dock menu validation if runtime grab behavior changes.
+1. Verified slice: compare wlroots popup grab behavior with Lambda's Firefox menu path.
+2. Verified slice: define popup cancellation/routing rules for same-client owner events, destroyed popup surfaces, and transient pointer-button grabs.
+3. Planned: compare the remaining wlroots seat focus and grab lifecycle with Lambda's pointer, keyboard, cursor, popup, and layer-shell input paths.
+4. Planned: verify cursor request validation still works during focus changes and grabs.
+5. Planned: define any remaining cancellation rules for destroyed/unmapped focus surfaces and popup parents outside the Firefox menu path.
+6. Planned: add broader automated tests for grab start/end/cancel, destroyed-surface cleanup, popup/menu focus, and keyboard focus restoration.
+7. Planned: request manual app menu/dock menu validation if runtime grab behavior changes again.
 
 **Acceptance criteria:**
 
@@ -1014,3 +1016,4 @@ Next comparison work:
 | 2026-05-31 | WM-COMP-20 | In progress | Viewporter comparison found Lambda already has commit-time viewport validation, but still hardcodes viewport object resources to version 1 and lacks manager bind no-memory handling. Implementing a shared version helper and bind guard. |
 | 2026-05-31 | WM-COMP-20 | Verified | Added a shared viewporter version helper, created `wp_viewport` objects at the capped manager-bound version, and guarded manager bind allocation failure. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --test-case="*viewport*"`, `./build/tests/lambda_tests --test-case="*Compositor*"`, `./build/tests/lambda_tests --source-file-exclude="*RuntimeInputTests.cpp"`, and `git diff --check` passed. |
 | 2026-05-31 | WM-COMP-21+ | Planned | End-of-day wrap-up captured the remaining wlroots comparison workstreams: remaining global resource hygiene, xdg toplevel configure-state parity, full seat/grab workflow parity, data-device DnD lifecycle parity, dynamic layer-shell behavior, output-layout foundation, and visual regression/real-app harness work. |
+| 2026-06-01 | WM-COMP-23 | Verified slice | Audited the Firefox xdg-popup menu path against wlroots-style seat/grab behavior and fixed popup input routing: popup-first hit testing now honors the grab client, same-client owner-event routing works during popup grabs, implicit pointer-button delivery survives transient popup surface teardown, and popup clicks avoid toplevel raise/keyboard focus changes. Firefox menu actions and click-open submenus passed manual validation. Build passed for `lambda-window-manager` and `lambda_tests`; `./build/tests/lambda_tests --test-case="*popup*"`, `./build/tests/lambda_tests --test-case="*config*"`, `./build/tests/lambda_tests --test-case="*seat serial*"`, `./build/tests/lambda_tests --test-case="*Compositor*" --source-file-exclude="*VulkanRenderTargetTests.cpp"`, and `git diff --check` passed. The unfiltered `*Compositor*` subset still requires a physical Vulkan device for three render-target tests in this environment. |
