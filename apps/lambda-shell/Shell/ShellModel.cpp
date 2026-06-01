@@ -149,10 +149,13 @@ void ShellModel::resetDockItems() {
 void ShellModel::setDockItems(std::vector<AppRegistryEntry> const& apps, ShellConfig const& config) {
   showRunningUnpinned_ = config.showRunningUnpinned;
   iconTheme_ = config.iconTheme;
-  iconSize_ = config.iconSize;
+  int const dockItemSize = clampedDockItemSize(config.dockItemSize);
+  if (dockItemSize_.peek() != dockItemSize) {
+    dockItemSize_.set(dockItemSize);
+  }
   clockFormat_ = config.dockClockFormat;
   timeText_.set(formatTimeText(clockFormat_));
-  int const iconPixelSize = scaledIconPixelSize(iconSize_, dockDpiScale_);
+  int const iconPixelSize = scaledIconPixelSize(dockItemSize, dockDpiScale_);
   std::vector<DockItem> items;
   DockItem launcher;
   launcher.id = "launcher";
@@ -200,7 +203,7 @@ bool ShellModel::setDockDpiScale(float scale) {
   if (std::abs(scale - dockDpiScale_) < 0.001f) return false;
   dockDpiScale_ = scale;
 
-  int const iconPixelSize = scaledIconPixelSize(iconSize_, dockDpiScale_);
+  int const iconPixelSize = scaledIconPixelSize(dockItemSize_.peek(), dockDpiScale_);
   auto items = dockItems_.peek();
   bool changed = false;
   for (auto& item : items) {
@@ -270,7 +273,7 @@ ShellModel::SnapshotChanges ShellModel::applySnapshot(std::string_view json) {
     item.running = true;
     item.focused = window.focused;
     item.icon = icon;
-    item.iconPixelSize = scaledIconPixelSize(iconSize_, dockDpiScale_);
+    item.iconPixelSize = scaledIconPixelSize(dockItemSize_.peek(), dockDpiScale_);
     item.iconPath = resolvedDockIconPath(icon, item.appId, item.kind, iconTheme_, item.iconPixelSize);
     if (item.focused) nextTitle = item.label;
     items.push_back(std::move(item));

@@ -1,6 +1,7 @@
 #include "Shell/ShellModels.hpp"
 
 #include "Shell/ShellIpc.hpp"
+#include "Shell/UI/LambdaShellTypes.hpp"
 
 #include <toml++/toml.hpp>
 
@@ -628,9 +629,6 @@ ShellConfig parseShellConfig(std::string_view tomlText) {
   if (auto* appearance = root["appearance"].as_table()) {
     if (auto value = readTomlString(*appearance, "icon_theme")) config.iconTheme = *value;
     if (auto value = readTomlString(*appearance, "symbolic_icon_theme")) config.symbolicIconTheme = *value;
-    if (auto value = readTomlInt(*appearance, "icon_size"); value && *value > 0 && *value <= 512) {
-      config.iconSize = static_cast<int>(*value);
-    }
     if (auto value = readTomlBool(*appearance, "reduced_motion")) config.reducedMotion = *value;
   }
 
@@ -640,6 +638,10 @@ ShellConfig parseShellConfig(std::string_view tomlText) {
       config.dockPosition = *value;
     }
     if (auto value = readTomlBool(*dock, "auto_hide")) config.dockAutoHide = *value;
+    if (auto value = readTomlInt(*dock, "item_size");
+        value && *value >= kDockMinItemSize && *value <= kDockMaxItemSize) {
+      config.dockItemSize = static_cast<int>(*value);
+    }
     if (auto value = readTomlInt(*dock, "bottom_gap"); value && *value >= 0 && *value <= 64) {
       config.dockBottomGap = static_cast<int>(*value);
     }
@@ -702,12 +704,12 @@ std::string writeShellConfigToml(ShellConfig const& config) {
   out << "[appearance]\n";
   out << "icon_theme = " << tomlQuote(config.iconTheme) << "\n";
   out << "symbolic_icon_theme = " << tomlQuote(config.symbolicIconTheme) << "\n";
-  out << "icon_size = " << config.iconSize << "\n";
   out << "reduced_motion = " << (config.reducedMotion ? "true" : "false") << "\n\n";
 
   out << "[dock]\n";
   out << "position = " << tomlQuote(config.dockPosition) << "\n";
   out << "auto_hide = " << (config.dockAutoHide ? "true" : "false") << "\n";
+  out << "item_size = " << clampedDockItemSize(config.dockItemSize) << "\n";
   out << "bottom_gap = " << config.dockBottomGap << "\n";
   out << "corner_radius = " << config.dockCornerRadius << "\n";
   out << "clock_format = " << tomlQuote(config.dockClockFormat) << "\n";

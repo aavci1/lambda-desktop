@@ -23,14 +23,16 @@ struct ShellDockView {
     auto const items = model.dockItemsSignal();
     auto const timeText = model.timeTextSignal();
     auto const clockWidth = model.dockClockWidthSignal();
+    auto const itemSize = model.dockItemSizeSignal();
     auto const systemStatus = model.systemStatusSignal();
-    lambda::Reactive::Bindable<int> widthBinding{[items, clockWidth] {
-      return dockWidth(items(), clockWidth());
+    lambda::Reactive::Bindable<int> widthBinding{[items, clockWidth, itemSize] {
+      return dockWidth(items(), clockWidth(), itemSize());
     }};
     return lambda::Element{LambdaDock{DockProps{
         .items = items,
         .timeText = timeText,
         .clockWidth = clockWidth,
+        .itemSize = itemSize,
         .system = lambda::Reactive::Bindable<SystemStatus>{[systemStatus] { return systemStatus(); }},
         .hoverIndex = -1,
         .width = widthBinding,

@@ -71,7 +71,7 @@ std::shared_ptr<Image> iconImage(std::string const& path, int pixelSize) {
 Element lambdaLauncherIcon(float iconSize, float iconInsetX, float lift) {
   return Text{
       .text = "λ",
-      .font = Font{.family = "", .size = 40.f, .weight = 900.f},
+      .font = Font{.family = "", .size = std::max(22.f, iconSize * 0.83f), .weight = 900.f},
       .color = VisualTokens::primaryText,
       .horizontalAlignment = HorizontalAlignment::Center,
       .verticalAlignment = VerticalAlignment::Center,
@@ -101,21 +101,18 @@ bool hasDockItemMenu(DockItem const& item) {
 }
 
 float currentDockFrameWidth(Signal<std::vector<DockItem>> const& items,
-                            Signal<int> const& clockWidth) {
-  return static_cast<float>(dockWidth(items.peek(), clockWidth.peek()));
+                            Signal<int> const& clockWidth,
+                            Signal<int> const& itemSize) {
+  return static_cast<float>(dockWidth(items.peek(), clockWidth.peek(), itemSize.peek()));
 }
 
 struct DockLayoutFrameState {
   Signal<std::vector<DockItem>> items;
   Signal<int> clockWidth;
+  Signal<int> itemSize;
   scenegraph::SceneNode* group = nullptr;
   std::vector<scenegraph::SceneNode*> children;
 };
-
-int dockStatusGridWidth() {
-  return kDockStatusColumns * kDockStatusCell +
-         (kDockStatusColumns - 1) * kDockStatusGridGap;
-}
 
 LayoutConstraints dockSectionConstraints(float width, float maxHeight, float minHeight = 0.f) {
   return LayoutConstraints{
@@ -133,22 +130,23 @@ Size relayoutDockSection(scenegraph::SceneNode* node, float width, float maxHeig
   return node->size();
 }
 
-void positionDockSection(scenegraph::SceneNode* node, float x, Size size) {
+void positionDockSection(scenegraph::SceneNode* node, float x, Size size, int itemSize) {
   if (!node) return;
   float const y = kDockPaddingTop +
-      std::max(0.f, (static_cast<float>(kDockSlotHeight) - size.height) * 0.5f);
+      std::max(0.f, (static_cast<float>(dockSlotHeight(itemSize)) - size.height) * 0.5f);
   node->setPosition(Point{x, y});
 }
 
 void layoutDockFrame(DockLayoutFrameState const& state) {
-  float const frameWidth = currentDockFrameWidth(state.items, state.clockWidth);
-  float const frameHeight = static_cast<float>(dockHeight());
+  int const itemSize = state.itemSize.peek();
+  float const frameWidth = currentDockFrameWidth(state.items, state.clockWidth, state.itemSize);
+  float const frameHeight = static_cast<float>(dockHeight(itemSize));
   auto const currentItems = state.items.peek();
-  float const appWidth = static_cast<float>(dockItemsWidth(currentItems));
+  float const appWidth = static_cast<float>(dockItemsWidth(currentItems, itemSize));
   float const separatorWidth = static_cast<float>(kDockSeparatorWidth);
-  float const statusWidth = static_cast<float>(dockStatusGridWidth());
+  float const statusWidth = static_cast<float>(dockStatusGridWidth(itemSize));
   float const clockWidth = static_cast<float>(std::max(kDockClockMinWidth, state.clockWidth.peek()));
-  float const slotHeight = static_cast<float>(kDockSlotHeight);
+  float const slotHeight = static_cast<float>(dockSlotHeight(itemSize));
 
   std::array<Size, 5> sizes{};
   if (state.children.size() >= 5) {
@@ -159,17 +157,17 @@ void layoutDockFrame(DockLayoutFrameState const& state) {
     sizes[4] = relayoutDockSection(state.children[4], clockWidth, slotHeight, slotHeight);
 
     float x = kDockPaddingX;
-    positionDockSection(state.children[0], x, sizes[0]);
+    positionDockSection(state.children[0], x, sizes[0], itemSize);
     if (appWidth > 0.f) {
       x += appWidth + static_cast<float>(kDockGap);
     }
-    positionDockSection(state.children[1], x, sizes[1]);
+    positionDockSection(state.children[1], x, sizes[1], itemSize);
     x += separatorWidth + static_cast<float>(kDockGap);
-    positionDockSection(state.children[2], x, sizes[2]);
+    positionDockSection(state.children[2], x, sizes[2], itemSize);
     x += statusWidth + static_cast<float>(kDockGap);
-    positionDockSection(state.children[3], x, sizes[3]);
+    positionDockSection(state.children[3], x, sizes[3], itemSize);
     x += separatorWidth + static_cast<float>(kDockGap);
-    positionDockSection(state.children[4], x, sizes[4]);
+    positionDockSection(state.children[4], x, sizes[4], itemSize);
   }
   if (state.group) {
     state.group->setSize(Size{frameWidth, frameHeight});
@@ -180,6 +178,7 @@ struct DockLayoutFrame {
   std::vector<Element> children;
   Signal<std::vector<DockItem>> items;
   Signal<int> clockWidth;
+  Signal<int> itemSize;
 
   Size measure(MeasureContext& ctx,
                LayoutConstraints const& constraints,
@@ -188,21 +187,22 @@ struct DockLayoutFrame {
     (void)constraints;
     (void)hints;
     (void)textSystem;
-    float const frameWidth = currentDockFrameWidth(items, clockWidth);
+    float const frameWidth = currentDockFrameWidth(items, clockWidth, itemSize);
     ctx.advanceChildSlot();
-    return Size{frameWidth, static_cast<float>(dockHeight())};
+    return Size{frameWidth, static_cast<float>(dockHeight(itemSize.peek()))};
   }
 
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const {
-    float const frameWidth = currentDockFrameWidth(items, clockWidth);
+    int const currentItemSize = itemSize.peek();
+    float const frameWidth = currentDockFrameWidth(items, clockWidth, itemSize);
     auto group = std::make_unique<scenegraph::SceneNode>(
-        Rect{0.f, 0.f, frameWidth, static_cast<float>(dockHeight())});
+        Rect{0.f, 0.f, frameWidth, static_cast<float>(dockHeight(currentItemSize))});
     std::vector<scenegraph::SceneNode*> mountedChildren;
     mountedChildren.reserve(children.size());
     for (std::size_t i = 0; i < children.size(); ++i) {
       ctx.measureContext().setChildIndex(i);
       MountContext childCtx = ctx.childWithSharedScope(
-          dockSectionConstraints(0.f, static_cast<float>(kDockSlotHeight)),
+          dockSectionConstraints(0.f, static_cast<float>(dockSlotHeight(currentItemSize))),
           ctx.hints());
       auto childNode = children[i].mount(childCtx);
       mountedChildren.push_back(childNode.get());
@@ -213,6 +213,7 @@ struct DockLayoutFrame {
     auto state = std::make_shared<DockLayoutFrameState>(DockLayoutFrameState{
         .items = items,
         .clockWidth = clockWidth,
+        .itemSize = itemSize,
         .group = group.get(),
         .children = std::move(mountedChildren),
     });
@@ -227,6 +228,7 @@ struct DockLayoutFrame {
       Reactive::Effect([state, requestRedraw]() mutable {
         (void)state->items();
         (void)state->clockWidth();
+        (void)state->itemSize();
         layoutDockFrame(*state);
         if (requestRedraw) {
           requestRedraw();
@@ -330,6 +332,7 @@ Element dockItemMenu(DockItem item,
 Element dockIconAt(Reactive::Signal<std::size_t> indexSignal,
                    DockItem const& item,
                    Signal<std::vector<DockItem>> const& items,
+                   int itemSize,
                    bool hover,
                    std::function<void(MouseButton, Modifiers)> onTap) {
   float const lift = hover ? -5.f : 0.f;
@@ -338,9 +341,9 @@ Element dockIconAt(Reactive::Signal<std::size_t> indexSignal,
     std::size_t const index = indexSignal();
     return index < dockItems.size() && dockItems[index].running;
   }};
-  float const slotWidth = static_cast<float>(kDockCell);
-  float const slotHeight = static_cast<float>(kDockSlotHeight);
-  float const iconSize = static_cast<float>(kDockIconSize);
+  float const slotWidth = static_cast<float>(dockCell(itemSize));
+  float const slotHeight = static_cast<float>(dockSlotHeight(itemSize));
+  float const iconSize = static_cast<float>(clampedDockItemSize(itemSize));
   float const iconDotGap = static_cast<float>(kDockIconDotGap);
   float const slotMargin = static_cast<float>(kDockSlotMargin);
   float const dotBelowPad = static_cast<float>(kDockDotBelowPad);
@@ -358,7 +361,7 @@ Element dockIconAt(Reactive::Signal<std::size_t> indexSignal,
   } else {
     iconLayers.push_back(Text{
         .text = icon(dockIconName(item)),
-        .font = Font{.family = "Material Symbols Rounded", .size = 36.f, .weight = 680.f},
+        .font = Font{.family = "Material Symbols Rounded", .size = std::max(20.f, iconSize * 0.75f), .weight = 680.f},
         .color = VisualTokens::primaryText,
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,
@@ -398,11 +401,11 @@ std::string dockRowKey(DockItem const& item) {
          std::to_string(item.iconPixelSize);
 }
 
-Element dockSeparator() {
+Element dockSeparator(int itemSize) {
   float const thickness = static_cast<float>(kDockSeparatorLineWidth);
   float const slotWidth = static_cast<float>(kDockSeparatorWidth);
-  float const height = static_cast<float>(kDockIconSize);
-  float const slotHeight = static_cast<float>(kDockSlotHeight);
+  float const height = static_cast<float>(clampedDockItemSize(itemSize));
+  float const slotHeight = static_cast<float>(dockSlotHeight(itemSize));
   float const x = (slotWidth - thickness) * 0.5f;
   float const y = (slotHeight - height) * 0.5f;
   return ZStack{.children = children(Rectangle{}
@@ -412,7 +415,9 @@ Element dockSeparator() {
       .size(slotWidth, slotHeight);
 }
 
-Element statusIcon(Reactive::Bindable<IconName> iconName, Reactive::Bindable<bool> available) {
+Element statusIcon(Reactive::Bindable<IconName> iconName,
+                   Reactive::Bindable<bool> available,
+                   int itemSize) {
   Reactive::Signal<bool> hovered = useHover();
   Reactive::Signal<bool> pressed = usePress();
   Reactive::Bindable<Color> const fill{[hovered, pressed] {
@@ -424,23 +429,29 @@ Element statusIcon(Reactive::Bindable<IconName> iconName, Reactive::Bindable<boo
     return available.evaluate() ? VisualTokens::primaryText : VisualTokens::tertiaryText;
   }};
 
+  float const cellSize = static_cast<float>(dockStatusCellSize(itemSize));
+  float const iconSize = static_cast<float>(dockStatusIconSize(itemSize));
+
   return ZStack{
              .horizontalAlignment = Alignment::Center,
              .verticalAlignment = Alignment::Center,
              .children = children(
                  Rectangle{}
-                     .size(static_cast<float>(kDockStatusCell), static_cast<float>(kDockStatusCell))
-                     .cornerRadius(6.f)
+                     .size(cellSize, cellSize)
+                     .cornerRadius(std::min(8.f, cellSize * 0.28f))
                      .fill(fill),
                  Icon{.name = std::move(iconName),
-                      .size = static_cast<float>(kDockStatusIconSize),
+                      .size = iconSize,
                       .weight = 520.f,
                       .color = color})}
-      .size(static_cast<float>(kDockStatusCell), static_cast<float>(kDockStatusCell))
+      .size(cellSize, cellSize)
       .cursor(Cursor::Hand);
 }
 
-Element statusDockletIcon(std::string id, IconName fallbackIcon, Reactive::Bindable<SystemStatus> system) {
+Element statusDockletIcon(std::string id,
+                          IconName fallbackIcon,
+                          Reactive::Bindable<SystemStatus> system,
+                          int itemSize) {
   std::string const itemId = std::move(id);
   return statusIcon(Reactive::Bindable<IconName>{[itemId, fallbackIcon, system] {
                       for (DockletStatusItem const& item : dockletStatusItems(system.evaluate())) {
@@ -453,44 +464,61 @@ Element statusDockletIcon(std::string id, IconName fallbackIcon, Reactive::Binda
                         if (item.id == itemId) return item.availability == StatusAvailability::Available;
                       }
                       return false;
-                    }});
+                    }},
+                    itemSize);
 }
 
-Element fixedStatusIcon(IconName iconName, bool available) {
-  return statusIcon(Reactive::Bindable<IconName>{iconName}, Reactive::Bindable<bool>{available});
+Element fixedStatusIcon(IconName iconName, bool available, int itemSize) {
+  return statusIcon(Reactive::Bindable<IconName>{iconName}, Reactive::Bindable<bool>{available}, itemSize);
 }
 
-Element statusIconGrid(Reactive::Bindable<SystemStatus> system) {
+Element statusIconGrid(Reactive::Bindable<SystemStatus> system, int itemSize) {
   float const gap = static_cast<float>(kDockStatusGridGap);
-  float const width =
-      static_cast<float>(kDockStatusColumns * kDockStatusCell + (kDockStatusColumns - 1) * kDockStatusGridGap);
-  float const height =
-      static_cast<float>(kDockStatusRows * kDockStatusCell + (kDockStatusRows - 1) * kDockStatusGridGap);
+  float const width = static_cast<float>(dockStatusGridWidth(itemSize));
+  float const height = static_cast<float>(dockStatusGridHeight(itemSize));
 
+  std::vector<Element> icons;
+  icons.reserve(kDockStatusItemCount);
+  icons.push_back(statusDockletIcon("network", IconName::WifiOff, system, itemSize));
+  icons.push_back(statusDockletIcon("bluetooth", IconName::BluetoothDisabled, system, itemSize));
+  icons.push_back(statusDockletIcon("volume", IconName::VolumeOff, system, itemSize));
+  icons.push_back(statusDockletIcon("battery", IconName::BatteryUnknown, system, itemSize));
+  icons.push_back(fixedStatusIcon(IconName::NotificationsOff, false, itemSize));
+  icons.push_back(fixedStatusIcon(IconName::ContentPasteOff, false, itemSize));
+
+  if (dockUsesSingleRowDocklets(itemSize)) {
+    return HStack{
+               .spacing = gap,
+               .alignment = Alignment::Center,
+               .children = std::move(icons),
+           }
+        .size(width, height);
+  }
+
+  std::vector<Element> rows;
+  rows.reserve(kDockStatusRows);
+  rows.push_back(HStack{
+      .spacing = gap,
+      .alignment = Alignment::Center,
+      .children = children(std::move(icons[0]), std::move(icons[1]), std::move(icons[2])),
+  });
+  rows.push_back(HStack{
+      .spacing = gap,
+      .alignment = Alignment::Center,
+      .children = children(std::move(icons[3]), std::move(icons[4]), std::move(icons[5])),
+  });
   return VStack{
              .spacing = gap,
              .alignment = Alignment::Center,
-             .children = children(
-                 HStack{
-                     .spacing = gap,
-                     .alignment = Alignment::Center,
-                     .children = children(statusDockletIcon("network", IconName::WifiOff, system),
-                                          statusDockletIcon("bluetooth", IconName::BluetoothDisabled, system),
-                                          statusDockletIcon("volume", IconName::VolumeOff, system)),
-                 },
-                 HStack{
-                     .spacing = gap,
-                     .alignment = Alignment::Center,
-                     .children = children(statusDockletIcon("battery", IconName::BatteryUnknown, system),
-                                          fixedStatusIcon(IconName::NotificationsOff, false),
-                                          fixedStatusIcon(IconName::ContentPasteOff, false)),
-                 })}
+             .children = std::move(rows),
+         }
       .size(width, height);
 }
 
-Element clockDocklet(Signal<std::string> timeText, Signal<int> clockWidth) {
+Element clockDocklet(Signal<std::string> timeText, Signal<int> clockWidth, int itemSize) {
   Reactive::Bindable<std::string> const dateText{[timeText] { return dockClockDateText(timeText()); }};
   Reactive::Bindable<std::string> const clockText{[timeText] { return dockClockTimeText(timeText()); }};
+  Reactive::Bindable<std::string> const singleRowText{[timeText] { return timeText(); }};
 
   Reactive::Bindable<float> const width{[clockWidth] {
     return static_cast<float>(std::max(kDockClockMinWidth, clockWidth()));
@@ -500,10 +528,31 @@ Element clockDocklet(Signal<std::string> timeText, Signal<int> clockWidth) {
     return std::max(1.f,
                     static_cast<float>(measuredWidth) - kDockClockLeadingPaddingX - kDockClockTrailingPaddingX);
   }};
+  float const slotHeight = static_cast<float>(dockSlotHeight(itemSize));
+  if (dockUsesSingleRowDocklets(itemSize)) {
+    float const textHeight =
+        std::min(slotHeight,
+                 std::max(20.f, static_cast<float>(clampedDockItemSize(itemSize)) * 0.68f));
+    float const textY = std::max(0.f, (slotHeight - textHeight) * 0.5f);
+    return ZStack{
+               .horizontalAlignment = Alignment::Center,
+               .verticalAlignment = Alignment::Center,
+               .children = children(Text{
+                   .text = singleRowText,
+                   .font = Font{.family = "",
+                                .size = kDockClockSingleRowFontSize,
+                                .weight = kDockClockSingleRowFontWeight},
+                   .color = VisualTokens::primaryText,
+                   .horizontalAlignment = HorizontalAlignment::Center,
+                   .verticalAlignment = VerticalAlignment::Center,
+               }.size(textWidth, textHeight).position(kDockClockLeadingPaddingX, textY))}
+        .size(width, slotHeight);
+  }
+
   float const bandTop = static_cast<float>(kDockSlotMargin);
   float const dateHeight = 19.f;
   float const timeHeight = 26.f;
-  float const rowGap = static_cast<float>(kDockIconSize) - dateHeight - timeHeight;
+  float const rowGap = std::max(0.f, static_cast<float>(clampedDockItemSize(itemSize)) - dateHeight - timeHeight);
   return ZStack{
              .horizontalAlignment = Alignment::Center,
              .verticalAlignment = Alignment::Center,
@@ -526,7 +575,7 @@ Element clockDocklet(Signal<std::string> timeText, Signal<int> clockWidth) {
                      .horizontalAlignment = HorizontalAlignment::Center,
                      .verticalAlignment = VerticalAlignment::Center,
                  }.size(textWidth, timeHeight).position(kDockClockLeadingPaddingX, bandTop + dateHeight + rowGap))}
-      .size(width, static_cast<float>(kDockSlotHeight));
+      .size(width, slotHeight);
 }
 
 } // namespace
@@ -535,20 +584,24 @@ Element LambdaDock::body() const {
   auto const items = props.items;
   auto const timeText = props.timeText;
   auto const clockWidth = props.clockWidth;
+  auto const itemSizeSignal = props.itemSize;
   auto const system = props.system;
   auto const onOpenLauncher = props.onOpenLauncher;
   auto const onActivateItem = props.onActivateItem;
   auto const onShowMenu = props.onShowMenu;
   int const hoverIndex = props.hoverIndex;
+  int const itemSize = itemSizeSignal();
 
   std::vector<Element> sections;
   sections.push_back(Element{For(
       items,
-      dockRowKey,
-      [items, onOpenLauncher, onActivateItem, onShowMenu, hoverIndex](
+      [itemSize](DockItem const& item) {
+        return dockRowKey(item) + "|size=" + std::to_string(clampedDockItemSize(itemSize));
+      },
+      [items, itemSize, onOpenLauncher, onActivateItem, onShowMenu, hoverIndex](
           DockItem const& item, Reactive::Signal<std::size_t> const& indexSignal) {
         if (item.kind == "separator") {
-          return dockSeparator();
+          return dockSeparator(itemSize);
         }
         std::function<void(MouseButton, Modifiers)> onTap;
         if (item.kind == "launcher") {
@@ -574,22 +627,23 @@ Element LambdaDock::body() const {
           };
         }
         bool const hover = hoverIndex >= 0 && static_cast<int>(indexSignal.peek()) == hoverIndex;
-        return dockIconAt(indexSignal, item, items, hover, std::move(onTap));
+        return dockIconAt(indexSignal, item, items, itemSize, hover, std::move(onTap));
       },
       static_cast<float>(kDockGap),
       Alignment::Center,
       ForLayout::HorizontalStack)}
-                         .height(static_cast<float>(kDockSlotHeight))
+                         .height(static_cast<float>(dockSlotHeight(itemSize)))
                          .clipContent(true));
-  sections.push_back(dockSeparator());
-  sections.push_back(statusIconGrid(system));
-  sections.push_back(dockSeparator());
-  sections.push_back(clockDocklet(timeText, clockWidth));
+  sections.push_back(dockSeparator(itemSize));
+  sections.push_back(statusIconGrid(system, itemSize));
+  sections.push_back(dockSeparator(itemSize));
+  sections.push_back(clockDocklet(timeText, clockWidth, itemSize));
 
   return Element{DockLayoutFrame{
       .children = std::move(sections),
       .items = items,
       .clockWidth = clockWidth,
+      .itemSize = itemSizeSignal,
   }};
 }
 

@@ -36,44 +36,90 @@ DockletStatusItem unavailableItem(std::string id, lambda::IconName icon) {
 
 } // namespace
 
-int dockItemWidth(DockItem const& item) {
-  return item.kind == "separator" ? kDockSeparatorWidth : kDockCell;
+int clampedDockItemSize(int itemSize) {
+  return std::clamp(itemSize, kDockMinItemSize, kDockMaxItemSize);
 }
 
-int dockItemsWidth(std::vector<DockItem> const& items) {
+bool dockUsesSingleRowDocklets(int itemSize) {
+  return clampedDockItemSize(itemSize) < kDockSingleRowThreshold;
+}
+
+int dockCell(int itemSize) {
+  return clampedDockItemSize(itemSize) + (kDockCell - kDockIconSize);
+}
+
+int dockSlotHeight(int itemSize) {
+  return kDockSlotMargin + clampedDockItemSize(itemSize) + kDockIconDotGap + kDockDotSize + kDockDotBelowPad;
+}
+
+int dockStatusCellSize(int itemSize) {
+  if (!dockUsesSingleRowDocklets(itemSize)) return kDockStatusCell;
+  return std::max(kDockStatusCell, clampedDockItemSize(itemSize));
+}
+
+int dockStatusIconSize(int itemSize) {
+  int const cell = dockStatusCellSize(itemSize);
+  return std::clamp(cell - 8, 14, std::max(14, clampedDockItemSize(itemSize)));
+}
+
+int dockStatusGridColumns(int itemSize) {
+  return dockUsesSingleRowDocklets(itemSize) ? kDockStatusItemCount : kDockStatusColumns;
+}
+
+int dockStatusGridRows(int itemSize) {
+  return dockUsesSingleRowDocklets(itemSize) ? 1 : kDockStatusRows;
+}
+
+int dockStatusGridWidth(int itemSize) {
+  int const columns = dockStatusGridColumns(itemSize);
+  return columns * dockStatusCellSize(itemSize) + std::max(0, columns - 1) * kDockStatusGridGap;
+}
+
+int dockStatusGridHeight(int itemSize) {
+  int const rows = dockStatusGridRows(itemSize);
+  return rows * dockStatusCellSize(itemSize) + std::max(0, rows - 1) * kDockStatusGridGap;
+}
+
+int dockItemWidth(DockItem const& item, int itemSize) {
+  return item.kind == "separator" ? kDockSeparatorWidth : dockCell(itemSize);
+}
+
+int dockItemsWidth(std::vector<DockItem> const& items, int itemSize) {
   int width = 0;
   for (std::size_t i = 0; i < items.size(); ++i) {
-    width += dockItemWidth(items[i]);
+    width += dockItemWidth(items[i], itemSize);
     if (i + 1 < items.size()) width += kDockGap;
   }
   return width;
 }
 
-int dockStatusWidth(int clockWidth) {
-  int const statusGridWidth =
-      kDockStatusColumns * kDockStatusCell + (kDockStatusColumns - 1) * kDockStatusGridGap;
-  return kDockSeparatorWidth + kDockGap + statusGridWidth + kDockGap + kDockSeparatorWidth + kDockGap +
+int dockStatusWidth(int clockWidth, int itemSize) {
+  return kDockSeparatorWidth + kDockGap + dockStatusGridWidth(itemSize) + kDockGap + kDockSeparatorWidth + kDockGap +
          std::max(kDockClockMinWidth, clockWidth);
 }
 
-int dockWidth(std::vector<DockItem> const& items, int clockWidth) {
-  int width = static_cast<int>(kDockPaddingX * 2.f) + dockItemsWidth(items);
+int dockWidth(std::vector<DockItem> const& items, int clockWidth, int itemSize) {
+  int width = static_cast<int>(kDockPaddingX * 2.f) + dockItemsWidth(items, itemSize);
   if (!items.empty()) width += kDockGap;
-  width += dockStatusWidth(clockWidth);
+  width += dockStatusWidth(clockWidth, itemSize);
   return width;
 }
 
-int dockHeight() {
-  return static_cast<int>(kDockPaddingTop + static_cast<float>(kDockSlotHeight) + kDockPaddingBottom);
+int dockHeight(int itemSize) {
+  return static_cast<int>(kDockPaddingTop + static_cast<float>(dockSlotHeight(itemSize)) + kDockPaddingBottom);
 }
 
-std::optional<std::size_t> dockItemIndexAt(std::vector<DockItem> const& items, double x, double y) {
+std::optional<std::size_t> dockItemIndexAt(std::vector<DockItem> const& items,
+                                           double x,
+                                           double y,
+                                           int itemSize) {
   int cursor = static_cast<int>(kDockPaddingX);
+  int const slotHeight = dockSlotHeight(itemSize);
   for (std::size_t i = 0; i < items.size(); ++i) {
-    int const width = dockItemWidth(items[i]);
+    int const width = dockItemWidth(items[i], itemSize);
     if (items[i].kind != "separator" &&
         x >= cursor && x < cursor + width &&
-        y >= kDockPaddingTop && y < kDockPaddingTop + static_cast<float>(kDockIconSize)) {
+        y >= kDockPaddingTop && y < kDockPaddingTop + static_cast<float>(slotHeight)) {
       return i;
     }
     cursor += width + kDockGap;

@@ -35,6 +35,7 @@ public:
   std::string const& activeTitle() const { return activeTitle_.peek(); }
   std::string const& timeText() const { return timeText_.peek(); }
   int dockClockWidth() const { return dockClockWidth_.peek(); }
+  int dockItemSize() const { return dockItemSize_.peek(); }
   lambda_shell::SystemStatus const& systemStatus() const { return systemStatus_.peek(); }
   std::vector<DockItem> const& launcherResults() const { return launcherResults_.peek(); }
 
@@ -49,6 +50,7 @@ public:
   lambda::Signal<std::string>& activeTitleSignal() { return activeTitle_; }
   lambda::Signal<std::string>& timeTextSignal() { return timeText_; }
   lambda::Signal<int>& dockClockWidthSignal() { return dockClockWidth_; }
+  lambda::Signal<int>& dockItemSizeSignal() { return dockItemSize_; }
   lambda::Signal<SystemStatus>& systemStatusSignal() { return systemStatus_; }
   lambda::Signal<std::vector<DockItem>>& launcherResultsSignal() { return launcherResults_; }
 
@@ -97,11 +99,11 @@ private:
   lambda::Signal<std::string> activeTitle_;
   lambda::Signal<std::string> timeText_{formatTimeText()};
   lambda::Signal<int> dockClockWidth_{kDockClockMinWidth};
+  lambda::Signal<int> dockItemSize_{kDockIconSize};
   lambda::Signal<SystemStatus> systemStatus_;
   lambda::Signal<std::vector<DockItem>> launcherResults_;
   bool showRunningUnpinned_ = true;
   std::string iconTheme_;
-  int iconSize_ = 48;
   float dockDpiScale_ = 1.f;
   std::string clockFormat_ = "%a %d %b, %H:%M";
 };

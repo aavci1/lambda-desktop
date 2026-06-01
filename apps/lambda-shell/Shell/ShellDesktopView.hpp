@@ -24,8 +24,9 @@ struct ShellDesktopView {
 
   lambda::Element body() const {
     auto const open = model.launcherOpenSignal();
-    int const dockW = dockWidth(model.dockItems(), model.dockClockWidth());
-    float const dockH = static_cast<float>(dockHeight());
+    int const itemSize = model.dockItemSize();
+    int const dockW = dockWidth(model.dockItems(), model.dockClockWidth(), itemSize);
+    float const dockH = static_cast<float>(dockHeight(itemSize));
     float const dockX = (width - static_cast<float>(dockW)) * 0.5f;
     float const dockY = height - dockH - static_cast<float>(kDockBottom);
 

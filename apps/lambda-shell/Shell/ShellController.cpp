@@ -79,7 +79,7 @@ LayerShellOptions visibleMenuLayer(char const* nameSpace) {
 
 } // namespace
 
-lambda::WindowConfig dockWindowConfig(int width, int bottomGap, int cornerRadius) {
+lambda::WindowConfig dockWindowConfig(int width, int itemSize, int bottomGap, int cornerRadius) {
   LayerShellOptions layer = layerBase(LayerShellLayer::Overlay, "lambda.dock");
   layer.anchorBottom = true;
   layer.marginBottom = std::clamp(bottomGap, 0, 64);
@@ -89,7 +89,7 @@ lambda::WindowConfig dockWindowConfig(int width, int bottomGap, int cornerRadius
   layer.chrome.glass.tintColor = Color{1.f, 1.f, 1.f, 0.06f};
   layer.chrome.glass.borderColor = VisualTokens::border;
   return WindowConfig{
-      .size = {static_cast<float>(std::max(width, 1)), static_cast<float>(dockHeight())},
+      .size = {static_cast<float>(std::max(width, 1)), static_cast<float>(dockHeight(itemSize))},
       .title = "Lambda Dock",
       .resizable = false,
       .layerShell = layer,
@@ -122,7 +122,8 @@ lambda::WindowConfig dockMenuWindowConfig() {
 
 ShellController::ShellController(lambda::Application& app, ShellModel& model) : app_(app), model_(model) {
   if (model_.dockItems().empty()) model_.resetDockItems();
-  lastDockWidth_ = dockWidth(model_.dockItems(), model_.dockClockWidth());
+  lastDockWidth_ = dockWidth(model_.dockItems(), model_.dockClockWidth(), model_.dockItemSize());
+  lastDockHeight_ = dockHeight(model_.dockItemSize());
 
   app_.eventQueue().on<lambda::WindowEvent>([this](lambda::WindowEvent const& event) {
     if (event.kind == lambda::WindowEvent::Kind::DpiChanged) {
@@ -303,17 +304,26 @@ bool ShellController::saveShellConfig(ShellConfig const& config) {
 }
 
 void ShellController::applyShellConfigToModel() {
+  int const previousDockItemSize = model_.dockItemSize();
   model_.setDockItems(appRegistry_, shellConfig_);
   (void)updateDockClockWidth();
   if (!lastSnapshotLine_.empty()) {
     (void)model_.applySnapshot(lastSnapshotLine_);
   }
+  bool const dockItemSizeChanged = model_.dockItemSize() != previousDockItemSize;
 
   if (dockWindow_) {
     resizeDockWindowIfNeeded();
-    int const width = dockWidth(model_.dockItems(), model_.dockClockWidth());
+    int const itemSize = model_.dockItemSize();
+    int const width = dockWidth(model_.dockItems(), model_.dockClockWidth(), itemSize);
     dockWindow_->setLayerShellOptions(
-        dockWindowConfig(width, shellConfig_.dockBottomGap, shellConfig_.dockCornerRadius).layerShell);
+        dockWindowConfig(width, itemSize, shellConfig_.dockBottomGap, shellConfig_.dockCornerRadius).layerShell);
+    if (dockItemSizeChanged) {
+      mountDockView();
+    }
+  }
+  if (dockItemSizeChanged && dockMenuOpen_) {
+    syncDockMenuOverlay();
   }
   requestDockRedraw();
   if (model_.launcherOpen()) requestLauncherRedraw();
@@ -337,13 +347,15 @@ bool ShellController::connectIpc() {
 
 void ShellController::createProductionWindows() {
   (void)updateDockClockWidth();
-  int const dockWidthPx = dockWidth(model_.dockItems(), model_.dockClockWidth());
+  int const itemSize = model_.dockItemSize();
+  int const dockWidthPx = dockWidth(model_.dockItems(), model_.dockClockWidth(), itemSize);
   auto& dock = app_.createWindow<lambda::Window>(
-      dockWindowConfig(dockWidthPx, shellConfig_.dockBottomGap, shellConfig_.dockCornerRadius));
+      dockWindowConfig(dockWidthPx, itemSize, shellConfig_.dockBottomGap, shellConfig_.dockCornerRadius));
   dock.setBackground(lambda::WindowBackground::transparent());
   dockWindow_ = &dock;
   dockHandle_ = dock.handle();
   lastDockWidth_ = dockWidthPx;
+  lastDockHeight_ = dockHeight(itemSize);
   (void)refreshSystemStatus();
   clockTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{1}, *dockHandle_);
   systemStatusTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{5}, *dockHandle_);
@@ -374,14 +386,19 @@ void ShellController::setupPreviewWindow(lambda::Window& window, float width, fl
   mountPreviewView();
 }
 
+void ShellController::mountDockView() {
+  if (!dockWindow_) return;
+  dockWindow_->setView(ShellDockView{
+      model_,
+      [this] { openLauncher(); },
+      makeActivateCallback(),
+      makeShowDockMenuCallback(),
+  });
+}
+
 void ShellController::mountProductionViews() {
   if (dockWindow_) {
-    dockWindow_->setView(ShellDockView{
-        model_,
-        [this] { openLauncher(); },
-        makeActivateCallback(),
-        makeShowDockMenuCallback(),
-    });
+    mountDockView();
   }
   if (dockMenuWindow_) {
     dockMenuWindow_->setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
@@ -444,6 +461,20 @@ int ShellController::measureDockClockWidth() {
   options.suppressCacheStats = true;
 
   std::string const text = model_.timeText();
+  if (dockUsesSingleRowDocklets(model_.dockItemSize())) {
+    lambda::Size const textSize = app_.textSystem().measure(text,
+                                                            lambda::Font{.family = "",
+                                                                         .size = kDockClockSingleRowFontSize,
+                                                                         .weight = kDockClockSingleRowFontWeight},
+                                                            lambda::VisualTokens::primaryText,
+                                                            0.f,
+                                                            options);
+    return std::max(kDockClockMinWidth,
+                    static_cast<int>(std::ceil(textSize.width +
+                                               kDockClockLeadingPaddingX +
+                                               kDockClockTrailingPaddingX)));
+  }
+
   std::string const date = dockClockDateText(text);
   std::string const time = dockClockTimeText(text);
   lambda::Size const dateSize = app_.textSystem().measure(date,
@@ -472,10 +503,13 @@ bool ShellController::updateDockClockWidth() {
 
 void ShellController::resizeDockWindowIfNeeded() {
   if (!dockWindow_) return;
-  int const width = dockWidth(model_.dockItems(), model_.dockClockWidth());
-  if (width == lastDockWidth_) return;
+  int const itemSize = model_.dockItemSize();
+  int const width = dockWidth(model_.dockItems(), model_.dockClockWidth(), itemSize);
+  int const height = dockHeight(itemSize);
+  if (width == lastDockWidth_ && height == lastDockHeight_) return;
   lastDockWidth_ = width;
-  dockWindow_->resize({static_cast<float>(width), static_cast<float>(dockHeight())});
+  lastDockHeight_ = height;
+  dockWindow_->resize({static_cast<float>(width), static_cast<float>(height)});
 }
 
 void ShellController::openLauncher() {
@@ -553,26 +587,27 @@ void ShellController::syncDockMenuOverlay() {
   }
 
   dockMenuItem_ = *found;
+  int const itemSize = model_.dockItemSize();
   float const outputWidth = std::max({dockMenuOverlayWidth_,
-                                      static_cast<float>(dockWidth(items, model_.dockClockWidth()))});
+                                      static_cast<float>(dockWidth(items, model_.dockClockWidth(), itemSize))});
   int const dockBottomGap = std::clamp(shellConfig_.dockBottomGap, 0, 64);
   float const outputHeight = std::max(dockMenuOverlayHeight_,
-                                      static_cast<float>(dockBottomGap + dockHeight() + kDockMenuGap +
+                                      static_cast<float>(dockBottomGap + dockHeight(itemSize) + kDockMenuGap +
                                                          kDockMenuSurfaceHeight));
-  int const currentDockWidth = dockWidth(items, model_.dockClockWidth());
+  int const currentDockWidth = dockWidth(items, model_.dockClockWidth(), itemSize);
   float const dockLeft = std::max(0.f, (outputWidth - static_cast<float>(currentDockWidth)) * 0.5f);
   float localCenter = kDockPaddingX;
   for (auto it = items.begin(); it != found; ++it) {
-    localCenter += static_cast<float>(dockItemWidth(*it) + kDockGap);
+    localCenter += static_cast<float>(dockItemWidth(*it, itemSize) + kDockGap);
   }
-  localCenter += static_cast<float>(dockItemWidth(*found)) * 0.5f;
+  localCenter += static_cast<float>(dockItemWidth(*found, itemSize)) * 0.5f;
   float const iconCenter = dockLeft + localCenter;
   int const menuLeft = static_cast<int>(std::lround(
       std::clamp(iconCenter - static_cast<float>(kDockMenuSurfaceWidth) * 0.5f,
                  0.f,
                  std::max(0.f, outputWidth - static_cast<float>(kDockMenuSurfaceWidth)))));
   int const menuTop = static_cast<int>(std::lround(
-      std::clamp(outputHeight - static_cast<float>(dockBottomGap + dockHeight() + kDockMenuGap +
+      std::clamp(outputHeight - static_cast<float>(dockBottomGap + dockHeight(itemSize) + kDockMenuGap +
                                                    kDockMenuSurfaceHeight),
                  0.f,
                  std::max(0.f, outputHeight - static_cast<float>(kDockMenuSurfaceHeight)))));

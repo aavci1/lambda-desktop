@@ -354,7 +354,7 @@ TEST_CASE("Shell config parses defaults and invalid fallback") {
                                    "lambda-settings",
                                    "firefox",
                                });
-  CHECK(defaults.iconSize == 48);
+  CHECK(defaults.dockItemSize == 48);
   CHECK(defaults.dockBottomGap == 8);
   CHECK(defaults.dockCornerRadius == 18);
   CHECK(defaults.dockClockFormat == "%a %d %b, %H:%M");
@@ -366,11 +366,11 @@ TEST_CASE("Shell config parses defaults and invalid fallback") {
   auto parsed = lambda_shell::parseShellConfig(R"(
 [appearance]
 icon_theme = "Adwaita"
-icon_size = 64
 reduced_motion = true
 [dock]
 pinned = ["lambda-terminal", "lambda-files"]
 auto_hide = true
+item_size = 36
 bottom_gap = 6
 corner_radius = 20
 clock_format = "%H:%M"
@@ -392,7 +392,7 @@ empty_query = "apps"
 max_results = 4
 )");
   CHECK(parsed.iconTheme == "Adwaita");
-  CHECK(parsed.iconSize == 64);
+  CHECK(parsed.dockItemSize == 36);
   CHECK(parsed.reducedMotion);
   CHECK(parsed.dockPinned == std::vector<std::string>{"lambda-terminal", "lambda-files"});
   CHECK(parsed.dockAutoHide);
@@ -414,7 +414,6 @@ max_results = 4
 
   auto fallback = lambda_shell::parseShellConfig(R"(
 [appearance]
-icon_size = -1
 [dock]
 pinned = []
 position = "floating"

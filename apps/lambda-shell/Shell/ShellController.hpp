@@ -34,6 +34,7 @@ public:
   ShellConnection& ipc() noexcept { return ipc_; }
 
 private:
+  void mountDockView();
   void mountProductionViews();
   void mountPreviewView();
   void requestRedraws();
@@ -80,6 +81,7 @@ private:
   float dockMenuOverlayWidth_ = 1.f;
   float dockMenuOverlayHeight_ = 1.f;
   int lastDockWidth_ = 0;
+  int lastDockHeight_ = 0;
   std::uint64_t ipcPollId_ = 0;
   std::uint64_t clockTimerId_ = 0;
   std::uint64_t systemStatusTimerId_ = 0;
@@ -93,6 +95,7 @@ private:
 };
 
 lambda::WindowConfig dockWindowConfig(int width,
+                                      int itemSize = kDockIconSize,
                                       int bottomGap = kDockBottom,
                                       int cornerRadius = kDockCornerRadius);
 lambda::WindowConfig dockMenuWindowConfig();

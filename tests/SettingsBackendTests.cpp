@@ -69,9 +69,9 @@ TEST_CASE("Settings Shell schema descriptors are unique and expose defaults") {
   CHECK(defaults.at("dock.pinned") ==
         "lambda-files,lambda-editor,lambda-preview,lambda-terminal,lambda-settings,firefox");
   CHECK(defaults.at("dock.bottom_gap") == "8");
+  CHECK(defaults.at("dock.item_size") == "48");
   CHECK(defaults.at("dock.corner_radius") == "18");
   CHECK(defaults.at("dock.clock_format") == "%a %d %b, %H:%M");
-  CHECK(defaults.at("appearance.icon_size") == "48");
   CHECK(defaults.at("clipboard_history.persist") == "false");
   CHECK(defaults.at("launcher.empty_query") == "recommended");
 }
@@ -146,6 +146,7 @@ unknown_appearance = "keep"
 pinned = ["lambda-files", "lambda-terminal"]
 show_running_unpinned = true
 bottom_gap = 6
+item_size = 36
 corner_radius = 20
 clock_format = "%H:%M"
 [clipboard_history]
@@ -162,6 +163,7 @@ max_results = 12
   CHECK(loaded.values.at("appearance.icon_theme") == "Adwaita");
   CHECK(loaded.values.at("dock.pinned") == "lambda-files,lambda-terminal");
   CHECK(loaded.values.at("dock.bottom_gap") == "6");
+  CHECK(loaded.values.at("dock.item_size") == "36");
   CHECK(loaded.values.at("dock.corner_radius") == "20");
   CHECK(loaded.values.at("dock.clock_format") == "%H:%M");
   CHECK(loaded.values.at("clipboard_history.max_entries") == "100");
@@ -171,6 +173,7 @@ max_results = 12
   std::string output = lambda_settings::writeShellSettings(input, {
       {"appearance.icon_theme", "Lambda"},
       {"dock.pinned", "lambda-terminal,lambda-settings"},
+      {"dock.item_size", "40"},
       {"dock.bottom_gap", "8"},
       {"dock.corner_radius", "18"},
       {"dock.clock_format", "%a %d %b, %H:%M"},
@@ -185,6 +188,7 @@ max_results = 12
   CHECK(output.find("unknown_appearance") != std::string::npos);
   CHECK(output.find("Lambda") != std::string::npos);
   CHECK(output.find("lambda-settings") != std::string::npos);
+  CHECK(output.find("item_size = 40") != std::string::npos);
   CHECK(output.find("show_running_unpinned = false") != std::string::npos);
   CHECK(output.find("enabled = false") != std::string::npos);
   CHECK(output.find("max_entries = 25") != std::string::npos);
@@ -271,6 +275,7 @@ TEST_CASE("Settings file helpers resolve create load and save owner configs") {
   CHECK(createdShell.error.empty());
   CHECK(std::filesystem::exists(shellPath));
   CHECK(createdShell.document.values.at("dock.position") == "bottom");
+  CHECK(createdShell.document.values.at("dock.item_size") == "48");
   CHECK(createdShell.document.values.at("dock.bottom_gap") == "8");
   CHECK(createdShell.document.values.at("dock.clock_format") == "%a %d %b, %H:%M");
 

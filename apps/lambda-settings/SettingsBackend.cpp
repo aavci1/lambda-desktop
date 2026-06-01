@@ -169,10 +169,10 @@ void setShellTomlValue(toml::table& table, std::string const& key, std::string c
 
   if (key == "appearance.icon_theme") setString("appearance", "icon_theme");
   else if (key == "appearance.symbolic_icon_theme") setString("appearance", "symbolic_icon_theme");
-  else if (key == "appearance.icon_size") setInt("appearance", "icon_size");
   else if (key == "appearance.reduced_motion") setBool("appearance", "reduced_motion");
   else if (key == "dock.position") setString("dock", "position");
   else if (key == "dock.auto_hide") setBool("dock", "auto_hide");
+  else if (key == "dock.item_size") setInt("dock", "item_size");
   else if (key == "dock.bottom_gap") setInt("dock", "bottom_gap");
   else if (key == "dock.corner_radius") setInt("dock", "corner_radius");
   else if (key == "dock.clock_format") setString("dock", "clock_format");
@@ -323,14 +323,14 @@ std::vector<SettingSchema> shellSettingsSchema() {
        .applyMode = ApplyMode::HotReload},
       {.id = "appearance.symbolic_icon_theme", .label = "Symbolic icon theme", .type = SettingType::String,
        .applyMode = ApplyMode::HotReload},
-      {.id = "appearance.icon_size", .label = "Icon size", .type = SettingType::Integer,
-       .applyMode = ApplyMode::HotReload, .defaultValue = "48"},
       {.id = "appearance.reduced_motion", .label = "Reduced motion", .type = SettingType::Boolean,
        .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
       {.id = "dock.position", .label = "Dock position", .type = SettingType::Enum,
        .applyMode = ApplyMode::HotReload, .enumValues = {"left", "right", "bottom"}, .defaultValue = "bottom"},
       {.id = "dock.auto_hide", .label = "Dock auto-hide", .type = SettingType::Boolean,
        .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
+      {.id = "dock.item_size", .label = "Dock item size", .type = SettingType::Integer,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "48"},
       {.id = "dock.bottom_gap", .label = "Dock bottom gap", .type = SettingType::Integer,
        .applyMode = ApplyMode::HotReload, .defaultValue = "8"},
       {.id = "dock.corner_radius", .label = "Dock corner radius", .type = SettingType::Integer,
@@ -501,12 +501,12 @@ SettingsDocument loadShellSettings(std::string_view tomlText) {
   if (auto* appearance = table["appearance"].as_table()) {
     setIf("appearance.icon_theme", tomlString(*appearance, "icon_theme"));
     setIf("appearance.symbolic_icon_theme", tomlString(*appearance, "symbolic_icon_theme"));
-    setIf("appearance.icon_size", tomlNumber(*appearance, "icon_size"));
     setIf("appearance.reduced_motion", tomlBool(*appearance, "reduced_motion"));
   }
   if (auto* dock = table["dock"].as_table()) {
     setIf("dock.position", tomlString(*dock, "position"));
     setIf("dock.auto_hide", tomlBool(*dock, "auto_hide"));
+    setIf("dock.item_size", tomlNumber(*dock, "item_size"));
     setIf("dock.bottom_gap", tomlNumber(*dock, "bottom_gap"));
     setIf("dock.corner_radius", tomlNumber(*dock, "corner_radius"));
     setIf("dock.clock_format", tomlString(*dock, "clock_format"));

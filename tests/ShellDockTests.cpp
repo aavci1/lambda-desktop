@@ -101,15 +101,17 @@ struct DockRoot {
   lambda::Signal<std::vector<lambda_shell::DockItem>> items;
   lambda::Signal<std::string> timeText;
   lambda::Signal<int> clockWidth;
+  lambda::Signal<int> itemSize{lambda_shell::kDockIconSize};
 
   lambda::Element body() const {
-    lambda::Reactive::Bindable<int> width{[items = items, clockWidth = clockWidth] {
-      return lambda_shell::dockWidth(items(), clockWidth());
+    lambda::Reactive::Bindable<int> width{[items = items, clockWidth = clockWidth, itemSize = itemSize] {
+      return lambda_shell::dockWidth(items(), clockWidth(), itemSize());
     }};
     return lambda::Element{lambda_shell::LambdaDock{lambda_shell::DockProps{
         .items = items,
         .timeText = timeText,
         .clockWidth = clockWidth,
+        .itemSize = itemSize,
         .system = lambda::Reactive::Bindable<lambda_shell::SystemStatus>{lambda_shell::SystemStatus{}},
         .width = width,
     }}};
@@ -117,7 +119,8 @@ struct DockRoot {
 };
 
 void checkDockAppSection(lambda::scenegraph::SceneGraph const& sceneGraph,
-                         std::vector<lambda_shell::DockItem> const& expectedItems) {
+                         std::vector<lambda_shell::DockItem> const& expectedItems,
+                         int itemSize = lambda_shell::kDockIconSize) {
   auto const& root = sceneGraph.root();
   REQUIRE(root.children().size() == 5);
 
@@ -125,9 +128,9 @@ void checkDockAppSection(lambda::scenegraph::SceneGraph const& sceneGraph,
   auto const& statusSeparator = *root.children()[1];
   auto const& clock = *root.children()[4];
 
-  float const expectedWidth = static_cast<float>(lambda_shell::dockItemsWidth(expectedItems));
+  float const expectedWidth = static_cast<float>(lambda_shell::dockItemsWidth(expectedItems, itemSize));
   float const expectedFrameWidth =
-      static_cast<float>(lambda_shell::dockWidth(expectedItems, 116));
+      static_cast<float>(lambda_shell::dockWidth(expectedItems, 116, itemSize));
   auto const* renderedItems = &appSection;
   while (renderedItems &&
          (std::abs(renderedItems->size().width - expectedWidth) > 0.01f ||
@@ -176,4 +179,39 @@ TEST_CASE("LambdaDock app section does not keep stale blank item slots") {
 
   items.set(pinned);
   checkDockAppSection(sceneGraph, pinned);
+}
+
+TEST_CASE("LambdaDock switches status and clock docklets to single row for compact item size") {
+  auto pinned = pinnedDockItems();
+
+  lambda::Signal<std::vector<lambda_shell::DockItem>> items{pinned};
+  lambda::Signal<std::string> timeText{"Sat 30 May, 18:31"};
+  lambda::Signal<int> clockWidth{148};
+  lambda::Signal<int> itemSize{36};
+
+  FakeTextSystem textSystem;
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<DockRoot>>(
+          std::in_place, DockRoot{items, timeText, clockWidth, itemSize}),
+      textSystem,
+      testEnvironment(),
+      lambda::Size{1100.f, static_cast<float>(lambda_shell::dockHeight(36))},
+  };
+
+  root.mount(sceneGraph);
+
+  auto const& sceneRoot = sceneGraph.root();
+  REQUIRE(sceneRoot.children().size() == 5);
+  auto const& status = *sceneRoot.children()[2];
+  auto const& clock = *sceneRoot.children()[4];
+
+  CHECK(sceneRoot.size().height == doctest::Approx(static_cast<float>(lambda_shell::dockHeight(36))));
+  CHECK(status.size().width == doctest::Approx(static_cast<float>(lambda_shell::dockStatusGridWidth(36))));
+  CHECK(status.size().height == doctest::Approx(static_cast<float>(lambda_shell::dockStatusGridHeight(36))));
+  CHECK(lambda_shell::dockStatusGridRows(36) == 1);
+  CHECK(clock.size().width == doctest::Approx(148.f));
+  CHECK(clock.position().x + clock.size().width <=
+        static_cast<float>(lambda_shell::dockWidth(pinned, 148, 36)) -
+            static_cast<float>(lambda_shell::kDockPaddingX) + 0.01f);
 }

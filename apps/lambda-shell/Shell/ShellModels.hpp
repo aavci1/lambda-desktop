@@ -178,11 +178,11 @@ struct ShellStatusModuleState {
 struct ShellConfig {
   std::string iconTheme;
   std::string symbolicIconTheme;
-  int iconSize = 48;
   bool reducedMotion = false;
 
   std::string dockPosition = "bottom";
   bool dockAutoHide = false;
+  int dockItemSize = 48;
   int dockBottomGap = 8;
   int dockCornerRadius = 18;
   std::string dockClockFormat = "%a %d %b, %H:%M";

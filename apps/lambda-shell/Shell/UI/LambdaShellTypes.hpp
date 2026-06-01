@@ -17,15 +17,21 @@ namespace lambda_shell {
 inline constexpr int kDockBottom = 8;
 inline constexpr int kDockCornerRadius = 18;
 inline constexpr int kDockCell = 56;
+inline constexpr int kDockMinItemSize = 32;
+inline constexpr int kDockMaxItemSize = 96;
+inline constexpr int kDockSingleRowThreshold = 48;
 inline constexpr int kDockClockMinWidth = 1;
 inline constexpr float kDockClockDateFontSize = 11.f;
 inline constexpr float kDockClockTimeFontSize = 17.f;
+inline constexpr float kDockClockSingleRowFontSize = 14.f;
 inline constexpr float kDockClockDateFontWeight = 580.f;
 inline constexpr float kDockClockTimeFontWeight = 680.f;
+inline constexpr float kDockClockSingleRowFontWeight = 640.f;
 inline constexpr float kDockClockLeadingPaddingX = 4.f;
 inline constexpr float kDockClockTrailingPaddingX = 8.f;
 inline constexpr int kDockStatusColumns = 3;
 inline constexpr int kDockStatusRows = 2;
+inline constexpr int kDockStatusItemCount = 6;
 inline constexpr int kDockStatusCell = 22;
 inline constexpr int kDockStatusIconSize = 18;
 inline constexpr int kDockStatusGridGap = 4;
@@ -82,12 +88,27 @@ struct LauncherLayout {
   int startX = 0;
 };
 
-int dockItemWidth(DockItem const& item);
-int dockItemsWidth(std::vector<DockItem> const& items);
-int dockStatusWidth(int clockWidth = kDockClockMinWidth);
-int dockWidth(std::vector<DockItem> const& items, int clockWidth = kDockClockMinWidth);
-int dockHeight();
-std::optional<std::size_t> dockItemIndexAt(std::vector<DockItem> const& items, double x, double y);
+int clampedDockItemSize(int itemSize);
+bool dockUsesSingleRowDocklets(int itemSize);
+int dockCell(int itemSize = kDockIconSize);
+int dockSlotHeight(int itemSize = kDockIconSize);
+int dockStatusCellSize(int itemSize = kDockIconSize);
+int dockStatusIconSize(int itemSize = kDockIconSize);
+int dockStatusGridColumns(int itemSize = kDockIconSize);
+int dockStatusGridRows(int itemSize = kDockIconSize);
+int dockStatusGridWidth(int itemSize = kDockIconSize);
+int dockStatusGridHeight(int itemSize = kDockIconSize);
+int dockItemWidth(DockItem const& item, int itemSize = kDockIconSize);
+int dockItemsWidth(std::vector<DockItem> const& items, int itemSize = kDockIconSize);
+int dockStatusWidth(int clockWidth = kDockClockMinWidth, int itemSize = kDockIconSize);
+int dockWidth(std::vector<DockItem> const& items,
+              int clockWidth = kDockClockMinWidth,
+              int itemSize = kDockIconSize);
+int dockHeight(int itemSize = kDockIconSize);
+std::optional<std::size_t> dockItemIndexAt(std::vector<DockItem> const& items,
+                                           double x,
+                                           double y,
+                                           int itemSize = kDockIconSize);
 
 std::vector<DockItem> launcherResults(std::vector<DockItem> const& items, std::string query);
 LauncherLayout launcherLayout(int width);
@@ -135,6 +156,7 @@ struct DockProps {
   lambda::Signal<std::vector<DockItem>> items;
   lambda::Signal<std::string> timeText;
   lambda::Signal<int> clockWidth;
+  lambda::Signal<int> itemSize{kDockIconSize};
   lambda::Reactive::Bindable<SystemStatus> system{SystemStatus{}};
   int hoverIndex = -1;
   lambda::Reactive::Bindable<int> width{1};

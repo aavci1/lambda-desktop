@@ -195,7 +195,7 @@ int enumIndexForValue(std::vector<std::string> const& values, std::string const&
 std::optional<NumericControlSpec> numericSpecForSetting(SettingSchema const& schema) {
   if (schema.id == "scale") return NumericControlSpec{.min = 1.f, .max = 3.f, .step = 0.25f, .slider = true};
   if (schema.id == "cursor_size") return NumericControlSpec{.min = 16.f, .max = 64.f, .step = 1.f, .slider = true};
-  if (schema.id == "appearance.icon_size") return NumericControlSpec{.min = 16.f, .max = 96.f, .step = 1.f, .slider = true};
+  if (schema.id == "dock.item_size") return NumericControlSpec{.min = 32.f, .max = 96.f, .step = 1.f, .slider = true};
   if (schema.id == "input.keyboard.repeat_rate") return NumericControlSpec{.min = 10.f, .max = 80.f, .step = 1.f, .slider = true};
   if (schema.id == "input.keyboard.repeat_delay_ms") {
     return NumericControlSpec{.min = 150.f, .max = 1000.f, .step = 50.f, .slider = true};
@@ -1339,8 +1339,7 @@ Element contentForSection(SettingsSection section,
                                                     wm("wallpaper_mode")}},
                          SettingsGroup{.heading = "Icons",
                                        .settings = {shell("appearance.icon_theme"),
-                                                    shell("appearance.symbolic_icon_theme"),
-                                                    shell("appearance.icon_size")}},
+                                                    shell("appearance.symbolic_icon_theme")}},
                          SettingsGroup{.heading = "Motion",
                                        .settings = {shell("appearance.reduced_motion")}}},
                         wmValues,
@@ -1386,6 +1385,7 @@ Element contentForSection(SettingsSection section,
                         {SettingsGroup{.heading = "Dock",
                                        .settings = {shell("dock.position"),
                                                     shell("dock.auto_hide"),
+                                                    shell("dock.item_size"),
                                                     shell("dock.bottom_gap"),
                                                     shell("dock.corner_radius"),
                                                     shell("dock.clock_format"),
