@@ -8,6 +8,7 @@
 #include <Lambda/UI/EnvironmentKeys.hpp>
 #include <Lambda/UI/Hooks.hpp>
 #include <Lambda/UI/Views/Button.hpp>
+#include <Lambda/UI/Views/Card.hpp>
 #include <Lambda/UI/Views/HStack.hpp>
 #include <Lambda/UI/Views/Icon.hpp>
 #include <Lambda/UI/Views/Rectangle.hpp>
@@ -273,7 +274,7 @@ struct SidebarItemRow {
                    Icon{.name = item.icon, .size = 18.f, .weight = 400.f, .color = iconColor},
                    Text{
                        .text = item.label,
-                       .font = Font{.size = 13.f, .weight = 500.f},
+                       .font = Font::headline(),
                        .color = labelColor,
                    })}
         .padding(6.f, 10.f, 6.f, 10.f)
@@ -291,7 +292,7 @@ Element sidebarHeader(WindowChromeMetrics const& chrome) {
   }
   row.push_back(Text{
       .text = "Settings",
-      .font = Font{.size = 13.f, .weight = 600.f},
+      .font = Font::headline(),
       .color = SettingsTheme::text,
       .verticalAlignment = VerticalAlignment::Center,
   });
@@ -328,7 +329,7 @@ Element sidebar(Reactive::Signal<SettingsSection> activeSection, WindowChromeMet
 Element sectionTitle(std::string title) {
   return Text{
       .text = std::move(title),
-      .font = Font{.size = 20.f, .weight = 600.f},
+      .font = Font::title3(),
       .color = SettingsTheme::text,
       .horizontalAlignment = HorizontalAlignment::Leading,
   };
@@ -337,7 +338,7 @@ Element sectionTitle(std::string title) {
 Element sectionHeading(std::string text) {
   return Text{
       .text = std::move(text),
-      .font = Font{.size = 11.f, .weight = 600.f},
+      .font = Font::footnote(),
       .color = SettingsTheme::text3,
       .horizontalAlignment = HorizontalAlignment::Leading,
   };
@@ -350,7 +351,7 @@ Element selectPill(std::string value) {
              .children = children(
                  Text{
                      .text = std::move(value),
-                     .font = Font{.size = 12.f, .weight = 400.f},
+                     .font = Font::callout(),
                      .color = SettingsTheme::text,
                  },
                  Icon{.name = IconName::ChevronRight, .size = 13.f, .color = SettingsTheme::text3})}
@@ -363,7 +364,7 @@ Element selectPill(std::string value) {
 Element valueText(std::string value) {
   return Text{
       .text = std::move(value),
-      .font = Font{.size = 12.f, .weight = 400.f},
+      .font = Font::callout(),
       .color = SettingsTheme::text2,
       .verticalAlignment = VerticalAlignment::Center,
   };
@@ -371,7 +372,7 @@ Element valueText(std::string value) {
 
 Element settingsRow(std::string label, std::string sublabel, Element control);
 Element rowsList(std::vector<Element> rows);
-Element sectionBlock(std::string heading, Element content);
+Element settingsCard(std::string heading, std::string caption, Element content);
 
 enum class SettingsSource {
   WindowManager,
@@ -385,6 +386,7 @@ struct BoundSetting {
 
 struct SettingsGroup {
   std::string heading;
+  std::string caption;
   std::vector<BoundSetting> settings;
 };
 
@@ -452,7 +454,7 @@ void setSettingValue(Reactive::Signal<std::map<std::string, std::string>> values
 
 TextInput::Style settingsTextInputStyle() {
   TextInput::Style inputStyle;
-  inputStyle.font = Font{.size = 12.f, .weight = 450.f};
+  inputStyle.font = Font::callout();
   inputStyle.textColor = SettingsTheme::text;
   inputStyle.placeholderColor = SettingsTheme::text3;
   inputStyle.backgroundColor = SettingsTheme::glassSoft;
@@ -495,7 +497,7 @@ Slider::Style settingsSliderStyle() {
 
 SegmentedControl::Style settingsSegmentStyle() {
   return SegmentedControl::Style{
-      .font = Font{.size = 12.f, .weight = 600.f},
+      .font = Font::headline(),
       .paddingH = 10.f,
       .paddingV = 5.f,
       .cornerRadius = 7.f,
@@ -507,8 +509,8 @@ SegmentedControl::Style settingsSegmentStyle() {
 
 Select::Style settingsSelectStyle() {
   Select::Style style;
-  style.labelFont = Font{.size = 12.f, .weight = 500.f};
-  style.detailFont = Font{.size = 11.f, .weight = 400.f};
+  style.labelFont = Font::callout();
+  style.detailFont = Font::footnote();
   style.cornerRadius = 7.f;
   style.menuCornerRadius = 8.f;
   style.menuMaxHeight = 260.f;
@@ -573,9 +575,9 @@ Element settingBooleanControl(SettingSchema schema,
   return HStack{
              .spacing = 8.f,
              .alignment = Alignment::Center,
-             .children = children(Text{
+                                  .children = children(Text{
                                       .text = label,
-                                      .font = Font{.size = 12.f, .weight = 500.f},
+                                      .font = Font::callout(),
                                       .color = SettingsTheme::text2,
                                       .horizontalAlignment = HorizontalAlignment::Trailing,
                                   }.width(28.f),
@@ -663,7 +665,7 @@ Element settingNumericControl(SettingSchema schema,
                                   }.width(180.f),
                                   Text{
                                       .text = valueLabel,
-                                      .font = Font{.size = 12.f, .weight = 500.f},
+                                      .font = Font::callout(),
                                       .color = SettingsTheme::text2,
                                       .horizontalAlignment = HorizontalAlignment::Trailing,
                                   }.width(58.f))}
@@ -767,12 +769,13 @@ Element settingsPage(std::string title,
   blocks.reserve(groups.size() + 1u);
   blocks.push_back(sectionTitle(std::move(title)));
   for (SettingsGroup group : groups) {
-    blocks.push_back(sectionBlock(
+    blocks.push_back(settingsCard(
         std::move(group.heading),
+        std::move(group.caption),
         rowsList(buildSettingRows(std::move(group.settings), wmValues, shellValues, setValue))));
   }
   return VStack{
-      .spacing = 18.f,
+      .spacing = 16.f,
       .alignment = Alignment::Stretch,
       .children = std::move(blocks),
   };
@@ -798,7 +801,7 @@ Element settingsActionBar(Reactive::Signal<std::map<std::string, std::string>> w
   }};
 
   Button::Style buttonStyle;
-  buttonStyle.font = Font{.size = 12.f, .weight = 650.f};
+  buttonStyle.font = Font::headline();
   buttonStyle.cornerRadius = 7.f;
   buttonStyle.paddingH = 12.f;
   buttonStyle.paddingV = 6.f;
@@ -814,7 +817,7 @@ Element settingsActionBar(Reactive::Signal<std::map<std::string, std::string>> w
                         .onTap = std::move(reset)},
                  Text{
                      .text = status,
-	                     .font = Font{.size = 12.f, .weight = 500.f},
+	                     .font = Font::callout(),
 	                     .color = SettingsTheme::text2,
 	                     .horizontalAlignment = HorizontalAlignment::Trailing,
 	                     .verticalAlignment = VerticalAlignment::Center,
@@ -840,43 +843,49 @@ struct SettingsRowView {
   Element control;
 
   Element labelBlock() const {
+    Theme const theme = useEnvironment<ThemeKey>()();
     std::vector<Element> labelChildren;
     labelChildren.push_back(Text{
         .text = label,
-        .font = Font{.size = 13.f, .weight = 500.f},
-        .color = SettingsTheme::text,
+        .font = theme.headlineFont,
+        .color = Color::primary(),
         .horizontalAlignment = HorizontalAlignment::Leading,
     });
     if (!sublabel.empty()) {
       labelChildren.push_back(Text{
           .text = sublabel,
-          .font = Font{.size = 11.5f, .weight = 400.f},
-          .color = SettingsTheme::text3,
+          .font = theme.calloutFont,
+          .color = Color::secondary(),
           .horizontalAlignment = HorizontalAlignment::Leading,
           .wrapping = TextWrapping::Wrap,
       });
     }
     return VStack{
-        .spacing = 2.f,
+        .spacing = theme.space1,
         .alignment = Alignment::Stretch,
         .children = std::move(labelChildren)};
   }
 
   Element body() const {
+    Theme const theme = useEnvironment<ThemeKey>()();
     Rect const bounds = useBounds();
     bool const compact = bounds.width > 0.f && bounds.width < 560.f;
     if (compact) {
       return VStack{
-                 .spacing = 8.f,
+                 .spacing = theme.space2,
                  .alignment = Alignment::Stretch,
                  .children = children(labelBlock(), control)}
-          .padding(9.f, 0.f, 9.f, 0.f);
+          .padding(theme.space3)
+          .fill(FillStyle::solid(Color::windowBackground()))
+          .cornerRadius(CornerRadius{theme.radiusMedium});
     }
     return HStack{
-               .spacing = 18.f,
+               .spacing = theme.space4,
                .alignment = Alignment::Center,
                .children = children(labelBlock().flex(1.f, 1.f, 0.f), control)}
-        .padding(8.f, 0.f, 8.f, 0.f);
+        .padding(theme.space3)
+        .fill(FillStyle::solid(Color::windowBackground()))
+        .cornerRadius(CornerRadius{theme.radiusMedium});
   }
 };
 
@@ -888,30 +897,43 @@ Element settingsRow(std::string label, std::string sublabel, Element control) {
   }};
 }
 
-Element rowDivider() {
-  return Rectangle{}.height(1.f).fill(SettingsTheme::line2);
-}
-
 Element rowsList(std::vector<Element> rows) {
-  std::vector<Element> childrenList;
-  for (std::size_t i = 0; i < rows.size(); ++i) {
-    if (i > 0) {
-      childrenList.push_back(rowDivider());
-    }
-    childrenList.push_back(std::move(rows[i]));
-  }
   return VStack{
-      .spacing = 0.f,
+      .spacing = 8.f,
       .alignment = Alignment::Stretch,
-      .children = std::move(childrenList),
+      .children = std::move(rows),
   };
 }
 
-Element sectionBlock(std::string heading, Element content) {
-  return VStack{
-      .spacing = 10.f,
-      .alignment = Alignment::Stretch,
-      .children = children(sectionHeading(std::move(heading)), std::move(content)),
+Element settingsCard(std::string heading, std::string caption, Element content) {
+  std::vector<Element> cardChildren;
+  cardChildren.push_back(Text{
+      .text = std::move(heading),
+      .font = Font::headline(),
+      .color = Color::primary(),
+      .horizontalAlignment = HorizontalAlignment::Leading,
+  });
+  if (!caption.empty()) {
+    cardChildren.push_back(Text{
+        .text = std::move(caption),
+        .font = Font::body(),
+        .color = Color::secondary(),
+        .horizontalAlignment = HorizontalAlignment::Leading,
+        .wrapping = TextWrapping::Wrap,
+    });
+  }
+  cardChildren.push_back(std::move(content));
+
+  return Card{
+      .child = VStack{
+          .spacing = 12.f,
+          .alignment = Alignment::Stretch,
+          .children = std::move(cardChildren),
+      },
+      .style = Card::Style{
+          .padding = 16.f,
+          .cornerRadius = 8.f,
+      },
   };
 }
 
@@ -983,7 +1005,7 @@ struct ThemeCard {
                        .clipContent(true),
                    Text{
                        .text = label,
-                       .font = Font{.size = 12.f, .weight = 500.f},
+                       .font = Font::callout(),
                        .color = labelColor,
                        .horizontalAlignment = HorizontalAlignment::Center,
                    })}
@@ -1112,7 +1134,7 @@ struct WallpaperCard {
                        .clipContent(true),
                    Text{
                        .text = label,
-                       .font = Font{.size = 12.f, .weight = 500.f},
+                       .font = Font::callout(),
                        .color = labelColor,
                        .horizontalAlignment = HorizontalAlignment::Center,
                    })}
@@ -1171,11 +1193,12 @@ Element appearancePage(Reactive::Signal<int> themeMode,
       .alignment = Alignment::Stretch,
       .children = children(
           sectionTitle("Appearance"),
-          sectionBlock("Theme", themeCards(themeMode)),
-          sectionBlock("Accent Color", accentDots(accentIndex)),
-          sectionBlock("Wallpaper", wallpaperCards(wallpaperIndex)),
-          sectionBlock(
+          settingsCard("Theme", "", themeCards(themeMode)),
+          settingsCard("Accent Color", "", accentDots(accentIndex)),
+          settingsCard("Wallpaper", "", wallpaperCards(wallpaperIndex)),
+          settingsCard(
               "Effects",
+              "",
               rowsList({
                   settingsRow(
                       "Transparency", "Adjust the level of blur and transparency",
@@ -1193,7 +1216,7 @@ Element appearancePage(Reactive::Signal<int> themeMode,
                                   .width(200.f),
                               Text{
                                   .text = [transparency] { return percentText(transparency()); },
-                                  .font = Font{.size = 12.f, .weight = 400.f},
+                                  .font = Font::callout(),
                                   .color = SettingsTheme::text2,
                                   .horizontalAlignment = HorizontalAlignment::Trailing,
                               }
@@ -1214,7 +1237,7 @@ Element appearancePage(Reactive::Signal<int> themeMode,
                                   .width(200.f),
                               Text{
                                   .text = [radius] { return radiusLabel(radius()); },
-                                  .font = Font{.size = 12.f, .weight = 400.f},
+                                  .font = Font::callout(),
                                   .color = SettingsTheme::text2,
                                   .horizontalAlignment = HorizontalAlignment::Trailing,
                               }
@@ -1225,14 +1248,15 @@ Element appearancePage(Reactive::Signal<int> themeMode,
                               Toggle{.value = highContrast, .style = toggleStyle}),
                   settingsRow("Font", "System UI typeface", selectPill("Helvetica Neue")),
               })),
-          rowsList({settingsRow("About Lambda", "Desktop environment settings",
-                                HStack{
-                                    .spacing = 6.f,
-                                    .alignment = Alignment::Center,
-                                    .children = children(valueText("v1.0.0"),
-                                                         Icon{.name = IconName::ChevronRight,
-                                                              .size = 13.f,
-                                                              .color = SettingsTheme::text3})})}))};
+          settingsCard("About", "",
+                       rowsList({settingsRow("About Lambda", "Desktop environment settings",
+                                             HStack{
+                                                 .spacing = 6.f,
+                                                 .alignment = Alignment::Center,
+                                                 .children = children(valueText("v1.0.0"),
+                                                                      Icon{.name = IconName::ChevronRight,
+                                                                           .size = 13.f,
+                                                                           .color = SettingsTheme::text3})})})))};
 }
 
 Element genericPage(std::string title, std::vector<SettingsRowValue> rows) {
@@ -1245,7 +1269,10 @@ Element genericPage(std::string title, std::vector<SettingsRowValue> rows) {
   return VStack{
       .spacing = 16.f,
       .alignment = Alignment::Stretch,
-      .children = children(sectionTitle(std::move(title)), rowsList(std::move(rowViews))),
+      .children = children(sectionTitle(std::move(title)),
+                           settingsCard("Configuration",
+                                        "Settings writes owner config files and preserves unknown keys where practical.",
+                                        rowsList(std::move(rowViews)))),
   };
 }
 
@@ -1283,7 +1310,7 @@ Element aboutPage() {
                      .size(64.f, 64.f);
 
   return VStack{
-      .spacing = 18.f,
+      .spacing = 16.f,
       .alignment = Alignment::Stretch,
       .children = children(
           sectionTitle("About"),
@@ -1298,20 +1325,20 @@ Element aboutPage() {
                       .children = children(
                           Text{
                               .text = "Lambda",
-                              .font = Font{.size = 22.f, .weight = 600.f},
+                              .font = Font::title2(),
                               .color = SettingsTheme::text,
                           },
                           Text{
                               .text = "Desktop Environment",
-                              .font = Font{.size = 13.f, .weight = 400.f},
+                              .font = Font::body(),
                               .color = SettingsTheme::text2,
                           },
                           Text{
                               .text = "Version 1.0.0 · Build 2026.05.24",
-                              .font = Font{.size = 12.f, .weight = 400.f},
+                              .font = Font::callout(),
                               .color = SettingsTheme::text3,
                           })})},
-          rowsList(std::move(rowElements)))};
+          settingsCard("System", "", rowsList(std::move(rowElements))))};
 }
 
 Element contentForSection(SettingsSection section,

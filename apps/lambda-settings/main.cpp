@@ -14,7 +14,6 @@ int main(int argc, char* argv[]) {
       .titlebar = lambda::WindowTitlebarMode::System,
       .resizable = true,
   });
-  window.setBackground(lambda::WindowBackground::glassEffect());
   window.setView<lambda_settings::SettingsAppRoot>();
 
   return app.exec();

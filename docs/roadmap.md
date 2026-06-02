@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-05-31
+**Last updated:** 2026-06-03
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -12,6 +12,7 @@ This document replaces the older roadmap, Lambda desktop readiness index, compon
 | Document | Role |
 | --- | --- |
 | [roadmap.md](roadmap.md) | Current project status, Lambda desktop backlog, ownership boundaries, validation gates, and archived milestone notes |
+| [lambda-settings-ux-plan.md](lambda-settings-ux-plan.md) | Active UX and organization plan for `lambda-settings` |
 | [compositor.md](compositor.md) | Architecture/history reference for the compositor and framework/compositor boundary |
 | [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md) | Active wlroots comparison plan for compositor protocol, state, rendering, and validation improvements |
 | [compositor-user-guide.md](compositor-user-guide.md) | Build, configure, and run `lambda-window-manager` from a TTY |
@@ -300,20 +301,32 @@ Current implementation:
 - Keyboard edits keyboard layout/repeat and screenshot/close shortcuts.
 - Desktop edits animations, hardware cursor, cursor theme/size, idle blank timeout, and screenshot shortcuts.
 - Dock & Panel edits Shell dock and quick-settings values.
-- Notifications edits Shell notification and clipboard-history config.
+- Notifications edits Shell notification and clipboard-history config, while Launcher schema/config exists in the backend but is not yet exposed as its own page.
 - About/System shows real or explicitly unavailable values.
 - Save/revert/reset/error UX exists; restart-required rows are visible.
+- The app has the right Settings skeleton, but the current content design reads more like a config editor: section headings plus transparent divided rows, bespoke glass colors, and some unused demo-style appearance helpers.
+- The detailed UX plan lives in [lambda-settings-ux-plan.md](lambda-settings-ux-plan.md).
 
 Open gate:
 
 - Ensure hot-reloadable changes apply live where the owning process supports them.
 - Keep apply-mode labels accurate: `Applies after Save` versus `Restart required`.
 - Avoid claiming unavailable system providers are live.
+- Convert settings groups into real `Card` surfaces using the framework `Card` component and the visual language already proven in `toggle-demo`/`card-demo`.
+- Update settings rows to use stable internal padding, label/detail hierarchy, quiet secondary text, and right-aligned controls rather than transparent row lists.
+- Reorganize Settings navigation around user intent: General, Appearance, Display, Input, Windows, Dock & Panel, Notifications, Launcher & Clipboard, and About.
+- Split Launcher & Clipboard out from Notifications, and expose the Shell launcher settings that already exist in the schema.
+- Rename/reframe Keyboard/Desktop content into clearer Input and Windows pages where appropriate.
+- Extend `SettingsGroup` with optional captions so cards can explain ownership/apply behavior without ad hoc page text.
+- Calm the save footer: keep staged Save/Revert/Reset semantics, but make status placement and reset styling feel like a system footer rather than a demo strip.
+- Replace bespoke glass surface tokens with `ThemeKey`/framework tokens where practical, leaving only app-specific layout constants in `SettingsTheme`.
+- Remove or wire the unused showcase-oriented helpers such as theme/accent/wallpaper preview code; no visible or retained UI should imply fake personalization settings.
 - Add Settings UI later for Files preferences, Terminal preferences, MIME/default-app editing, and shared-service settings after those backends exist.
 
 Validation:
 
 - Targeted Settings tests pass for schema, validation, dirty/revert/reset, Window Manager and Shell config round trips, unknown key preservation, atomic write failure, owner config file helpers, shortcut conflict detection, wallpaper path normalization, theme discovery, and system info fixtures.
+- Manual Settings validation must cover launch, scrolling, compact layout, Appearance, Display, Input, Windows, Dock & Panel, Notifications, Launcher & Clipboard, About/System, save/revert/reset, invalid values, restart-required rows, and owner-config persistence.
 
 Deferred:
 
@@ -438,7 +451,7 @@ Manual validation coverage inherited from the old readiness specs:
 
 - Window Manager: build/unit checks, TTY launch, Shell launch, protocol smoke, Lambda apps, browser/GTK/Qt/foot real-app matrix, screenshots, fullscreen/restore, video/mpv pacing, hardware overlay/scanout traces, config reload/restart matrix, idle CPU, and compositor crash/disconnect behavior.
 - Shell: build/unit checks, launch/failure behavior, app registry discovery, dock launch/focus/restore, launcher keyboard behavior, docklet status, quick settings, notification workflows, clipboard-history workflows, config reload, and Lambda/external app validation.
-- Settings: build/unit checks, launch, Appearance, Display, Keyboard, Desktop, Dock & Panel, Notifications, About/System, save/revert/reset, restart-required rows, and owner-config persistence.
+- Settings: build/unit checks, launch, Appearance, Display, Input, Windows, Dock & Panel, Notifications, Launcher & Clipboard, About/System, save/revert/reset, invalid values, restart-required rows, compact layout, and owner-config persistence.
 - Files: build/unit checks, launch, browsing places/root/outside-home/permission-denied/large/hidden/external-change cases, selection, safe operations, trash, clipboard/DnD behavior, open-with behavior, grid/list/sort/search behavior, and preference persistence.
 - Terminal: build/unit checks, launch, shell workflows, full-screen apps, scrollback, selection/clipboard, key input, Unicode/color/attributes, resize/performance traces, and preferences.
 
