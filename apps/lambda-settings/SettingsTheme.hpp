@@ -18,10 +18,6 @@ struct SettingsTheme {
   static constexpr lambda::Color selectFill = lambda::Color{0.16f, 0.50f, 1.f, 0.14f};
   static constexpr lambda::Color selectBorder = lambda::Color{0.16f, 0.50f, 1.f, 0.35f};
   static constexpr lambda::Color hoverFill = lambda::Color{0.f, 0.f, 0.f, 0.04f};
-  static constexpr lambda::Color swatchLightTop = lambda::Color::hex(0xFFFFFF);
-  static constexpr lambda::Color swatchLightBottom = lambda::Color::hex(0xDEE5F2);
-  static constexpr lambda::Color swatchDarkTop = lambda::Color::hex(0x1D2440);
-  static constexpr lambda::Color swatchDarkBottom = lambda::Color::hex(0x0C1024);
 
   static constexpr float kSidebarHeaderHeight = 48.f;
   static constexpr float kSidebarWidth = 220.f;
