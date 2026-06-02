@@ -220,18 +220,18 @@ struct SidebarItemRow {
     }};
     Reactive::Bindable<FillStyle> const fill{[hover, active] {
       if (active.evaluate()) {
-        return FillStyle::solid(SettingsTheme::selectFill);
+        return FillStyle::solid(Color::selectedContentBackground());
       }
       if (hover()) {
-        return FillStyle::solid(SettingsTheme::hoverFill);
+        return FillStyle::solid(Color::windowBackground());
       }
       return FillStyle::solid(Colors::transparent);
     }};
     Reactive::Bindable<Color> const labelColor{[active] {
-      return active.evaluate() ? SettingsTheme::accent : SettingsTheme::text2;
+      return active.evaluate() ? Color::accent() : Color::secondary();
     }};
     Reactive::Bindable<Color> const iconColor{[active] {
-      return active.evaluate() ? SettingsTheme::accent : SettingsTheme::text3;
+      return active.evaluate() ? Color::accent() : Color::tertiary();
     }};
 
     return HStack{
@@ -260,7 +260,7 @@ Element sidebarHeader(WindowChromeMetrics const& chrome) {
   row.push_back(Text{
       .text = "Settings",
       .font = Font::headline(),
-      .color = SettingsTheme::text,
+      .color = Color::primary(),
       .verticalAlignment = VerticalAlignment::Center,
   });
   row.push_back(Spacer{}.flex(1.f, 1.f));
@@ -297,7 +297,7 @@ Element sectionTitle(std::string title) {
   return Text{
       .text = std::move(title),
       .font = Font::title3(),
-      .color = SettingsTheme::text,
+      .color = Color::primary(),
       .horizontalAlignment = HorizontalAlignment::Leading,
   };
 }
@@ -306,7 +306,7 @@ Element sectionHeading(std::string text) {
   return Text{
       .text = std::move(text),
       .font = Font::footnote(),
-      .color = SettingsTheme::text3,
+      .color = Color::tertiary(),
       .horizontalAlignment = HorizontalAlignment::Leading,
   };
 }
@@ -319,12 +319,12 @@ Element selectPill(std::string value) {
                  Text{
                      .text = std::move(value),
                      .font = Font::callout(),
-                     .color = SettingsTheme::text,
+                     .color = Color::primary(),
                  },
-                 Icon{.name = IconName::ChevronRight, .size = 13.f, .color = SettingsTheme::text3})}
+                 Icon{.name = IconName::ChevronRight, .size = 13.f, .color = Color::tertiary()})}
       .padding(5.f, 10.f, 5.f, 10.f)
-      .fill(SettingsTheme::glassSoft)
-      .stroke(StrokeStyle::solid(SettingsTheme::line, 1.f))
+      .fill(Color::controlBackground())
+      .stroke(StrokeStyle::solid(Color::separator(), 1.f))
       .cornerRadius(7.f);
 }
 
@@ -332,7 +332,7 @@ Element valueText(std::string value) {
   return Text{
       .text = std::move(value),
       .font = Font::callout(),
-      .color = SettingsTheme::text2,
+      .color = Color::secondary(),
       .verticalAlignment = VerticalAlignment::Center,
   };
 }
@@ -449,13 +449,13 @@ void setSettingValue(Reactive::Signal<std::map<std::string, std::string>> values
 TextInput::Style settingsTextInputStyle() {
   TextInput::Style inputStyle;
   inputStyle.font = Font::callout();
-  inputStyle.textColor = SettingsTheme::text;
-  inputStyle.placeholderColor = SettingsTheme::text3;
-  inputStyle.backgroundColor = SettingsTheme::glassSoft;
-  inputStyle.borderColor = SettingsTheme::line;
-  inputStyle.borderFocusColor = SettingsTheme::accent;
-  inputStyle.caretColor = SettingsTheme::accent;
-  inputStyle.selectionColor = SettingsTheme::selectFill;
+  inputStyle.textColor = Color::primary();
+  inputStyle.placeholderColor = Color::tertiary();
+  inputStyle.backgroundColor = Color::controlBackground();
+  inputStyle.borderColor = Color::separator();
+  inputStyle.borderFocusColor = Color::accent();
+  inputStyle.caretColor = Color::accent();
+  inputStyle.selectionColor = Color::selectedContentBackground();
   inputStyle.cornerRadius = 7.f;
   inputStyle.paddingH = 10.f;
   inputStyle.paddingV = 5.f;
@@ -470,18 +470,18 @@ Toggle::Style settingsToggleStyle() {
       .thumbInset = 3.f,
       .borderWidth = 1.f,
       .thumbBorderWidth = 1.f,
-      .onColor = SettingsTheme::accent,
-      .offColor = SettingsTheme::line,
+      .onColor = Color::accent(),
+      .offColor = Color::separator(),
       .thumbColor = Colors::white,
       .thumbBorderColor = Color{0.f, 0.f, 0.f, 0.08f},
-      .borderColor = SettingsTheme::line,
+      .borderColor = Color::separator(),
   };
 }
 
 Slider::Style settingsSliderStyle() {
   return Slider::Style{
-      .activeColor = SettingsTheme::accent,
-      .inactiveColor = SettingsTheme::line,
+      .activeColor = Color::accent(),
+      .inactiveColor = Color::separator(),
       .thumbColor = Colors::white,
       .thumbBorderColor = Color{0.f, 0.f, 0.f, 0.08f},
       .trackHeight = 3.f,
@@ -495,9 +495,9 @@ SegmentedControl::Style settingsSegmentStyle() {
       .paddingH = 10.f,
       .paddingV = 5.f,
       .cornerRadius = 7.f,
-      .accentColor = SettingsTheme::accent,
-      .trackColor = SettingsTheme::glassSoft,
-      .borderColor = SettingsTheme::line,
+      .accentColor = Color::accent(),
+      .trackColor = Color::controlBackground(),
+      .borderColor = Color::separator(),
   };
 }
 
@@ -509,11 +509,11 @@ Select::Style settingsSelectStyle() {
   style.menuCornerRadius = 8.f;
   style.menuMaxHeight = 260.f;
   style.minMenuWidth = 180.f;
-  style.accentColor = SettingsTheme::accent;
-  style.fieldColor = SettingsTheme::glassSoft;
-  style.fieldHoverColor = SettingsTheme::hoverFill;
-  style.borderColor = SettingsTheme::line;
-  style.rowHoverColor = SettingsTheme::hoverFill;
+  style.accentColor = Color::accent();
+  style.fieldColor = Color::controlBackground();
+  style.fieldHoverColor = Color::windowBackground();
+  style.borderColor = Color::separator();
+  style.rowHoverColor = Color::windowBackground();
   return style;
 }
 
@@ -526,7 +526,7 @@ Element settingTextField(SettingSchema schema,
       .value = localValue,
       .placeholder = schema.defaultValue,
       .validationColor = [schema](std::string_view text) {
-        return validateSettingValue(schema, std::string{text}) ? SettingsTheme::accent : Color::warning();
+        return validateSettingValue(schema, std::string{text}) ? Color::accent() : Color::warning();
       },
       .style = settingsTextInputStyle(),
       .onChange = [localValue, schema = std::move(schema), source, set = std::move(setValue)](
@@ -544,7 +544,7 @@ Element settingColorControl(SettingSchema schema,
                             SettingsSource source,
                             std::function<void(SettingsSource, std::string, std::string)> setValue) {
   Reactive::Bindable<Color> const swatchFill{[localValue] {
-    return parseHexColor(localValue()).value_or(SettingsTheme::glassSoft);
+    return parseHexColor(localValue()).value_or(Color::controlBackground());
   }};
   return HStack{
              .spacing = 8.f,
@@ -552,7 +552,7 @@ Element settingColorControl(SettingSchema schema,
              .children = children(Rectangle{}
                                       .size(30.f, 30.f)
                                       .fill(swatchFill)
-                                      .stroke(StrokeStyle::solid(SettingsTheme::line, 1.f))
+                                      .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                                       .cornerRadius(7.f),
                                   settingTextField(std::move(schema), localValue, source, std::move(setValue), 144.f))}
       .width(184.f);
@@ -572,7 +572,7 @@ Element settingBooleanControl(SettingSchema schema,
                                   .children = children(Text{
                                       .text = label,
                                       .font = Font::callout(),
-                                      .color = SettingsTheme::text2,
+                                      .color = Color::secondary(),
                                       .horizontalAlignment = HorizontalAlignment::Trailing,
                                   }.width(28.f),
                                   Toggle{
@@ -660,7 +660,7 @@ Element settingNumericControl(SettingSchema schema,
                                   Text{
                                       .text = valueLabel,
                                       .font = Font::callout(),
-                                      .color = SettingsTheme::text2,
+                                      .color = Color::secondary(),
                                       .horizontalAlignment = HorizontalAlignment::Trailing,
                                   }.width(58.f))}
       .width(248.f);
@@ -715,7 +715,7 @@ struct SettingEditorRow {
                    .alignment = Alignment::Center,
                    .children = children(Icon{.name = IconName::FolderOpen,
                                              .size = 17.f,
-                                             .color = SettingsTheme::text3},
+                                             .color = Color::tertiary()},
                                         settingTextField(schema, localValue, setting.source, setValue, 260.f))}
             .width(288.f);
       case SettingType::Shortcut:
@@ -724,7 +724,7 @@ struct SettingEditorRow {
                    .alignment = Alignment::Center,
                    .children = children(Icon{.name = IconName::Keyboard,
                                              .size = 17.f,
-                                             .color = SettingsTheme::text3},
+                                             .color = Color::tertiary()},
                                         settingTextField(schema, localValue, setting.source, setValue, 190.f))}
             .width(218.f);
       case SettingType::String:
@@ -790,32 +790,36 @@ Element settingsActionBar(Reactive::Signal<std::map<std::string, std::string>> w
     if (!statusText().empty()) return statusText();
     return dirty.evaluate() ? std::string{"Unsaved changes"} : std::string{"Saved"};
   }};
-  Reactive::Bindable<Color> const barFill{[dirty] {
-    return dirty.evaluate() ? Color{1.f, 1.f, 1.f, 0.20f} : Color{1.f, 1.f, 1.f, 0.08f};
+  Reactive::Bindable<Color> const statusColor{[dirty] {
+    return dirty.evaluate() ? Color::primary() : Color::secondary();
   }};
 
   Button::Style buttonStyle;
-  buttonStyle.font = Font::headline();
+  buttonStyle.font = Font::callout();
   buttonStyle.cornerRadius = 7.f;
   buttonStyle.paddingH = 12.f;
   buttonStyle.paddingV = 6.f;
-  buttonStyle.accentColor = SettingsTheme::accent;
+  buttonStyle.accentColor = Color::accent();
+
+  Button::Style resetButtonStyle = buttonStyle;
+  resetButtonStyle.accentColor = Color::secondary();
 
   return HStack{
-             .spacing = 8.f,
+             .spacing = 10.f,
              .alignment = Alignment::Center,
              .children = children(
-                 Button{.label = std::string{"Reset Defaults"},
-                        .variant = ButtonVariant::Ghost,
-                        .style = buttonStyle,
-                        .onTap = std::move(reset)},
                  Text{
                      .text = status,
 	                     .font = Font::callout(),
-	                     .color = SettingsTheme::text2,
-	                     .horizontalAlignment = HorizontalAlignment::Trailing,
+	                     .color = statusColor,
+	                     .horizontalAlignment = HorizontalAlignment::Leading,
 	                     .verticalAlignment = VerticalAlignment::Center,
+                         .wrapping = TextWrapping::Wrap,
 	                 }.flex(1.f, 1.f, 0.f),
+                 Button{.label = std::string{"Reset Defaults"},
+                        .variant = ButtonVariant::Ghost,
+                        .style = resetButtonStyle,
+                        .onTap = std::move(reset)},
                  Button{.label = std::string{"Revert"},
                         .variant = ButtonVariant::Secondary,
                         .disabled = [dirty] { return !dirty.evaluate(); },
@@ -826,9 +830,9 @@ Element settingsActionBar(Reactive::Signal<std::map<std::string, std::string>> w
                         .disabled = [dirty] { return !dirty.evaluate(); },
                         .style = buttonStyle,
                         .onTap = std::move(save)})}
-      .padding(8.f, SettingsTheme::kMainPadH, 8.f, SettingsTheme::kMainPadH)
-      .fill(barFill)
-      .stroke(StrokeStyle::solid(SettingsTheme::line, 1.f));
+      .padding(10.f, SettingsTheme::kMainPadH, 10.f, SettingsTheme::kMainPadH)
+      .fill(Color::windowBackground())
+      .stroke(StrokeStyle::solid(Color::separator(), 1.f));
 }
 
 struct SettingsRowView {
@@ -977,7 +981,7 @@ Element settingsCard(std::string heading, std::string caption, Element content) 
   if (!caption.empty()) {
     cardChildren.push_back(Text{
         .text = std::move(caption),
-        .font = Font::body(),
+        .font = Font::callout(),
         .color = Color::secondary(),
         .horizontalAlignment = HorizontalAlignment::Leading,
         .wrapping = TextWrapping::Wrap,
@@ -1030,7 +1034,7 @@ Element aboutPage() {
                      .children = children(
                          Rectangle{}
                              .size(64.f, 64.f)
-                             .fill(FillStyle::linearGradient(SettingsTheme::accent2, SettingsTheme::accent,
+                             .fill(FillStyle::linearGradient(Color::hex(0x5AA2FF), Color::accent(),
                                                              {0.f, 0.f}, {1.f, 1.f}))
                              .cornerRadius(18.f)
                              .shadow(subtleShadow()),
@@ -1065,17 +1069,17 @@ Element aboutPage() {
                           Text{
                               .text = "Lambda",
                               .font = Font::title2(),
-                              .color = SettingsTheme::text,
+                              .color = Color::primary(),
                           },
                           Text{
                               .text = "Desktop Environment",
                               .font = Font::body(),
-                              .color = SettingsTheme::text2,
+                              .color = Color::secondary(),
                           },
                           Text{
                               .text = "Version 1.0.0 · Build 2026.05.24",
                               .font = Font::callout(),
-                              .color = SettingsTheme::text3,
+                              .color = Color::tertiary(),
                           })})},
           settingsCard("System", "", rowsList(std::move(rowElements))))};
 }
@@ -1102,13 +1106,16 @@ Element contentForSection(SettingsSection section,
   case SettingsSection::Appearance:
     return settingsPage("Appearance",
                         {SettingsGroup{.heading = "Desktop Background",
+                                       .caption = "Window Manager owned; applies after Save.",
                                        .settings = {wm("background"),
                                                     wm("wallpaper"),
                                                     wm("wallpaper_mode")}},
                          SettingsGroup{.heading = "Icons",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("appearance.icon_theme"),
                                                     shell("appearance.symbolic_icon_theme")}},
                          SettingsGroup{.heading = "Motion",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("appearance.reduced_motion")}}},
                         wmValues,
                         shellValues,
@@ -1116,8 +1123,10 @@ Element contentForSection(SettingsSection section,
   case SettingsSection::Display:
     return settingsPage("Display",
                         {SettingsGroup{.heading = "Output",
+                                       .caption = "Window Manager owned; changing output requires restart.",
                                        .settings = {wm("output")}},
                          SettingsGroup{.heading = "Scaling",
+                                       .caption = "Window Manager owned; applies after Save.",
                                        .settings = {wm("scale")}}},
                         wmValues,
                         shellValues,
@@ -1125,10 +1134,12 @@ Element contentForSection(SettingsSection section,
   case SettingsSection::Input:
     return settingsPage("Input",
                         {SettingsGroup{.heading = "Keyboard",
+                                       .caption = "Window Manager owned; applies after Save.",
                                        .settings = {wm("input.keyboard.layout"),
                                                     wm("input.keyboard.repeat_rate"),
                                                     wm("input.keyboard.repeat_delay_ms")}},
                          SettingsGroup{.heading = "Shortcuts",
+                                       .caption = "Window Manager owned; applies after Save.",
                                        .settings = {wm("keybindings.close")}}},
                         wmValues,
                         shellValues,
@@ -1136,13 +1147,16 @@ Element contentForSection(SettingsSection section,
   case SettingsSection::Windows:
     return settingsPage("Windows",
                         {SettingsGroup{.heading = "Behavior",
+                                       .caption = "Window Manager owned; applies after Save.",
                                        .settings = {wm("animations"),
                                                     wm("idle_blank_timeout_seconds")}},
                          SettingsGroup{.heading = "Cursor",
+                                       .caption = "Window Manager owned; applies after Save.",
                                        .settings = {wm("hardware_cursor"),
                                                     wm("cursor_theme"),
                                                     wm("cursor_size")}},
                          SettingsGroup{.heading = "Screenshots",
+                                       .caption = "Window Manager owned; applies after Save.",
                                        .settings = {wm("keybindings.screenshot"),
                                                     wm("keybindings.screenshot_region"),
                                                     wm("keybindings.screenshot_active_window")}}},
@@ -1152,23 +1166,28 @@ Element contentForSection(SettingsSection section,
   case SettingsSection::DockPanel:
     return settingsPage("Dock & Panel",
                         {SettingsGroup{.heading = "Position",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("dock.position")}},
                          SettingsGroup{.heading = "Behavior",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("dock.auto_hide"),
                                                     shell("dock.full_width"),
                                                     shell("dock.show_running_unpinned"),
                                                     shell("dock.show_tooltips")}},
                          SettingsGroup{.heading = "Sizing",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("dock.item_size"),
                                                     shell("dock.bottom_gap"),
                                                     shell("dock.corner_radius")}},
                          SettingsGroup{.heading = "Material",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("dock.blur_radius"),
                                                     shell("dock.opacity"),
                                                     shell("dock.base_color"),
                                                     shell("dock.tint_color"),
                                                     shell("dock.border_color")}},
                          SettingsGroup{.heading = "Content",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("dock.pinned"),
                                                     shell("dock.clock_format"),
                                                     shell("quick_settings.modules")}}},
@@ -1178,11 +1197,13 @@ Element contentForSection(SettingsSection section,
   case SettingsSection::Notifications:
     return settingsPage("Notifications",
                         {SettingsGroup{.heading = "Banners",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("notifications.enabled"),
                                                     shell("notifications.do_not_disturb"),
                                                     shell("notifications.banner_timeout_seconds"),
                                                     shell("notifications.show_previews")}},
                          SettingsGroup{.heading = "History",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("notifications.history_limit")}}},
                         wmValues,
                         shellValues,
@@ -1190,10 +1211,12 @@ Element contentForSection(SettingsSection section,
   case SettingsSection::LauncherClipboard:
     return settingsPage("Launcher & Clipboard",
                         {SettingsGroup{.heading = "Launcher",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("launcher.empty_query"),
                                                     shell("launcher.max_results"),
                                                     shell("launcher.show_categories")}},
                          SettingsGroup{.heading = "Clipboard History",
+                                       .caption = "Shell owned; applies after Save.",
                                        .settings = {shell("clipboard_history.enabled"),
                                                     shell("clipboard_history.persist"),
                                                     shell("clipboard_history.max_entries"),
@@ -1281,7 +1304,7 @@ struct SettingsAppRoot {
                        .alignment = Alignment::Stretch,
                        .children = children(
                            sidebar(activeSection, metrics),
-                           Rectangle{}.width(1.f).fill(SettingsTheme::line),
+                           Rectangle{}.width(1.f).fill(Color::separator()),
 	                           VStack{
 	                               .spacing = 0.f,
 	                               .alignment = Alignment::Stretch,
