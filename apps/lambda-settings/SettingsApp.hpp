@@ -40,10 +40,6 @@
 
 namespace lambda_settings {
 
-namespace {
-
-using namespace lambda;
-
 enum class SettingsSection {
   General,
   Appearance,
@@ -55,6 +51,10 @@ enum class SettingsSection {
   LauncherClipboard,
   About,
 };
+
+namespace {
+
+using namespace lambda;
 
 struct ChromeInsets {
   float leading = 0.f;
