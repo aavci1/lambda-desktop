@@ -31,9 +31,11 @@ Element ListRow::body() const {
     Reactive::Signal<bool> hovered = useHover();
     Reactive::Signal<bool> pressed = usePress();
     bool const isDisabled = disabled;
+    Reactive::Bindable<bool> const isSelected = selected;
 
-    Reactive::Bindable<Color> const fill{[selected = selected, pressed, hovered, theme] {
-        return selected      ? theme().selectedContentBackgroundColor :
+    Reactive::Bindable<Color> const fill{[isSelected, pressed, hovered, theme] {
+        return isSelected.evaluate()
+               ? theme().selectedContentBackgroundColor :
                pressed.get() ? theme().rowHoverBackgroundColor :
                hovered.get() ? theme().hoveredControlBackgroundColor :
                                Colors::transparent;
@@ -44,7 +46,11 @@ Element ListRow::body() const {
             onTap();
         }
     };
-    auto handleKey = [handleTap](KeyCode key, Modifiers) {
+    auto handleKey = [handleTap, onKeyDown = onKeyDown](KeyCode key, Modifiers modifiers) {
+        if (onKeyDown) {
+            onKeyDown(key, modifiers);
+            return;
+        }
         if (key == keys::Return || key == keys::Space) {
             handleTap();
         }

@@ -6,7 +6,9 @@
 
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/Hooks.hpp>
+#include <Lambda/UI/Input.hpp>
 #include <Lambda/UI/Theme.hpp>
+#include <Lambda/Reactive/Bindable.hpp>
 
 #include <functional>
 #include <vector>
@@ -26,13 +28,15 @@ struct ListRow : ViewModifiers<ListRow> {
     /// Row body content.
     Element content;
     /// Selected state for styling.
-    bool selected = false;
+    Reactive::Bindable<bool> selected{false};
     /// Prevents interaction when true.
     bool disabled = false;
     /// Optional row token overrides.
     Style style {};
     /// Called when the row is activated.
     std::function<void()> onTap;
+    /// Called for keys not handled by the row's default activation behavior.
+    std::function<void(KeyCode, Modifiers)> onKeyDown;
 
     Element body() const;
 };

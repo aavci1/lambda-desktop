@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -155,6 +156,27 @@ std::filesystem::path pathFromDialogInput(std::filesystem::path const& directory
   return (directory / path).lexically_normal();
 }
 
+std::optional<std::size_t> entryIndex(std::vector<FileDialogEntry> const& entries,
+                                      std::filesystem::path const& path) {
+  if (path.empty()) {
+    return std::nullopt;
+  }
+  for (std::size_t index = 0; index < entries.size(); ++index) {
+    if (entries[index].path == path) {
+      return index;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<FileDialogEntry> selectedEntry(std::vector<FileDialogEntry> const& entries,
+                                             std::filesystem::path const& path) {
+  if (auto const index = entryIndex(entries, path)) {
+    return entries[*index];
+  }
+  return std::nullopt;
+}
+
 TextInput::Style compactInputStyle() {
   TextInput::Style style;
   style.font = Font{.size = 13.f, .weight = 430.f};
@@ -169,16 +191,24 @@ Element fileDialogRow(FileDialogEntry entry,
                       Reactive::Signal<std::string> directoryText,
                       Reactive::Signal<std::vector<FileDialogEntry>> entries,
                       Reactive::Signal<std::string> name,
-                      Reactive::Signal<std::string> status) {
-  auto navigate = [entry = entry, directory, directoryText, entries, status] {
+                      Reactive::Signal<std::filesystem::path> selectedPath,
+                      Reactive::Signal<std::filesystem::path> overwriteConfirmPath,
+                      Reactive::Signal<std::string> status,
+                      std::function<void(KeyCode, Modifiers)> onRowKeyDown) {
+  auto navigate = [entry = entry, directory, directoryText, entries,
+                   selectedPath, overwriteConfirmPath, status] {
     DirectoryListing next = listDirectory(entry.path);
     directory.set(next.directory);
     directoryText.set(next.directory.string());
     entries.set(std::move(next.entries));
+    selectedPath.set({});
+    overwriteConfirmPath.set({});
     status.set(next.status);
   };
-  auto select = [entry = entry, name, status] {
+  auto select = [entry = entry, name, selectedPath, overwriteConfirmPath, status] {
     name.set(entry.name);
+    selectedPath.set(entry.path);
+    overwriteConfirmPath.set({});
     status.set(std::string{});
   };
 
@@ -200,7 +230,11 @@ Element fileDialogRow(FileDialogEntry entry,
                   .color = entry.parent ? Color::secondary() : Color::primary(),
                   .verticalAlignment = VerticalAlignment::Center,
               }.flex(1.f, 1.f, 0.f))},
+      .selected = [entry, selectedPath] {
+        return !selectedPath().empty() && selectedPath() == entry.path;
+      },
       .onTap = entry.directory ? std::function<void()>{navigate} : std::function<void()>{select},
+      .onKeyDown = std::move(onRowKeyDown),
   };
 }
 
@@ -212,33 +246,56 @@ Element FileDialog::body() const {
   auto directoryText = useState<std::string>(initial.directory.string());
   auto entries = useState<std::vector<FileDialogEntry>>(initial.entries);
   auto name = useState<std::string>(initialName);
+  auto selectedPath = useState<std::filesystem::path>({});
+  auto overwriteConfirmPath = useState<std::filesystem::path>({});
   auto status = useState<std::string>(initial.status);
 
-  auto refreshDirectory = [directory, directoryText, entries, status](std::filesystem::path path) {
+  auto refreshDirectory = [directory, directoryText, entries, selectedPath,
+                           overwriteConfirmPath, status](std::filesystem::path path) {
     DirectoryListing next = listDirectory(std::move(path));
     directory.set(next.directory);
     directoryText.set(next.directory.string());
     entries.set(std::move(next.entries));
+    selectedPath.set({});
+    overwriteConfirmPath.set({});
     status.set(next.status);
   };
 
-  auto accept = [mode = mode, directory, name, status, onAccept = onAccept] {
-    std::string const nameText = name.peek();
-    if (nameText.empty()) {
-      status.set(mode == FileDialogMode::Open ? "Choose a file to open." : "Enter a file name.");
-      return;
-    }
-    std::filesystem::path const target = pathFromDialogInput(directory.peek(), nameText);
+  auto nameChanged = [selectedPath, overwriteConfirmPath, status](std::string const&) {
+    selectedPath.set({});
+    overwriteConfirmPath.set({});
+    status.set(std::string{});
+  };
+
+  auto acceptPath = [mode = mode, overwriteConfirmPath, status, onAccept = onAccept](
+                        std::filesystem::path const& target) {
     if (mode == FileDialogMode::Open) {
       std::error_code ec;
       if (!std::filesystem::is_regular_file(target, ec) || ec) {
         status.set("Choose an existing file.");
         return;
       }
+    } else {
+      std::error_code ec;
+      bool const exists = std::filesystem::exists(target, ec) && !ec;
+      if (exists && overwriteConfirmPath.peek() != target) {
+        overwriteConfirmPath.set(target);
+        status.set("File exists. Press Save again to replace it.");
+        return;
+      }
     }
     if (onAccept) {
       onAccept(target);
     }
+  };
+
+  auto accept = [mode = mode, directory, name, status, acceptPath] {
+    std::string const nameText = name.peek();
+    if (nameText.empty()) {
+      status.set(mode == FileDialogMode::Open ? "Choose a file to open." : "Enter a file name.");
+      return;
+    }
+    acceptPath(pathFromDialogInput(directory.peek(), nameText));
   };
 
   auto cancel = [onCancel = onCancel] {
@@ -249,6 +306,82 @@ Element FileDialog::body() const {
 
   auto goToDirectory = [directoryText, refreshDirectory] {
     refreshDirectory(std::filesystem::path{directoryText.peek()});
+  };
+
+  auto activateEntry = [name, refreshDirectory, acceptPath](FileDialogEntry const& entry) {
+    if (entry.directory) {
+      refreshDirectory(entry.path);
+      return;
+    }
+    name.set(entry.name);
+    acceptPath(entry.path);
+  };
+
+  auto selectIndex = [entries, name, selectedPath, overwriteConfirmPath, status](std::size_t index) {
+    std::vector<FileDialogEntry> const currentEntries = entries.peek();
+    if (index >= currentEntries.size()) {
+      return;
+    }
+    FileDialogEntry const entry = currentEntries[index];
+    selectedPath.set(entry.path);
+    overwriteConfirmPath.set({});
+    if (!entry.directory) {
+      name.set(entry.name);
+    }
+    status.set(std::string{});
+  };
+
+  auto moveSelection = [entries, selectedPath, selectIndex](
+                           int delta, std::optional<std::size_t> focusedIndex = std::nullopt) {
+    std::vector<FileDialogEntry> const currentEntries = entries.peek();
+    if (currentEntries.empty()) {
+      return;
+    }
+    std::size_t index = 0;
+    if (auto const currentIndex = entryIndex(currentEntries, selectedPath.peek())) {
+      int const next = static_cast<int>(*currentIndex) + delta;
+      index = static_cast<std::size_t>(
+          std::clamp(next, 0, static_cast<int>(currentEntries.size() - 1)));
+    } else if (focusedIndex && *focusedIndex < currentEntries.size()) {
+      int const next = static_cast<int>(*focusedIndex) + delta;
+      index = static_cast<std::size_t>(
+          std::clamp(next, 0, static_cast<int>(currentEntries.size() - 1)));
+    } else if (delta < 0) {
+      index = currentEntries.size() - 1;
+    }
+    selectIndex(index);
+  };
+
+  auto handleListKeyAtIndex = [entries, selectedPath, selectIndex, moveSelection, accept,
+                               activateEntry](std::optional<std::size_t> focusedIndex,
+                                               KeyCode key, Modifiers) {
+    std::vector<FileDialogEntry> const currentEntries = entries.peek();
+    if (key == keys::DownArrow) {
+      moveSelection(1, focusedIndex);
+      return;
+    }
+    if (key == keys::UpArrow) {
+      moveSelection(-1, focusedIndex);
+      return;
+    }
+    if (key == keys::Home && !currentEntries.empty()) {
+      selectIndex(0);
+      return;
+    }
+    if (key == keys::End && !currentEntries.empty()) {
+      selectIndex(currentEntries.size() - 1);
+      return;
+    }
+    if (key == keys::Return) {
+      if (auto const entry = selectedEntry(currentEntries, selectedPath.peek())) {
+        activateEntry(*entry);
+      } else {
+        accept();
+      }
+    }
+  };
+  auto handleListKey = [handleListKeyAtIndex](KeyCode key, Modifiers modifiers) {
+    handleListKeyAtIndex(std::nullopt, key, modifiers);
   };
 
   std::string const title = mode == FileDialogMode::Open ? "Open File" : "Save File";
@@ -288,14 +421,26 @@ Element FileDialog::body() const {
                               [](FileDialogEntry const& entry) {
                                 return entry.path.string() + (entry.directory ? "/" : "");
                               },
-                              [directory, directoryText, entries, name, status](
+                              [directory, directoryText, entries, name, selectedPath,
+                               overwriteConfirmPath, status, handleListKeyAtIndex](
                                   FileDialogEntry const& entry) {
+                                auto rowKey = [handleListKeyAtIndex, entries,
+                                               path = entry.path](
+                                                  KeyCode key, Modifiers modifiers) {
+                                  handleListKeyAtIndex(entryIndex(entries.peek(), path),
+                                                       key, modifiers);
+                                };
                                 return fileDialogRow(entry, directory, directoryText, entries,
-                                                     name, status);
+                                                     name, selectedPath, overwriteConfirmPath,
+                                                     status,
+                                                     std::function<void(KeyCode, Modifiers)>{
+                                                         std::move(rowKey)});
                               },
                               0.f,
                               Alignment::Stretch)),
-                      }),
+                      })
+                      .focusable(true)
+                      .onKeyDown(std::function<void(KeyCode, Modifiers)>{handleListKey}),
                   HStack{
                       .spacing = 8.f,
                       .alignment = Alignment::Center,
@@ -311,6 +456,7 @@ Element FileDialog::body() const {
                               .placeholder =
                                   mode == FileDialogMode::Open ? "Select a file" : "File name",
                               .style = compactInputStyle(),
+                              .onChange = nameChanged,
                               .onSubmit = [accept](std::string const&) { accept(); },
                           }.flex(1.f, 1.f, 0.f))},
                   Text{
