@@ -8,11 +8,8 @@
 #include "Layout/Algorithms/StackLayout.hpp"
 #include "UI/ViewLayout/ContainerScope.hpp"
 #include "Layout/LayoutHelpers.hpp"
-#include "UI/DebugFlags.hpp"
-
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 #include <limits>
 #include <optional>
 #include <vector>
@@ -107,21 +104,6 @@ void rewindMeasuredChildren(MeasureContext& ctx) {
   ctx.rewindChildKeyIndex();
 }
 
-void warnFlexGrowIfParentMainAxisUnconstrained(std::vector<Element> const& children,
-                                               bool parentMainAxisFinite) {
-  if (parentMainAxisFinite || !debug::layoutEnabled()) {
-    return;
-  }
-  for (Element const& child : children) {
-    if (child.flexGrow() > layout::kFlexEpsilon) {
-      std::fprintf(stderr,
-                   "[lambda:layout] flexGrow>0 has no effect: parent stack has no finite main-axis size "
-                   "(LAMBDA_DEBUG_LAYOUT)\n");
-      break;
-    }
-  }
-}
-
 } // namespace
 
 Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
@@ -154,10 +136,6 @@ Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
 
   std::vector<layout::StackMainAxisChild> stackChildren =
       stackChildrenForAxis(children, sizes, activeIndices, layout::StackAxis::Vertical);
-  if (!heightConstrained && !activeIndices.empty()) {
-    warnFlexGrowIfParentMainAxisUnconstrained(children, heightConstrained);
-  }
-
   layout::StackMainAxisLayout const mainLayout =
       layout::layoutStackMainAxis(stackChildren, spacing, assignedHeight, heightConstrained,
                                   justifyContent);
@@ -207,10 +185,6 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
       stackChildrenForAxis(children, initialSizes, activeStackIndices(children, initialSizes),
                            layout::StackAxis::Horizontal);
   std::vector<std::size_t> const activeIndices = activeStackIndices(children, initialSizes);
-  if (!widthConstrained && !activeIndices.empty()) {
-    warnFlexGrowIfParentMainAxisUnconstrained(children, widthConstrained);
-  }
-
   layout::StackMainAxisLayout const mainLayout =
       layout::layoutStackMainAxis(stackChildren, spacing, assignedWidth, widthConstrained,
                                   justifyContent);

@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -50,7 +51,11 @@ class TextSystem {
                                              Rect const &box, TextLayoutOptions const &options = {}) {
         AttributedString as;
         as.utf8 = std::string(utf8);
-        as.runs.push_back({.start = 0, .end = static_cast<std::uint32_t>(utf8.size()), .font = font, .color = color});
+        as.runs.push_back({.start = 0,
+                           .end = static_cast<std::uint32_t>(utf8.size()),
+                           .font = font,
+                           .color = color,
+                           .backgroundColor = std::nullopt});
         return layoutBoxedImpl(as, box, options);
     }
 

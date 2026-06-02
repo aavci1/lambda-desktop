@@ -124,17 +124,17 @@ struct Theme {
     float popoverBackdropBlurRadius = 0.f;
 
     /// Apple-style type roles. Use these directly or via `Font::...()` semantic tokens.
-    Font largeTitleFont {.size = 34.f, .weight = 400.f};
-    Font titleFont {.size = 28.f, .weight = 400.f};
-    Font title2Font {.size = 22.f, .weight = 400.f};
-    Font title3Font {.size = 20.f, .weight = 400.f};
-    Font headlineFont {.size = 13.f, .weight = 600.f};
-    Font subheadlineFont {.size = 12.f, .weight = 400.f};
-    Font bodyFont {.size = 13.f, .weight = 400.f};
-    Font calloutFont {.size = 12.f, .weight = 400.f};
-    Font footnoteFont {.size = 11.f, .weight = 400.f};
-    Font captionFont {.size = 11.f, .weight = 400.f};
-    Font caption2Font {.size = 10.f, .weight = 400.f};
+    Font largeTitleFont {.family = "", .size = 34.f, .weight = 400.f};
+    Font titleFont {.family = "", .size = 28.f, .weight = 400.f};
+    Font title2Font {.family = "", .size = 22.f, .weight = 400.f};
+    Font title3Font {.family = "", .size = 20.f, .weight = 400.f};
+    Font headlineFont {.family = "", .size = 13.f, .weight = 600.f};
+    Font subheadlineFont {.family = "", .size = 12.f, .weight = 400.f};
+    Font bodyFont {.family = "", .size = 13.f, .weight = 400.f};
+    Font calloutFont {.family = "", .size = 12.f, .weight = 400.f};
+    Font footnoteFont {.family = "", .size = 11.f, .weight = 400.f};
+    Font captionFont {.family = "", .size = 11.f, .weight = 400.f};
+    Font caption2Font {.family = "", .size = 10.f, .weight = 400.f};
     Font monospacedBodyFont {.family = "Menlo", .size = 13.f, .weight = 400.f};
 
     // Spacing scale (8 pt grid). At density 1.0, space3 is 12 pt, space4 is 16 pt, etc.
@@ -208,7 +208,7 @@ struct Theme {
     EdgeInsets dialogHeaderPadding {16.f, 20.f, 16.f, 20.f};
     EdgeInsets dialogContentPadding {18.f, 20.f, 20.f, 20.f};
     EdgeInsets dialogFooterPadding {12.f, 20.f, 12.f, 20.f};
-    Font dialogTitleFont {.size = 15.f, .weight = 600.f};
+    Font dialogTitleFont {.family = "", .size = 15.f, .weight = 600.f};
     Color dialogTitleColor = Color::hex(0x1A1A1A);
     Color dialogSurfaceColor = Color::hex(0xFFFFFF);
     Color dialogSurfaceStrokeColor = Color {0.f, 0.f, 0.f, 0.08f};
