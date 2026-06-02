@@ -5,6 +5,7 @@
 
 #include <Lambda.hpp>
 #include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/SceneGraph/SceneNode.hpp>
 #include <Lambda/UI/EnvironmentKeys.hpp>
 #include <Lambda/UI/Hooks.hpp>
 #include <Lambda/UI/Views/Button.hpp>
@@ -48,10 +49,11 @@ enum class SettingsSection {
   General,
   Appearance,
   Display,
-  Keyboard,
-  Desktop,
+  Input,
+  Windows,
   DockPanel,
   Notifications,
+  LauncherClipboard,
   About,
 };
 
@@ -90,22 +92,23 @@ ChromeInsets chromeInsets(WindowChromeMetrics const& chrome) {
   return insets;
 }
 
-std::array<SidebarItem, 8> const& sidebarItems() {
-  static std::array<SidebarItem, 8> const items{{
+std::array<SidebarItem, 9> const& sidebarItems() {
+  static std::array<SidebarItem, 9> const items{{
       {SettingsSection::General, "General", IconName::Settings},
       {SettingsSection::Appearance, "Appearance", IconName::Palette},
       {SettingsSection::Display, "Display", IconName::Computer},
-      {SettingsSection::Keyboard, "Keyboard", IconName::Keyboard},
-      {SettingsSection::Desktop, "Desktop", IconName::Computer},
+      {SettingsSection::Input, "Input", IconName::Keyboard},
+      {SettingsSection::Windows, "Windows", IconName::Window},
       {SettingsSection::DockPanel, "Dock & Panel", IconName::Dock},
       {SettingsSection::Notifications, "Notifications", IconName::Notifications},
+      {SettingsSection::LauncherClipboard, "Launcher & Clipboard", IconName::RocketLaunch},
       {SettingsSection::About, "About", IconName::Info},
   }};
   return items;
 }
 
 bool hasGroupGapBefore(SettingsSection section) {
-  return section == SettingsSection::Notifications;
+  return section == SettingsSection::Notifications || section == SettingsSection::About;
 }
 
 Color accentColor(int index) {
@@ -842,8 +845,14 @@ struct SettingsRowView {
   std::string sublabel;
   Element control;
 
-  Element labelBlock() const {
-    Theme const theme = useEnvironment<ThemeKey>()();
+  static constexpr float kCompactWidth = 560.f;
+
+  static bool compactFor(LayoutConstraints const& constraints) {
+    return std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f &&
+           constraints.maxWidth < kCompactWidth;
+  }
+
+  Element labelBlock(Theme const& theme) const {
     std::vector<Element> labelChildren;
     labelChildren.push_back(Text{
         .text = label,
@@ -866,15 +875,12 @@ struct SettingsRowView {
         .children = std::move(labelChildren)};
   }
 
-  Element body() const {
-    Theme const theme = useEnvironment<ThemeKey>()();
-    Rect const bounds = useBounds();
-    bool const compact = bounds.width > 0.f && bounds.width < 560.f;
+  Element rowElement(Theme const& theme, bool compact) const {
     if (compact) {
       return VStack{
                  .spacing = theme.space2,
                  .alignment = Alignment::Stretch,
-                 .children = children(labelBlock(), control)}
+                 .children = children(labelBlock(theme), control)}
           .padding(theme.space3)
           .fill(FillStyle::solid(Color::windowBackground()))
           .cornerRadius(CornerRadius{theme.radiusMedium});
@@ -882,10 +888,74 @@ struct SettingsRowView {
     return HStack{
                .spacing = theme.space4,
                .alignment = Alignment::Center,
-               .children = children(labelBlock().flex(1.f, 1.f, 0.f), control)}
+               .children = children(labelBlock(theme).flex(1.f, 1.f, 0.f), control)}
         .padding(theme.space3)
         .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius{theme.radiusMedium});
+  }
+
+  Size measure(MeasureContext& ctx,
+               LayoutConstraints const& constraints,
+               LayoutHints const& hints,
+               TextSystem& textSystem) const {
+    Theme const theme = ctx.environmentBinding().value<ThemeKey>();
+    return rowElement(theme, compactFor(constraints)).measure(ctx, constraints, hints, textSystem);
+  }
+
+  std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const {
+    Theme const theme = ctx.environmentBinding().value<ThemeKey>();
+    auto group = std::make_unique<scenegraph::SceneNode>();
+    auto* rawGroup = group.get();
+    auto compact = std::make_shared<bool>(compactFor(ctx.constraints()));
+    SettingsRowView row = *this;
+
+    auto mountChild = [row, theme](MountContext& childCtx, bool compactMode) mutable {
+      Element rowTree = row.rowElement(theme, compactMode);
+      return rowTree.mount(childCtx);
+    };
+
+    MountContext childCtx = ctx.childWithSharedScope(ctx.constraints(), ctx.hints());
+    if (auto child = mountChild(childCtx, *compact)) {
+      rawGroup->setSize(child->size());
+      rawGroup->appendChild(std::move(child));
+    }
+
+    rawGroup->setLayoutConstraints(ctx.constraints());
+    rawGroup->setRelayout([rawGroup,
+                           compact,
+                           row = std::move(row),
+                           theme,
+                           textSystem = &ctx.textSystem(),
+                           owner = &ctx.owner(),
+                           environment = ctx.environmentBinding(),
+                           hints = ctx.hints(),
+                           requestRedraw = ctx.redrawCallback()](LayoutConstraints const& constraints) mutable {
+      bool const nextCompact = SettingsRowView::compactFor(constraints);
+      auto children = rawGroup->children();
+      if (nextCompact != *compact) {
+        *compact = nextCompact;
+        MeasureContext measureContext{*textSystem, environment};
+        MountContext rebuildCtx{*owner, *textSystem, measureContext, constraints, hints,
+                                requestRedraw, environment};
+        Element rowTree = row.rowElement(theme, nextCompact);
+        auto rebuilt = Reactive::withOwner(*owner, [&] {
+          return rowTree.mount(rebuildCtx);
+        });
+        if (rebuilt) {
+          rawGroup->replaceChildren({});
+          rawGroup->setSize(rebuilt->size());
+          rawGroup->appendChild(std::move(rebuilt));
+        }
+        return;
+      }
+
+      if (!children.empty() && children[0]) {
+        children[0]->relayout(constraints);
+        rawGroup->setSize(children[0]->size());
+      }
+    });
+
+    return group;
   }
 };
 
@@ -1362,7 +1432,7 @@ Element contentForSection(SettingsSection section,
                                    {"Unknown keys", "Preserved where practical"}});
   case SettingsSection::Appearance:
     return settingsPage("Appearance",
-                        {SettingsGroup{.heading = "Desktop",
+                        {SettingsGroup{.heading = "Desktop Background",
                                        .settings = {wm("background"),
                                                     wm("wallpaper"),
                                                     wm("wallpaper_mode")}},
@@ -1377,14 +1447,15 @@ Element contentForSection(SettingsSection section,
   case SettingsSection::Display:
     return settingsPage("Display",
                         {SettingsGroup{.heading = "Output",
-                                       .settings = {wm("output"),
-                                                    wm("scale")}}},
+                                       .settings = {wm("output")}},
+                         SettingsGroup{.heading = "Scaling",
+                                       .settings = {wm("scale")}}},
                         wmValues,
                         shellValues,
                         setValue);
-  case SettingsSection::Keyboard:
-    return settingsPage("Keyboard",
-                        {SettingsGroup{.heading = "Input",
+  case SettingsSection::Input:
+    return settingsPage("Input",
+                        {SettingsGroup{.heading = "Keyboard",
                                        .settings = {wm("input.keyboard.layout"),
                                                     wm("input.keyboard.repeat_rate"),
                                                     wm("input.keyboard.repeat_delay_ms")}},
@@ -1393,9 +1464,9 @@ Element contentForSection(SettingsSection section,
                         wmValues,
                         shellValues,
                         setValue);
-  case SettingsSection::Desktop:
-    return settingsPage("Desktop",
-                        {SettingsGroup{.heading = "Windows",
+  case SettingsSection::Windows:
+    return settingsPage("Windows",
+                        {SettingsGroup{.heading = "Behavior",
                                        .settings = {wm("animations"),
                                                     wm("idle_blank_timeout_seconds")}},
                          SettingsGroup{.heading = "Cursor",
@@ -1411,37 +1482,49 @@ Element contentForSection(SettingsSection section,
                         setValue);
   case SettingsSection::DockPanel:
     return settingsPage("Dock & Panel",
-                        {SettingsGroup{.heading = "Dock",
-                                       .settings = {shell("dock.position"),
-                                                    shell("dock.auto_hide"),
+                        {SettingsGroup{.heading = "Position",
+                                       .settings = {shell("dock.position")}},
+                         SettingsGroup{.heading = "Behavior",
+                                       .settings = {shell("dock.auto_hide"),
                                                     shell("dock.full_width"),
-                                                    shell("dock.item_size"),
-                                                    shell("dock.bottom_gap"),
-                                                    shell("dock.corner_radius"),
-                                                    shell("dock.clock_format"),
                                                     shell("dock.show_running_unpinned"),
-                                                    shell("dock.show_tooltips"),
-                                                    shell("dock.pinned")}},
-                         SettingsGroup{.heading = "Dock Material",
+                                                    shell("dock.show_tooltips")}},
+                         SettingsGroup{.heading = "Sizing",
+                                       .settings = {shell("dock.item_size"),
+                                                    shell("dock.bottom_gap"),
+                                                    shell("dock.corner_radius")}},
+                         SettingsGroup{.heading = "Material",
                                        .settings = {shell("dock.blur_radius"),
                                                     shell("dock.opacity"),
                                                     shell("dock.base_color"),
                                                     shell("dock.tint_color"),
                                                     shell("dock.border_color")}},
-                         SettingsGroup{.heading = "Quick Settings",
-                                       .settings = {shell("quick_settings.modules")}}},
+                         SettingsGroup{.heading = "Content",
+                                       .settings = {shell("dock.pinned"),
+                                                    shell("dock.clock_format"),
+                                                    shell("quick_settings.modules")}}},
                         wmValues,
                         shellValues,
                         setValue);
   case SettingsSection::Notifications:
     return settingsPage("Notifications",
-                        {SettingsGroup{.heading = "Notifications",
+                        {SettingsGroup{.heading = "Banners",
                                        .settings = {shell("notifications.enabled"),
                                                     shell("notifications.do_not_disturb"),
                                                     shell("notifications.banner_timeout_seconds"),
-                                                    shell("notifications.history_limit"),
                                                     shell("notifications.show_previews")}},
-                         SettingsGroup{.heading = "Clipboard",
+                         SettingsGroup{.heading = "History",
+                                       .settings = {shell("notifications.history_limit")}}},
+                        wmValues,
+                        shellValues,
+                        setValue);
+  case SettingsSection::LauncherClipboard:
+    return settingsPage("Launcher & Clipboard",
+                        {SettingsGroup{.heading = "Launcher",
+                                       .settings = {shell("launcher.empty_query"),
+                                                    shell("launcher.max_results"),
+                                                    shell("launcher.show_categories")}},
+                         SettingsGroup{.heading = "Clipboard History",
                                        .settings = {shell("clipboard_history.enabled"),
                                                     shell("clipboard_history.persist"),
                                                     shell("clipboard_history.max_entries"),
@@ -1548,12 +1631,12 @@ struct SettingsAppRoot {
                                                  return contentForSection(SettingsSection::Display,
                                                                           wmValues, shellValues, setValue);
                                                }),
-                                               Case(SettingsSection::Keyboard, [=] {
-                                                 return contentForSection(SettingsSection::Keyboard,
+                                               Case(SettingsSection::Input, [=] {
+                                                 return contentForSection(SettingsSection::Input,
                                                                           wmValues, shellValues, setValue);
                                                }),
-                                               Case(SettingsSection::Desktop, [=] {
-                                                 return contentForSection(SettingsSection::Desktop,
+                                               Case(SettingsSection::Windows, [=] {
+                                                 return contentForSection(SettingsSection::Windows,
                                                                           wmValues, shellValues, setValue);
                                                }),
                                                Case(SettingsSection::DockPanel, [=] {
@@ -1562,6 +1645,10 @@ struct SettingsAppRoot {
                                                }),
                                                Case(SettingsSection::Notifications, [=] {
                                                  return contentForSection(SettingsSection::Notifications,
+                                                                          wmValues, shellValues, setValue);
+                                               }),
+                                               Case(SettingsSection::LauncherClipboard, [=] {
+                                                 return contentForSection(SettingsSection::LauncherClipboard,
                                                                           wmValues, shellValues, setValue);
                                                }),
                                                Case(SettingsSection::About, [] { return aboutPage(); }),
