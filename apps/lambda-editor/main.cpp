@@ -269,17 +269,21 @@ struct LambdaEditor {
                        .padding(7.f, theme().space3, 7.f, theme().space3)
                        .fill(FillStyle::solid(Color::windowBackground()))
                        .stroke(StrokeStyle::solid(Color::separator(), 1.f)),
-                   TextInput{
-                       .value = text,
-                       .placeholder = "Start typing...",
-                       .style = editorStyle,
-                       .multiline = true,
-                       .multilineHeight = {.fixed = 0.f, .minIntrinsic = 560.f},
-                       .onChange = [document](std::string const& value) {
-                         EditorDocument current = document.peek();
-                         current.setText(value);
-                         document.set(std::move(current));
-                       },
+                   ScrollView{
+                       .axis = ScrollAxis::Vertical,
+                       .children = children(
+                           TextInput{
+                               .value = text,
+                               .placeholder = "Start typing...",
+                               .style = editorStyle,
+                               .multiline = true,
+                               .multilineHeight = {.fixed = 0.f, .minIntrinsic = 560.f},
+                               .onChange = [document](std::string const& value) {
+                                 EditorDocument current = document.peek();
+                                 current.setText(value);
+                                 document.set(std::move(current));
+                               },
+                           }.fill(FillStyle::solid(Color::controlBackground()))),
                    }.flex(1.f, 1.f, 0.f)
                        .fill(FillStyle::solid(Color::controlBackground())),
                    HStack{

@@ -21,6 +21,7 @@ class TextNode final : public SceneNode {
     void setLayout(std::shared_ptr<TextLayout const> layout);
 
     void render(Renderer &renderer) const override;
+    bool canPrepareRenderOps() const noexcept override;
 
   private:
     std::shared_ptr<TextLayout const> layout_{};

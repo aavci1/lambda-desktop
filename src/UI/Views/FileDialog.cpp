@@ -11,6 +11,7 @@
 #include <Lambda/UI/Views/ListView.hpp>
 #include <Lambda/UI/Views/Rectangle.hpp>
 #include <Lambda/UI/Views/ScrollView.hpp>
+#include <Lambda/UI/Views/Show.hpp>
 #include <Lambda/UI/Views/Spacer.hpp>
 #include <Lambda/UI/Views/Text.hpp>
 #include <Lambda/UI/Views/TextInput.hpp>
@@ -28,6 +29,9 @@
 namespace lambda {
 
 namespace {
+
+constexpr float kFileDialogListHeight = 260.f;
+constexpr float kFileDialogRowHeight = 42.f;
 
 struct FileDialogEntry {
   std::filesystem::path path;
@@ -194,6 +198,7 @@ Element fileDialogRow(FileDialogEntry entry,
                       Reactive::Signal<std::filesystem::path> selectedPath,
                       Reactive::Signal<std::filesystem::path> overwriteConfirmPath,
                       Reactive::Signal<std::string> status,
+                      std::function<void(FileDialogEntry)> onFileActivate,
                       std::function<void(KeyCode, Modifiers)> onRowKeyDown) {
   auto navigate = [entry = entry, directory, directoryText, entries,
                    selectedPath, overwriteConfirmPath, status] {
@@ -205,11 +210,16 @@ Element fileDialogRow(FileDialogEntry entry,
     overwriteConfirmPath.set({});
     status.set(next.status);
   };
-  auto select = [entry = entry, name, selectedPath, overwriteConfirmPath, status] {
+  auto select = [entry = entry, name, selectedPath, overwriteConfirmPath, status,
+                 onFileActivate = std::move(onFileActivate)] {
+    bool const alreadySelected = selectedPath.peek() == entry.path;
     name.set(entry.name);
     selectedPath.set(entry.path);
     overwriteConfirmPath.set({});
     status.set(std::string{});
+    if (alreadySelected && onFileActivate) {
+      onFileActivate(entry);
+    }
   };
 
   return ListRow{
@@ -248,16 +258,18 @@ Element FileDialog::body() const {
   auto name = useState<std::string>(initialName);
   auto selectedPath = useState<std::filesystem::path>({});
   auto overwriteConfirmPath = useState<std::filesystem::path>({});
+  auto scrollOffset = useState<Point>({});
   auto status = useState<std::string>(initial.status);
 
   auto refreshDirectory = [directory, directoryText, entries, selectedPath,
-                           overwriteConfirmPath, status](std::filesystem::path path) {
+                           overwriteConfirmPath, scrollOffset, status](std::filesystem::path path) {
     DirectoryListing next = listDirectory(std::move(path));
     directory.set(next.directory);
     directoryText.set(next.directory.string());
     entries.set(std::move(next.entries));
     selectedPath.set({});
     overwriteConfirmPath.set({});
+    scrollOffset.set({});
     status.set(next.status);
   };
 
@@ -278,9 +290,9 @@ Element FileDialog::body() const {
     } else {
       std::error_code ec;
       bool const exists = std::filesystem::exists(target, ec) && !ec;
-      if (exists && overwriteConfirmPath.peek() != target) {
+      if (exists) {
         overwriteConfirmPath.set(target);
-        status.set("File exists. Press Save again to replace it.");
+        status.set("File exists.");
         return;
       }
     }
@@ -303,6 +315,16 @@ Element FileDialog::body() const {
       onCancel();
     }
   };
+  auto cancelReplace = [overwriteConfirmPath, status] {
+    overwriteConfirmPath.set({});
+    status.set(std::string{});
+  };
+  auto replaceConfirmed = [overwriteConfirmPath, onAccept = onAccept] {
+    std::filesystem::path const target = overwriteConfirmPath.peek();
+    if (!target.empty() && onAccept) {
+      onAccept(target);
+    }
+  };
 
   auto goToDirectory = [directoryText, refreshDirectory] {
     refreshDirectory(std::filesystem::path{directoryText.peek()});
@@ -316,8 +338,26 @@ Element FileDialog::body() const {
     name.set(entry.name);
     acceptPath(entry.path);
   };
+  auto activateFileFromClick = [mode = mode, activateEntry](FileDialogEntry entry) {
+    if (mode == FileDialogMode::Open && !entry.directory) {
+      activateEntry(entry);
+    }
+  };
 
-  auto selectIndex = [entries, name, selectedPath, overwriteConfirmPath, status](std::size_t index) {
+  auto ensureIndexVisible = [scrollOffset](std::size_t index) {
+    float const rowTop = static_cast<float>(index) * kFileDialogRowHeight;
+    float const rowBottom = rowTop + kFileDialogRowHeight;
+    float nextOffset = scrollOffset.peek().y;
+    if (rowTop < nextOffset) {
+      nextOffset = rowTop;
+    } else if (rowBottom > nextOffset + kFileDialogListHeight) {
+      nextOffset = rowBottom - kFileDialogListHeight;
+    }
+    scrollOffset.set(Point{0.f, std::max(0.f, nextOffset)});
+  };
+
+  auto selectIndex = [entries, name, selectedPath, overwriteConfirmPath, status,
+                      ensureIndexVisible](std::size_t index) {
     std::vector<FileDialogEntry> const currentEntries = entries.peek();
     if (index >= currentEntries.size()) {
       return;
@@ -328,6 +368,7 @@ Element FileDialog::body() const {
     if (!entry.directory) {
       name.set(entry.name);
     }
+    ensureIndexVisible(index);
     status.set(std::string{});
   };
 
@@ -416,13 +457,15 @@ Element FileDialog::body() const {
                       .cornerRadius(CornerRadius{6.f})
                       .overlay(ScrollView{
                           .axis = ScrollAxis::Vertical,
+                          .scrollOffset = scrollOffset,
                           .children = children(For<FileDialogEntry>(
                               entries,
                               [](FileDialogEntry const& entry) {
                                 return entry.path.string() + (entry.directory ? "/" : "");
                               },
                               [directory, directoryText, entries, name, selectedPath,
-                               overwriteConfirmPath, status, handleListKeyAtIndex](
+                               overwriteConfirmPath, status, activateFileFromClick,
+                               handleListKeyAtIndex](
                                   FileDialogEntry const& entry) {
                                 auto rowKey = [handleListKeyAtIndex, entries,
                                                path = entry.path](
@@ -432,7 +475,7 @@ Element FileDialog::body() const {
                                 };
                                 return fileDialogRow(entry, directory, directoryText, entries,
                                                      name, selectedPath, overwriteConfirmPath,
-                                                     status,
+                                                     status, activateFileFromClick,
                                                      std::function<void(KeyCode, Modifiers)>{
                                                          std::move(rowKey)});
                               },
@@ -464,7 +507,41 @@ Element FileDialog::body() const {
                       .font = Font{.size = 12.f, .weight = 430.f},
                       .color = Color::secondary(),
                       .verticalAlignment = VerticalAlignment::Center,
-                  }.height(18.f))}),
+                  }.height(18.f),
+                  Show(
+                      [overwriteConfirmPath] {
+                        return !overwriteConfirmPath().empty();
+                      },
+                      [overwriteConfirmPath, cancelReplace, replaceConfirmed] {
+                        return HStack{
+                              .spacing = 8.f,
+                              .alignment = Alignment::Center,
+                              .children = children(
+                                  Text{
+                                      .text = [overwriteConfirmPath] {
+                                        return "Replace \"" +
+                                               overwriteConfirmPath().filename().string() +
+                                               "\"?";
+                                      },
+                                      .font = Font{.size = 12.f, .weight = 500.f},
+                                      .color = Color::primary(),
+                                      .verticalAlignment = VerticalAlignment::Center,
+                                  }.flex(1.f, 1.f, 0.f),
+                                  Button{
+                                      .label = "Cancel",
+                                      .variant = ButtonVariant::Secondary,
+                                      .onTap = cancelReplace,
+                                  },
+                                  Button{
+                                      .label = "Replace",
+                                      .variant = ButtonVariant::Destructive,
+                                      .onTap = replaceConfirmed,
+                                  })}
+                              .padding(8.f)
+                              .fill(FillStyle::solid(Color::controlBackground()))
+                              .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+                              .cornerRadius(CornerRadius{6.f});
+                      }))}),
       .footer = children(
           Spacer{},
           Button{

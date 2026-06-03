@@ -29,4 +29,8 @@ void TextNode::render(Renderer &renderer) const {
     renderer.drawTextLayout(*layout_);
 }
 
+bool TextNode::canPrepareRenderOps() const noexcept {
+    return false;
+}
+
 } // namespace lambda::scenegraph

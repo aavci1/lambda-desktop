@@ -8,6 +8,7 @@
 #include <Lambda/SceneGraph/RectNode.hpp>
 #include <Lambda/SceneGraph/RenderNode.hpp>
 #include <Lambda/SceneGraph/TextNode.hpp>
+#include <Lambda/UI/Views/ControlFlowDetail.hpp>
 #include <Lambda/UI/InputFieldChrome.hpp>
 #include <Lambda/UI/InputFieldLayout.hpp>
 #include <Lambda/UI/MeasureContext.hpp>
@@ -514,13 +515,23 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
                                     resolved, frameSize, layoutResult, textSystem = &ctx.textSystem(),
                                     lastLayoutText, lastLayoutBox,
                                     requestRedraw = ctx.redrawCallback()] {
+    auto lastMeasuredText = std::make_shared<std::string>(valueState.peek());
     Reactive::onCleanup([caretOpacity] {
       caretOpacity.stop();
     });
     Reactive::Effect([rawWrapper, rawText, rawSelectionLayer, rawCaretLayer, valueState,
                       selectionState, focusState, caretOpacity, input, resolved, frameSize,
-                      layoutResult, textSystem, lastLayoutText, lastLayoutBox, requestRedraw] {
+                      layoutResult, textSystem, lastLayoutText, lastLayoutBox,
+                      lastMeasuredText, requestRedraw] {
       std::string const& text = valueState.get();
+      if (input.multiline && text != *lastMeasuredText) {
+        *lastMeasuredText = text;
+        Size const oldSize = rawWrapper->size();
+        rawWrapper->invalidateSubtreeLayout();
+        if (rawWrapper->relayoutStoredConstraints()) {
+          detail::controlPropagateLayoutChange(*rawWrapper, oldSize);
+        }
+      }
       detail::TextEditSelection currentSelection = selectionState.get();
       detail::TextEditSelection const clamped =
           detail::clampSelection(text, currentSelection);
