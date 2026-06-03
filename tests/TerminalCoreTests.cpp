@@ -210,6 +210,7 @@ line_height = 19.0
 content_inset = 12.0
 bracketed_paste = false
 black_glass_background = true
+black_glass_blur_radius = 64.0
 black_glass_tint = "#000000cc"
 )");
   CHECK(parsed.scrollbackLimit == 5000);
@@ -219,6 +220,7 @@ black_glass_tint = "#000000cc"
   CHECK(parsed.contentInset == doctest::Approx(12.f));
   CHECK_FALSE(parsed.bracketedPaste);
   CHECK(parsed.blackGlassBackground);
+  CHECK(parsed.blackGlassBlurRadius == doctest::Approx(64.f));
   CHECK(parsed.blackGlassTint.a == doctest::Approx(204.f / 255.f));
 
   auto fallback = parseTerminalConfigToml(R"(
@@ -263,6 +265,7 @@ scrollback_limit = 5000
 
 [profile.work.background]
 kind = "glass"
+blur_radius = 64.0
 tint = "#000000cc"
 )");
 
@@ -273,6 +276,7 @@ tint = "#000000cc"
   CHECK(active.shell == "/bin/zsh");
   CHECK(active.config.scrollbackLimit == 5000);
   CHECK(active.config.blackGlassBackground);
+  CHECK(active.config.blackGlassBlurRadius == doctest::Approx(64.f));
   CHECK(active.config.blackGlassTint.a == doctest::Approx(204.f / 255.f));
 
   auto fallback = activeTerminalProfile(TerminalPreferences{.defaultProfile = "missing", .profiles = preferences.profiles});

@@ -586,13 +586,13 @@ controls_inset_right = 8
 controls_inset_top = 6
 button_size = 16
 button_radius = 5
-close_glyph_color = "#5b6781"
+close_glyph_color = "#ffffff"
 close_glyph_hover_color = "#ffffff"
 close_hover_background = "#e25555"
-minimize_glyph_color = "#5b6781"
-minimize_glyph_hover_color = "#16203a"
+minimize_glyph_color = "#ffffff"
+minimize_glyph_hover_color = "#ffffff"
 minimize_hover_background = "#00000012"
-title_text_color = "#16203a"
+title_text_color = "#ffffff"
 title_text_font_size = 11.5
 title_text_font_weight = 600
 window_corner_radius = 14
@@ -604,16 +604,16 @@ window_corner_radius = 14
 # bottom_right = 14
 # bottom_left = 14
 resize_grip_size = 4
-window_border_color = "#ffffff9e"
+window_border_color = "#ffffff66"
 window_border_width = 1
-border_line_color = "#ffffff9e"
+border_line_color = "#ffffff66"
 
 [chrome.glass]
-blur_radius = 46
-base_color = "#ffffff80"
-tint_color = "#dbf5ff8f"
-border_color = "#ffffff9e"
-opacity = 1.0
+blur_radius = 64
+base_color = "#ddddff"
+tint_color = "#ddffff"
+border_color = "#ffffff66"
+opacity = 0.05
 
 [keybindings]
 close = "super+q"

@@ -18,7 +18,7 @@ int main(int argc, char* argv[]) {
   });
   if (profile.config.blackGlassBackground) {
     window.setBackground(lambda::WindowBackground::glassEffect(lambda::GlassEffectOptions{
-        .blurRadius = 46.f,
+        .blurRadius = profile.config.blackGlassBlurRadius,
         .baseColor = profile.config.blackGlassTint,
         .tintColor = profile.config.blackGlassTint,
         .borderColor = lambda::Color{1.f, 1.f, 1.f, 0.16f},

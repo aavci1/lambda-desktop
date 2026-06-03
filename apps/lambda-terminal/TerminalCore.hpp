@@ -86,6 +86,7 @@ struct TerminalConfig {
   float contentInset = 14.f;
   bool bracketedPaste = true;
   bool blackGlassBackground = true;
+  float blackGlassBlurRadius = 64.f;
   lambda::Color blackGlassTint{0.f, 0.f, 0.f, 0.58f};
 
   constexpr bool operator==(TerminalConfig const&) const = default;

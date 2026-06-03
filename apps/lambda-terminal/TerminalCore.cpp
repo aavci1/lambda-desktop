@@ -236,6 +236,7 @@ void parseTerminalConfigFields(toml::table const& table, TerminalConfig& config)
   parseFloatField(table, "content_inset", 0.f, 80.f, config.contentInset);
   parseBoolField(table, "bracketed_paste", config.bracketedPaste);
   parseBoolField(table, "black_glass_background", config.blackGlassBackground);
+  parseFloatField(table, "black_glass_blur_radius", 0.f, 160.f, config.blackGlassBlurRadius);
   if (auto value = table["black_glass_tint"].value<std::string>()) {
     if (auto color = parseHexColor(*value)) config.blackGlassTint = *color;
   }
@@ -269,6 +270,8 @@ TerminalProfile parseTerminalProfile(std::string name, toml::table const& table)
     if (auto tint = (*background)["black_glass_tint"].value<std::string>()) {
       if (auto color = parseHexColor(*tint)) profile.config.blackGlassTint = *color;
     }
+    parseFloatField(*background, "blur_radius", 0.f, 160.f, profile.config.blackGlassBlurRadius);
+    parseFloatField(*background, "black_glass_blur_radius", 0.f, 160.f, profile.config.blackGlassBlurRadius);
   }
   if (auto* copyPaste = table["copy_paste"].as_table()) {
     parseBoolField(*copyPaste, "bracketed_paste", profile.config.bracketedPaste);
@@ -779,6 +782,7 @@ std::string writeTerminalConfigToml(TerminalConfig const& config) {
   table.insert_or_assign("content_inset", static_cast<double>(config.contentInset));
   table.insert_or_assign("bracketed_paste", config.bracketedPaste);
   table.insert_or_assign("black_glass_background", config.blackGlassBackground);
+  table.insert_or_assign("black_glass_blur_radius", static_cast<double>(config.blackGlassBlurRadius));
   table.insert_or_assign("black_glass_tint", colorToHex(config.blackGlassTint));
   std::ostringstream out;
   out << table;
@@ -851,6 +855,7 @@ std::string writeTerminalPreferencesToml(TerminalPreferences const& preferences)
 
     toml::table background;
     background.insert_or_assign("kind", profile.config.blackGlassBackground ? "glass" : "solid");
+    background.insert_or_assign("blur_radius", static_cast<double>(profile.config.blackGlassBlurRadius));
     background.insert_or_assign("tint", colorToHex(profile.config.blackGlassTint));
     profileTable.insert_or_assign("background", std::move(background));
 

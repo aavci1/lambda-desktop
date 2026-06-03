@@ -44,13 +44,6 @@ ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {
   };
 }
 
-bool hasClientGlassMaterial(CommittedSurfaceSnapshot const& surface) {
-  return surface.backgroundEffect.blurRadius > 0.f ||
-         surface.backgroundEffect.baseColor.a > 0.f ||
-         surface.backgroundEffect.tint.a > 0.f ||
-         surface.backgroundEffect.borderColor.a > 0.f;
-}
-
 void drawControls(Canvas& canvas,
                   CommittedSurfaceSnapshot const& surface,
                   ChromeConfig const& chrome,
@@ -141,15 +134,11 @@ void drawDefaultChrome(Canvas& canvas,
   float const titleTop = titleRect.y;
   CornerRadius const frameRadius = chrome.windowCornerRadius;
   CornerRadius const titleRadius = windowTitleBarCornerRadius(frameRadius);
-  bool const titlebarUsesClientMaterial = hasClientGlassMaterial(surface);
   {
-    float const blurRadius = titlebarUsesClientMaterial ? surface.backgroundEffect.blurRadius : 0.f;
-    Color const baseColor =
-        titlebarUsesClientMaterial ? surface.backgroundEffect.baseColor : withOpacity(chrome.glass.baseColor, chrome.glass.opacity);
-    Color const titleTint = titlebarUsesClientMaterial
-                                ? surface.backgroundEffect.tint
-                                : Color{chrome.glass.tintColor.r, chrome.glass.tintColor.g, chrome.glass.tintColor.b, 1.f};
-    if (titlebarUsesClientMaterial && blurRadius > 0.f) {
+    float const blurRadius = chrome.glass.blurRadius;
+    Color const baseColor = withOpacity(chrome.glass.baseColor, chrome.glass.opacity);
+    Color const titleTint = withOpacity(chrome.glass.tintColor, chrome.glass.opacity);
+    if (blurRadius > 0.f) {
       canvas.drawBackdropBlur(titleRect, blurRadius, Colors::transparent, titleRadius);
     }
     if (baseColor.a > 0.f) {
@@ -166,14 +155,12 @@ void drawDefaultChrome(Canvas& canvas,
                   FillStyle::solid(chrome.borderLineColor),
                   StrokeStyle::none(),
                   ShadowStyle::none());
-  if (!titlebarUsesClientMaterial) {
-    float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
-    float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
-    if (chrome.insetHighlightColor.a > 0.f && topInsetRight > topInsetLeft) {
-      canvas.drawLine({topInsetLeft, titleTop + 0.5f},
-                      {topInsetRight, titleTop + 0.5f},
-                      StrokeStyle::solid(chrome.insetHighlightColor, 1.f));
-    }
+  float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
+  float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
+  if (chrome.insetHighlightColor.a > 0.f && topInsetRight > topInsetLeft) {
+    canvas.drawLine({topInsetLeft, titleTop + 0.5f},
+                    {topInsetRight, titleTop + 0.5f},
+                    StrokeStyle::solid(chrome.insetHighlightColor, 1.f));
   }
 
   float const controlsWidth = chromeControlsMetrics(chrome, titleBarHeight).controlsWidth;
