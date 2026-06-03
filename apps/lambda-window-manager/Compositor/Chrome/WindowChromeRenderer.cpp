@@ -298,7 +298,7 @@ void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
   ShadowStyle const shadow = windowShadow(chrome, surface.focused);
   if (shadow.isNone()) return;
 
-  int const steps = std::clamp(static_cast<int>(std::ceil(shadow.radius * 4.f)), 48, 96);
+  int const steps = std::clamp(static_cast<int>(std::ceil(shadow.radius / 3.f)), 4, 10);
   for (int i = steps; i >= 1; --i) {
     float const t = static_cast<float>(i) / static_cast<float>(steps);
     float const spread = std::max(0.f, shadow.radius * t + shadowSpreadJitter(i));

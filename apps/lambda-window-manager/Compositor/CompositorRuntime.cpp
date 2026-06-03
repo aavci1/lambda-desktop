@@ -1362,7 +1362,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (!allowRenderFence && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0) {
         return false;
       }
-      return true;
+      return presenter->atomicPresenter()->canSchedulePresent(frame.presentToken);
     };
     auto queuedAtomicScheduleCandidate = [&]() -> std::optional<std::size_t> {
       if (!presenter->atomicPresenter() || presenter->atomicPresenter()->hasPendingPageFlip() ||
