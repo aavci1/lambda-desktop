@@ -38,10 +38,93 @@ std::optional<Rect> clippedShadowRect(Rect const& layerRect, CommittedSurfaceSna
 
 ShadowStyle windowShadow(ChromeConfig const& chrome, bool focused) {
   return ShadowStyle{
-      .radius = focused ? 30.f : 18.f,
-      .offset = {0.f, focused ? 14.f : 9.f},
+      .radius = focused ? 18.f : 12.f,
+      .offset = {0.f, focused ? 7.f : 4.f},
       .color = focused ? chrome.focusedShadowColor : chrome.unfocusedShadowColor,
   };
+}
+
+void drawGlassMaterialRect(Canvas& canvas, Rect const& rect, CornerRadius const& radius, ChromeConfig const& chrome) {
+  if (rect.width <= 0.f || rect.height <= 0.f) return;
+  float const blurRadius = chrome.glass.blurRadius;
+  Color const baseColor = withOpacity(chrome.glass.baseColor, chrome.glass.opacity);
+  Color const tintColor = withOpacity(chrome.glass.tintColor, chrome.glass.opacity);
+  if (blurRadius > 0.f) {
+    canvas.drawBackdropBlur(rect, blurRadius, Colors::transparent, radius);
+  }
+  if (baseColor.a > 0.f) {
+    canvas.drawRect(rect, radius, FillStyle::solid(baseColor), StrokeStyle::none(), ShadowStyle::none());
+  }
+  if (tintColor.a > 0.f) {
+    canvas.drawRect(rect, radius, FillStyle::solid(tintColor), StrokeStyle::none(), ShadowStyle::none());
+  }
+}
+
+void drawGlassMaterialFrame(Canvas& canvas,
+                            Rect const& frame,
+                            CornerRadius const& frameRadius,
+                            Rect const& cutout,
+                            CornerRadius const& cutoutRadius,
+                            ChromeConfig const& chrome) {
+  if (frame.width <= 0.f || frame.height <= 0.f) return;
+  if (cutout.width <= 0.f || cutout.height <= 0.f) {
+    drawGlassMaterialRect(canvas, frame, frameRadius, chrome);
+    return;
+  }
+
+  float const blurRadius = chrome.glass.blurRadius;
+  float const left = std::max(0.f, cutout.x - frame.x);
+  float const top = std::max(0.f, cutout.y - frame.y);
+  float const right = std::max(0.f, frame.x + frame.width - (cutout.x + cutout.width));
+  float const bottom = std::max(0.f, frame.y + frame.height - (cutout.y + cutout.height));
+  if (blurRadius > 0.f) {
+    if (top > 0.f) {
+      canvas.drawBackdropBlurCached(Rect::sharp(frame.x, frame.y, frame.width, top),
+                                    frame,
+                                    blurRadius,
+                                    Colors::transparent,
+                                    CornerRadius{frameRadius.topLeft, frameRadius.topRight, 0.f, 0.f});
+    }
+    if (left > 0.f) {
+      canvas.drawBackdropBlurCached(Rect::sharp(frame.x, cutout.y, left, cutout.height),
+                                    frame,
+                                    blurRadius,
+                                    Colors::transparent,
+                                    CornerRadius{});
+    }
+    if (right > 0.f) {
+      canvas.drawBackdropBlurCached(Rect::sharp(cutout.x + cutout.width, cutout.y, right, cutout.height),
+                                    frame,
+                                    blurRadius,
+                                    Colors::transparent,
+                                    CornerRadius{});
+    }
+    if (bottom > 0.f) {
+      canvas.drawBackdropBlurCached(Rect::sharp(frame.x, cutout.y + cutout.height, frame.width, bottom),
+                                    frame,
+                                    blurRadius,
+                                    Colors::transparent,
+                                    CornerRadius{0.f, 0.f, frameRadius.bottomRight, frameRadius.bottomLeft});
+    }
+  }
+
+  Path glassFrame;
+  glassFrame.rect(frame, frameRadius);
+  glassFrame.rect(cutout, cutoutRadius);
+
+  Color const baseColor = withOpacity(chrome.glass.baseColor, chrome.glass.opacity);
+  if (baseColor.a > 0.f) {
+    FillStyle fill = FillStyle::solid(baseColor);
+    fill.fillRule = FillRule::EvenOdd;
+    canvas.drawPath(glassFrame, fill, StrokeStyle::none(), ShadowStyle::none());
+  }
+
+  Color const tintColor = withOpacity(chrome.glass.tintColor, chrome.glass.opacity);
+  if (tintColor.a > 0.f) {
+    FillStyle fill = FillStyle::solid(tintColor);
+    fill.fillRule = FillRule::EvenOdd;
+    canvas.drawPath(glassFrame, fill, StrokeStyle::none(), ShadowStyle::none());
+  }
 }
 
 void drawControls(Canvas& canvas,
@@ -130,31 +213,15 @@ void drawDefaultChrome(Canvas& canvas,
   float const titleBarHeight = titleRect.height;
   if (titleBarHeight <= 0.f) return;
 
-  float const windowY = static_cast<float>(surface.y);
   float const titleTop = titleRect.y;
   CornerRadius const frameRadius = chrome.windowCornerRadius;
-  CornerRadius const titleRadius = windowTitleBarCornerRadius(frameRadius);
-  {
-    float const blurRadius = chrome.glass.blurRadius;
-    Color const baseColor = withOpacity(chrome.glass.baseColor, chrome.glass.opacity);
-    Color const titleTint = withOpacity(chrome.glass.tintColor, chrome.glass.opacity);
-    if (blurRadius > 0.f) {
-      canvas.drawBackdropBlur(titleRect, blurRadius, Colors::transparent, titleRadius);
-    }
-    if (baseColor.a > 0.f) {
-      canvas.drawRect(titleRect, titleRadius, FillStyle::solid(baseColor), StrokeStyle::none(), ShadowStyle::none());
-    }
-    if (titleTint.a > 0.f) {
-      canvas.drawRect(titleRect, titleRadius, FillStyle::solid(titleTint), StrokeStyle::none(), ShadowStyle::none());
-    }
-  }
+  drawGlassMaterialFrame(canvas,
+                         windowFrameRect(surface),
+                         frameRadius,
+                         windowVisibleContentRect(surface, chrome.contentInsetWidth),
+                         windowVisibleContentCornerRadius(surface, frameRadius),
+                         chrome);
 
-  float constexpr separatorHeight = 0.5f;
-  canvas.drawRect(Rect::sharp(windowX, windowY - separatorHeight, windowWidth, separatorHeight),
-                  CornerRadius{},
-                  FillStyle::solid(chrome.borderLineColor),
-                  StrokeStyle::none(),
-                  ShadowStyle::none());
   float const topInsetLeft = windowX + std::min(frameRadius.topLeft, windowWidth * 0.5f);
   float const topInsetRight = windowX + windowWidth - std::min(frameRadius.topRight, windowWidth * 0.5f);
   if (chrome.insetHighlightColor.a > 0.f && topInsetRight > topInsetLeft) {
@@ -253,6 +320,7 @@ void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
 
 void drawWindowFrameBorder(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
   if (!surface.serverSideDecorated) return;
+
   StrokeStyle const border = visibleStroke(chrome.windowBorderColor, chrome.windowBorderWidth);
   if (border.isNone()) return;
 

@@ -58,6 +58,28 @@ inline CornerRadius windowContentCornerRadius(CommittedSurfaceSnapshot const& su
   return frameRadius;
 }
 
+inline float windowContentChromeInsetWidth(CommittedSurfaceSnapshot const& surface, float configuredInsetWidth) {
+  if (!surface.serverSideDecorated || windowUsesCutoutChrome(surface) || windowExternalTitleBarHeight(surface) <= 0.f) {
+    return 0.f;
+  }
+  return std::max(0.f, configuredInsetWidth);
+}
+
+inline Rect windowVisibleContentRect(CommittedSurfaceSnapshot const& surface, float configuredInsetWidth) {
+  Rect const content = windowContentRect(surface);
+  float const inset = windowContentChromeInsetWidth(surface, configuredInsetWidth);
+  float const clampedInset = std::clamp(inset, 0.f, std::min(content.width * 0.5f, content.height));
+  return Rect::sharp(content.x + clampedInset,
+                     content.y + clampedInset,
+                     std::max(0.f, content.width - clampedInset * 2.f),
+                     std::max(0.f, content.height - clampedInset * 2.f));
+}
+
+inline CornerRadius windowVisibleContentCornerRadius(CommittedSurfaceSnapshot const& surface,
+                                                    CornerRadius const& frameRadius) {
+  return windowContentCornerRadius(surface, frameRadius);
+}
+
 inline WindowShadowLayerGeometry windowShadowLayerGeometry(Rect const& frameRect,
                                                            CornerRadius const& frameRadius,
                                                            ShadowStyle const& shadow,

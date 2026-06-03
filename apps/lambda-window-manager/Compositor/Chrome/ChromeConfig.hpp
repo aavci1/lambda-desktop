@@ -33,14 +33,15 @@ struct ChromeConfig {
   float titleTextFontSize = 11.5f;
   float titleTextFontWeight = 600.f;
   CornerRadius windowCornerRadius = CornerRadius{14.f};
+  float contentInsetWidth = 4.f;
   std::int32_t resizeGripSize = 4;
   GlassEffectConfig glass{};
   Color windowBorderColor = Color{1.f, 1.f, 1.f, 102.f * (1.f / 255.f)};
   float windowBorderWidth = 1.f;
   Color borderLineColor = Color{1.f, 1.f, 1.f, 102.f * (1.f / 255.f)};
   Color insetHighlightColor = Colors::transparent;
-  Color focusedShadowColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.35f};
-  Color unfocusedShadowColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.20f};
+  Color focusedShadowColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.52f};
+  Color unfocusedShadowColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.32f};
 };
 
 } // namespace lambda::compositor

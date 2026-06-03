@@ -522,26 +522,30 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                         ? static_cast<float>(surface.destinationHeight)
                                         : windowHeight;
   Rect const fullContentRect = windowContentRect(surface);
+  Rect const visibleContentRect = windowVisibleContentRect(surface, chrome.contentInsetWidth);
+  CornerRadius const visibleContentCorners = windowVisibleContentCornerRadius(surface, windowCorners);
   drawSurfaceBackgroundBlur(canvas, surface, fullContentRect, contentCorners);
   drawWindowFrameShadow(canvas, surface, chrome);
   if (!cutoutChrome) drawWindowChrome(canvas, textSystem, surface, chrome);
   canvas.save();
-  canvas.clipRect(fullContentRect, contentCorners, true);
+  canvas.clipRect(visibleContentRect, visibleContentCorners, true);
   drawClientSurfacePiece(canvas,
                          clientImage,
                          Rect::sharp(surface.sourceX,
                                      surface.sourceY,
                                      sourceWidth,
                                      sourceHeight),
-                         Rect::sharp(windowX,
-                                     windowY,
-                                     contentWidth,
-                                     contentHeight),
-                         fullContentRect,
-                         contentCorners);
+                         Rect::sharp(visibleContentRect.x,
+                                     visibleContentRect.y,
+                                     std::min(contentWidth, visibleContentRect.width),
+                                     std::min(contentHeight, visibleContentRect.height)),
+                         visibleContentRect,
+                         visibleContentCorners);
   if (clientContentSmallerThanFrame && !geometryAnimationContentSizeMismatch && !surface.activeSizing) {
-    float const rightPad = std::max(0.f, windowWidth - contentWidth);
-    float const bottomPad = std::max(0.f, windowHeight - contentHeight);
+    float const drawnContentWidth = std::min(contentWidth, visibleContentRect.width);
+    float const drawnContentHeight = std::min(contentHeight, visibleContentRect.height);
+    float const rightPad = std::max(0.f, visibleContentRect.width - drawnContentWidth);
+    float const bottomPad = std::max(0.f, visibleContentRect.height - drawnContentHeight);
     float const edgeSourceWidth = std::max(1.f, sourceWidth);
     float const edgeSourceHeight = std::max(1.f, sourceHeight);
     if (rightPad > 0.f) {
@@ -551,12 +555,12 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                          surface.sourceY,
                                          1.f,
                                          edgeSourceHeight),
-                             Rect::sharp(windowX + contentWidth,
-                                         windowY,
+                             Rect::sharp(visibleContentRect.x + drawnContentWidth,
+                                         visibleContentRect.y,
                                          rightPad,
-                                         contentHeight),
-                             fullContentRect,
-                             contentCorners);
+                                         drawnContentHeight),
+                             visibleContentRect,
+                             visibleContentCorners);
     }
     if (bottomPad > 0.f) {
       drawClientSurfacePiece(canvas,
@@ -565,12 +569,12 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                          surface.sourceY + edgeSourceHeight - 1.f,
                                          edgeSourceWidth,
                                          1.f),
-                             Rect::sharp(windowX,
-                                         windowY + contentHeight,
-                                         contentWidth,
+                             Rect::sharp(visibleContentRect.x,
+                                         visibleContentRect.y + drawnContentHeight,
+                                         drawnContentWidth,
                                          bottomPad),
-                             fullContentRect,
-                             contentCorners);
+                             visibleContentRect,
+                             visibleContentCorners);
     }
     if (rightPad > 0.f && bottomPad > 0.f) {
       drawClientSurfacePiece(canvas,
@@ -579,12 +583,12 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                          surface.sourceY + edgeSourceHeight - 1.f,
                                          1.f,
                                          1.f),
-                             Rect::sharp(windowX + contentWidth,
-                                         windowY + contentHeight,
+                             Rect::sharp(visibleContentRect.x + drawnContentWidth,
+                                         visibleContentRect.y + drawnContentHeight,
                                          rightPad,
                                          bottomPad),
-                             fullContentRect,
-                             contentCorners);
+                             visibleContentRect,
+                             visibleContentCorners);
     }
   }
   canvas.restore();

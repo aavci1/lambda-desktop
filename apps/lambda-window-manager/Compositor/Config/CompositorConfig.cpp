@@ -479,6 +479,7 @@ void parseChromeConfig(toml::table const& table, ChromeConfig& chrome, char cons
   parseFloatField("title_text_font_size", chrome.titleTextFontSize, 6.f, 40.f);
   parseFloatField("title_text_font_weight", chrome.titleTextFontWeight, 100.f, 1000.f);
   parseCornerRadiusField("window_corner_radius", chrome.windowCornerRadius, 0.f, 48.f);
+  parseFloatField("content_inset_width", chrome.contentInsetWidth, 0.f, 32.f);
   parseIntField("resize_grip_size", chrome.resizeGripSize, 1, 24);
   if (auto* glassTable = table["glass"].as_table()) {
     parseGlassConfig(*glassTable);
@@ -596,6 +597,7 @@ title_text_color = "#ffffff"
 title_text_font_size = 11.5
 title_text_font_weight = 600
 window_corner_radius = 14
+content_inset_width = 4
 # window_corner_radius can also be configured per corner:
 # [chrome.window_corner_radius]
 # all = 14
@@ -607,6 +609,8 @@ resize_grip_size = 4
 window_border_color = "#ffffff66"
 window_border_width = 1
 border_line_color = "#ffffff66"
+focused_shadow_color = "#141e3c85"
+unfocused_shadow_color = "#141e3c52"
 
 [chrome.glass]
 blur_radius = 64
