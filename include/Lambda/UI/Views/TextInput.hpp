@@ -14,9 +14,11 @@
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/Hooks.hpp>
 #include <Lambda/UI/Theme.hpp>
+#include <Lambda/UI/Views/TextEditUtils.hpp>
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace lambda {
@@ -81,6 +83,8 @@ struct TextInput : ViewModifiers<TextInput> {
 
     /// Controlled text value.
     Signal<std::string> value {};
+    /// Optional controlled caret/selection state.
+    std::optional<Signal<detail::TextEditSelection>> selection {};
     /// Placeholder shown when `value` is empty.
     std::string placeholder;
 
@@ -94,6 +98,8 @@ struct TextInput : ViewModifiers<TextInput> {
 
     /// Enables multiline editing behavior when true.
     bool multiline = false;
+    /// Wrapping strategy used by multiline editing.
+    TextWrapping wrapping = TextWrapping::Wrap;
     /// Disables editing and focus when true.
     bool disabled = false;
     /// Maximum accepted character count. `0` means unlimited.
@@ -103,19 +109,27 @@ struct TextInput : ViewModifiers<TextInput> {
 
     /// Called whenever the text changes.
     std::function<void(std::string const &)> onChange;
+    /// Called whenever the text changes, after the caret/selection has been updated.
+    std::function<void(std::string const &, detail::TextEditSelection)> onEdit;
     /// Called on submit/confirm action.
     std::function<void(std::string const &)> onSubmit;
     /// Called when Escape is pressed while the control is focused.
     std::function<void(std::string const &)> onEscape;
 
     bool operator==(TextInput const& other) const {
-        return value == other.value && placeholder == other.placeholder &&
+        bool const sameSelection =
+            (!selection && !other.selection) ||
+            (selection && other.selection && *selection == *other.selection);
+        return value == other.value && sameSelection &&
+               placeholder == other.placeholder &&
                static_cast<bool>(styler) == static_cast<bool>(other.styler) &&
                static_cast<bool>(validationColor) == static_cast<bool>(other.validationColor) &&
                style == other.style && multiline == other.multiline &&
+               wrapping == other.wrapping &&
                disabled == other.disabled && maxLength == other.maxLength &&
                multilineHeight == other.multilineHeight &&
                static_cast<bool>(onChange) == static_cast<bool>(other.onChange) &&
+               static_cast<bool>(onEdit) == static_cast<bool>(other.onEdit) &&
                static_cast<bool>(onSubmit) == static_cast<bool>(other.onSubmit) &&
                static_cast<bool>(onEscape) == static_cast<bool>(other.onEscape);
     }

@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace lambda {
@@ -63,11 +64,11 @@ ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const& style,
   };
 }
 
-TextLayoutOptions textInputLayoutOptions(bool multiline) {
+TextLayoutOptions textInputLayoutOptions(TextInput const& input) {
   TextLayoutOptions options{};
-  options.wrapping = multiline ? TextWrapping::Wrap : TextWrapping::NoWrap;
+  options.wrapping = input.multiline ? input.wrapping : TextWrapping::NoWrap;
   options.horizontalAlignment = HorizontalAlignment::Leading;
-  options.verticalAlignment = multiline ? VerticalAlignment::Top : VerticalAlignment::Center;
+  options.verticalAlignment = input.multiline ? VerticalAlignment::Top : VerticalAlignment::Center;
   return options;
 }
 
@@ -136,6 +137,7 @@ AttributedString attributedText(TextInput const& input,
         .end = static_cast<std::uint32_t>(attributed.utf8.size()),
         .font = style.font,
         .color = textColor,
+        .backgroundColor = std::nullopt,
     });
   }
   return attributed;
@@ -159,7 +161,7 @@ Size textInputFrameSize(TextInput const& input, ResolvedTextInputStyle const& st
   if (assignedSingleLineWidth) {
     measured.width = constraints.maxWidth;
   } else {
-    TextLayoutOptions const options = textInputLayoutOptions(input.multiline);
+    TextLayoutOptions const options = textInputLayoutOptions(input);
     measured = textSystem.measure(attributedText(input, style), maxTextWidth, options);
     measured.width += 2.f * padX;
     measured.height += 2.f * padY;
@@ -207,7 +209,7 @@ void setTextLayout(scenegraph::TextNode& node, TextInput const& input,
   Rect const layoutBox = Rect::sharp(0.f, 0.f, box.width, box.height);
   node.setBounds(box);
   auto layout = textSystem.layout(attributedText(input, style), layoutBox,
-                                  textInputLayoutOptions(input.multiline));
+                                  textInputLayoutOptions(input));
   node.setLayout(layout);
   if (layoutResult) {
     *layoutResult = detail::makeTextEditLayoutResult(
@@ -297,15 +299,21 @@ void drawCaret(Canvas& canvas, detail::TextEditLayoutResult const& layoutResult,
 void applyTextMutation(Signal<std::string> const& valueState,
                        Signal<detail::TextEditSelection> const& selectionState,
                        detail::TextEditMutation const& mutation,
-                       std::function<void(std::string const&)> const& onChangeHandler) {
+                       std::function<void(std::string const&)> const& onChangeHandler,
+                       std::function<void(std::string const&, detail::TextEditSelection)> const& onEditHandler) {
   if (mutation.valueChanged) {
     valueState = mutation.text;
-    if (onChangeHandler) {
-      onChangeHandler(mutation.text);
-    }
   }
   if (!sameSelection(selectionState.peek(), mutation.selection)) {
     selectionState = mutation.selection;
+  }
+  if (mutation.valueChanged) {
+    if (onChangeHandler) {
+      onChangeHandler(mutation.text);
+    }
+    if (onEditHandler) {
+      onEditHandler(mutation.text, mutation.selection);
+    }
   }
 }
 
@@ -334,11 +342,11 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   auto textNode = std::make_unique<scenegraph::TextNode>();
   scenegraph::TextNode* rawText = textNode.get();
   Signal<std::string> valueState = value;
-  Signal<detail::TextEditSelection> selectionState{
-      detail::TextEditSelection{
+  Signal<detail::TextEditSelection> selectionState = selection.value_or(
+      Signal<detail::TextEditSelection>{detail::TextEditSelection{
           .caretByte = static_cast<int>(value.get().size()),
           .anchorByte = static_cast<int>(value.get().size()),
-      }};
+      }});
   auto layoutResult = std::make_shared<detail::TextEditLayoutResult>();
   setTextLayout(*rawText, *this, resolved, ctx.textSystem(), *frameSize, layoutResult);
   auto lastLayoutText = std::make_shared<std::string>(valueState.peek());
@@ -389,6 +397,7 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   int const lengthLimit = maxLength;
   bool const acceptsMultiline = multiline;
   auto onChangeHandler = onChange;
+  auto onEditHandler = onEdit;
   auto onSubmitHandler = onSubmit;
   auto onEscapeHandler = onEscape;
   bool const isDisabled = disabled;
@@ -417,16 +426,16 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
     *draggingSelection = false;
   };
   interaction->onTextInput = [valueState, selectionState, lengthLimit, onChangeHandler,
-                              isDisabled](std::string const& text) {
+                              onEditHandler, isDisabled](std::string const& text) {
     if (isDisabled || text.empty()) {
       return;
     }
     applyTextMutation(valueState, selectionState,
                       detail::insertText(valueState.peek(), selectionState.peek(), text, lengthLimit),
-                      onChangeHandler);
+                      onChangeHandler, onEditHandler);
   };
   interaction->onKeyDown = [valueState, selectionState, layoutResult, acceptsMultiline, lengthLimit,
-                            onChangeHandler, onSubmitHandler, onEscapeHandler,
+                            onChangeHandler, onEditHandler, onSubmitHandler, onEscapeHandler,
                             isDisabled](KeyCode key, Modifiers modifiers) {
     if (isDisabled) {
       return;
@@ -445,21 +454,21 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
       detail::TextEditMutation mutation = meta ? detail::eraseToLineBoundary(text, current, false)
                                                : alt ? detail::eraseWord(text, current, false)
                                                      : detail::eraseSelectionOrChar(text, current, false);
-      applyTextMutation(valueState, selectionState, mutation, onChangeHandler);
+      applyTextMutation(valueState, selectionState, mutation, onChangeHandler, onEditHandler);
       return;
     }
     if (key == keys::ForwardDelete) {
       detail::TextEditMutation mutation = meta ? detail::eraseToLineBoundary(text, current, true)
                                                : alt ? detail::eraseWord(text, current, true)
                                                      : detail::eraseSelectionOrChar(text, current, true);
-      applyTextMutation(valueState, selectionState, mutation, onChangeHandler);
+      applyTextMutation(valueState, selectionState, mutation, onChangeHandler, onEditHandler);
       return;
     }
     if (key == keys::Return) {
       if (acceptsMultiline) {
         applyTextMutation(valueState, selectionState,
                           detail::insertText(text, current, "\n", lengthLimit),
-                          onChangeHandler);
+                          onChangeHandler, onEditHandler);
       } else if (onSubmitHandler) {
         onSubmitHandler(text);
       }

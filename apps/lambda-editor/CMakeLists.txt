@@ -3,5 +3,6 @@ lambda_add_app(lambda-editor
   BUNDLE_IDENTIFIER "io.lambda.editor"
   COMMENT "Text editor for Lambda Desktop"
   SOURCES
+    EditorCommands.cpp
     EditorDocument.cpp
     main.cpp)

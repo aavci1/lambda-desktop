@@ -9,7 +9,6 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | ID | Type | Item | Severity | Priority |
 | --- | --- | --- | --- | --- |
 | TODO-002 | Bug | Copy/paste is not working across applications | High | P1 |
-| TODO-004 | Feature | Complete basic Editor functionality and toolbar actions | N/A | P1 |
 | TODO-006 | Bug | Window close animation is inconsistent across window types | Medium | P2 |
 | TODO-007 | Bug | Minimized apps do not move to the dock with previews | Medium | P2 |
 | TODO-008 | Bug | Window content can stretch while resizing | Medium | P1 |
@@ -26,20 +25,6 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Do not add or rely on Super+C or Super+V clipboard behavior.
 - [ ] [Auto] The text editor selection bug is part of this item: pressing Ctrl+C currently replaces the selected text with `c`, and there is no way to bring the text back because Ctrl+Z is not working.
 - [ ] [Auto + Manual] Verify copy and paste across multiple apps or text surfaces, including the Editor app, Terminal, and at least one other application.
-
-## TODO-004: Complete basic Editor functionality and toolbar actions
-
-- [ ] [Manual] Current state: New, Open, Save, and Save As are implemented in `apps/lambda-editor/main.cpp`.
-- [ ] [Auto + Manual] Replace the remaining placeholder toolbar actions with real behavior, or remove any action that is intentionally out of scope instead of leaving a clickable "not implemented" button.
-- [ ] [Auto] Add undo/redo for normal text editing operations: typing, delete/backspace, newline insertion, cut, and paste.
-- [ ] [Auto] Use Ctrl+Z for undo and Ctrl+Shift+Z for redo.
-- [ ] [Auto + Manual] Wire toolbar buttons, keyboard shortcuts, menu/action registry entries, and any focused text-edit command handlers to the same underlying editor commands.
-- [ ] [Auto + Manual] Implement editing toolbar actions: Cut, Copy, Paste, Delete, and Select All. Clipboard behavior should stay consistent with TODO-002.
-- [ ] [Auto + Manual] Implement navigation/search toolbar actions: Find, Replace, and Go To Line.
-- [ ] [Auto + Manual] Implement view controls: Word Wrap, Zoom Out, Zoom In, and Font selection or font size controls.
-- [ ] [Auto + Manual] Resolve the Print toolbar action by implementing it if platform support exists, or removing it from the primary toolbar until printing is supported.
-- [ ] [Auto + Manual] Ensure toolbar buttons and shortcuts have correct enabled/disabled states based on selection, clipboard availability, undo/redo history, and document state.
-- [ ] [Auto] Automate verification for document edit history and editor commands where possible, including undo/redo over typing, delete/backspace, newline, cut, and paste.
 
 ## TODO-006: Window close animation is inconsistent across window types
 

@@ -16,6 +16,8 @@ set(_lambda_test_sources
   AlertTests.cpp
   AnimationTests.cpp
   BindableInferenceTests.cpp
+  ${PROJECT_SOURCE_DIR}/apps/lambda-editor/EditorCommands.cpp
+  EditorCommandsTests.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-editor/EditorDocument.cpp
   EditorDocumentTests.cpp
   EnvironmentKeyOtherTU.cpp

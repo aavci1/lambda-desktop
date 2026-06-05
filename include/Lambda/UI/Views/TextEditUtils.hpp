@@ -50,6 +50,7 @@ struct TextEditSelection {
 
     [[nodiscard]] bool hasSelection() const noexcept { return caretByte != anchorByte; }
     [[nodiscard]] std::pair<int, int> ordered() const noexcept;
+    bool operator==(TextEditSelection const&) const = default;
 };
 
 struct TextEditState {
