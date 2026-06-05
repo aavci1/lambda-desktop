@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
+#include <mutex>
 #include <optional>
 #include <ctime>
 #include <cmath>
@@ -45,6 +46,136 @@ std::uint64_t monotonicNanoseconds() {
   return static_cast<std::uint64_t>(now.tv_sec) * 1'000'000'000ull +
          static_cast<std::uint64_t>(now.tv_nsec);
 }
+
+enum class KmsTraceBucket : std::size_t {
+  Prepare,
+  Reap,
+  ResetSemaphore,
+  BeginCommand,
+  SetTarget,
+  MarkRendered,
+  FinishCommand,
+  QueueSubmit,
+  ExportFence,
+  UpdateReady,
+  SchedulePresent,
+  ScheduleOverlay,
+  ScheduleDirect,
+  ScheduleDirectRepeat,
+  AtomicAlloc,
+  PopulateRequest,
+  AtomicCommit,
+  AtomicFree,
+  DispatchFlip,
+  FlipPoll,
+  HandleEvent,
+  CursorProps,
+  CursorCommit,
+  TestAtomic,
+  OverlayImport,
+  Count,
+};
+
+char const* kmsTraceBucketName(KmsTraceBucket bucket) {
+  switch (bucket) {
+  case KmsTraceBucket::Prepare: return "prepare";
+  case KmsTraceBucket::Reap: return "reap";
+  case KmsTraceBucket::ResetSemaphore: return "reset_sem";
+  case KmsTraceBucket::BeginCommand: return "begin_cmd";
+  case KmsTraceBucket::SetTarget: return "set_target";
+  case KmsTraceBucket::MarkRendered: return "mark";
+  case KmsTraceBucket::FinishCommand: return "finish_cmd";
+  case KmsTraceBucket::QueueSubmit: return "queue_submit";
+  case KmsTraceBucket::ExportFence: return "export_fd";
+  case KmsTraceBucket::UpdateReady: return "update_ready";
+  case KmsTraceBucket::SchedulePresent: return "schedule_present";
+  case KmsTraceBucket::ScheduleOverlay: return "schedule_overlay";
+  case KmsTraceBucket::ScheduleDirect: return "schedule_direct";
+  case KmsTraceBucket::ScheduleDirectRepeat: return "schedule_repeat";
+  case KmsTraceBucket::AtomicAlloc: return "atomic_alloc";
+  case KmsTraceBucket::PopulateRequest: return "populate";
+  case KmsTraceBucket::AtomicCommit: return "atomic_commit";
+  case KmsTraceBucket::AtomicFree: return "atomic_free";
+  case KmsTraceBucket::DispatchFlip: return "dispatch_flip";
+  case KmsTraceBucket::FlipPoll: return "flip_poll";
+  case KmsTraceBucket::HandleEvent: return "handle_event";
+  case KmsTraceBucket::CursorProps: return "cursor_props";
+  case KmsTraceBucket::CursorCommit: return "cursor_commit";
+  case KmsTraceBucket::TestAtomic: return "test_atomic";
+  case KmsTraceBucket::OverlayImport: return "overlay_import";
+  case KmsTraceBucket::Count: return "unknown";
+  }
+  return "unknown";
+}
+
+bool kmsPresentTraceEnabled() {
+  static bool const enabled = debug::envNonZero(std::getenv("LAMBDA_KMS_PRESENT_TRACE"));
+  return enabled;
+}
+
+struct KmsTraceState {
+  std::mutex mutex;
+  std::uint64_t windowStartNsec = monotonicNanoseconds();
+  std::array<std::uint64_t, static_cast<std::size_t>(KmsTraceBucket::Count)> counts{};
+  std::array<std::uint64_t, static_cast<std::size_t>(KmsTraceBucket::Count)> nanos{};
+};
+
+KmsTraceState& kmsTraceState() {
+  static KmsTraceState state;
+  return state;
+}
+
+std::uint64_t kmsTraceStart() {
+  return kmsPresentTraceEnabled() ? monotonicNanoseconds() : 0;
+}
+
+void recordKmsTraceElapsed(KmsTraceBucket bucket, std::uint64_t elapsedNsec) noexcept {
+  if (!kmsPresentTraceEnabled()) return;
+  try {
+    auto& state = kmsTraceState();
+    std::uint64_t const now = monotonicNanoseconds();
+    std::scoped_lock lock(state.mutex);
+    std::size_t const index = static_cast<std::size_t>(bucket);
+    if (index >= state.counts.size()) return;
+    ++state.counts[index];
+    state.nanos[index] += elapsedNsec;
+    if (now - state.windowStartNsec < 1'000'000'000ull) return;
+
+    double const windowSeconds = static_cast<double>(now - state.windowStartNsec) / 1'000'000'000.0;
+    std::fprintf(stderr, "kms-trace: window=%.2fs", windowSeconds);
+    for (std::size_t i = 0; i < state.counts.size(); ++i) {
+      if (state.counts[i] == 0) continue;
+      std::fprintf(stderr,
+                   " %s=%llu/%.3fms",
+                   kmsTraceBucketName(static_cast<KmsTraceBucket>(i)),
+                   static_cast<unsigned long long>(state.counts[i]),
+                   static_cast<double>(state.nanos[i]) / 1'000'000.0);
+    }
+    std::fprintf(stderr, "\n");
+    state.counts.fill(0);
+    state.nanos.fill(0);
+    state.windowStartNsec = now;
+  } catch (...) {
+  }
+}
+
+void recordKmsTraceSince(KmsTraceBucket bucket, std::uint64_t startNsec) noexcept {
+  if (startNsec == 0) return;
+  recordKmsTraceElapsed(bucket, monotonicNanoseconds() - startNsec);
+}
+
+class KmsTraceScope {
+public:
+  explicit KmsTraceScope(KmsTraceBucket bucket) : bucket_(bucket), startNsec_(kmsTraceStart()) {}
+  ~KmsTraceScope() noexcept { recordKmsTraceSince(bucket_, startNsec_); }
+
+  KmsTraceScope(KmsTraceScope const&) = delete;
+  KmsTraceScope& operator=(KmsTraceScope const&) = delete;
+
+private:
+  KmsTraceBucket bucket_;
+  std::uint64_t startNsec_ = 0;
+};
 
 bool fenceFdReadableNow(int fd) noexcept {
   if (fd < 0) return true;
@@ -160,6 +291,10 @@ bool useDirectScanoutRender() {
 
 bool disableAutomaticDirectScanoutRender() {
   return debug::envNonZero(std::getenv("LAMBDA_COMPOSITOR_DISABLE_DIRECT_SCANOUT_RENDER"));
+}
+
+bool disableKmsOverlayPlanes() {
+  return debug::envNonZero(std::getenv("LAMBDA_COMPOSITOR_DISABLE_KMS_OVERLAYS"));
 }
 
 std::uint32_t propertyId(int fd, std::uint32_t objectId, std::uint32_t objectType, char const* name) {
@@ -622,6 +757,7 @@ public:
   }
 
   void prepareFrame() {
+    KmsTraceScope trace(KmsTraceBucket::Prepare);
     reapDiscardedPreparedFrames();
     if (buffers_.empty()) throw std::runtime_error("Atomic KMS presenter has no scanout buffers");
     clearPreparedOverlayCandidate();
@@ -648,12 +784,15 @@ public:
     buffers_[*next].prepared = false;
     buffers_[*next].discardWhenReady = false;
     beginRenderCommandBuffer(buffers_[*next]);
+    std::uint64_t const targetStart = kmsTraceStart();
     if (!lambda::setVulkanRenderTargetSpecForCanvas(canvas_.get(), buffers_[*next].spec)) {
       throw std::runtime_error("Failed to switch atomic KMS render target");
     }
+    recordKmsTraceSince(KmsTraceBucket::SetTarget, targetStart);
   }
 
   std::uint32_t markFrameRendered() {
+    KmsTraceScope trace(KmsTraceBucket::MarkRendered);
     if (renderBuffer_ < 0) return 0;
     Buffer& buffer = buffers_[static_cast<std::size_t>(renderBuffer_)];
     finishRenderCommandBuffer(buffer);
@@ -749,15 +888,20 @@ public:
   }
 
   std::uint32_t scheduleOverlayOnly() {
+    KmsTraceScope trace(KmsTraceBucket::ScheduleOverlay);
     if (!canScheduleOverlayOnly()) throw std::runtime_error("KMS atomic presenter has no prepared overlay-only frame");
     Buffer& buffer = buffers_[static_cast<std::size_t>(preparedOverlayPrimaryBuffer_)];
     if (preparedOverlay_ && fenceFdReadableNow(preparedOverlay_->acquireFenceFd)) {
       closePreparedOverlayFence(*preparedOverlay_);
     }
+    std::uint64_t const allocStart = kmsTraceStart();
     drmModeAtomicReq* request = drmModeAtomicAlloc();
+    recordKmsTraceSince(KmsTraceBucket::AtomicAlloc, allocStart);
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
+      std::uint64_t const populateStart = kmsTraceStart();
       populateAtomicRequest(request, buffer, false, preparedOverlay_ ? &*preparedOverlay_ : nullptr);
+      recordKmsTraceSince(KmsTraceBucket::PopulateRequest, populateStart);
       pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
           .presentId = nextPresentId_++,
           .scheduledMonotonicNsec = monotonicNanoseconds(),
@@ -770,11 +914,14 @@ public:
       int const rc = drmModeAtomicCommit(fd_, request, DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT, &pendingTiming_);
       pendingTiming_.commitReturnMonotonicNsec = monotonicNanoseconds();
       pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
+      recordKmsTraceElapsed(KmsTraceBucket::AtomicCommit, pendingTiming_.commitDurationNsec);
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit overlay-only");
       }
       if (output_) output_->markAtomicCursorScheduled();
+      std::uint64_t const freeStart = kmsTraceStart();
       drmModeAtomicFree(request);
+      recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
       request = nullptr;
       pendingBuffer_ = displayedBuffer_;
       pendingOverlayPlaneId_ = preparedOverlay_ ? preparedOverlay_->planeId : 0;
@@ -1073,14 +1220,19 @@ public:
   }
 
   std::uint32_t scheduleDirectScanout() {
+    KmsTraceScope trace(KmsTraceBucket::ScheduleDirect);
     if (!canScheduleDirectScanout()) throw std::runtime_error("KMS atomic presenter has no prepared direct scanout frame");
     if (preparedDirectScanout_ && fenceFdReadableNow(preparedDirectScanout_->acquireFenceFd)) {
       closePreparedDirectScanoutFence(*preparedDirectScanout_);
     }
+    std::uint64_t const allocStart = kmsTraceStart();
     drmModeAtomicReq* request = drmModeAtomicAlloc();
+    recordKmsTraceSince(KmsTraceBucket::AtomicAlloc, allocStart);
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
+      std::uint64_t const populateStart = kmsTraceStart();
       populateDirectScanoutRequest(request, *preparedDirectScanout_);
+      recordKmsTraceSince(KmsTraceBucket::PopulateRequest, populateStart);
       pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
           .presentId = nextPresentId_++,
           .scheduledMonotonicNsec = monotonicNanoseconds(),
@@ -1093,11 +1245,14 @@ public:
       int const rc = drmModeAtomicCommit(fd_, request, DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT, &pendingTiming_);
       pendingTiming_.commitReturnMonotonicNsec = monotonicNanoseconds();
       pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
+      recordKmsTraceElapsed(KmsTraceBucket::AtomicCommit, pendingTiming_.commitDurationNsec);
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit direct scanout");
       }
       if (output_) output_->markAtomicCursorScheduled();
+      std::uint64_t const freeStart = kmsTraceStart();
       drmModeAtomicFree(request);
+      recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
       request = nullptr;
       pendingBuffer_ = displayedBuffer_;
       pendingOverlayPlaneId_ = 0;
@@ -1122,15 +1277,20 @@ public:
   }
 
   std::uint32_t scheduleDirectScanoutRepeat() {
+    KmsTraceScope trace(KmsTraceBucket::ScheduleDirectRepeat);
     if (!canScheduleDirectScanoutRepeat()) {
       throw std::runtime_error("KMS atomic presenter has no active direct scanout frame to repeat");
     }
     PreparedDirectScanout repeat = *activeDirectScanoutState_;
     repeat.acquireFenceFd = -1;
+    std::uint64_t const allocStart = kmsTraceStart();
     drmModeAtomicReq* request = drmModeAtomicAlloc();
+    recordKmsTraceSince(KmsTraceBucket::AtomicAlloc, allocStart);
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
+      std::uint64_t const populateStart = kmsTraceStart();
       populateDirectScanoutRequest(request, repeat);
+      recordKmsTraceSince(KmsTraceBucket::PopulateRequest, populateStart);
       pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
           .presentId = nextPresentId_++,
           .scheduledMonotonicNsec = monotonicNanoseconds(),
@@ -1143,11 +1303,14 @@ public:
       int const rc = drmModeAtomicCommit(fd_, request, DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT, &pendingTiming_);
       pendingTiming_.commitReturnMonotonicNsec = monotonicNanoseconds();
       pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
+      recordKmsTraceElapsed(KmsTraceBucket::AtomicCommit, pendingTiming_.commitDurationNsec);
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit direct scanout repeat");
       }
       if (output_) output_->markAtomicCursorScheduled();
+      std::uint64_t const freeStart = kmsTraceStart();
       drmModeAtomicFree(request);
+      recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
       request = nullptr;
       pendingBuffer_ = displayedBuffer_;
       pendingOverlayPlaneId_ = 0;
@@ -1241,16 +1404,21 @@ public:
   }
 
   std::uint32_t schedulePresent(std::uint32_t token = 0) {
+    KmsTraceScope trace(KmsTraceBucket::SchedulePresent);
     if (pageFlipPending_) throw std::runtime_error("KMS atomic page flip is already pending");
     int const index = preparedBufferForToken(token);
     if (index < 0) throw std::runtime_error("KMS atomic presenter has no prepared render buffer");
     if (!canSchedulePresent(token)) throw std::runtime_error("KMS atomic render buffer is not ready");
     Buffer& buffer = buffers_[static_cast<std::size_t>(index)];
+    std::uint64_t const allocStart = kmsTraceStart();
     drmModeAtomicReq* request = drmModeAtomicAlloc();
+    recordKmsTraceSince(KmsTraceBucket::AtomicAlloc, allocStart);
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
       bool const useRenderFence = !buffer.renderComplete && canUseRenderFence(buffer);
+      std::uint64_t const populateStart = kmsTraceStart();
       populateAtomicRequest(request, buffer, useRenderFence, preparedOverlay_ ? &*preparedOverlay_ : nullptr);
+      recordKmsTraceSince(KmsTraceBucket::PopulateRequest, populateStart);
       std::uint32_t flags = DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT;
       if (!modesetDone_) flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
       pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
@@ -1265,6 +1433,7 @@ public:
       int const rc = drmModeAtomicCommit(fd_, request, flags, &pendingTiming_);
       pendingTiming_.commitReturnMonotonicNsec = monotonicNanoseconds();
       pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
+      recordKmsTraceElapsed(KmsTraceBucket::AtomicCommit, pendingTiming_.commitDurationNsec);
       if (rc != 0) {
         throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit");
       }
@@ -1273,7 +1442,9 @@ public:
         closeRenderFence(buffer);
         buffer.renderComplete = true;
       }
+      std::uint64_t const freeStart = kmsTraceStart();
       drmModeAtomicFree(request);
+      recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
       request = nullptr;
       modesetDone_ = true;
       pendingBuffer_ = index;
@@ -1304,9 +1475,12 @@ public:
   }
 
   std::optional<KmsAtomicPresenter::PageFlipTiming> dispatchPageFlipEvents() {
+    KmsTraceScope trace(KmsTraceBucket::DispatchFlip);
     if (!pageFlipPending_) return std::nullopt;
     pollfd pfd{.fd = fd_, .events = POLLIN, .revents = 0};
+    std::uint64_t const pollStart = kmsTraceStart();
     int const pollResult = poll(&pfd, 1, 0);
+    recordKmsTraceSince(KmsTraceBucket::FlipPoll, pollStart);
     if (pollResult < 0) {
       if (errno == EINTR) return std::nullopt;
       throw std::system_error(errno, std::generic_category(), "poll KMS page flip");
@@ -1316,9 +1490,11 @@ public:
     eventContext.version = DRM_EVENT_CONTEXT_VERSION;
     eventContext.page_flip_handler = pageFlipHandler;
     pendingTiming_.eventDispatchStartMonotonicNsec = monotonicNanoseconds();
+    std::uint64_t const handleStart = kmsTraceStart();
     if (drmHandleEvent(fd_, &eventContext) != 0) {
       throw std::system_error(errno, std::generic_category(), "drmHandleEvent");
     }
+    recordKmsTraceSince(KmsTraceBucket::HandleEvent, handleStart);
     pendingTiming_.eventDispatchEndMonotonicNsec = monotonicNanoseconds();
     if (!pendingTiming_.hardware) return std::nullopt;
     displayedBuffer_ = pendingBuffer_;
@@ -1539,6 +1715,7 @@ private:
   }
 
   void reapDiscardedPreparedFrames() {
+    KmsTraceScope trace(KmsTraceBucket::Reap);
     for (std::size_t i = 0; i < buffers_.size(); ++i) {
       Buffer& buffer = buffers_[i];
       if (!buffer.prepared || !buffer.discardWhenReady) continue;
@@ -1556,6 +1733,7 @@ private:
   }
 
   void resetRenderSemaphore(Buffer& buffer) {
+    KmsTraceScope trace(KmsTraceBucket::ResetSemaphore);
     VkDevice device = lambda::VulkanContext::instance().device();
     if (buffer.renderFinished) {
       vkDestroySemaphore(device, buffer.renderFinished, nullptr);
@@ -1572,6 +1750,7 @@ private:
   }
 
   void updateRenderFenceReadiness(Buffer& buffer) {
+    KmsTraceScope trace(KmsTraceBucket::UpdateReady);
     if (buffer.renderComplete) return;
     if (buffer.renderFenceFd < 0) return;
     pollfd pfd{.fd = buffer.renderFenceFd, .events = POLLIN, .revents = 0};
@@ -1660,6 +1839,7 @@ private:
   }
 
   OverlayFramebuffer* importOverlayFramebuffer(KmsAtomicPresenter::OverlayCandidate& candidate) {
+    KmsTraceScope trace(KmsTraceBucket::OverlayImport);
     std::array<std::uint32_t, 4> handles{};
     std::array<std::uint32_t, 4> strides{};
     std::array<std::uint32_t, 4> offsets{};
@@ -1944,6 +2124,7 @@ private:
   }
 
   bool testAtomicOverlay(Buffer const& buffer, PreparedOverlay const& overlay) {
+    KmsTraceScope trace(KmsTraceBucket::TestAtomic);
     drmModeAtomicReq* request = drmModeAtomicAlloc();
     if (!request) return false;
     bool accepted = false;
@@ -1984,6 +2165,7 @@ private:
   }
 
   bool testAtomicDirectScanout(PreparedDirectScanout const& direct) {
+    KmsTraceScope trace(KmsTraceBucket::TestAtomic);
     drmModeAtomicReq* request = drmModeAtomicAlloc();
     if (!request) return false;
     bool accepted = false;
@@ -2120,7 +2302,9 @@ private:
       std::fprintf(stderr,
                    "lambda-window-manager: KMS primary plane has no IN_FENCE_FD; atomic presenter will use CPU GPU waits\n");
     }
-    std::vector<std::uint32_t> const overlayIds = planesForCrtcWithType(fd_, connector_.crtcId, DRM_PLANE_TYPE_OVERLAY);
+    std::vector<std::uint32_t> const overlayIds = disableKmsOverlayPlanes()
+                                                     ? std::vector<std::uint32_t>{}
+                                                     : planesForCrtcWithType(fd_, connector_.crtcId, DRM_PLANE_TYPE_OVERLAY);
     overlayPlanes_.reserve(overlayIds.size());
     std::optional<std::uint64_t> cursorPlaneZpos;
     for (std::uint32_t cursorId : planesForCrtcWithType(fd_, connector_.crtcId, DRM_PLANE_TYPE_CURSOR)) {
@@ -2406,6 +2590,7 @@ private:
   }
 
   void beginRenderCommandBuffer(Buffer& buffer) {
+    KmsTraceScope trace(KmsTraceBucket::BeginCommand);
     if (!buffer.commandBuffer) return;
     vkCheck(vkResetCommandBuffer(buffer.commandBuffer, 0), "vkResetCommandBuffer atomic KMS presenter");
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -2415,6 +2600,7 @@ private:
   }
 
   void finishRenderCommandBuffer(Buffer& buffer) {
+    KmsTraceScope trace(KmsTraceBucket::FinishCommand);
     if (!buffer.commandBuffer || !buffer.commandBufferRecording) return;
     if (!directScanoutRender_) {
       transitionImage(buffer.commandBuffer,
@@ -2460,8 +2646,10 @@ private:
     submit.pCommandBufferInfos = &commandBufferInfo;
     submit.signalSemaphoreInfoCount = buffer.renderFinished ? 1u : 0u;
     submit.pSignalSemaphoreInfos = buffer.renderFinished ? &signalSemaphore : nullptr;
+    std::uint64_t const submitStart = kmsTraceStart();
     vkCheck(vkQueueSubmit2(lambda::VulkanContext::instance().queue(), 1, &submit, VK_NULL_HANDLE),
             "vkQueueSubmit2 atomic KMS presenter");
+    recordKmsTraceSince(KmsTraceBucket::QueueSubmit, submitStart);
   }
 
   VkSemaphore createExportableSemaphore() {
@@ -2477,6 +2665,7 @@ private:
   }
 
   int exportRenderSemaphoreFd(VkSemaphore semaphore) {
+    KmsTraceScope trace(KmsTraceBucket::ExportFence);
     auto getSemaphoreFd =
         reinterpret_cast<PFN_vkGetSemaphoreFdKHR>(vkGetDeviceProcAddr(lambda::VulkanContext::instance().device(),
                                                                        "vkGetSemaphoreFdKHR"));
@@ -2838,6 +3027,7 @@ bool KmsOutput::Impl::ensureAtomicCursorPlane() const {
 }
 
 bool KmsOutput::Impl::addAtomicCursorProperties(drmModeAtomicReq* request) const {
+  KmsTraceScope trace(KmsTraceBucket::CursorProps);
   if (!cursorVisible_) return false;
   if (!ensureAtomicCursorPlane()) return false;
   if (cursorBuffer_.fbId == 0 || cursorBuffer_.width == 0 || cursorBuffer_.height == 0) return false;
@@ -2874,6 +3064,7 @@ void KmsOutput::Impl::markAtomicCursorScheduled() const noexcept {
 }
 
 bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool visible) const noexcept {
+  KmsTraceScope trace(KmsTraceBucket::CursorCommit);
   if (!ensureAtomicCursorPlane()) return false;
   if (visible && (cursorBuffer_.fbId == 0 || cursorBuffer_.width == 0 || cursorBuffer_.height == 0)) return false;
 

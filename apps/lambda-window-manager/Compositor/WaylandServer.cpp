@@ -1,7 +1,11 @@
 #include "Compositor/WaylandServer.hpp"
 
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Window/WindowGeometry.hpp"
+#include "Compositor/Window/WindowManagerInternal.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace lambda::compositor {
@@ -215,6 +219,43 @@ float WaylandServer::pointerY() const noexcept {
 CursorShape WaylandServer::cursorShape() const noexcept {
   if (impl_->compositorCursorOverride_) return impl_->compositorCursorShape_;
   return impl_->cursorShape_;
+}
+
+bool WaylandServer::diagnosticExerciseTopToplevel(std::uint32_t step, bool resize) {
+  auto* surface = wm::mostRecentToplevel(impl_.get());
+  if (!wm::isManagedToplevel(surface)) return false;
+  if (surface->fullscreen || surface->maximized || surface->snapped || surface->minimized) return false;
+
+  std::int32_t const baseWidth = std::max(320, displayWidth(surface));
+  std::int32_t const baseHeight = std::max(220, displayHeight(surface));
+  std::int32_t const maxX = std::max(0, logicalOutputWidth() - baseWidth - 32);
+  std::int32_t const maxY = std::max(0, logicalOutputHeight() - baseHeight - 32);
+  float const t = static_cast<float>(step) * 0.105f;
+  std::int32_t const nextX = std::clamp(32 + static_cast<std::int32_t>(std::lround((std::sin(t) * 0.5f + 0.5f) *
+                                                                                  static_cast<float>(maxX))),
+                                       0,
+                                       std::max(0, logicalOutputWidth() - baseWidth));
+  std::int32_t const nextY = std::clamp(48 + static_cast<std::int32_t>(std::lround((std::cos(t * 0.7f) * 0.5f + 0.5f) *
+                                                                                  static_cast<float>(maxY))),
+                                       0,
+                                       std::max(0, logicalOutputHeight() - baseHeight));
+
+  if (resize && step % 30u == 0u) {
+    std::int32_t const nextWidth = std::clamp(620 + static_cast<std::int32_t>(std::lround((std::sin(t * 0.41f) * 0.5f + 0.5f) * 260.f)),
+                                             360,
+                                             std::max(360, logicalOutputWidth() - 96));
+    std::int32_t const nextHeight = std::clamp(360 + static_cast<std::int32_t>(std::lround((std::cos(t * 0.37f) * 0.5f + 0.5f) * 180.f)),
+                                              240,
+                                              std::max(240, logicalOutputHeight() - 96));
+    return requestToplevelResizeConfigure(impl_.get(), surface, nextX, nextY, nextWidth, nextHeight);
+  }
+
+  if (surface->windowX == nextX && surface->windowY == nextY) return false;
+  surface->windowX = nextX;
+  surface->windowY = nextY;
+  surface->geometryAnimationActive = false;
+  ++impl_->contentSerial_;
+  return true;
 }
 
 } // namespace lambda::compositor

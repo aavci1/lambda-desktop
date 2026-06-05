@@ -35,6 +35,7 @@ Environment overrides:
   LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE    1 enables sampled hot symbols. Default: 1
   LAMBDA_WINDOW_MANAGER_SAMPLE_USEC     CPU sample interval. Default: 1000
   LAMBDA_DEBUG_PERF                     0, 1, 2, or anomaly. Default: 0
+  LAMBDA_KMS_PRESENT_TRACE              1 enables atomic-KMS presenter timing. Default: 0
   LAMBDA_WINDOW_MANAGER_PACING_TRACE    1 enables verbose pacing log. Default: 0
   LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG Pacing log. Default: $PACING_LOG
 EOF
@@ -231,6 +232,14 @@ summarize_cpu_trace() {
       printf "  path_tess avg:        %.3fms\n", vk_path_tess_sum / n
     }
   ' "$TRACE_LOG"
+
+  echo
+  echo "Recent KMS presenter trace:"
+  if grep -q '^kms-trace:' "$STDERR_LOG"; then
+    grep '^kms-trace:' "$STDERR_LOG" | tail -n 12
+  else
+    echo "  no kms-trace entries; set LAMBDA_KMS_PRESENT_TRACE=1 to enable"
+  fi
 }
 
 : >"$TRACE_LOG"
@@ -257,6 +266,7 @@ export LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE="${LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE:
 export LAMBDA_WINDOW_MANAGER_SAMPLE_USEC="${LAMBDA_WINDOW_MANAGER_SAMPLE_USEC:-1000}"
 export LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG="$TRACE_LOG"
 export LAMBDA_DEBUG_PERF="${LAMBDA_DEBUG_PERF:-0}"
+export LAMBDA_KMS_PRESENT_TRACE="${LAMBDA_KMS_PRESENT_TRACE:-0}"
 
 "$BIN" "$@" 2>&1 | tee "$STDERR_LOG"
 summarize_cpu_trace

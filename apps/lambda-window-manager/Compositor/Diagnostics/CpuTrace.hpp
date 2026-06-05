@@ -39,6 +39,28 @@ struct CpuLoopDecisionTrace {
   bool waylandWoke = false;
 };
 
+struct CpuAtomicLoopTrace {
+  std::uint64_t updateReadyCalls = 0;
+  std::uint64_t updateReadyFrames = 0;
+  double updateReadyMs = 0.0;
+  std::uint64_t scheduleAttempts = 0;
+  std::uint64_t scheduleSuccess = 0;
+  std::uint64_t schedulePresent = 0;
+  std::uint64_t scheduleDirect = 0;
+  std::uint64_t scheduleDirectRepeat = 0;
+  std::uint64_t scheduleOverlay = 0;
+  double scheduleMs = 0.0;
+  std::uint64_t dispatchFlipCalls = 0;
+  std::uint64_t dispatchFlipCompletions = 0;
+  double dispatchFlipMs = 0.0;
+  std::uint64_t renderCalls = 0;
+  std::uint64_t renderAheadCalls = 0;
+  double renderCallMs = 0.0;
+  std::uint64_t emptyDamageChecks = 0;
+  std::uint64_t emptyDamageSkips = 0;
+  double emptyDamageMs = 0.0;
+};
+
 enum class CpuSurfaceCommitKind : std::uint8_t {
   State,
   Shm,
@@ -70,6 +92,7 @@ void recordCpuPoll(double milliseconds, bool woke, int timeoutMs);
 void recordCpuWakeSources(bool inputOrSystem, bool wayland, bool pageFlip, bool renderReady);
 void recordCpuDispatch(double milliseconds);
 void recordCpuLoopDecision(CpuLoopDecisionTrace const &decision);
+void recordCpuAtomicLoop(CpuAtomicLoopTrace const &trace);
 void recordWaylandDispatch(bool contentChanged);
 void recordSurfaceDrawCache(bool hit, double recordMilliseconds);
 void recordSurfaceDrawCacheBlock(CpuSurfaceDrawCacheBlockReason reason);

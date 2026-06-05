@@ -70,6 +70,25 @@ struct CpuTraceState {
   std::uint64_t loopAtomicBlocked = 0;
   std::uint64_t loopAtomicReady = 0;
   std::uint64_t loopAtomicPendingFlip = 0;
+  std::uint64_t atomicUpdateReadyCalls = 0;
+  std::uint64_t atomicUpdateReadyFrames = 0;
+  double atomicUpdateReadyMs = 0.0;
+  std::uint64_t atomicScheduleAttempts = 0;
+  std::uint64_t atomicScheduleSuccess = 0;
+  std::uint64_t atomicSchedulePresent = 0;
+  std::uint64_t atomicScheduleDirect = 0;
+  std::uint64_t atomicScheduleDirectRepeat = 0;
+  std::uint64_t atomicScheduleOverlay = 0;
+  double atomicScheduleMs = 0.0;
+  std::uint64_t atomicDispatchFlipCalls = 0;
+  std::uint64_t atomicDispatchFlipCompletions = 0;
+  double atomicDispatchFlipMs = 0.0;
+  std::uint64_t atomicRenderCalls = 0;
+  std::uint64_t atomicRenderAheadCalls = 0;
+  double atomicRenderCallMs = 0.0;
+  std::uint64_t atomicEmptyDamageChecks = 0;
+  std::uint64_t atomicEmptyDamageSkips = 0;
+  double atomicEmptyDamageMs = 0.0;
   std::uint64_t surfaces = 0;
   double pollMs = 0.0;
   double dispatchMs = 0.0;
@@ -383,6 +402,25 @@ void resetCounters(CpuTraceState &traceState, CpuTraceClock::time_point now, dou
   traceState.loopAtomicBlocked = 0;
   traceState.loopAtomicReady = 0;
   traceState.loopAtomicPendingFlip = 0;
+  traceState.atomicUpdateReadyCalls = 0;
+  traceState.atomicUpdateReadyFrames = 0;
+  traceState.atomicUpdateReadyMs = 0.0;
+  traceState.atomicScheduleAttempts = 0;
+  traceState.atomicScheduleSuccess = 0;
+  traceState.atomicSchedulePresent = 0;
+  traceState.atomicScheduleDirect = 0;
+  traceState.atomicScheduleDirectRepeat = 0;
+  traceState.atomicScheduleOverlay = 0;
+  traceState.atomicScheduleMs = 0.0;
+  traceState.atomicDispatchFlipCalls = 0;
+  traceState.atomicDispatchFlipCompletions = 0;
+  traceState.atomicDispatchFlipMs = 0.0;
+  traceState.atomicRenderCalls = 0;
+  traceState.atomicRenderAheadCalls = 0;
+  traceState.atomicRenderCallMs = 0.0;
+  traceState.atomicEmptyDamageChecks = 0;
+  traceState.atomicEmptyDamageSkips = 0;
+  traceState.atomicEmptyDamageMs = 0.0;
   traceState.surfaces = 0;
   traceState.pollMs = 0.0;
   traceState.dispatchMs = 0.0;
@@ -485,6 +523,12 @@ void maybeLog(CpuTraceState &traceState) {
         "input=%llu config=%llu wayland=%llu "
         "zero_reason force=%llu anim=%llu snap=%llu ahead=%llu dirty=%llu blocked=%llu "
         "atomic_state blocked=%llu ready=%llu pending_flip=%llu "
+        "atomic_ops update_ready=%llu update_frames=%llu update_ms=%.3f "
+        "schedule=%llu scheduled=%llu schedule_ms=%.3f "
+        "schedule_kind present=%llu direct=%llu direct_repeat=%llu overlay=%llu "
+        "dispatch_flip=%llu flips=%llu dispatch_ms=%.3f "
+        "render=%llu render_ahead=%llu render_ms=%.3f "
+        "empty_damage=%llu empty_skips=%llu empty_ms=%.3f "
         "surfaces=%.2f/f "
         "phase_avg_ms total=%.3f bg=%.3f snapshot=%.3f surface=%.3f closing=%.3f "
         "cursor=%.3f present=%.3f canvas_present=%.3f kms_present=%.3f "
@@ -537,6 +581,25 @@ void maybeLog(CpuTraceState &traceState) {
         static_cast<unsigned long long>(traceState.loopAtomicBlocked),
         static_cast<unsigned long long>(traceState.loopAtomicReady),
         static_cast<unsigned long long>(traceState.loopAtomicPendingFlip),
+        static_cast<unsigned long long>(traceState.atomicUpdateReadyCalls),
+        static_cast<unsigned long long>(traceState.atomicUpdateReadyFrames),
+        traceState.atomicUpdateReadyMs,
+        static_cast<unsigned long long>(traceState.atomicScheduleAttempts),
+        static_cast<unsigned long long>(traceState.atomicScheduleSuccess),
+        traceState.atomicScheduleMs,
+        static_cast<unsigned long long>(traceState.atomicSchedulePresent),
+        static_cast<unsigned long long>(traceState.atomicScheduleDirect),
+        static_cast<unsigned long long>(traceState.atomicScheduleDirectRepeat),
+        static_cast<unsigned long long>(traceState.atomicScheduleOverlay),
+        static_cast<unsigned long long>(traceState.atomicDispatchFlipCalls),
+        static_cast<unsigned long long>(traceState.atomicDispatchFlipCompletions),
+        traceState.atomicDispatchFlipMs,
+        static_cast<unsigned long long>(traceState.atomicRenderCalls),
+        static_cast<unsigned long long>(traceState.atomicRenderAheadCalls),
+        traceState.atomicRenderCallMs,
+        static_cast<unsigned long long>(traceState.atomicEmptyDamageChecks),
+        static_cast<unsigned long long>(traceState.atomicEmptyDamageSkips),
+        traceState.atomicEmptyDamageMs,
         static_cast<double>(traceState.surfaces) * invFrames, traceState.totalMs * invFrames,
         traceState.backgroundMs * invFrames, traceState.snapshotMs * invFrames, traceState.surfaceMs * invFrames,
         traceState.closingMs * invFrames, traceState.cursorMs * invFrames,
@@ -756,6 +819,32 @@ void recordCpuLoopDecision(CpuLoopDecisionTrace const &decision) {
     ++traceState.loopAtomicReady;
   if (decision.atomicPageFlipPending)
     ++traceState.loopAtomicPendingFlip;
+}
+
+void recordCpuAtomicLoop(CpuAtomicLoopTrace const &trace) {
+  if (!cpuTraceEnabled())
+    return;
+  std::scoped_lock lock(traceMutex());
+  auto &traceState = state();
+  traceState.atomicUpdateReadyCalls += trace.updateReadyCalls;
+  traceState.atomicUpdateReadyFrames += trace.updateReadyFrames;
+  traceState.atomicUpdateReadyMs += trace.updateReadyMs;
+  traceState.atomicScheduleAttempts += trace.scheduleAttempts;
+  traceState.atomicScheduleSuccess += trace.scheduleSuccess;
+  traceState.atomicSchedulePresent += trace.schedulePresent;
+  traceState.atomicScheduleDirect += trace.scheduleDirect;
+  traceState.atomicScheduleDirectRepeat += trace.scheduleDirectRepeat;
+  traceState.atomicScheduleOverlay += trace.scheduleOverlay;
+  traceState.atomicScheduleMs += trace.scheduleMs;
+  traceState.atomicDispatchFlipCalls += trace.dispatchFlipCalls;
+  traceState.atomicDispatchFlipCompletions += trace.dispatchFlipCompletions;
+  traceState.atomicDispatchFlipMs += trace.dispatchFlipMs;
+  traceState.atomicRenderCalls += trace.renderCalls;
+  traceState.atomicRenderAheadCalls += trace.renderAheadCalls;
+  traceState.atomicRenderCallMs += trace.renderCallMs;
+  traceState.atomicEmptyDamageChecks += trace.emptyDamageChecks;
+  traceState.atomicEmptyDamageSkips += trace.emptyDamageSkips;
+  traceState.atomicEmptyDamageMs += trace.emptyDamageMs;
 }
 
 void recordWaylandDispatch(bool contentChanged) {

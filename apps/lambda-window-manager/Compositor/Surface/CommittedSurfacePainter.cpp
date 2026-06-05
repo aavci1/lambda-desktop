@@ -11,6 +11,8 @@
 #endif
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <cmath>
 #include <optional>
 
@@ -48,6 +50,12 @@ bool renderSnapshotChanged(CommittedSurfaceSnapshot const& current,
 
 bool reachesEdge(float value, float edge) {
   return std::abs(value - edge) <= 0.5f;
+}
+
+bool diagnosticEnvEnabled(char const* name) {
+  char const* raw = std::getenv(name);
+  if (!raw || !*raw) return false;
+  return std::strcmp(raw, "0") != 0 && std::strcmp(raw, "false") != 0 && std::strcmp(raw, "FALSE") != 0;
 }
 
 CornerRadius cornerRadiusForPiece(Rect const& full, Rect const& piece, CornerRadius const& outer) {
@@ -309,6 +317,7 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
                                CommittedSurfaceSnapshot const& surface,
                                Rect const& fullContentRect,
                                CornerRadius const& contentCorners) {
+  if (diagnosticEnvEnabled("LWM_DIAGNOSTIC_DISABLE_SURFACE_MATERIAL")) return;
   ResolvedGlassMaterial const material = resolvedGlassMaterial(surface);
   if (!material.enabled) return;
 

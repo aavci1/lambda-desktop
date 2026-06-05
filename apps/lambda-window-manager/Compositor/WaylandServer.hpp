@@ -95,6 +95,7 @@ public:
   [[nodiscard]] float pointerX() const noexcept;
   [[nodiscard]] float pointerY() const noexcept;
   [[nodiscard]] CursorShape cursorShape() const noexcept;
+  bool diagnosticExerciseTopToplevel(std::uint32_t step, bool resize);
 
   struct Impl;
 
