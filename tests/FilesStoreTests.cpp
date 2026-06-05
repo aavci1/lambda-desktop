@@ -889,6 +889,29 @@ image/png=org.example.ImageViewer.desktop;
   CHECK(missingPlan.error == "No application is registered for this file type.");
 }
 
+TEST_CASE("FilesStore launches file open commands without blocking the caller") {
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "org.example.SlowViewer",
+       .name = "Slow Viewer",
+       .command = "/bin/sh -c \"sleep 2\"",
+       .mimeTypes = {"text/plain"}},
+  };
+  lambda_files::FileEntry entry{
+      .name = "readme.txt",
+      .path = "/tmp/readme.txt",
+      .isDirectory = false,
+  };
+
+  std::string error;
+  auto const start = std::chrono::steady_clock::now();
+  bool const opened = lambda_files::openEntryWithApps(entry, apps, {}, error);
+  auto const elapsed = std::chrono::steady_clock::now() - start;
+
+  CHECK(opened);
+  CHECK(error.empty());
+  CHECK(elapsed < std::chrono::milliseconds(1000));
+}
+
 TEST_CASE("FilesStore loads mimeapps lists with deterministic precedence") {
   auto root = tempRoot("lambda-files-mimeapps-load-test");
   auto user = root / "user-mimeapps.list";

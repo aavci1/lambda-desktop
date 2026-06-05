@@ -2,10 +2,12 @@
 #include "FilesTrace.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cctype>
 #include <cstdlib>
 #include <ctime>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <set>
@@ -15,6 +17,12 @@
 
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
+#endif
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #endif
 
 namespace lambda_files {
@@ -257,12 +265,149 @@ FileOperationResult moveReplacing(std::filesystem::path const& source, std::file
   return {.ok = true, .path = target};
 }
 
+std::string shellCommandFromArgs(std::vector<std::string> const& args);
+
 int runShellCommand(std::string const& command) {
   if (command.empty()) {
     return -1;
   }
   return std::system(command.c_str());
 }
+
+#if defined(__unix__) || defined(__APPLE__)
+bool setCloseOnExec(int fd) {
+  int const flags = fcntl(fd, F_GETFD);
+  if (flags == -1) return false;
+  return fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != -1;
+}
+
+void writeLaunchError(int fd, int errorNumber) {
+  unsigned char const* data = reinterpret_cast<unsigned char const*>(&errorNumber);
+  std::size_t remaining = sizeof(errorNumber);
+  while (remaining > 0) {
+    ssize_t const written = write(fd, data, remaining);
+    if (written < 0) {
+      if (errno == EINTR) continue;
+      return;
+    }
+    data += written;
+    remaining -= static_cast<std::size_t>(written);
+  }
+}
+
+bool readLaunchError(int fd, int& errorNumber) {
+  unsigned char* data = reinterpret_cast<unsigned char*>(&errorNumber);
+  std::size_t received = 0;
+  while (received < sizeof(errorNumber)) {
+    ssize_t const count = read(fd, data + received, sizeof(errorNumber) - received);
+    if (count < 0) {
+      if (errno == EINTR) continue;
+      return false;
+    }
+    if (count == 0) break;
+    received += static_cast<std::size_t>(count);
+  }
+  return received == sizeof(errorNumber);
+}
+
+long launchCloseMax() {
+  long const value = sysconf(_SC_OPEN_MAX);
+  return value > 0 ? value : 1024;
+}
+
+void closeInheritedFdsExcept(int preservedFd, long maxFd) {
+  for (int fd = 3; fd < maxFd; ++fd) {
+    if (fd == preservedFd) continue;
+    close(fd);
+  }
+}
+
+bool launchDetachedProcess(std::vector<std::string> const& args, std::string& error) {
+  if (args.empty() || args.front().empty()) {
+    error = "Registered application has no launch command.";
+    return false;
+  }
+
+  std::vector<char*> argv;
+  argv.reserve(args.size() + 1u);
+  for (auto const& arg : args) {
+    argv.push_back(const_cast<char*>(arg.c_str()));
+  }
+  argv.push_back(nullptr);
+
+  int errorPipe[2]{-1, -1};
+  if (pipe(errorPipe) != 0) {
+    error = "Could not create launch pipe: " + std::string(std::strerror(errno));
+    return false;
+  }
+  if (!setCloseOnExec(errorPipe[1])) {
+    error = "Could not prepare launch pipe: " + std::string(std::strerror(errno));
+    close(errorPipe[0]);
+    close(errorPipe[1]);
+    return false;
+  }
+  long const maxFd = launchCloseMax();
+
+  pid_t const firstChild = fork();
+  if (firstChild < 0) {
+    error = "Could not fork launcher: " + std::string(std::strerror(errno));
+    close(errorPipe[0]);
+    close(errorPipe[1]);
+    return false;
+  }
+
+  if (firstChild == 0) {
+    close(errorPipe[0]);
+    if (setsid() < 0) {
+      writeLaunchError(errorPipe[1], errno);
+      _exit(127);
+    }
+
+    pid_t const secondChild = fork();
+    if (secondChild < 0) {
+      writeLaunchError(errorPipe[1], errno);
+      _exit(127);
+    }
+    if (secondChild > 0) {
+      _exit(0);
+    }
+
+    closeInheritedFdsExcept(errorPipe[1], maxFd);
+    execvp(argv[0], argv.data());
+    writeLaunchError(errorPipe[1], errno);
+    _exit(127);
+  }
+
+  close(errorPipe[1]);
+  int launchError = 0;
+  bool const childReportedError = readLaunchError(errorPipe[0], launchError);
+  close(errorPipe[0]);
+
+  int status = 0;
+  while (waitpid(firstChild, &status, 0) < 0 && errno == EINTR) {
+  }
+
+  if (childReportedError) {
+    error = "Could not launch registered application: " + std::string(std::strerror(launchError));
+    return false;
+  }
+  return true;
+}
+#else
+bool launchDetachedProcess(std::vector<std::string> const& args, std::string& error) {
+  std::string command = shellCommandFromArgs(args);
+  if (command.empty()) {
+    error = "Registered application has no launch command.";
+    return false;
+  }
+  int const code = runShellCommand(command);
+  if (code != 0) {
+    error = "Could not open this item with the registered application.";
+    return false;
+  }
+  return true;
+}
+#endif
 
 std::string shellCommandFromArgs(std::vector<std::string> const& args) {
   std::string command;
@@ -874,9 +1019,7 @@ bool openEntryWithApps(FileEntry const& entry,
     error = plan.error;
     return false;
   }
-  int const code = runShellCommand(shellCommandFromArgs(plan.command));
-  if (code != 0) {
-    error = "Could not open this item with the registered application.";
+  if (!launchDetachedProcess(plan.command, error)) {
     return false;
   }
   return true;

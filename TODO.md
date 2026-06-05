@@ -1,6 +1,6 @@
 # TODO
 
-When starting work, read all TODO items in this document, pick one item to complete, and ask questions until the bug or TODO item is perfectly clear before starting implementation. Handle any directly related work that can be fixed or completed together. Always try to automate testing or verification of the implementation when possible; if automatic verification is not practical, tell the user exactly how to verify it manually. Then update this document by deleting the completed item or revising its description based on the outcome, commit the changes, and push.
+When starting work, read all TODO items in this document, pick one item to complete, and ask questions until the bug or TODO item is perfectly clear before starting implementation. Handle any directly related work that can be fixed or completed together. Always build with `-j$(nproc)`. Always try to automate testing or verification of the implementation when possible; if automatic verification is not practical, tell the user exactly how to verify it manually. Then update this document by deleting the completed item or revising its description based on the outcome, commit the changes, and push.
 
 Verification labels: `[Auto]` means the item can be automatically tested or verified. `[Manual]` means the item requires manual verification. `[Auto + Manual]` means automated coverage should be added, but manual verification is also required.
 
@@ -14,7 +14,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-007 | Bug | Minimized apps do not move to the dock with previews | Medium | P2 |
 | TODO-008 | Bug | Window content can stretch while resizing | Medium | P1 |
 | TODO-009 | Bug | Files opens supported images in Firefox instead of Preview | Medium | P1 |
-| TODO-010 | Bug | Files loses window events after launching another app | High | P0 |
+| TODO-010 | Bug | Verify Files remains interactive after launching another app | High | P0 |
 | TODO-011 | Feature | Fix and enhance Super+Tab window cycler | N/A | P1 |
 | TODO-013 | Feature | Add Editor file watcher with reload prompt | N/A | P1 |
 | TODO-014 | Bug | File dialog view stops using full width after folder navigation | Medium | P2 |
@@ -81,14 +81,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Add or update tests around local `lambda-preview` registration and Files default open-with resolution so supported images choose Preview instead of Firefox/browser fallback.
 - [ ] [Manual] Verify manually by running from the development build and opening PNG, JPEG, and SVG files from Files.
 
-## TODO-010: Files loses window events after launching another app
+## TODO-010: Verify Files remains interactive after launching another app
 
-- [ ] [Auto + Manual] When Files launches another app for a file, the launch should always be non-modal.
-- [ ] [Auto + Manual] Files must remain movable, closable, focusable, and able to receive normal window events after launching another app.
-- [ ] [Auto + Manual] The launched app may take focus, but it must not capture or block input/events for the Files window.
-- [ ] [Manual] Known repro: opening an image in Firefox from Files leaves Files unable to move or close and not receiving events.
-- [ ] [Manual] The same event handling issue happens when opening a video.
-- [ ] [Manual] Verify by opening image and video files from Files, then moving, focusing, and closing the Files window while the launched app remains open.
+- [ ] [Manual] Manually verify the async launch fix by opening image and video files from Files, then moving, focusing, and closing the Files window while the launched app remains open.
+- [ ] [Manual] If Files still loses events after the async launch fix, investigate compositor focus/input routing next; the file launch path should already be non-blocking and should not leave the launched app holding Files' inherited non-stdio file descriptors.
 
 ## TODO-011: Fix and enhance Super+Tab window cycler
 
