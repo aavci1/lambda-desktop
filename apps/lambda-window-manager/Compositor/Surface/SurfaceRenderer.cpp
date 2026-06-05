@@ -487,17 +487,31 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
     visual.hasLastSnapshot = true;
     return;
   }
+  bool const cacheBackendOk = canvas.backend() == Backend::Vulkan;
+  bool const cacheClipOk = surface.windowClipTop <= 0 && surface.windowClipBottom <= 0;
+  bool const cacheCalloutOk = surface.backgroundEffect.shape != BackgroundEffectShape::Callout;
+  bool const cacheSizingOk = !surface.activeSizing && !surface.pacingSizing && !surface.geometryAnimationGrowing;
+  bool const cacheTransientChromeOk = !hasTransientChromeState(surface);
+  bool const cacheOpeningOk = surfaceOpenAnimationComplete(visual, frameTime, animationsEnabled);
   bool const canRecordSurface =
-      canvas.backend() == Backend::Vulkan &&
-      surface.windowClipTop <= 0 &&
-      surface.windowClipBottom <= 0 &&
-      surface.backgroundEffect.shape != BackgroundEffectShape::Callout &&
-      !hasCompositorMaterial(surface, chrome) &&
-      !surface.activeSizing &&
-      !surface.pacingSizing &&
-      !surface.geometryAnimationGrowing &&
-      !hasTransientChromeState(surface) &&
-      surfaceOpenAnimationComplete(visual, frameTime, animationsEnabled);
+      cacheBackendOk &&
+      cacheClipOk &&
+      cacheCalloutOk &&
+      cacheSizingOk &&
+      cacheTransientChromeOk &&
+      cacheOpeningOk;
+  if (!canRecordSurface) {
+    if (!cacheBackendOk) diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::Backend);
+    if (!cacheClipOk) diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::Clip);
+    if (!cacheCalloutOk) diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::Callout);
+    if (!cacheSizingOk) diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::Sizing);
+    if (!cacheTransientChromeOk) {
+      diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::TransientChrome);
+    }
+    if (!cacheOpeningOk) {
+      diagnostics::recordSurfaceDrawCacheBlock(diagnostics::CpuSurfaceDrawCacheBlockReason::OpeningAnimation);
+    }
+  }
   std::uint64_t const signature = canRecordSurface ? surfaceDrawSignature(surface, cached, *cached.image, chrome) : 0;
   if (canRecordSurface && cached.recordedOps && cached.recordedSignature == signature) {
     canvas.save();
@@ -513,14 +527,7 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
     }
   }
 
-  bool const signatureStable = canRecordSurface && cached.lastDrawSignature == signature;
   if (canRecordSurface) {
-    cached.stableDrawSignatureFrames = signatureStable ? cached.stableDrawSignatureFrames + 1u : 1u;
-    cached.lastDrawSignature = signature;
-  }
-  bool const shouldRecordSurface = canRecordSurface && cached.stableDrawSignatureFrames >= 2u;
-
-  if (shouldRecordSurface) {
     auto recorder = std::make_unique<VulkanFrameRecorder>();
     if (beginRecordedOpsCaptureForCanvas(&canvas, recorder.get())) {
       auto const recordStart = diagnostics::cpuTraceNow();
@@ -547,10 +554,6 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
     cached.recordedSignature = 0;
     cached.recordedX = 0;
     cached.recordedY = 0;
-    if (!canRecordSurface) {
-      cached.lastDrawSignature = 0;
-      cached.stableDrawSignatureFrames = 0;
-    }
   }
 
   drawCommittedSurfaceSnapshot(canvas, textSystem, surface, visual, *cached.image, frameTime, chrome,

@@ -39,8 +39,6 @@ struct CachedClientImage {
   std::uint64_t recordedSignature = 0;
   std::int32_t recordedX = 0;
   std::int32_t recordedY = 0;
-  std::uint64_t lastDrawSignature = 0;
-  std::uint32_t stableDrawSignatureFrames = 0;
 };
 
 struct ClosingSurfaceVisual {
