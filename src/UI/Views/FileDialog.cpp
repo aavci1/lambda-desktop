@@ -1,7 +1,9 @@
 #include <Lambda/UI/Views/FileDialog.hpp>
 
 #include <Lambda/Graphics/Styles.hpp>
+#include <Lambda/UI/Hooks.hpp>
 #include <Lambda/UI/IconName.hpp>
+#include <Lambda/UI/Shortcut.hpp>
 #include <Lambda/UI/Theme.hpp>
 #include <Lambda/UI/Views/Button.hpp>
 #include <Lambda/UI/Views/Checkbox.hpp>
@@ -553,6 +555,13 @@ Element FileDialog::body() const {
       onCancel();
     }
   };
+  useWindowAction("dialog.cancel",
+                  cancel,
+                  ActionDescriptor{
+                      .label = "Cancel",
+                      .shortcut = Shortcut{keys::Escape, Modifiers::None},
+                      .isEnabled = [] { return true; },
+                  });
   auto toggleHidden = [directory, showHidden, loadDirectory](bool visible) {
     showHidden.set(visible);
     loadDirectory(directory.peek(), visible);

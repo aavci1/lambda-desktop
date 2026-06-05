@@ -20,6 +20,7 @@ set(_lambda_test_sources
   EditorDocumentTests.cpp
   EnvironmentKeyOtherTU.cpp
   EnvironmentKeyTests.cpp
+  EventQueueTests.cpp
   FilesFlowGridTests.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-files/FilesStore.cpp
   FilesStoreTests.cpp

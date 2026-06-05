@@ -123,17 +123,25 @@ void detail::EventQueueImplAccess::dispatchOne(EventQueue& q, Event& event) {
   std::visit(
       [&q](auto& ev) {
         using T = std::decay_t<decltype(ev)>;
+        std::vector<std::function<void(std::any const&)>> handlers;
         auto it = q.d->frameworkHandlers_.find(std::type_index(typeid(T)));
         if (it != q.d->frameworkHandlers_.end()) {
+          handlers = it->second;
+        }
+        if (!handlers.empty()) {
           std::any a = ev;
-          for (auto& f : it->second) {
+          for (auto const& f : handlers) {
             f(a);
           }
         }
         if constexpr (std::is_same_v<T, CustomEvent>) {
+          std::vector<std::function<void(std::any const&)>> customHandlers;
           auto pit = q.d->customPayloadHandlers_.find(ev.type);
           if (pit != q.d->customPayloadHandlers_.end()) {
-            for (auto& fn : pit->second) {
+            customHandlers = pit->second;
+          }
+          for (auto const& fn : customHandlers) {
+            if (fn) {
               fn(ev.payload);
             }
           }

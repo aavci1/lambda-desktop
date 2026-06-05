@@ -224,7 +224,7 @@ struct Application::Impl {
   std::unordered_map<unsigned int, Window*> byHandle_;
   std::unordered_map<unsigned int, WindowRenderState> renderStates_;
   std::unordered_set<unsigned int> pendingAdoptRedraws_;
-  std::vector<unsigned int> pendingCloseHandles_;
+  std::unordered_set<unsigned int> pendingCloseHandles_;
   std::unordered_map<unsigned int, unsigned int> modalParentByChild_;
 
   std::unique_ptr<TextSystem> textSystem_;
@@ -336,7 +336,7 @@ Application::Application(int argc, char** argv) {
       }
     }
     if (ev.kind == WindowEvent::Kind::CloseRequest) {
-      d->pendingCloseHandles_.push_back(ev.handle);
+      d->pendingCloseHandles_.insert(ev.handle);
     }
   });
 
@@ -705,7 +705,7 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
         }
       } catch (std::exception const& e) {
         std::fprintf(stderr, "Lambda Linux render error on window %u: %s\n", w->handle(), e.what());
-        d->pendingCloseHandles_.push_back(w->handle());
+        d->pendingCloseHandles_.insert(w->handle());
         state.frameReady = false;
         state.frameBudgetPending = false;
         continue;
@@ -754,6 +754,36 @@ void Application::unregisterEventPollSource(std::uint64_t id) {
 }
 
 int Application::exec() {
+  auto closePendingWindows = [this] {
+    for (unsigned int closeHandle : std::exchange(d->pendingCloseHandles_, {})) {
+      auto it = std::find_if(d->windows_.begin(), d->windows_.end(),
+                             [&](std::unique_ptr<Window> const& w) {
+                               return w && w->handle() == closeHandle;
+                             });
+      if (it == d->windows_.end()) {
+        continue;
+      }
+      if (!(*it)->restoreId().empty()) {
+        saveWindowState((*it)->restoreId(), (*it)->currentWindowState());
+      }
+      d->byHandle_.erase(closeHandle);
+      d->renderStates_.erase(closeHandle);
+      d->modalParentByChild_.erase(closeHandle);
+      for (auto modalIt = d->modalParentByChild_.begin(); modalIt != d->modalParentByChild_.end();) {
+        if (modalIt->second == closeHandle) {
+          modalIt = d->modalParentByChild_.erase(modalIt);
+        } else {
+          ++modalIt;
+        }
+      }
+      d->windows_.erase(it);
+      if (d->windows_.empty()) {
+        quit();
+        return;
+      }
+    }
+  };
+
   while (!d->quit_) {
     d->dispatchPollSources();
     using namespace std::chrono;
@@ -771,24 +801,7 @@ int Application::exec() {
       break;
     }
 
-    for (unsigned int closeHandle : std::exchange(d->pendingCloseHandles_, {})) {
-      auto it = std::find_if(d->windows_.begin(), d->windows_.end(),
-                             [&](std::unique_ptr<Window> const& w) {
-                               return w && w->handle() == closeHandle;
-                             });
-      if (it == d->windows_.end()) {
-        continue;
-      }
-      if (!(*it)->restoreId().empty()) {
-        saveWindowState((*it)->restoreId(), (*it)->currentWindowState());
-      }
-      d->byHandle_.erase(closeHandle);
-      d->renderStates_.erase(closeHandle);
-      d->windows_.erase(it);
-      if (d->windows_.empty()) {
-        quit();
-      }
-    }
+    closePendingWindows();
     if (d->quit_) {
       break;
     }
@@ -798,6 +811,8 @@ int Application::exec() {
         w->platformWindow()->processEvents();
       }
     }
+    d->eventQueue_.dispatch();
+    closePendingWindows();
     if (d->quit_) {
       break;
     }
