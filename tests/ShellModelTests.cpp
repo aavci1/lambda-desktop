@@ -174,9 +174,12 @@ TEST_CASE("Shell model applies snapshots to dock and title while status remains 
     "system":{"network":"online","wifi":"Lambda","bluetooth":"off","volume":"55%","battery":"88%"}
   })");
   CHECK(changes.dockItems);
+  bool terminalStillRunning = false;
   for (auto const& item : model.dockItems()) {
     CHECK(item.appId != "org.example.Editor");
+    if (item.appId == "lambda-terminal") terminalStillRunning = item.running;
   }
+  CHECK_FALSE(terminalStillRunning);
 }
 
 TEST_CASE("Shell model dock items come from config pins and app registry") {
