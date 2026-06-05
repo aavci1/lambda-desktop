@@ -12,6 +12,7 @@
 #include "presentation-time-server-protocol.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -135,6 +136,58 @@ double renderMilliseconds(CompositorRenderFrameContext const& ctx,
              : 0.0;
 }
 
+using RegionRect = CommittedSurfaceSnapshot::RegionRect;
+
+Rect logicalRect(RegionRect const& rect) {
+  return Rect::sharp(static_cast<float>(rect.x),
+                     static_cast<float>(rect.y),
+                     static_cast<float>(rect.width),
+                     static_cast<float>(rect.height));
+}
+
+std::uint64_t damageArea(SceneDamageResult const& damage) {
+  std::uint64_t area = 0;
+  for (RegionRect const& rect : damage.rects) {
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    area += static_cast<std::uint64_t>(rect.width) * static_cast<std::uint64_t>(rect.height);
+  }
+  return area;
+}
+
+std::vector<platform::KmsAtomicPresenter::DamageRect>
+physicalDamageRects(SceneDamageResult const& damage,
+                    platform::KmsOutput const& output,
+                    std::int32_t logicalWidth,
+                    std::int32_t logicalHeight) {
+  std::vector<platform::KmsAtomicPresenter::DamageRect> rects;
+  std::int32_t const outputWidth = static_cast<std::int32_t>(output.width());
+  std::int32_t const outputHeight = static_cast<std::int32_t>(output.height());
+  if (damage.fullOutput || damage.empty() || logicalWidth <= 0 || logicalHeight <= 0 ||
+      outputWidth <= 0 || outputHeight <= 0) {
+    return rects;
+  }
+  double const scaleX = static_cast<double>(outputWidth) / static_cast<double>(logicalWidth);
+  double const scaleY = static_cast<double>(outputHeight) / static_cast<double>(logicalHeight);
+  rects.reserve(damage.rects.size());
+  for (RegionRect const& rect : damage.rects) {
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    std::int32_t const x1 = std::clamp(static_cast<std::int32_t>(std::floor(rect.x * scaleX)), 0, outputWidth);
+    std::int32_t const y1 = std::clamp(static_cast<std::int32_t>(std::floor(rect.y * scaleY)), 0, outputHeight);
+    std::int32_t const x2 =
+        std::clamp(static_cast<std::int32_t>(std::ceil((rect.x + rect.width) * scaleX)), 0, outputWidth);
+    std::int32_t const y2 =
+        std::clamp(static_cast<std::int32_t>(std::ceil((rect.y + rect.height) * scaleY)), 0, outputHeight);
+    if (x2 <= x1 || y2 <= y1) continue;
+    rects.push_back(platform::KmsAtomicPresenter::DamageRect{
+        .x = x1,
+        .y = y1,
+        .width = static_cast<std::uint32_t>(x2 - x1),
+        .height = static_cast<std::uint32_t>(y2 - y1),
+    });
+  }
+  return rects;
+}
+
 struct AtomicReadyFrameOptions {
   bool overlayOnly = false;
   bool directScanout = false;
@@ -215,7 +268,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                                       .forceFullDamage = true,
                                       .selectScanout = false,
                                   });
-    if (atomicPresenter) atomicPresenter->prepareFrame();
+    if (atomicPresenter) (void)atomicPresenter->prepareFrame();
     ctx.canvas.beginFrame();
     ctx.canvas.clear(Color{0.f, 0.f, 0.f, 1.f});
     ctx.output.hideCursor();
@@ -302,9 +355,10 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                                 });
   std::vector<std::uint64_t> const& frameCallbackSurfaceIds = scenePlan.frameCallbackSurfaceIds;
   SceneDamageResult const& sceneDamage = scenePlan.damage;
-  LAMBDA_WINDOW_MANAGER_TRACE_PACING("scene-damage full=%d rects=%zu empty=%d surfaces=%zu\n",
+  LAMBDA_WINDOW_MANAGER_TRACE_PACING("scene-damage full=%d rects=%zu area=%llu empty=%d surfaces=%zu\n",
                             sceneDamage.fullOutput ? 1 : 0,
                             sceneDamage.rectCount(),
+                            static_cast<unsigned long long>(damageArea(sceneDamage)),
                             sceneDamage.empty() ? 1 : 0,
                             committedSurfaces.size());
   bool const collectAgeProfile = ctx.detailedFrameProfile;
@@ -522,67 +576,111 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     }
   }
 
-  if (atomicPresenter) atomicPresenter->prepareFrame();
+  bool const partialDamageCandidate =
+      atomicPresenter &&
+      !renderAheadFrame &&
+      !pendingOverlay &&
+      !sceneDamage.fullOutput &&
+      !sceneDamage.empty();
+  std::vector<platform::KmsAtomicPresenter::DamageRect> physicalDamage =
+      partialDamageCandidate
+          ? physicalDamageRects(sceneDamage,
+                                ctx.output,
+                                ctx.wayland.logicalOutputWidth(),
+                                ctx.wayland.logicalOutputHeight())
+          : std::vector<platform::KmsAtomicPresenter::DamageRect>{};
+  bool partialDamageFrame = false;
+  if (atomicPresenter) {
+    if (!physicalDamage.empty()) {
+      partialDamageFrame = atomicPresenter->prepareFrame(physicalDamage);
+    } else {
+      (void)atomicPresenter->prepareFrame();
+    }
+    if (!partialDamageFrame) {
+      physicalDamage.clear();
+    }
+  }
+  LAMBDA_WINDOW_MANAGER_TRACE_PACING("scene-damage-render partial=%d logicalRects=%zu kmsRects=%zu\n",
+                            partialDamageFrame ? 1 : 0,
+                            partialDamageFrame ? sceneDamage.rects.size() : 0u,
+                            physicalDamage.size());
   ctx.canvas.beginFrame();
-  phaseStart = profileNow();
-  drawCompositorBackground(ctx.canvas,
-                           ctx.appliedConfig,
-                           static_cast<std::uint32_t>(ctx.wayland.logicalOutputWidth()),
-                           static_cast<std::uint32_t>(ctx.wayland.logicalOutputHeight()));
-  atomicFrameProfile.backgroundMs = profileMs(phaseStart);
-  ctx.frameProfile.backgroundMs += atomicFrameProfile.backgroundMs;
-  phaseStart = profileNow();
-  for (auto const& clientSurface : committedSurfaces) {
-    if (snapPreview && !snapPreviewDrawn && snapPreview->surfaceId == clientSurface.id) {
+  auto drawFrameContent = [&] {
+    phaseStart = profileNow();
+    drawCompositorBackground(ctx.canvas,
+                             ctx.appliedConfig,
+                             static_cast<std::uint32_t>(ctx.wayland.logicalOutputWidth()),
+                             static_cast<std::uint32_t>(ctx.wayland.logicalOutputHeight()));
+    double const backgroundMs = profileMs(phaseStart);
+    atomicFrameProfile.backgroundMs += backgroundMs;
+    ctx.frameProfile.backgroundMs += backgroundMs;
+    phaseStart = profileNow();
+    for (auto const& clientSurface : committedSurfaces) {
+      if (snapPreview && !snapPreviewDrawn && snapPreview->surfaceId == clientSurface.id) {
+        drawSnapPreview(ctx.canvas, *snapPreview, ctx.appliedConfig.config.chrome);
+        snapPreviewDrawn = true;
+      }
+      liveSurfaceIds.insert(clientSurface.id);
+      if (clientSurface.id == overlaySurfaceId) {
+        ctx.surfaceRenderState.clientImages.erase(clientSurface.id);
+        drawWindowFrameShadow(ctx.canvas, clientSurface, ctx.appliedConfig.config.chrome);
+        drawWindowChrome(ctx.canvas, ctx.textSystem, clientSurface, ctx.appliedConfig.config.chrome);
+        drawWindowFrameBorder(ctx.canvas, clientSurface, ctx.appliedConfig.config.chrome);
+        continue;
+      }
+      auto& visual = ctx.surfaceRenderState.surfaceVisuals[clientSurface.id];
+      auto& cached = ctx.surfaceRenderState.clientImages[clientSurface.id];
+      drawCommittedSurface(ctx.wayland,
+                           ctx.canvas,
+                           ctx.textSystem,
+                           clientSurface,
+                           visual,
+                           cached,
+                           frameTime,
+                           ctx.appliedConfig.config.chrome,
+                           ctx.appliedConfig.config.animationsEnabled);
+    }
+    if (snapPreview && !snapPreviewDrawn) {
       drawSnapPreview(ctx.canvas, *snapPreview, ctx.appliedConfig.config.chrome);
-      snapPreviewDrawn = true;
     }
-    liveSurfaceIds.insert(clientSurface.id);
-    if (clientSurface.id == overlaySurfaceId) {
-      ctx.surfaceRenderState.clientImages.erase(clientSurface.id);
-      drawWindowFrameShadow(ctx.canvas, clientSurface, ctx.appliedConfig.config.chrome);
-      drawWindowChrome(ctx.canvas, ctx.textSystem, clientSurface, ctx.appliedConfig.config.chrome);
-      drawWindowFrameBorder(ctx.canvas, clientSurface, ctx.appliedConfig.config.chrome);
-      continue;
+    double const surfaceMs = profileMs(phaseStart);
+    atomicFrameProfile.surfaceMs += surfaceMs;
+    ctx.frameProfile.surfaceMs += surfaceMs;
+    phaseStart = profileNow();
+    captureClosingSurfaces(ctx.surfaceRenderState,
+                           liveSurfaceIds,
+                           frameTime,
+                           ctx.appliedConfig.config.animationsEnabled);
+    drawClosingSurfaces(ctx.canvas, ctx.surfaceRenderState, frameTime);
+    if (screenshotOverlay) {
+      drawScreenshotSelectionOverlay(ctx.canvas, ctx.wayland, *screenshotOverlay);
     }
-    auto& visual = ctx.surfaceRenderState.surfaceVisuals[clientSurface.id];
-    auto& cached = ctx.surfaceRenderState.clientImages[clientSurface.id];
-    drawCommittedSurface(ctx.wayland,
+    double const closingMs = profileMs(phaseStart);
+    atomicFrameProfile.closingMs += closingMs;
+    ctx.frameProfile.closingMs += closingMs;
+    phaseStart = profileNow();
+    drawCompositorCursor(ctx.wayland,
                          ctx.canvas,
-                         ctx.textSystem,
-                         clientSurface,
-                         visual,
-                         cached,
-                         frameTime,
-                         ctx.appliedConfig.config.chrome,
-                         ctx.appliedConfig.config.animationsEnabled);
+                         ctx.output,
+                         ctx.cursorState,
+                         ctx.appliedConfig.config.cursorTheme,
+                         ctx.appliedConfig.config.cursorSize,
+                         ctx.appliedConfig.config.hardwareCursorEnabled && ctx.hardwareCursorAvailable);
+    drawScreenshotFlash(ctx.canvas, ctx.wayland, ctx.screenshotFlashOpacity);
+    double const cursorMs = profileMs(phaseStart);
+    atomicFrameProfile.cursorMs += cursorMs;
+    ctx.frameProfile.cursorMs += cursorMs;
+  };
+  if (partialDamageFrame) {
+    for (RegionRect const& rect : sceneDamage.rects) {
+      ctx.canvas.save();
+      ctx.canvas.clipRect(logicalRect(rect));
+      drawFrameContent();
+      ctx.canvas.restore();
+    }
+  } else {
+    drawFrameContent();
   }
-  if (snapPreview && !snapPreviewDrawn) {
-    drawSnapPreview(ctx.canvas, *snapPreview, ctx.appliedConfig.config.chrome);
-  }
-  atomicFrameProfile.surfaceMs = profileMs(phaseStart);
-  ctx.frameProfile.surfaceMs += atomicFrameProfile.surfaceMs;
-  phaseStart = profileNow();
-  captureClosingSurfaces(ctx.surfaceRenderState,
-                         liveSurfaceIds,
-                         frameTime,
-                         ctx.appliedConfig.config.animationsEnabled);
-  drawClosingSurfaces(ctx.canvas, ctx.surfaceRenderState, frameTime);
-  if (screenshotOverlay) {
-    drawScreenshotSelectionOverlay(ctx.canvas, ctx.wayland, *screenshotOverlay);
-  }
-  atomicFrameProfile.closingMs = profileMs(phaseStart);
-  ctx.frameProfile.closingMs += atomicFrameProfile.closingMs;
-  drawCompositorCursor(ctx.wayland,
-                       ctx.canvas,
-                       ctx.output,
-                       ctx.cursorState,
-                       ctx.appliedConfig.config.cursorTheme,
-                       ctx.appliedConfig.config.cursorSize,
-                       ctx.appliedConfig.config.hardwareCursorEnabled && ctx.hardwareCursorAvailable);
-  drawScreenshotFlash(ctx.canvas, ctx.wayland, ctx.screenshotFlashOpacity);
-  atomicFrameProfile.cursorMs = profileMs(phaseStart);
-  ctx.frameProfile.cursorMs += atomicFrameProfile.cursorMs;
   pruneSurfaceRenderState(ctx.surfaceRenderState, liveSurfaceIds);
   phaseStart = profileNow();
   std::vector<PresentationCompletion> presentationCompletions;

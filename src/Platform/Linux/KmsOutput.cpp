@@ -756,7 +756,90 @@ public:
     return false;
   }
 
-  void prepareFrame() {
+  [[nodiscard]] VkImage primaryRenderImage(int bufferIndex) const noexcept {
+    if (bufferIndex < 0 || bufferIndex >= static_cast<int>(buffers_.size())) return VK_NULL_HANDLE;
+    auto const& buffer = buffers_[static_cast<std::size_t>(bufferIndex)];
+    return directScanoutRender_ ? buffer.image : buffer.offscreenImage;
+  }
+
+  [[nodiscard]] VkImageLayout primaryRenderFinalLayout() const noexcept {
+    return directScanoutRender_ ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  }
+
+  [[nodiscard]] bool canPreparePartialFrame(std::span<KmsAtomicPresenter::DamageRect const> damage) const noexcept {
+    if (damage.empty() || !modesetDone_ || pageFlipPending_ || pendingBuffer_ >= 0 ||
+        renderBuffer_ < 0 || displayedBuffer_ < 0) {
+      return false;
+    }
+    if (activeDirectScanout_ || pendingDirectScanout_ || activeOverlayPlaneId_ != 0 || pendingOverlayPlaneId_ != 0) {
+      return false;
+    }
+    if (displayedBuffer_ >= static_cast<int>(buffers_.size()) ||
+        renderBuffer_ >= static_cast<int>(buffers_.size())) {
+      return false;
+    }
+    Buffer const& source = buffers_[static_cast<std::size_t>(displayedBuffer_)];
+    return source.primaryContentsValid &&
+           primaryRenderImage(displayedBuffer_) != VK_NULL_HANDLE &&
+           primaryRenderImage(renderBuffer_) != VK_NULL_HANDLE;
+  }
+
+  void copyDisplayedPrimaryToRenderTarget(int destinationBuffer) {
+    if (displayedBuffer_ < 0 || displayedBuffer_ >= static_cast<int>(buffers_.size())) return;
+    if (destinationBuffer < 0 || destinationBuffer >= static_cast<int>(buffers_.size())) return;
+    VkImage const sourceImage = primaryRenderImage(displayedBuffer_);
+    VkImage const destinationImage = primaryRenderImage(destinationBuffer);
+    if (sourceImage == VK_NULL_HANDLE || destinationImage == VK_NULL_HANDLE || sourceImage == destinationImage) return;
+    VkCommandBuffer commandBuffer = buffers_[static_cast<std::size_t>(destinationBuffer)].commandBuffer;
+    if (!commandBuffer) return;
+
+    VkImageLayout const sourceFinalLayout = primaryRenderFinalLayout();
+    if (sourceFinalLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+      transitionImage(commandBuffer,
+                      sourceImage,
+                      sourceFinalLayout,
+                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                      VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                      VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                      VK_ACCESS_2_MEMORY_READ_BIT,
+                      VK_ACCESS_2_TRANSFER_READ_BIT);
+    }
+    transitionImage(commandBuffer,
+                    destinationImage,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_PIPELINE_STAGE_2_NONE,
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    VK_ACCESS_2_NONE,
+                    VK_ACCESS_2_TRANSFER_WRITE_BIT);
+
+    VkImageCopy copy{};
+    copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.srcSubresource.layerCount = 1;
+    copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.dstSubresource.layerCount = 1;
+    copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
+    vkCmdCopyImage(commandBuffer,
+                   sourceImage,
+                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   destinationImage,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   1,
+                   &copy);
+
+    if (sourceFinalLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+      transitionImage(commandBuffer,
+                      sourceImage,
+                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                      sourceFinalLayout,
+                      VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                      VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                      VK_ACCESS_2_TRANSFER_READ_BIT,
+                      VK_ACCESS_2_MEMORY_READ_BIT);
+    }
+  }
+
+  bool prepareFrame(std::span<KmsAtomicPresenter::DamageRect const> damage = {}) {
     KmsTraceScope trace(KmsTraceBucket::Prepare);
     reapDiscardedPreparedFrames();
     if (buffers_.empty()) throw std::runtime_error("Atomic KMS presenter has no scanout buffers");
@@ -774,6 +857,7 @@ public:
     }
     if (!next) throw std::runtime_error("No reusable KMS atomic render buffers");
     renderBuffer_ = static_cast<int>(*next);
+    bool const partialFrame = canPreparePartialFrame(damage);
     closeRenderFence(buffers_[*next]);
     if (useAsyncRenderFence_) {
       resetRenderSemaphore(buffers_[*next]);
@@ -783,12 +867,23 @@ public:
     buffers_[*next].renderReadyNsec = 0;
     buffers_[*next].prepared = false;
     buffers_[*next].discardWhenReady = false;
+    buffers_[*next].damageRects.clear();
+    buffers_[*next].partialFrame = false;
     beginRenderCommandBuffer(buffers_[*next]);
+    if (partialFrame) {
+      copyDisplayedPrimaryToRenderTarget(renderBuffer_);
+      buffers_[*next].damageRects.assign(damage.begin(), damage.end());
+      buffers_[*next].partialFrame = true;
+    }
     std::uint64_t const targetStart = kmsTraceStart();
+    buffers_[*next].spec.initialLayout =
+        partialFrame ? VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+    buffers_[*next].spec.preserveContents = partialFrame;
     if (!lambda::setVulkanRenderTargetSpecForCanvas(canvas_.get(), buffers_[*next].spec)) {
       throw std::runtime_error("Failed to switch atomic KMS render target");
     }
     recordKmsTraceSince(KmsTraceBucket::SetTarget, targetStart);
+    return partialFrame;
   }
 
   std::uint32_t markFrameRendered() {
@@ -900,7 +995,7 @@ public:
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
       std::uint64_t const populateStart = kmsTraceStart();
-      populateAtomicRequest(request, buffer, false, preparedOverlay_ ? &*preparedOverlay_ : nullptr);
+      populateAtomicRequest(request, buffer, false, preparedOverlay_ ? &*preparedOverlay_ : nullptr, 0);
       recordKmsTraceSince(KmsTraceBucket::PopulateRequest, populateStart);
       pendingTiming_ = KmsAtomicPresenter::PageFlipTiming{
           .presentId = nextPresentId_++,
@@ -1410,6 +1505,7 @@ public:
     if (index < 0) throw std::runtime_error("KMS atomic presenter has no prepared render buffer");
     if (!canSchedulePresent(token)) throw std::runtime_error("KMS atomic render buffer is not ready");
     Buffer& buffer = buffers_[static_cast<std::size_t>(index)];
+    std::uint32_t damageBlob = createDamageClipBlob(buffer);
     std::uint64_t const allocStart = kmsTraceStart();
     drmModeAtomicReq* request = drmModeAtomicAlloc();
     recordKmsTraceSince(KmsTraceBucket::AtomicAlloc, allocStart);
@@ -1417,7 +1513,11 @@ public:
     try {
       bool const useRenderFence = !buffer.renderComplete && canUseRenderFence(buffer);
       std::uint64_t const populateStart = kmsTraceStart();
-      populateAtomicRequest(request, buffer, useRenderFence, preparedOverlay_ ? &*preparedOverlay_ : nullptr);
+      populateAtomicRequest(request,
+                            buffer,
+                            useRenderFence,
+                            preparedOverlay_ ? &*preparedOverlay_ : nullptr,
+                            damageBlob);
       recordKmsTraceSince(KmsTraceBucket::PopulateRequest, populateStart);
       std::uint32_t flags = DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT;
       if (!modesetDone_) flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
@@ -1446,10 +1546,17 @@ public:
       drmModeAtomicFree(request);
       recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
       request = nullptr;
+      if (damageBlob != 0) {
+        drmModeDestroyPropertyBlob(fd_, damageBlob);
+        damageBlob = 0;
+      }
       modesetDone_ = true;
       pendingBuffer_ = index;
       buffer.prepared = false;
       buffer.discardWhenReady = false;
+      buffer.damageRects.clear();
+      buffer.partialFrame = false;
+      buffer.primaryContentsValid = true;
       if (activePreparedBuffer_ == index) activePreparedBuffer_ = -1;
       pendingOverlayPlaneId_ = preparedOverlay_ ? preparedOverlay_->planeId : 0;
       pendingOverlayFbId_ = preparedOverlay_ ? preparedOverlay_->fbId : 0;
@@ -1464,6 +1571,7 @@ public:
       return pendingTiming_.presentId;
     } catch (...) {
       if (request) drmModeAtomicFree(request);
+      if (damageBlob != 0) drmModeDestroyPropertyBlob(fd_, damageBlob);
       throw;
     }
   }
@@ -1510,8 +1618,14 @@ public:
       activeOverlayPlaneId_ = 0;
       activeOverlayFbId_ = 0;
       activeOverlayBufferId_ = 0;
+      if (displayedBuffer_ >= 0 && displayedBuffer_ < static_cast<int>(buffers_.size())) {
+        buffers_[static_cast<std::size_t>(displayedBuffer_)].primaryContentsValid = false;
+      }
     } else {
       activeDirectScanoutState_.reset();
+      if (displayedBuffer_ >= 0 && displayedBuffer_ < static_cast<int>(buffers_.size())) {
+        buffers_[static_cast<std::size_t>(displayedBuffer_)].primaryContentsValid = true;
+      }
     }
     pendingOverlayPlaneId_ = 0;
     pendingOverlayFbId_ = 0;
@@ -1555,6 +1669,7 @@ private:
     std::uint32_t crtcW = 0;
     std::uint32_t crtcH = 0;
     std::uint32_t inFenceFd = 0;
+    std::uint32_t fbDamageClips = 0;
     std::uint32_t alpha = 0;
     std::uint32_t pixelBlendMode = 0;
     std::uint32_t rotation = 0;
@@ -1671,8 +1786,11 @@ private:
     bool renderComplete = true;
     bool prepared = false;
     bool discardWhenReady = false;
+    bool partialFrame = false;
+    bool primaryContentsValid = false;
     std::uint64_t renderSubmittedNsec = 0;
     std::uint64_t renderReadyNsec = 0;
+    std::vector<KmsAtomicPresenter::DamageRect> damageRects;
     VulkanRenderTargetSpec spec{};
   };
 
@@ -1700,6 +1818,8 @@ private:
     closeRenderFence(buffer);
     buffer.prepared = false;
     buffer.discardWhenReady = false;
+    buffer.partialFrame = false;
+    buffer.damageRects.clear();
     buffer.renderComplete = true;
     buffer.renderSubmittedNsec = 0;
     buffer.renderReadyNsec = 0;
@@ -2036,10 +2156,44 @@ private:
     addPlaneProperties(request, planeId, props, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, "overlay.disable");
   }
 
+  std::uint32_t createDamageClipBlob(Buffer const& buffer) {
+    if (primaryPlaneProps_.fbDamageClips == 0 || buffer.damageRects.empty()) return 0;
+    std::vector<drm_mode_rect> clips;
+    clips.reserve(buffer.damageRects.size());
+    for (KmsAtomicPresenter::DamageRect const& rect : buffer.damageRects) {
+      std::int32_t const x1 = std::clamp(rect.x, 0, static_cast<std::int32_t>(connector_.mode.hdisplay));
+      std::int32_t const y1 = std::clamp(rect.y, 0, static_cast<std::int32_t>(connector_.mode.vdisplay));
+      std::int64_t const rectRight = static_cast<std::int64_t>(rect.x) + static_cast<std::int64_t>(rect.width);
+      std::int64_t const rectBottom = static_cast<std::int64_t>(rect.y) + static_cast<std::int64_t>(rect.height);
+      std::int32_t const x2 = static_cast<std::int32_t>(
+          std::clamp<std::int64_t>(rectRight, 0, connector_.mode.hdisplay));
+      std::int32_t const y2 = static_cast<std::int32_t>(
+          std::clamp<std::int64_t>(rectBottom, 0, connector_.mode.vdisplay));
+      if (x2 <= x1 || y2 <= y1) continue;
+      clips.push_back(drm_mode_rect{.x1 = x1, .y1 = y1, .x2 = x2, .y2 = y2});
+    }
+    if (clips.empty()) return 0;
+    std::uint32_t blob = 0;
+    if (drmModeCreatePropertyBlob(fd_,
+                                  clips.data(),
+                                  static_cast<std::uint32_t>(clips.size() * sizeof(drm_mode_rect)),
+                                  &blob) != 0) {
+      if (!damageClipFailureLogged_) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: failed to create FB_DAMAGE_CLIPS blob: %s\n",
+                     std::strerror(errno));
+        damageClipFailureLogged_ = true;
+      }
+      return 0;
+    }
+    return blob;
+  }
+
   void populateAtomicRequest(drmModeAtomicReq* request,
                              Buffer const& buffer,
                              bool useRenderFence,
-                             PreparedOverlay const* overlay) {
+                             PreparedOverlay const* overlay,
+                             std::uint32_t primaryDamageBlob) {
     if (!modesetDone_) {
       addAtomicProperty(request, connector_.connectorId, connectorCrtcId_, connector_.crtcId, "connector.CRTC_ID");
       addAtomicProperty(request, connector_.crtcId, crtcModeId_, modeBlob_, "crtc.MODE_ID");
@@ -2060,6 +2214,13 @@ private:
                        connector_.mode.vdisplay,
                        useRenderFence ? buffer.renderFenceFd : -1,
                        "primary");
+    if (primaryPlaneProps_.fbDamageClips != 0) {
+      addAtomicProperty(request,
+                        planeId_,
+                        primaryPlaneProps_.fbDamageClips,
+                        primaryDamageBlob,
+                        "primary.FB_DAMAGE_CLIPS");
+    }
     if (overlay) {
       addPlaneProperties(request,
                          overlay->planeId,
@@ -2129,7 +2290,7 @@ private:
     if (!request) return false;
     bool accepted = false;
     try {
-      populateAtomicRequest(request, buffer, false, &overlay);
+      populateAtomicRequest(request, buffer, false, &overlay, 0);
       std::uint32_t flags = DRM_MODE_ATOMIC_TEST_ONLY;
       if (!modesetDone_) flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
       int const rc = drmModeAtomicCommit(fd_, request, flags, nullptr);
@@ -2284,6 +2445,7 @@ private:
         .crtcW = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_W"),
         .crtcH = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "CRTC_H"),
         .inFenceFd = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "IN_FENCE_FD"),
+        .fbDamageClips = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "FB_DAMAGE_CLIPS"),
         .alpha = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "alpha"),
         .pixelBlendMode = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "pixel blend mode"),
         .rotation = propertyId(fd_, planeId, DRM_MODE_OBJECT_PLANE, "rotation"),
@@ -2437,16 +2599,17 @@ private:
       allocateCommandBuffer(buffer);
       VkImage renderImage = directScanoutRender_ ? buffer.image : buffer.offscreenImage;
       VkImageView renderView = directScanoutRender_ ? buffer.view : buffer.offscreenView;
-      buffer.spec = VulkanRenderTargetSpec{
-          .image = renderImage,
-          .view = renderView,
-          .format = VK_FORMAT_B8G8R8A8_UNORM,
-          .width = connector_.mode.hdisplay,
-          .height = connector_.mode.vdisplay,
-          .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-          .finalLayout = directScanoutRender_ ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-          .commandBuffer = buffer.commandBuffer,
-      };
+    buffer.spec = VulkanRenderTargetSpec{
+        .image = renderImage,
+        .view = renderView,
+        .format = VK_FORMAT_B8G8R8A8_UNORM,
+        .width = connector_.mode.hdisplay,
+        .height = connector_.mode.vdisplay,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = directScanoutRender_ ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .preserveContents = false,
+        .commandBuffer = buffer.commandBuffer,
+    };
       std::fprintf(stderr,
                    "lambda-window-manager: atomic scanout buffer %ux%u modifier=0x%016llx stride=%u\n",
                    gbm_bo_get_width(buffer.bo),
@@ -2822,8 +2985,14 @@ private:
           activeOverlayPlaneId_ = 0;
           activeOverlayFbId_ = 0;
           activeOverlayBufferId_ = 0;
+          if (displayedBuffer_ >= 0 && displayedBuffer_ < static_cast<int>(buffers_.size())) {
+            buffers_[static_cast<std::size_t>(displayedBuffer_)].primaryContentsValid = false;
+          }
         } else {
           activeDirectScanoutState_.reset();
+          if (displayedBuffer_ >= 0 && displayedBuffer_ < static_cast<int>(buffers_.size())) {
+            buffers_[static_cast<std::size_t>(displayedBuffer_)].primaryContentsValid = true;
+          }
         }
         pendingOverlayPlaneId_ = 0;
         pendingOverlayFbId_ = 0;
@@ -2898,6 +3067,7 @@ private:
   bool overlayTestFailureLogged_ = false;
   bool directScanoutPreparedLogged_ = false;
   bool directScanoutTestFailureLogged_ = false;
+  bool damageClipFailureLogged_ = false;
   bool useRenderInFence_ = false;
   bool useAsyncRenderFence_ = false;
   bool directScanoutRenderForced_ = false;
@@ -3136,8 +3306,8 @@ bool KmsAtomicPresenter::canPrepareFrame() {
   return impl_ && impl_->canPrepareFrame();
 }
 
-void KmsAtomicPresenter::prepareFrame() {
-  if (impl_) impl_->prepareFrame();
+bool KmsAtomicPresenter::prepareFrame(std::span<DamageRect const> damage) {
+  return impl_ && impl_->prepareFrame(damage);
 }
 
 std::uint32_t KmsAtomicPresenter::markFrameRendered() {

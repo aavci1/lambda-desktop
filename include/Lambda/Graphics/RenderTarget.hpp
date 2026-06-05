@@ -35,6 +35,7 @@ struct VulkanRenderTargetSpec {
 
   VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   VkImageLayout finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  bool preserveContents = false;
 
   VkSemaphore waitSemaphore = VK_NULL_HANDLE;
   VkSemaphore signalSemaphore = VK_NULL_HANDLE;

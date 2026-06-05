@@ -26,7 +26,7 @@ public:
     presenter_->canvas().resize(logicalWidth, logicalHeight);
   }
 
-  void prepareFrame() override { presenter_->prepareFrame(); }
+  void prepareFrame() override { (void)presenter_->prepareFrame(); }
   void markFrameRendered() override { (void)presenter_->markFrameRendered(); }
 
   [[nodiscard]] bool isAtomic() const noexcept override { return true; }

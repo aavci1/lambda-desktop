@@ -1577,6 +1577,7 @@ public:
                                      swapchainViews_[imageIndex],
                                      targetLayout,
                                      clear,
+                                     VK_ATTACHMENT_LOAD_OP_CLEAR,
                                      backdropRuns);
     } else {
       transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED,
@@ -1768,17 +1769,20 @@ public:
     clear.color.float32[3] = clearColor_.a;
     VkImageLayout targetLayout = initialLayout;
     start = phaseStart();
+    VkAttachmentLoadOp const loadOp =
+        targetSpec_.preserveContents ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
     if (!backdropRuns.empty() && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
       drawOpsWithStackedBackdropBlur(commandBuffer,
                                      targetImage,
                                      targetView,
                                      targetLayout,
                                      clear,
+                                     loadOp,
                                      backdropRuns);
     } else {
       transition(commandBuffer, targetImage, targetLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
       targetLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-      beginColorRendering(commandBuffer, targetView, swapExtent_, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
+      beginColorRendering(commandBuffer, targetView, swapExtent_, clear, loadOp);
       drawOps(commandBuffer);
       vkCmdEndRendering(commandBuffer);
     }
@@ -4040,6 +4044,7 @@ private:
     hashValue(h, targetSpec_.height);
     hashValue(h, targetSpec_.initialLayout);
     hashValue(h, targetSpec_.finalLayout);
+    hashValue(h, targetSpec_.preserveContents);
     hashValue(h, width_);
     hashValue(h, height_);
     hashValue(h, framebufferWidth_);
@@ -4455,10 +4460,11 @@ private:
                                       VkImageView targetView,
                                       VkImageLayout &targetLayout,
                                       VkClearValue const &clear,
+                                      VkAttachmentLoadOp initialLoadOp,
                                       std::vector<BackdropBlurRun> const &runs) {
     auto const start = std::chrono::steady_clock::now();
     std::uint64_t replayedOps = 0;
-    beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, VK_ATTACHMENT_LOAD_OP_CLEAR);
+    beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, initialLoadOp);
     std::size_t cursor = 0;
     for (std::size_t runIndex = 0; runIndex < runs.size(); ++runIndex) {
       BackdropBlurRun const &run = runs[runIndex];
@@ -4469,7 +4475,7 @@ private:
 
       CachedBackdropBlur &cacheEntry = ensureBackdropBlurCacheEntry(runIndex);
       std::uint64_t const signature = backdropBlurSignature(run, runIndex);
-      bool const cacheHit = cacheEntry.valid && cacheEntry.signature == signature;
+      bool const cacheHit = !targetSpec_.preserveContents && cacheEntry.valid && cacheEntry.signature == signature;
       debug::perf::recordBackdropBlurCacheLookup(cacheHit);
       Texture *blurTexture = cacheHit ? &cacheEntry.texture : nullptr;
       if (!blurTexture) {

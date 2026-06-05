@@ -65,6 +65,13 @@ public:
     std::vector<DmabufPlane> planes;
   };
 
+  struct DamageRect {
+    std::int32_t x = 0;
+    std::int32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+  };
+
   struct PageFlipTiming {
     bool hardware = false;
     std::uint32_t presentId = 0;
@@ -90,7 +97,7 @@ public:
 
   Canvas& canvas();
   [[nodiscard]] bool canPrepareFrame();
-  void prepareFrame();
+  [[nodiscard]] bool prepareFrame(std::span<DamageRect const> damage = {});
   [[nodiscard]] std::uint32_t markFrameRendered();
   [[nodiscard]] bool updateRenderReady(std::uint32_t token = 0);
   [[nodiscard]] bool canSchedulePresent(std::uint32_t token = 0);

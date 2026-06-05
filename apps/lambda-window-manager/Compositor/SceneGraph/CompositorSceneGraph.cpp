@@ -93,6 +93,16 @@ RegionRect clippedRect(RegionRect rect, std::int32_t outputWidth, std::int32_t o
   return RegionRect{.x = left, .y = top, .width = right - left, .height = bottom - top};
 }
 
+RegionRect inflatedRect(RegionRect rect, std::int32_t amount) {
+  if (amount <= 0) return rect;
+  return RegionRect{
+      .x = rect.x - amount,
+      .y = rect.y - amount,
+      .width = rect.width + amount * 2,
+      .height = rect.height + amount * 2,
+  };
+}
+
 bool rectEmpty(RegionRect const& rect) {
   return rect.width <= 0 || rect.height <= 0;
 }
@@ -103,6 +113,25 @@ bool rectsOverlap(RegionRect const& a, RegionRect const& b) {
   std::int32_t const bx2 = b.x + std::max(0, b.width);
   std::int32_t const by2 = b.y + std::max(0, b.height);
   return a.x < bx2 && ax2 > b.x && a.y < by2 && ay2 > b.y;
+}
+
+bool rectContains(RegionRect const& outer, RegionRect const& inner) {
+  std::int64_t const outerRight = static_cast<std::int64_t>(outer.x) + std::max(0, outer.width);
+  std::int64_t const outerBottom = static_cast<std::int64_t>(outer.y) + std::max(0, outer.height);
+  std::int64_t const innerRight = static_cast<std::int64_t>(inner.x) + std::max(0, inner.width);
+  std::int64_t const innerBottom = static_cast<std::int64_t>(inner.y) + std::max(0, inner.height);
+  return outer.x <= inner.x &&
+         outer.y <= inner.y &&
+         outerRight >= innerRight &&
+         outerBottom >= innerBottom;
+}
+
+RegionRect unionRect(RegionRect const& a, RegionRect const& b) {
+  std::int32_t const left = std::min(a.x, b.x);
+  std::int32_t const top = std::min(a.y, b.y);
+  std::int32_t const right = std::max(a.x + std::max(0, a.width), b.x + std::max(0, b.width));
+  std::int32_t const bottom = std::max(a.y + std::max(0, a.height), b.y + std::max(0, b.height));
+  return RegionRect{.x = left, .y = top, .width = right - left, .height = bottom - top};
 }
 
 void makeFullDamage(SceneDamageResult& damage, std::int32_t outputWidth, std::int32_t outputHeight) {
@@ -124,11 +153,61 @@ void appendDamageRect(SceneDamageResult& damage,
     makeFullDamage(damage, outputWidth, outputHeight);
     return;
   }
+  bool merged = true;
+  while (merged) {
+    merged = false;
+    for (auto it = damage.rects.begin(); it != damage.rects.end(); ++it) {
+      if (rectContains(*it, rect)) return;
+      if (rectContains(rect, *it) || rectsOverlap(*it, rect)) {
+        rect = clippedRect(unionRect(rect, *it), outputWidth, outputHeight);
+        damage.rects.erase(it);
+        if (rect.x <= 0 && rect.y <= 0 && rect.width >= outputWidth && rect.height >= outputHeight) {
+          makeFullDamage(damage, outputWidth, outputHeight);
+          return;
+        }
+        merged = true;
+        break;
+      }
+    }
+  }
   if (damage.rects.size() >= kMaxDamageRects) {
     makeFullDamage(damage, outputWidth, outputHeight);
     return;
   }
   damage.rects.push_back(rect);
+}
+
+std::int32_t backdropDamageInflation(std::vector<CommittedSurfaceSnapshot> const& surfaces,
+                                     ChromeConfig const& chrome) {
+  float maxBlurRadius = std::max(0.f, chrome.glass.blurRadius);
+  for (CommittedSurfaceSnapshot const& surface : surfaces) {
+    if (surface.backgroundBlurRects.empty()) continue;
+    maxBlurRadius = std::max(maxBlurRadius, surface.backgroundEffect.blurRadius);
+  }
+  if (maxBlurRadius <= 0.f) return 0;
+  return static_cast<std::int32_t>(std::ceil(maxBlurRadius * 1.5f + 2.f));
+}
+
+void inflateDamageForBackdropSampling(SceneDamageResult& damage,
+                                      std::vector<CommittedSurfaceSnapshot> const& surfaces,
+                                      ChromeConfig const& chrome,
+                                      std::int32_t outputWidth,
+                                      std::int32_t outputHeight) {
+  if (damage.fullOutput || damage.rects.empty()) return;
+  std::int32_t const inflation = backdropDamageInflation(surfaces, chrome);
+  if (inflation <= 0) return;
+  SceneDamageResult normalized;
+  for (RegionRect const& rect : damage.rects) {
+    RegionRect clipped = clippedRect(inflatedRect(rect, inflation), outputWidth, outputHeight);
+    if (!rectEmpty(clipped)) {
+      appendDamageRect(normalized, clipped, outputWidth, outputHeight);
+      if (normalized.fullOutput) {
+        damage = std::move(normalized);
+        return;
+      }
+    }
+  }
+  damage.rects = std::move(normalized.rects);
 }
 
 RegionRect surfaceVisibleContentRect(CommittedSurfaceSnapshot const& surface,
@@ -488,6 +567,7 @@ SceneDamageResult computeSceneDamage(CompositorSceneGraphState const& previous,
     if (currentCursor) appendDamageRect(damage, sceneSurfaceContentRect(*currentCursor), outputWidth, outputHeight);
   }
 
+  inflateDamageForBackdropSampling(damage, currentSurfaces, chrome, outputWidth, outputHeight);
   return damage;
 }
 
