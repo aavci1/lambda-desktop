@@ -418,10 +418,8 @@ struct FileDialogNavSegmentButton : ViewModifiers<FileDialogNavSegmentButton> {
 
 struct FileDialogNavSegmentedControl : ViewModifiers<FileDialogNavSegmentedControl> {
   Reactive::Bindable<bool> canGoBack{false};
-  Reactive::Bindable<bool> canGoUp{false};
   Reactive::Bindable<bool> canGoForward{false};
   std::function<void()> goBack;
-  std::function<void()> goUp;
   std::function<void()> goForward;
 
   Element body() const {
@@ -435,14 +433,6 @@ struct FileDialogNavSegmentedControl : ViewModifiers<FileDialogNavSegmentedContr
                        .enabled = canGoBack,
                        .radius = CornerRadius{6.f, 0.f, 0.f, 6.f},
                        .onTap = goBack,
-                   },
-                   Rectangle{}.width(1.f).height(16.f).fill(FillStyle::solid(Color::separator())),
-                   FileDialogNavSegmentButton{
-                       .icon = IconName::KeyboardArrowUp,
-                       .tooltip = "Parent Folder",
-                       .enabled = canGoUp,
-                       .radius = CornerRadius{},
-                       .onTap = goUp,
                    },
                    Rectangle{}.width(1.f).height(16.f).fill(FillStyle::solid(Color::separator())),
                    FileDialogNavSegmentButton{
@@ -834,13 +824,6 @@ Element FileDialog::body() const {
     forwardStack.set(std::move(forward));
     applyListing(listDirectory(target, false));
   };
-  auto goUp = [directory, navigateToDirectory] {
-    std::filesystem::path const current = directory.peek();
-    std::filesystem::path const parent = current.parent_path();
-    if (!parent.empty() && parent != current) {
-      navigateToDirectory(parent);
-    }
-  };
 
   auto activateEntry = [name, navigateToDirectory, acceptPath](FileDialogEntry const& entry) {
     if (entry.directory) {
@@ -948,11 +931,6 @@ Element FileDialog::body() const {
   Reactive::Bindable<bool> const canGoForward{[forwardStack] {
     return !forwardStack().empty();
   }};
-  Reactive::Bindable<bool> const canGoUp{[directory] {
-    std::filesystem::path const current = directory();
-    std::filesystem::path const parent = current.parent_path();
-    return !parent.empty() && parent != current;
-  }};
   Reactive::Bindable<bool> const actionDisabled{[mode = mode, selectedPath, name] {
     return mode == FileDialogMode::Open ? selectedPath().empty() : name().empty();
   }};
@@ -1020,10 +998,8 @@ Element FileDialog::body() const {
               .children = children(
                   FileDialogNavSegmentedControl{
                       .canGoBack = canGoBack,
-                      .canGoUp = canGoUp,
                       .canGoForward = canGoForward,
                       .goBack = goBack,
-                      .goUp = goUp,
                       .goForward = goForward,
                   },
                   FileDialogBreadcrumbBar{

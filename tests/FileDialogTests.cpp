@@ -156,13 +156,12 @@ void tap(lambda::scenegraph::SceneGraph& sceneGraph, lambda::Point point) {
 constexpr lambda::Point kFirstEntry{220.f, 84.f};
 constexpr lambda::Point kSecondEntry{220.f, 122.f};
 constexpr lambda::Point kBackButton{27.f, 26.f};
-constexpr lambda::Point kUpButton{58.f, 26.f};
-constexpr lambda::Point kForwardButton{89.f, 26.f};
+constexpr lambda::Point kForwardButton{58.f, 26.f};
 constexpr lambda::Point kPrimaryButton{610.f, 392.f};
 
 } // namespace
 
-TEST_CASE("FileDialog open navigation supports Back Up Forward and primary activation") {
+TEST_CASE("FileDialog open navigation supports Back Forward and primary activation") {
   ScopedTempDir temp{"lambda-file-dialog-open"};
   makeOpenDialogFixture(temp);
   std::vector<std::filesystem::path> accepted;
@@ -193,8 +192,6 @@ TEST_CASE("FileDialog open navigation supports Back Up Forward and primary activ
   };
 
   runScenario({kFirstEntry, kBackButton, kSecondEntry, kPrimaryButton},
-              temp.path / "root.txt");
-  runScenario({kFirstEntry, kUpButton, kSecondEntry, kPrimaryButton},
               temp.path / "root.txt");
   runScenario({kFirstEntry, kBackButton, kForwardButton, kFirstEntry, kPrimaryButton},
               temp.path / "child" / "nested.txt");
