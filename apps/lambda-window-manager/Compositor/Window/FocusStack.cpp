@@ -55,6 +55,27 @@ WaylandServer::Impl::Surface* surfaceById(WaylandServer::Impl* server, std::uint
   return found == server->surfaces_.end() ? nullptr : found->get();
 }
 
+WaylandServer::Impl::Surface* modalTransientChildFor(WaylandServer::Impl* server,
+                                                     WaylandServer::Impl::Surface* surface) {
+  if (!server || !surface) return nullptr;
+  auto* parent = toplevelForSurface(server, surface);
+  if (!parent) return nullptr;
+
+  for (auto it = server->surfaces_.rbegin(); it != server->surfaces_.rend(); ++it) {
+    WaylandServer::Impl::Surface* candidateSurface = it->get();
+    if (!candidateSurface || candidateSurface == surface || !surfaceIsXdgToplevel(candidateSurface) ||
+        candidateSurface->minimized) {
+      continue;
+    }
+    WaylandServer::Impl::XdgToplevel* candidate = toplevelForSurface(server, candidateSurface);
+    if (!candidate || !candidate->mapped) continue;
+    for (WaylandServer::Impl::XdgToplevel* ancestor = candidate->parent; ancestor; ancestor = ancestor->parent) {
+      if (ancestor == parent) return candidateSurface;
+    }
+  }
+  return nullptr;
+}
+
 void noteFocusedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!server || !isManagedToplevel(surface)) return;
   removeSurfaceFromFocusOrder(server, surface);
@@ -137,6 +158,9 @@ void activateMostRecentToplevel(WaylandServer::Impl* server, std::uint32_t timeM
 
 void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs) {
   if (!surface) return;
+  if (WaylandServer::Impl::Surface* modalChild = wm::modalTransientChildFor(server, surface)) {
+    surface = modalChild;
+  }
   surface->minimized = false;
   raiseSurface(server, surface);
   setKeyboardFocus(server, surface);

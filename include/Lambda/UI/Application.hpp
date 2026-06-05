@@ -30,6 +30,29 @@ namespace platform {
 class Application;
 }
 
+namespace detail {
+
+void pushWindowCreationModalParent(unsigned int parentHandle, bool modal);
+void popWindowCreationModalParent();
+unsigned int currentWindowCreationTransientParentHandle();
+bool currentWindowCreationModal();
+
+class ScopedWindowCreationModalParent {
+public:
+  ScopedWindowCreationModalParent(unsigned int parentHandle, bool modal) {
+    pushWindowCreationModalParent(parentHandle, modal);
+  }
+
+  ~ScopedWindowCreationModalParent() {
+    popWindowCreationModalParent();
+  }
+
+  ScopedWindowCreationModalParent(ScopedWindowCreationModalParent const&) = delete;
+  ScopedWindowCreationModalParent& operator=(ScopedWindowCreationModalParent const&) = delete;
+};
+
+} // namespace detail
+
 class Application {
 public:
   explicit Application(int argc = 0, char** argv = nullptr);
@@ -76,6 +99,15 @@ public:
     return *raw;
   }
 
+  template<typename T = Window, typename... Args>
+  T& createModalChildWindow(unsigned int parentHandle, WindowConfig const& config, Args&&... args) {
+    detail::ScopedWindowCreationModalParent creationScope(parentHandle, true);
+    T& window = createWindow<T>(config, std::forward<Args>(args)...);
+    registerModalChildWindow(window.handle(), parentHandle, true);
+    static_cast<Window&>(window).setTransientParent(parentHandle, true);
+    return window;
+  }
+
   int exec();
   void quit();
 
@@ -119,6 +151,8 @@ public:
   std::string cacheDir() const;
   /// Returns platform output names when available. KMS returns DRM connector names such as "eDP-1" or "HDMI-A-1".
   std::vector<std::string> availableOutputs() const;
+  /// True when another live window is registered as a modal child of this window.
+  bool isWindowInputBlockedByModal(unsigned int handle) const;
   std::optional<WindowState> loadWindowState(std::string const& restoreId) const;
   void saveWindowState(std::string const& restoreId, WindowState const& state);
 
@@ -139,6 +173,7 @@ private:
   void requestAnimationFrames();
   void saveOpenWindowStates();
   void adoptOwnedWindow(std::unique_ptr<Window> window);
+  void registerModalChildWindow(unsigned int childHandle, unsigned int parentHandle, bool modal);
   WindowConfig resolveWindowConfig(WindowConfig config);
   /// Invoked when `WindowLifecycleEvent::Registered` is dispatched (first `exec()` `dispatch()` drains the ctor post).
   void onWindowRegistered(Window* window);

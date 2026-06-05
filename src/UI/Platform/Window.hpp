@@ -42,6 +42,7 @@ public:
   virtual void setTitle(const std::string& title) = 0;
   virtual void setTitlebarMode(WindowTitlebarMode /*mode*/) {}
   virtual WindowTitlebarMode titlebarMode() const { return WindowTitlebarMode::System; }
+  virtual void setTransientParent(unsigned int /*parentHandle*/, bool /*modal*/) {}
   virtual void setBackground(WindowBackground const& /*background*/) {}
   virtual WindowChromeMetrics chromeMetrics() const { return {}; }
   virtual void beginWindowDrag(std::uint32_t /*platformSerial*/ = 0) {}

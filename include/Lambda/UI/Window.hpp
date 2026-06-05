@@ -327,6 +327,7 @@ private:
   std::string const& restoreId() const;
   WindowState currentWindowState() const;
   void applyRestoredWindowState(WindowState const& state);
+  void setTransientParent(unsigned int parentHandle, bool modal);
   void refreshChromeMetrics();
   void beginWindowDrag(InputEvent const& event);
   void beginWindowResize(WindowResizeEdge edge, InputEvent const& event);

@@ -47,6 +47,7 @@ using wm::handleScreenshotSelectionPointerPosition;
 using wm::isManagedToplevel;
 using wm::kSnapDwellMs;
 using wm::kSnapPreviewAnimationMs;
+using wm::modalTransientChildFor;
 using wm::monotonicMilliseconds;
 using wm::raiseSurface;
 using wm::resetDragSnapState;
@@ -386,6 +387,20 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
   }
   if (handlePopupGrabPointerButton(this, button, pressed, timeMs)) return;
   if (pressed && dismissTopPopupOutside(this, target)) return;
+  if (pressed) {
+    Surface* activationTarget = target;
+    if (!activationTarget) {
+      if (auto context = topChromeHitContext(this, pointerX_, pointerY_)) activationTarget = context->surface;
+    }
+    if (Surface* modalChild = modalTransientChildFor(this, activationTarget)) {
+      raiseSurface(this, modalChild);
+      setKeyboardFocus(this, modalChild);
+      sendPointerFocus(this, nullptr, timeMs);
+      updateCompositorCursorForPointer(this);
+      flushClients();
+      return;
+    }
+  }
   if (button == BTN_LEFT) {
     if (pressed) {
       if (altDown_) {

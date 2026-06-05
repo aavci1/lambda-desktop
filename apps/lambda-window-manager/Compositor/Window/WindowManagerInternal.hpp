@@ -238,6 +238,8 @@ void clearCompositorCursorOverride(WaylandServer::Impl* server);
 void updateCompositorCursorForPointer(WaylandServer::Impl* server);
 void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next, std::uint32_t timeMs);
 void sendRelativePointerMotion(WaylandServer::Impl* server, double dx, double dy, std::uint32_t timeMs);
+WaylandServer::Impl::Surface* modalTransientChildFor(WaylandServer::Impl* server,
+                                                     WaylandServer::Impl::Surface* surface);
 WaylandServer::Impl::XdgPopup* topmostPopup(WaylandServer::Impl* server);
 bool surfaceBelongsToPopup(WaylandServer::Impl::Surface* surface, WaylandServer::Impl::XdgPopup* popup);
 bool dismissPopup(WaylandServer::Impl::XdgPopup* popup);

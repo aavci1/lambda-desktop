@@ -392,6 +392,10 @@ void Window::setLayerShellOptions(LayerShellOptions const& options) {
   d->platform_->setLayerShellOptions(options);
 }
 
+void Window::setTransientParent(unsigned int parentHandle, bool modal) {
+  d->platform_->setTransientParent(parentHandle, modal);
+}
+
 unsigned int Window::handle() const {
   return d->platform_->handle();
 }

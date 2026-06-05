@@ -643,6 +643,11 @@ void resetTransientTargets(RuntimeInputState& input, Window& window) {
 } // namespace
 
 void Runtime::handleInput(InputEvent const& event) {
+  if (Application::hasInstance() &&
+      Application::instance().isWindowInputBlockedByModal(d->window.handle())) {
+    return;
+  }
+
   Point const point = eventPoint(event);
 
   if (event.kind == InputEvent::Kind::KeyDown && event.key == keys::Escape) {

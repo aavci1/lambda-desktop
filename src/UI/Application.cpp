@@ -37,8 +37,35 @@
 namespace lambda {
 
 namespace detail {
+namespace {
+struct WindowCreationModalParent {
+  unsigned int parentHandle = 0;
+  bool modal = false;
+};
+
+thread_local std::vector<WindowCreationModalParent> gWindowCreationModalParents;
+} // namespace
+
 bool signalBridgeApplicationHasInstance() {
   return Application::hasInstance();
+}
+
+void pushWindowCreationModalParent(unsigned int parentHandle, bool modal) {
+  gWindowCreationModalParents.push_back(WindowCreationModalParent{.parentHandle = parentHandle, .modal = modal});
+}
+
+void popWindowCreationModalParent() {
+  if (!gWindowCreationModalParents.empty()) {
+    gWindowCreationModalParents.pop_back();
+  }
+}
+
+unsigned int currentWindowCreationTransientParentHandle() {
+  return gWindowCreationModalParents.empty() ? 0 : gWindowCreationModalParents.back().parentHandle;
+}
+
+bool currentWindowCreationModal() {
+  return !gWindowCreationModalParents.empty() && gWindowCreationModalParents.back().modal;
 }
 } // namespace detail
 
@@ -198,6 +225,7 @@ struct Application::Impl {
   std::unordered_map<unsigned int, WindowRenderState> renderStates_;
   std::unordered_set<unsigned int> pendingAdoptRedraws_;
   std::vector<unsigned int> pendingCloseHandles_;
+  std::unordered_map<unsigned int, unsigned int> modalParentByChild_;
 
   std::unique_ptr<TextSystem> textSystem_;
   std::unique_ptr<Clipboard> clipboard_;
@@ -362,6 +390,13 @@ void Application::adoptOwnedWindow(std::unique_ptr<Window> window) {
   }
 }
 
+void Application::registerModalChildWindow(unsigned int childHandle, unsigned int parentHandle, bool modal) {
+  if (!modal || childHandle == 0 || parentHandle == 0 || childHandle == parentHandle) {
+    return;
+  }
+  d->modalParentByChild_[childHandle] = parentHandle;
+}
+
 void Application::onWindowRegistered(Window* window) {
   if (window) {
     window->platformWindow()->show();
@@ -372,12 +407,35 @@ void Application::unregisterWindowHandle(unsigned int handle) {
   d->byHandle_.erase(handle);
   d->renderStates_.erase(handle);
   d->pendingAdoptRedraws_.erase(handle);
+  d->modalParentByChild_.erase(handle);
+  for (auto it = d->modalParentByChild_.begin(); it != d->modalParentByChild_.end();) {
+    if (it->second == handle) {
+      it = d->modalParentByChild_.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 EventQueue& Application::eventQueue() { return d->eventQueue_; }
 TextSystem& Application::textSystem() { return *d->textSystem_; }
 platform::Application& Application::platformApp() { return *d->platformApp_; }
 Clipboard& Application::clipboard() { return *d->clipboard_; }
+
+bool Application::isWindowInputBlockedByModal(unsigned int handle) const {
+  if (handle == 0) {
+    return false;
+  }
+  for (auto const& [child, parent] : d->modalParentByChild_) {
+    if (parent != handle) {
+      continue;
+    }
+    if (d->byHandle_.find(child) != d->byHandle_.end()) {
+      return true;
+    }
+  }
+  return false;
+}
 
 void Application::setMenuBar(MenuBar menu) {
   d->menuHandlers_.clear();

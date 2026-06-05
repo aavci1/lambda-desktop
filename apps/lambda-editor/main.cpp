@@ -1,9 +1,11 @@
 #include "EditorDocument.hpp"
 
 #include <Lambda.hpp>
+#include <Lambda/UI/Events.hpp>
 #include <Lambda/UI/Shortcut.hpp>
 #include <Lambda/UI/Theme.hpp>
 #include <Lambda/UI/UI.hpp>
+#include <Lambda/UI/WindowUI.hpp>
 #include <Lambda/UI/Views/Views.hpp>
 
 #include <filesystem>
@@ -35,6 +37,12 @@ std::string saveDialogInitialName(EditorDocument const& document) {
     return "Untitled.txt";
   }
   return document.displayName();
+}
+
+void requestWindowClose(unsigned int handle) {
+  if (handle != 0 && Application::hasInstance()) {
+    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::CloseRequest, handle});
+  }
 }
 
 struct ToolbarButton {
@@ -107,8 +115,6 @@ struct LambdaEditor {
     auto document = useState(initialDocument);
     auto text = useState(initialDocument.text());
     auto status = useState(initialStatus.empty() ? std::string{"Ready"} : initialStatus);
-    auto [showDialog, hideDialog, fileDialogPresented] = useOverlay();
-    (void)fileDialogPresented;
 
     useEffect([document, window] {
       if (window) {
@@ -119,40 +125,52 @@ struct LambdaEditor {
     auto markComingSoon = [status](std::string label) {
       status.set(label + " is not implemented yet.");
     };
-    auto showFileDialog = [showDialog, hideDialog](FileDialog dialog) mutable {
-      dialog.onCancel = hideDialog;
-      showDialog(
-          Element{std::move(dialog)},
-          OverlayConfig{
-              .modal = true,
-              .backdropColor = Color{0.f, 0.f, 0.f, 0.24f},
-              .dismissOnOutsideTap = true,
-              .dismissOnEscape = true,
-              .onDismiss = hideDialog,
-              .debugName = "lambda-editor-file-dialog",
-          });
+    auto showFileDialog = [window](FileDialog dialog) mutable {
+      if (!window || !Application::hasInstance()) {
+        return;
+      }
+      FileDialogMode const dialogMode = dialog.mode;
+      Window& dialogWindow = Application::instance().createModalChildWindow<Window>(window->handle(), {
+          .size = {760.f, 540.f},
+          .title = dialogMode == FileDialogMode::Open ? "Open File" : "Save File",
+          .resizable = true,
+          .minSize = {640.f, 430.f},
+      });
+      unsigned int const dialogHandle = dialogWindow.handle();
+      auto accept = std::move(dialog.onAccept);
+      dialog.onAccept = [accept = std::move(accept), dialogHandle](std::filesystem::path path) mutable {
+        bool const accepted = accept ? accept(std::move(path)) : true;
+        if (accepted) {
+          requestWindowClose(dialogHandle);
+        }
+        return accepted;
+      };
+      dialog.onCancel = [dialogHandle] {
+        requestWindowClose(dialogHandle);
+      };
+      dialogWindow.setView(std::move(dialog));
     };
-    auto openFile = [document, text, status, showFileDialog, hideDialog] mutable {
+    auto openFile = [document, text, status, showFileDialog] mutable {
       showFileDialog(FileDialog{
           .mode = FileDialogMode::Open,
           .initialDirectory = documentDirectory(document.peek()),
-          .onAccept = [document, text, status, hideDialog](std::filesystem::path path) {
+          .onAccept = [document, text, status](std::filesystem::path path) {
             EditorDocumentResult result = openDocument(path.string());
             status.set(result.status);
             if (result.ok) {
               document.set(result.document);
               text.set(result.document.text());
-              hideDialog();
             }
+            return result.ok;
           },
       });
     };
-    auto saveFileAs = [document, text, status, showFileDialog, hideDialog] mutable {
+    auto saveFileAs = [document, text, status, showFileDialog] mutable {
       showFileDialog(FileDialog{
           .mode = FileDialogMode::Save,
           .initialDirectory = documentDirectory(document.peek()),
           .initialName = saveDialogInitialName(document.peek()),
-          .onAccept = [document, text, status, hideDialog](std::filesystem::path path) {
+          .onAccept = [document, text, status](std::filesystem::path path) {
             EditorDocument current = document.peek();
             current.setText(text.peek());
             EditorDocumentResult result = saveDocumentAs(current, path.string());
@@ -160,8 +178,8 @@ struct LambdaEditor {
             if (result.ok) {
               document.set(result.document);
               text.set(result.document.text());
-              hideDialog();
             }
+            return result.ok;
           },
       });
     };

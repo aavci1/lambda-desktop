@@ -835,6 +835,8 @@ public:
       xdg_toplevel_add_listener(toplevel_, &toplevelListener_, this);
       xdg_toplevel_set_title(toplevel_, title_.c_str());
       xdg_toplevel_set_app_id(toplevel_, appId_.c_str());
+      setTransientParent(detail::currentWindowCreationTransientParentHandle(),
+                         detail::currentWindowCreationModal());
       if (config.minSize.width > 0.f || config.minSize.height > 0.f) setMinSize(config.minSize);
       if (config.maxSize.width > 0.f || config.maxSize.height > 0.f) setMaxSize(config.maxSize);
       configureDecorationProtocol();
@@ -1012,6 +1014,34 @@ public:
   void setTitle(std::string const& title) override {
     title_ = title;
     if (toplevel_) xdg_toplevel_set_title(toplevel_, title_.c_str());
+  }
+
+  void setTransientParent(unsigned int parentHandle, bool modal) override {
+    (void)modal;
+    if (!toplevel_ || !shared_) {
+      return;
+    }
+
+    xdg_toplevel* parentToplevel = nullptr;
+    bool shouldSetParent = parentHandle == 0;
+    if (parentHandle != 0) {
+      for (WaylandWindow* window : shared_->windows) {
+        if (window && window != this && window->handle_ == parentHandle && window->toplevel_) {
+          parentToplevel = window->toplevel_;
+          shouldSetParent = true;
+          break;
+        }
+      }
+    }
+    if (!shouldSetParent) {
+      return;
+    }
+
+    xdg_toplevel_set_parent(toplevel_, parentToplevel);
+    if (surfaceCommitted_) {
+      commitSurface();
+      flushWaylandDisplay(shared_, "transient parent update");
+    }
   }
 
   void setTitlebarMode(WindowTitlebarMode mode) override {
