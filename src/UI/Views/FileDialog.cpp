@@ -6,7 +6,6 @@
 #include <Lambda/UI/Shortcut.hpp>
 #include <Lambda/UI/Theme.hpp>
 #include <Lambda/UI/Views/Button.hpp>
-#include <Lambda/UI/Views/Checkbox.hpp>
 #include <Lambda/UI/Views/For.hpp>
 #include <Lambda/UI/Views/HStack.hpp>
 #include <Lambda/UI/Views/Icon.hpp>
@@ -14,8 +13,8 @@
 #include <Lambda/UI/Views/Rectangle.hpp>
 #include <Lambda/UI/Views/ScrollView.hpp>
 #include <Lambda/UI/Views/Show.hpp>
+#include <Lambda/UI/Views/Spacer.hpp>
 #include <Lambda/UI/Views/Text.hpp>
-#include <Lambda/UI/Views/TextInput.hpp>
 #include <Lambda/UI/Views/Tooltip.hpp>
 #include <Lambda/UI/Views/VStack.hpp>
 #include <Lambda/UI/Views/ZStack.hpp>
@@ -43,7 +42,6 @@ struct FileDialogEntry {
   std::filesystem::path path;
   std::string name;
   bool directory = false;
-  bool parent = false;
   std::uintmax_t size = 0;
 
   bool operator==(FileDialogEntry const&) const = default;
@@ -57,11 +55,17 @@ struct FileDialogPlace {
   bool operator==(FileDialogPlace const&) const = default;
 };
 
+struct FileDialogCrumb {
+  std::filesystem::path path;
+  std::string label;
+
+  bool operator==(FileDialogCrumb const&) const = default;
+};
+
 struct DirectoryListing {
   std::filesystem::path directory;
   std::vector<FileDialogEntry> entries;
   std::string status;
-  std::string summary;
 };
 
 std::string displayName(std::filesystem::path const& path) {
@@ -122,6 +126,76 @@ std::filesystem::path homeDirectory() {
   return currentDirectoryFallback();
 }
 
+bool isInsideOrEqual(std::filesystem::path const& path, std::filesystem::path const& parent) {
+  std::error_code ec;
+  std::filesystem::path current = std::filesystem::weakly_canonical(path, ec);
+  if (ec || current.empty()) {
+    current = path.lexically_normal();
+  }
+  std::filesystem::path root = std::filesystem::weakly_canonical(parent, ec);
+  if (ec || root.empty()) {
+    root = parent.lexically_normal();
+  }
+  if (current == root) {
+    return true;
+  }
+  auto currentIt = current.begin();
+  auto rootIt = root.begin();
+  for (; rootIt != root.end(); ++rootIt, ++currentIt) {
+    if (currentIt == current.end() || *currentIt != *rootIt) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::vector<FileDialogCrumb> breadcrumbCrumbs(std::filesystem::path const& path) {
+  std::vector<FileDialogCrumb> crumbs;
+  std::error_code ec;
+  std::filesystem::path current = std::filesystem::weakly_canonical(path, ec);
+  if (ec || current.empty()) {
+    current = path.lexically_normal();
+  }
+
+  std::filesystem::path const home = homeDirectory();
+  if (isInsideOrEqual(current, home)) {
+    crumbs.push_back(FileDialogCrumb{.path = home, .label = "Home"});
+    if (current == home) {
+      return crumbs;
+    }
+    std::filesystem::path accumulated = home;
+    std::filesystem::path relative = std::filesystem::relative(current, home, ec);
+    if (ec) {
+      relative = current.lexically_relative(home);
+    }
+    for (std::filesystem::path const& part : relative) {
+      if (part.empty() || part == ".") {
+        continue;
+      }
+      accumulated /= part;
+      crumbs.push_back(FileDialogCrumb{.path = accumulated, .label = part.string()});
+    }
+    return crumbs;
+  }
+
+  std::filesystem::path accumulated = current.root_path();
+  crumbs.push_back(FileDialogCrumb{
+      .path = accumulated.empty() ? std::filesystem::path{"/"} : accumulated,
+      .label = accumulated.empty() ? "/" : accumulated.string(),
+  });
+  if (current == accumulated) {
+    return crumbs;
+  }
+  for (std::filesystem::path const& part : current.relative_path()) {
+    if (part.empty() || part == ".") {
+      continue;
+    }
+    accumulated /= part;
+    crumbs.push_back(FileDialogCrumb{.path = accumulated, .label = part.string()});
+  }
+  return crumbs;
+}
+
 void addPlaceIfDirectory(std::vector<FileDialogPlace>& places,
                          std::string label,
                          std::filesystem::path path,
@@ -139,7 +213,7 @@ void addPlaceIfDirectory(std::vector<FileDialogPlace>& places,
   }
 }
 
-std::vector<FileDialogPlace> commonPlaces(std::filesystem::path const& currentDirectory) {
+std::vector<FileDialogPlace> commonPlaces() {
   std::vector<FileDialogPlace> places;
   std::filesystem::path const home = homeDirectory();
   addPlaceIfDirectory(places, "Home", home, IconName::Home);
@@ -147,7 +221,6 @@ std::vector<FileDialogPlace> commonPlaces(std::filesystem::path const& currentDi
   addPlaceIfDirectory(places, "Documents", home / "Documents", IconName::Article);
   addPlaceIfDirectory(places, "Downloads", home / "Downloads", IconName::FolderSpecial);
   addPlaceIfDirectory(places, "Computer", std::filesystem::path{"/"}, IconName::Computer);
-  addPlaceIfDirectory(places, "Current Folder", currentDirectory, IconName::FolderOpen);
   return places;
 }
 
@@ -172,30 +245,6 @@ std::string formatByteSize(std::uintmax_t bytes) {
   }
   int const rounded = static_cast<int>(std::round(value * 10.0));
   return std::to_string(rounded / 10) + "." + std::to_string(rounded % 10) + suffix;
-}
-
-std::string listingSummary(std::size_t folders, std::size_t files, std::size_t hiddenSkipped) {
-  std::string summary = std::to_string(folders) + " folders, " + std::to_string(files) + " files";
-  if (hiddenSkipped > 0) {
-    summary += ", " + std::to_string(hiddenSkipped) + " hidden";
-  }
-  return summary;
-}
-
-std::filesystem::path newFolderCandidate(std::filesystem::path const& directory) {
-  std::filesystem::path candidate = directory / "New Folder";
-  std::error_code ec;
-  if (!std::filesystem::exists(candidate, ec) || ec) {
-    return candidate;
-  }
-  for (int index = 2; index < 1000; ++index) {
-    candidate = directory / ("New Folder " + std::to_string(index));
-    ec.clear();
-    if (!std::filesystem::exists(candidate, ec) || ec) {
-      return candidate;
-    }
-  }
-  return directory / "New Folder";
 }
 
 bool caseInsensitiveLess(FileDialogEntry const& lhs, FileDialogEntry const& rhs) {
@@ -224,14 +273,10 @@ DirectoryListing listDirectory(std::filesystem::path directory, bool includeHidd
   std::error_code ec;
   if (!std::filesystem::is_directory(listing.directory, ec) || ec) {
     listing.status = "Folder is not available.";
-    listing.summary = listingSummary(0, 0, 0);
     return listing;
   }
 
   std::vector<FileDialogEntry> children;
-  std::size_t folderCount = 0;
-  std::size_t fileCount = 0;
-  std::size_t hiddenSkipped = 0;
   std::filesystem::directory_options const options =
       std::filesystem::directory_options::skip_permission_denied;
   std::filesystem::directory_iterator it(listing.directory, options, ec);
@@ -239,7 +284,6 @@ DirectoryListing listDirectory(std::filesystem::path directory, bool includeHidd
   for (; !ec && it != end; it.increment(ec)) {
     std::filesystem::directory_entry const entry = *it;
     if (!includeHidden && isHiddenPath(entry.path())) {
-      ++hiddenSkipped;
       continue;
     }
 
@@ -259,17 +303,11 @@ DirectoryListing listDirectory(std::filesystem::path directory, bool includeHidd
         fileSize = 0;
       }
     }
-    if (directoryEntry) {
-      ++folderCount;
-    } else {
-      ++fileCount;
-    }
 
     children.push_back(FileDialogEntry{
         .path = entry.path(),
         .name = displayName(entry.path()),
         .directory = directoryEntry,
-        .parent = false,
         .size = fileSize,
     });
   }
@@ -279,18 +317,7 @@ DirectoryListing listDirectory(std::filesystem::path directory, bool includeHidd
   }
 
   std::sort(children.begin(), children.end(), caseInsensitiveLess);
-
-  std::filesystem::path const parent = listing.directory.parent_path();
-  if (!parent.empty() && parent != listing.directory) {
-    listing.entries.push_back(FileDialogEntry{
-        .path = parent,
-        .name = "..",
-        .directory = true,
-        .parent = true,
-    });
-  }
-  listing.entries.insert(listing.entries.end(), children.begin(), children.end());
-  listing.summary = listingSummary(folderCount, fileCount, hiddenSkipped);
+  listing.entries = std::move(children);
   return listing;
 }
 
@@ -324,20 +351,19 @@ std::optional<FileDialogEntry> selectedEntry(std::vector<FileDialogEntry> const&
   return std::nullopt;
 }
 
-TextInput::Style compactInputStyle() {
-  TextInput::Style style;
-  style.font = Font{.size = 13.f, .weight = 430.f};
-  style.paddingH = 8.f;
-  style.paddingV = 6.f;
-  style.cornerRadius = 6.f;
-  return style;
+Font dialogFont(float size, float weight) {
+  Font font;
+  font.size = size;
+  font.weight = weight;
+  return font;
 }
 
-struct FileDialogToolButton : ViewModifiers<FileDialogToolButton> {
-  IconName icon = IconName::Folder;
+struct FileDialogNavSegmentButton : ViewModifiers<FileDialogNavSegmentButton> {
+  IconName icon = IconName::ChevronLeft;
   std::string tooltip;
+  Reactive::Bindable<bool> enabled{true};
+  CornerRadius radius{};
   std::function<void()> onTap;
-  bool disabled = false;
 
   Element body() const {
     auto theme = useEnvironment<ThemeKey>();
@@ -345,8 +371,9 @@ struct FileDialogToolButton : ViewModifiers<FileDialogToolButton> {
       useTooltip(TooltipConfig{.text = tooltip, .placement = PopoverPlacement::Below});
     }
     Reactive::Signal<bool> hovered = useHover();
-    auto handleTap = [onTap = onTap, disabled = disabled] {
-      if (!disabled && onTap) {
+    Reactive::Bindable<bool> const enabledBinding = enabled;
+    auto handleTap = [onTap = onTap, enabledBinding] {
+      if (enabledBinding.evaluate() && onTap) {
         onTap();
       }
     };
@@ -355,33 +382,212 @@ struct FileDialogToolButton : ViewModifiers<FileDialogToolButton> {
         handleTap();
       }
     };
+    Reactive::Bindable<FillStyle> const fill{[hovered, enabledBinding, theme] {
+      if (!enabledBinding.evaluate()) {
+        return FillStyle::solid(Color{0.f, 0.f, 0.f, 0.02f});
+      }
+      return hovered() ? FillStyle::solid(theme().hoveredControlBackgroundColor)
+                       : FillStyle::solid(Colors::transparent);
+    }};
+    Reactive::Bindable<Color> const iconColor{[enabledBinding] {
+      return enabledBinding.evaluate() ? Color::primary() : Color::secondary();
+    }};
 
     return ZStack{
         .horizontalAlignment = Alignment::Center,
         .verticalAlignment = Alignment::Center,
         .children = children(
-            Rectangle{}
-                .size(30.f, 30.f)
-                .fill([hovered, disabled = disabled, theme] {
-                  if (disabled) {
-                    return FillStyle::solid(Color{0.f, 0.f, 0.f, 0.02f});
-                  }
-                  return hovered() ? FillStyle::solid(theme().hoveredControlBackgroundColor)
-                                   : FillStyle::solid(Color::controlBackground());
-                })
-                .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-                .cornerRadius(CornerRadius{6.f}),
+            Rectangle{}.size(30.f, 30.f).fill(fill).cornerRadius(radius),
             Icon{
                 .name = icon,
                 .size = 18.f,
                 .weight = 450.f,
-                .color = disabled ? Color::secondary() : Color::primary(),
+                .color = iconColor,
             })}
         .size(30.f, 30.f)
-        .cursor(disabled ? Cursor::Inherit : Cursor::Hand)
-        .focusable(!disabled)
+        .cursor([enabledBinding] {
+          return enabledBinding.evaluate() ? Cursor::Hand : Cursor::Inherit;
+        })
+        .focusable([enabledBinding] {
+          return enabledBinding.evaluate();
+        })
         .onKeyDown(std::function<void(KeyCode, Modifiers)>{handleKey})
         .onTap(std::function<void()>{handleTap});
+  }
+};
+
+struct FileDialogNavSegmentedControl : ViewModifiers<FileDialogNavSegmentedControl> {
+  Reactive::Bindable<bool> canGoBack{false};
+  Reactive::Bindable<bool> canGoUp{false};
+  Reactive::Bindable<bool> canGoForward{false};
+  std::function<void()> goBack;
+  std::function<void()> goUp;
+  std::function<void()> goForward;
+
+  Element body() const {
+    return HStack{
+               .spacing = 0.f,
+               .alignment = Alignment::Center,
+               .children = children(
+                   FileDialogNavSegmentButton{
+                       .icon = IconName::ChevronLeft,
+                       .tooltip = "Back",
+                       .enabled = canGoBack,
+                       .radius = CornerRadius{6.f, 0.f, 0.f, 6.f},
+                       .onTap = goBack,
+                   },
+                   Rectangle{}.width(1.f).height(16.f).fill(FillStyle::solid(Color::separator())),
+                   FileDialogNavSegmentButton{
+                       .icon = IconName::KeyboardArrowUp,
+                       .tooltip = "Parent Folder",
+                       .enabled = canGoUp,
+                       .radius = CornerRadius{},
+                       .onTap = goUp,
+                   },
+                   Rectangle{}.width(1.f).height(16.f).fill(FillStyle::solid(Color::separator())),
+                   FileDialogNavSegmentButton{
+                       .icon = IconName::ChevronRight,
+                       .tooltip = "Forward",
+                       .enabled = canGoForward,
+                       .radius = CornerRadius{0.f, 6.f, 6.f, 0.f},
+                       .onTap = goForward,
+                   })}
+        .height(30.f)
+        .fill(FillStyle::solid(Color::controlBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+        .cornerRadius(CornerRadius{6.f});
+  }
+};
+
+struct FileDialogBreadcrumbCrumbView : ViewModifiers<FileDialogBreadcrumbCrumbView> {
+  FileDialogCrumb crumb;
+  bool showHomeIcon = false;
+  Reactive::Bindable<bool> isLast{false};
+  std::function<void()> onTap;
+
+  Element body() const {
+    auto theme = useEnvironment<ThemeKey>();
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Bindable<bool> const isLastBinding = isLast;
+    Reactive::Bindable<FillStyle> const fill{[hovered, isLastBinding, theme] {
+      if (!isLastBinding.evaluate() && hovered()) {
+        return FillStyle::solid(theme().hoveredControlBackgroundColor);
+      }
+      return FillStyle::solid(Colors::transparent);
+    }};
+    Reactive::Bindable<Color> const labelColor{[isLastBinding] {
+      return isLastBinding.evaluate() ? Color::primary() : Color::secondary();
+    }};
+    auto handleTap = [isLastBinding, onTap = onTap] {
+      if (!isLastBinding.evaluate() && onTap) {
+        onTap();
+      }
+    };
+
+    std::vector<Element> parts;
+    if (showHomeIcon) {
+      parts.push_back(Icon{.name = IconName::Home, .size = 14.f, .color = Color::secondary()});
+    }
+    parts.push_back(Text{
+        .text = crumb.label,
+        .font = dialogFont(12.f, 430.f),
+        .color = labelColor,
+        .verticalAlignment = VerticalAlignment::Center,
+        .maxLines = 1,
+    });
+
+    return HStack{
+               .spacing = 5.f,
+               .alignment = Alignment::Center,
+               .children = std::move(parts)}
+        .height(26.f)
+        .padding(0.f, showHomeIcon ? 6.f : 5.f, 0.f, 5.f)
+        .fill(fill)
+        .cornerRadius(CornerRadius{5.f})
+        .cursor([isLastBinding] {
+          return isLastBinding.evaluate() ? Cursor::Inherit : Cursor::Hand;
+        })
+        .onTap(std::function<void()>{handleTap});
+  }
+};
+
+struct FileDialogBreadcrumbSeparatorView {
+  Element body() const {
+    return Icon{.name = IconName::ChevronRight, .size = 14.f, .color = Color::secondary()};
+  }
+};
+
+struct FileDialogBreadcrumbBar : ViewModifiers<FileDialogBreadcrumbBar> {
+  Reactive::Signal<std::vector<FileDialogCrumb>> crumbs;
+  std::function<void(std::filesystem::path)> navigateToPath;
+
+  Element body() const {
+    Reactive::Signal<std::vector<FileDialogCrumb>> const crumbsSignal = crumbs;
+    auto const navigate = navigateToPath;
+    Reactive::Bindable<float> const barWidth{[] {
+      Rect const bounds = useBounds();
+      return bounds.width > 0.f ? bounds.width : 0.f;
+    }};
+
+    Element trail = Element{For<FileDialogCrumb>(
+        crumbsSignal,
+        [](FileDialogCrumb const& crumb) {
+          return crumb.path.string();
+        },
+        [navigate, crumbsSignal](FileDialogCrumb const& crumb,
+                                 Reactive::Signal<std::size_t> const& indexSignal) {
+          Reactive::Bindable<bool> const isLast{[indexSignal, crumbsSignal] {
+            return indexSignal() + 1 >= crumbsSignal().size();
+          }};
+          return HStack{
+              .spacing = 4.f,
+              .alignment = Alignment::Center,
+              .children = children(
+                  FileDialogBreadcrumbCrumbView{
+                      .crumb = crumb,
+                      .showHomeIcon = indexSignal() == 0,
+                      .isLast = isLast,
+                      .onTap = [navigate, target = crumb.path] {
+                        if (navigate) {
+                          navigate(target);
+                        }
+                      },
+                  },
+                  Show(
+                      [isLast] {
+                        return !isLast.evaluate();
+                      },
+                      [] {
+                        return Element{FileDialogBreadcrumbSeparatorView{}};
+                      },
+                      [] {
+                        return Rectangle{}.size(0.f, 0.f);
+                      })),
+          };
+        },
+        4.f,
+        Alignment::Center,
+        ForLayout::HorizontalStack)};
+
+    return HStack{
+               .spacing = 0.f,
+               .alignment = Alignment::Center,
+               .children = children(
+                   Element{ScrollView{
+                               .axis = ScrollAxis::Horizontal,
+                               .dragScrollEnabled = true,
+                               .onTap = {},
+                               .children = children(std::move(trail)),
+                           }}
+                       .flex(1.f, 1.f, 0.f),
+                   Spacer{}.flex(1.f, 1.f, 0.f))}
+        .width(barWidth)
+        .height(30.f)
+        .padding(0.f, 8.f, 0.f, 8.f)
+        .fill(FillStyle::solid(Color::controlBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+        .cornerRadius(CornerRadius{6.f})
+        .clipContent(true);
   }
 };
 
@@ -390,6 +596,7 @@ Element fileDialogRow(FileDialogEntry entry,
                       Reactive::Signal<std::filesystem::path> selectedPath,
                       Reactive::Signal<std::filesystem::path> overwriteConfirmPath,
                       Reactive::Signal<std::string> status,
+                      Reactive::Bindable<float> rowWidth,
                       std::function<void(std::filesystem::path)> refreshDirectory,
                       std::function<void(FileDialogEntry)> onFileActivate,
                       std::function<void(KeyCode, Modifiers)> onRowKeyDown) {
@@ -409,41 +616,43 @@ Element fileDialogRow(FileDialogEntry entry,
       onFileActivate(entry);
     }
   };
-  std::string const detail = entry.parent ? "Parent folder"
-                                          : entry.directory ? "Folder" : formatByteSize(entry.size);
+  std::string const detail = entry.directory ? "Folder" : formatByteSize(entry.size);
 
   return ListRow{
-      .content = HStack{
-          .spacing = 8.f,
-          .alignment = Alignment::Center,
-          .children = children(
-              Icon{
-                  .name = entry.directory ? IconName::Folder : IconName::TextSnippet,
-                  .size = 18.f,
-                  .weight = 430.f,
-                  .color = entry.directory ? Color{0.11f, 0.36f, 0.74f, 1.f}
-                                           : Color::secondary(),
-              },
-              Text{
-                  .text = entry.name,
-                  .font = Font{.size = 13.f, .weight = entry.directory ? 480.f : 420.f},
-                  .color = entry.parent ? Color::secondary() : Color::primary(),
-                  .verticalAlignment = VerticalAlignment::Center,
-              }.flex(1.f, 1.f, 0.f),
-              Text{
-                  .text = detail,
-                  .font = Font{.size = 12.f, .weight = 410.f},
-                  .color = Color::secondary(),
-                  .horizontalAlignment = HorizontalAlignment::Trailing,
-                  .verticalAlignment = VerticalAlignment::Center,
-              }.width(92.f))},
-      .selected = [entry, selectedPath] {
-        return !selectedPath().empty() && selectedPath() == entry.path;
-      },
-      .style = ListRow::Style{.paddingH = 9.f, .paddingV = 7.f},
-      .onTap = entry.directory ? std::function<void()>{navigate} : std::function<void()>{select},
-      .onKeyDown = std::move(onRowKeyDown),
-  };
+             .content = HStack{
+                 .spacing = 8.f,
+                 .alignment = Alignment::Center,
+                 .children = children(
+                     Icon{
+                         .name = entry.directory ? IconName::Folder : IconName::TextSnippet,
+                         .size = 18.f,
+                         .weight = 430.f,
+                         .color = entry.directory ? Color{0.11f, 0.36f, 0.74f, 1.f}
+                                                  : Color::secondary(),
+                     },
+                     Text{
+                         .text = entry.name,
+                         .font = dialogFont(13.f, entry.directory ? 480.f : 420.f),
+                         .color = Color::primary(),
+                         .verticalAlignment = VerticalAlignment::Center,
+                         .maxLines = 1,
+                     }.flex(1.f, 1.f, 0.f),
+                     Text{
+                         .text = detail,
+                         .font = dialogFont(12.f, 410.f),
+                         .color = Color::secondary(),
+                         .horizontalAlignment = HorizontalAlignment::Trailing,
+                         .verticalAlignment = VerticalAlignment::Center,
+                         .maxLines = 1,
+                     }.width(92.f))},
+             .selected = [entry, selectedPath] {
+               return !selectedPath().empty() && selectedPath() == entry.path;
+             },
+             .style = ListRow::Style{.paddingH = 9.f, .paddingV = 7.f},
+             .onTap = entry.directory ? std::function<void()>{navigate} : std::function<void()>{select},
+             .onKeyDown = std::move(onRowKeyDown),
+         }
+      .width(rowWidth);
 }
 
 Element fileDialogPlaceRow(FileDialogPlace place,
@@ -462,7 +671,7 @@ Element fileDialogPlaceRow(FileDialogPlace place,
               },
               Text{
                   .text = place.label,
-                  .font = Font{.size = 13.f, .weight = 450.f},
+                  .font = dialogFont(13.f, 450.f),
                   .color = Color::primary(),
                   .verticalAlignment = VerticalAlignment::Center,
               }.flex(1.f, 1.f, 0.f))},
@@ -475,6 +684,7 @@ Element fileDialogPlaceRow(FileDialogPlace place,
           refreshDirectory(place.path);
         }
       },
+      .onKeyDown = {},
   };
 }
 
@@ -483,40 +693,48 @@ Element fileDialogPlaceRow(FileDialogPlace place,
 Element FileDialog::body() const {
   DirectoryListing initial = listDirectory(initialDirectory, false);
   auto directory = useState<std::filesystem::path>(initial.directory);
-  auto directoryText = useState<std::string>(initial.directory.string());
   auto entries = useState<std::vector<FileDialogEntry>>(initial.entries);
-  auto places = useState<std::vector<FileDialogPlace>>(commonPlaces(initial.directory));
+  auto places = useState<std::vector<FileDialogPlace>>(commonPlaces());
+  auto crumbs = useState<std::vector<FileDialogCrumb>>(breadcrumbCrumbs(initial.directory));
   auto name = useState<std::string>(initialName);
   auto selectedPath = useState<std::filesystem::path>({});
   auto overwriteConfirmPath = useState<std::filesystem::path>({});
   auto scrollOffset = useState<Point>({});
-  auto showHidden = useState<bool>(false);
+  auto listViewportSize = useState<Size>({});
+  auto listGeneration = useState<bool>(false);
+  auto backStack = useState<std::vector<std::filesystem::path>>({});
+  auto forwardStack = useState<std::vector<std::filesystem::path>>({});
   auto status = useState<std::string>(initial.status);
-  auto summary = useState<std::string>(initial.summary);
 
-  auto loadDirectory = [directory, directoryText, entries, places, selectedPath,
-                        overwriteConfirmPath, scrollOffset, status, summary](
-                           std::filesystem::path path, bool includeHidden) {
-    DirectoryListing next = listDirectory(std::move(path), includeHidden);
+  auto applyListing = [mode = mode, directory, entries, places, crumbs, name, selectedPath,
+                       overwriteConfirmPath, scrollOffset, listGeneration, status](
+                          DirectoryListing next) {
     directory.set(next.directory);
-    directoryText.set(next.directory.string());
-    places.set(commonPlaces(next.directory));
+    places.set(commonPlaces());
+    crumbs.set(breadcrumbCrumbs(next.directory));
     entries.set(std::move(next.entries));
     selectedPath.set({});
+    if (mode == FileDialogMode::Open) {
+      name.set(std::string{});
+    }
     overwriteConfirmPath.set({});
     scrollOffset.set({});
     status.set(next.status);
-    summary.set(next.summary);
+    listGeneration.set(!listGeneration.peek());
   };
 
-  auto refreshDirectory = [loadDirectory, showHidden](std::filesystem::path path) {
-    loadDirectory(std::move(path), showHidden.peek());
-  };
-
-  auto nameChanged = [selectedPath, overwriteConfirmPath, status](std::string const&) {
-    selectedPath.set({});
-    overwriteConfirmPath.set({});
-    status.set(std::string{});
+  auto loadDirectory = [directory, backStack, forwardStack, applyListing](
+                           std::filesystem::path path, bool recordHistory) {
+    DirectoryListing next = listDirectory(std::move(path), false);
+    std::filesystem::path const previous = directory.peek();
+    bool const changed = !previous.empty() && !sameDirectory(previous, next.directory);
+    if (recordHistory && changed) {
+      std::vector<std::filesystem::path> back = backStack.peek();
+      back.push_back(previous);
+      backStack.set(std::move(back));
+      forwardStack.set({});
+    }
+    applyListing(std::move(next));
   };
 
   auto acceptPath = [mode = mode, overwriteConfirmPath, status, onAccept = onAccept](
@@ -541,10 +759,20 @@ Element FileDialog::body() const {
     }
   };
 
-  auto accept = [mode = mode, directory, name, status, acceptPath] {
+  auto accept = [mode = mode, directory, name, selectedPath, status, acceptPath] {
+    if (mode == FileDialogMode::Open) {
+      std::filesystem::path const target = selectedPath.peek();
+      if (target.empty()) {
+        status.set("Choose a file to open.");
+        return;
+      }
+      acceptPath(target);
+      return;
+    }
+
     std::string const nameText = name.peek();
     if (nameText.empty()) {
-      status.set(mode == FileDialogMode::Open ? "Choose a file to open." : "Enter a file name.");
+      status.set("Enter a file name.");
       return;
     }
     acceptPath(pathFromDialogInput(directory.peek(), nameText));
@@ -562,10 +790,6 @@ Element FileDialog::body() const {
                       .shortcut = Shortcut{keys::Escape, Modifiers::None},
                       .isEnabled = [] { return true; },
                   });
-  auto toggleHidden = [directory, showHidden, loadDirectory](bool visible) {
-    showHidden.set(visible);
-    loadDirectory(directory.peek(), visible);
-  };
   auto cancelReplace = [overwriteConfirmPath, status] {
     overwriteConfirmPath.set({});
     status.set(std::string{});
@@ -577,38 +801,50 @@ Element FileDialog::body() const {
     }
   };
 
-  auto goToDirectory = [directoryText, refreshDirectory] {
-    refreshDirectory(std::filesystem::path{directoryText.peek()});
+  auto navigateToDirectory = [loadDirectory](std::filesystem::path path) {
+    loadDirectory(std::move(path), true);
   };
-  auto goUp = [directory, refreshDirectory] {
+  auto goBack = [directory, backStack, forwardStack, applyListing] {
+    std::vector<std::filesystem::path> back = backStack.peek();
+    if (back.empty()) {
+      return;
+    }
+    std::filesystem::path const target = back.back();
+    back.pop_back();
+    std::vector<std::filesystem::path> forward = forwardStack.peek();
+    if (!directory.peek().empty()) {
+      forward.push_back(directory.peek());
+    }
+    backStack.set(std::move(back));
+    forwardStack.set(std::move(forward));
+    applyListing(listDirectory(target, false));
+  };
+  auto goForward = [directory, backStack, forwardStack, applyListing] {
+    std::vector<std::filesystem::path> forward = forwardStack.peek();
+    if (forward.empty()) {
+      return;
+    }
+    std::filesystem::path const target = forward.back();
+    forward.pop_back();
+    std::vector<std::filesystem::path> back = backStack.peek();
+    if (!directory.peek().empty()) {
+      back.push_back(directory.peek());
+    }
+    backStack.set(std::move(back));
+    forwardStack.set(std::move(forward));
+    applyListing(listDirectory(target, false));
+  };
+  auto goUp = [directory, navigateToDirectory] {
     std::filesystem::path const current = directory.peek();
     std::filesystem::path const parent = current.parent_path();
     if (!parent.empty() && parent != current) {
-      refreshDirectory(parent);
+      navigateToDirectory(parent);
     }
-  };
-  auto refreshCurrent = [directory, refreshDirectory] {
-    refreshDirectory(directory.peek());
-  };
-  auto createFolder = [directory, refreshDirectory, name, selectedPath,
-                       overwriteConfirmPath, status] {
-    std::filesystem::path const target = newFolderCandidate(directory.peek());
-    std::error_code ec;
-    std::filesystem::create_directory(target, ec);
-    if (ec) {
-      status.set("Could not create folder: " + ec.message());
-      return;
-    }
-    refreshDirectory(directory.peek());
-    name.set(target.filename().string());
-    selectedPath.set(target);
-    overwriteConfirmPath.set({});
-    status.set("Created \"" + target.filename().string() + "\".");
   };
 
-  auto activateEntry = [name, refreshDirectory, acceptPath](FileDialogEntry const& entry) {
+  auto activateEntry = [name, navigateToDirectory, acceptPath](FileDialogEntry const& entry) {
     if (entry.directory) {
-      refreshDirectory(entry.path);
+      navigateToDirectory(entry.path);
       return;
     }
     name.set(entry.name);
@@ -705,10 +941,74 @@ Element FileDialog::body() const {
     handleListKeyAtIndex(std::nullopt, key, modifiers);
   };
 
-  std::string const title = mode == FileDialogMode::Open ? "Open File" : "Save File";
   std::string const action = mode == FileDialogMode::Open ? "Open" : "Save";
-  std::filesystem::path const parent = directory.peek().parent_path();
-  bool const canGoUp = !parent.empty() && parent != directory.peek();
+  Reactive::Bindable<bool> const canGoBack{[backStack] {
+    return !backStack().empty();
+  }};
+  Reactive::Bindable<bool> const canGoForward{[forwardStack] {
+    return !forwardStack().empty();
+  }};
+  Reactive::Bindable<bool> const canGoUp{[directory] {
+    std::filesystem::path const current = directory();
+    std::filesystem::path const parent = current.parent_path();
+    return !parent.empty() && parent != current;
+  }};
+  Reactive::Bindable<bool> const actionDisabled{[mode = mode, selectedPath, name] {
+    return mode == FileDialogMode::Open ? selectedPath().empty() : name().empty();
+  }};
+  Reactive::Bindable<float> const fileListWidth{[listViewportSize] {
+    return std::max(1.f, listViewportSize().width - 2.f);
+  }};
+  auto fileListScrollView = [scrollOffset,
+                             listViewportSize,
+                             entries,
+                             name,
+                             selectedPath,
+                             overwriteConfirmPath,
+                             status,
+                             navigateToDirectory,
+                             activateFileFromClick,
+                             handleListKeyAtIndex,
+                             fileListWidth] {
+    return ScrollView{
+        .axis = ScrollAxis::Vertical,
+        .scrollOffset = scrollOffset,
+        .viewportSize = listViewportSize,
+        .onTap = {},
+        .children = children(
+            VStack{
+                .spacing = 0.f,
+                .alignment = Alignment::Stretch,
+                .children = children(For<FileDialogEntry>(
+                    entries,
+                    [](FileDialogEntry const& entry) {
+                      return entry.path.string() + (entry.directory ? "/" : "");
+                    },
+                    [name, selectedPath, overwriteConfirmPath, status,
+                     navigateToDirectory, activateFileFromClick,
+                     handleListKeyAtIndex, entries, fileListWidth](
+                        FileDialogEntry const& entry) {
+                      auto rowKey = [handleListKeyAtIndex, entries, path = entry.path](
+                                        KeyCode key, Modifiers modifiers) {
+                        handleListKeyAtIndex(entryIndex(entries.peek(), path), key, modifiers);
+                      };
+                      return fileDialogRow(entry,
+                                           name,
+                                           selectedPath,
+                                           overwriteConfirmPath,
+                                           status,
+                                           fileListWidth,
+                                           navigateToDirectory,
+                                           activateFileFromClick,
+                                           std::function<void(KeyCode, Modifiers)>{
+                                               std::move(rowKey)});
+                    },
+                    0.f,
+                    Alignment::Stretch)),
+            }.width(fileListWidth)
+             .padding(0.f, 1.f, 0.f, 1.f)),
+    };
+  };
 
   return VStack{
       .spacing = 0.f,
@@ -718,48 +1018,18 @@ Element FileDialog::body() const {
               .spacing = 8.f,
               .alignment = Alignment::Center,
               .children = children(
-                  FileDialogToolButton{
-                      .icon = IconName::ArrowUpward,
-                      .tooltip = "Parent Folder",
-                      .onTap = goUp,
-                      .disabled = !canGoUp,
+                  FileDialogNavSegmentedControl{
+                      .canGoBack = canGoBack,
+                      .canGoUp = canGoUp,
+                      .canGoForward = canGoForward,
+                      .goBack = goBack,
+                      .goUp = goUp,
+                      .goForward = goForward,
                   },
-                  FileDialogToolButton{
-                      .icon = IconName::Refresh,
-                      .tooltip = "Refresh",
-                      .onTap = refreshCurrent,
-                  },
-                  FileDialogToolButton{
-                      .icon = IconName::CreateNewFolder,
-                      .tooltip = "New Folder",
-                      .onTap = createFolder,
-                  },
-                  TextInput{
-                      .value = directoryText,
-                      .placeholder = "Folder",
-                      .style = compactInputStyle(),
-                      .onSubmit = [goToDirectory](std::string const&) { goToDirectory(); },
-                      .onEscape = [cancel](std::string const&) { cancel(); },
-                  }.flex(1.f, 1.f, 0.f),
-                  Button{
-                      .label = "Go",
-                      .variant = ButtonVariant::Secondary,
-                      .onTap = goToDirectory,
-                  },
-                  HStack{
-                      .spacing = 6.f,
-                      .alignment = Alignment::Center,
-                      .children = children(
-                          Checkbox{
-                              .value = showHidden,
-                              .onChange = toggleHidden,
-                          },
-                          Text{
-                              .text = "Show hidden",
-                              .font = Font{.size = 12.f, .weight = 430.f},
-                              .color = Color::secondary(),
-                              .verticalAlignment = VerticalAlignment::Center,
-                          })})}
+                  FileDialogBreadcrumbBar{
+                      .crumbs = crumbs,
+                      .navigateToPath = navigateToDirectory,
+                  }.flex(1.f, 1.f, 0.f))}
               .height(52.f)
               .padding(10.f, 12.f, 10.f, 12.f)
               .fill(FillStyle::solid(Color::windowBackground()))
@@ -769,15 +1039,9 @@ Element FileDialog::body() const {
               .alignment = Alignment::Stretch,
               .children = children(
                   VStack{
-                      .spacing = 8.f,
+                      .spacing = 0.f,
                       .alignment = Alignment::Stretch,
                       .children = children(
-                          Text{
-                              .text = "Locations",
-                              .font = Font{.size = 12.f, .weight = 620.f},
-                              .color = Color::secondary(),
-                              .verticalAlignment = VerticalAlignment::Center,
-                          }.height(20.f),
                           VStack{
                               .spacing = 2.f,
                               .alignment = Alignment::Stretch,
@@ -786,8 +1050,8 @@ Element FileDialog::body() const {
                                   [](FileDialogPlace const& place) {
                                     return place.label + ":" + place.path.string();
                                   },
-                                  [directory, refreshDirectory](FileDialogPlace const& place) {
-                                    return fileDialogPlaceRow(place, directory, refreshDirectory);
+                                  [directory, navigateToDirectory](FileDialogPlace const& place) {
+                                    return fileDialogPlaceRow(place, directory, navigateToDirectory);
                                   },
                                   0.f,
                                   Alignment::Stretch)),
@@ -796,78 +1060,34 @@ Element FileDialog::body() const {
                                                    .fill(FillStyle::solid(Color::windowBackground())),
                   Rectangle{}.width(1.f).fill(FillStyle::solid(Color::separator())),
                   VStack{
-                      .spacing = 10.f,
+                      .spacing = 0.f,
                       .alignment = Alignment::Stretch,
                       .children = children(
                           Rectangle{}
                               .fill(FillStyle::solid(Color::controlBackground()))
                               .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                               .cornerRadius(CornerRadius{6.f})
-                              .overlay(ScrollView{
-                                  .axis = ScrollAxis::Vertical,
-                                  .scrollOffset = scrollOffset,
-                                  .children = children(For<FileDialogEntry>(
-                                      entries,
-                                      [](FileDialogEntry const& entry) {
-                                        return entry.path.string() + (entry.directory ? "/" : "");
-                                      },
-                                      [name, selectedPath, overwriteConfirmPath, status,
-                                       refreshDirectory, activateFileFromClick,
-                                       handleListKeyAtIndex, entries](
-                                          FileDialogEntry const& entry) {
-                                        auto rowKey = [handleListKeyAtIndex, entries,
-                                                       path = entry.path](
-                                                          KeyCode key, Modifiers modifiers) {
-                                          handleListKeyAtIndex(entryIndex(entries.peek(), path),
-                                                               key, modifiers);
-                                        };
-                                        return fileDialogRow(entry,
-                                                             name,
-                                                             selectedPath,
-                                                             overwriteConfirmPath,
-                                                             status,
-                                                             refreshDirectory,
-                                                             activateFileFromClick,
-                                                             std::function<void(KeyCode, Modifiers)>{
-                                                                 std::move(rowKey)});
-                                      },
-                                      0.f,
-                                      Alignment::Stretch)),
-                              })
+                              .overlay(Show(
+                                  [listGeneration] {
+                                    return listGeneration();
+                                  },
+                                  fileListScrollView,
+                                  fileListScrollView))
                               .focusable(true)
                               .onKeyDown(std::function<void(KeyCode, Modifiers)>{handleListKey})
                               .flex(1.f, 1.f, 0.f),
-                          HStack{
-                              .spacing = 8.f,
-                              .alignment = Alignment::Center,
-                              .children = children(
-                                  Text{
-                                      .text = "Name",
-                                      .font = Font{.size = 13.f, .weight = 500.f},
-                                      .color = Color::secondary(),
-                                      .verticalAlignment = VerticalAlignment::Center,
-                                  }.width(52.f),
-                                  TextInput{
-                                      .value = name,
-                                      .placeholder =
-                                          mode == FileDialogMode::Open ? "Select a file" : "File name",
-                                      .style = compactInputStyle(),
-                                      .onChange = nameChanged,
-                                      .onSubmit = [accept](std::string const&) { accept(); },
-                                      .onEscape = [cancel](std::string const&) { cancel(); },
-                                  }.flex(1.f, 1.f, 0.f))},
-                          HStack{
-                              .spacing = 8.f,
-                              .alignment = Alignment::Center,
-                              .children = children(
-                                  Text{
-                                      .text = [status, summary] {
-                                        return status().empty() ? summary() : status();
-                                      },
-                                      .font = Font{.size = 12.f, .weight = 430.f},
-                                      .color = Color::secondary(),
-                                      .verticalAlignment = VerticalAlignment::Center,
-                                  }.flex(1.f, 1.f, 0.f))},
+                          Show(
+                              [status] {
+                                return !status().empty();
+                              },
+                              [status] {
+                                return Text{
+                                    .text = status,
+                                    .font = dialogFont(12.f, 430.f),
+                                    .color = Color::secondary(),
+                                    .verticalAlignment = VerticalAlignment::Center,
+                                }.height(20.f).padding(6.f, 0.f, 0.f, 0.f);
+                              }),
                           Show(
                               [overwriteConfirmPath] {
                                 return !overwriteConfirmPath().empty();
@@ -883,7 +1103,7 @@ Element FileDialog::body() const {
                                                        overwriteConfirmPath().filename().string() +
                                                        "\"?";
                                               },
-                                              .font = Font{.size = 12.f, .weight = 500.f},
+                                              .font = dialogFont(12.f, 500.f),
                                               .color = Color::primary(),
                                               .verticalAlignment = VerticalAlignment::Center,
                                           }.flex(1.f, 1.f, 0.f),
@@ -900,20 +1120,16 @@ Element FileDialog::body() const {
                                       .padding(8.f)
                                       .fill(FillStyle::solid(Color::controlBackground()))
                                       .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-                                      .cornerRadius(CornerRadius{6.f});
-                              }))}.padding(12.f)
+                                      .cornerRadius(CornerRadius{6.f})
+                                      .padding(6.f, 0.f, 0.f, 0.f);
+                              }))}.padding(12.f, 12.f, 12.f, 12.f)
                                   .flex(1.f, 1.f, 0.f))}
               .flex(1.f, 1.f, 0.f),
           HStack{
               .spacing = 8.f,
               .alignment = Alignment::Center,
               .children = children(
-                  Text{
-                      .text = title,
-                      .font = Font{.size = 12.f, .weight = 520.f},
-                      .color = Color::secondary(),
-                      .verticalAlignment = VerticalAlignment::Center,
-                  }.flex(1.f, 1.f, 0.f),
+                  Spacer{}.flex(1.f, 1.f, 0.f),
                   Button{
                       .label = "Cancel",
                       .variant = ButtonVariant::Secondary,
@@ -922,6 +1138,7 @@ Element FileDialog::body() const {
                   Button{
                       .label = action,
                       .variant = ButtonVariant::Primary,
+                      .disabled = actionDisabled,
                       .onTap = accept,
                   })}
               .height(58.f)

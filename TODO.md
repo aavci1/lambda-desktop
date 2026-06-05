@@ -14,11 +14,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-007 | Bug | Minimized apps do not move to the dock with previews | Medium | P2 |
 | TODO-008 | Bug | Window content can stretch while resizing | Medium | P1 |
 | TODO-009 | Bug | Files opens supported images in Firefox instead of Preview | Medium | P1 |
-| TODO-010 | Bug | Verify Files remains interactive after launching another app | High | P0 |
 | TODO-011 | Feature | Fix and enhance Super+Tab window cycler | N/A | P1 |
 | TODO-013 | Feature | Add Editor file watcher with reload prompt | N/A | P1 |
-| TODO-014 | Bug | File dialog view stops using full width after folder navigation | Medium | P2 |
-| TODO-015 | Feature | Simplify Open and Save file dialog navigation UI | N/A | P2 |
 
 ## TODO-002: Copy/paste is not working across applications
 
@@ -81,11 +78,6 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Add or update tests around local `lambda-preview` registration and Files default open-with resolution so supported images choose Preview instead of Firefox/browser fallback.
 - [ ] [Manual] Verify manually by running from the development build and opening PNG, JPEG, and SVG files from Files.
 
-## TODO-010: Verify Files remains interactive after launching another app
-
-- [ ] [Manual] Manually verify the async launch fix by opening image and video files from Files, then moving, focusing, and closing the Files window while the launched app remains open.
-- [ ] [Manual] If Files still loses events after the async launch fix, investigate compositor focus/input routing next; the file launch path should already be non-blocking and should not leave the launched app holding Files' inherited non-stdio file descriptors.
-
 ## TODO-011: Fix and enhance Super+Tab window cycler
 
 - [ ] [Manual] The window manager can only cycle through two apps with Super+Tab.
@@ -115,26 +107,3 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Update the watcher when the user opens a different file, creates a new file, or closes the document, and avoid leaving stale watchers running.
 - [ ] [Auto] Coalesce duplicate filesystem events so one external save produces one reload prompt.
 - [ ] [Auto] Automate verification if possible by opening a file in Editor, changing it externally, asserting the reload banner/toast appears, accepting reload, and checking that scroll and caret position are preserved.
-
-## TODO-014: File dialog view stops using full width after folder navigation
-
-- [ ] [Manual] In the file open dialog, the file/folder view area does not use the full available width after clicking into another folder.
-- [ ] [Auto + Manual] Navigating into a folder should preserve or recompute the file/folder view layout so it fills the available content width.
-- [ ] [Auto + Manual] Verify the issue in the Open File dialog and any shared FileDialog view used by Save dialogs.
-- [ ] [Auto] Add layout coverage if possible for the FileDialog content area after directory navigation, ensuring the file/folder list or grid receives the expected width constraints.
-- [ ] [Manual] Manually verify by opening the file dialog, navigating into a subfolder, and confirming the file/folder view area still spans the dialog width.
-
-## TODO-015: Simplify Open and Save file dialog navigation UI
-
-- [ ] [Auto + Manual] Apply these FileDialog UI changes to both Open and Save dialogs.
-- [ ] [Auto + Manual] Replace the URL/path bar with a breadcrumb control similar to the Files app.
-- [ ] [Auto + Manual] Replace the single Up button with a Back / Up / Forward button group.
-- [ ] [Auto + Manual] Remove the Go button and any dialog functionality that only exists to submit the removed URL/path bar.
-- [ ] [Auto + Manual] Remove the Show Hidden control.
-- [ ] [Auto + Manual] Remove the `Name: Select a file` input/control from both Open and Save dialogs.
-- [ ] [Manual] Remove the file/folder count text.
-- [ ] [Manual] Remove the extra `Open File` or `Save File` label from inside the dialog if it duplicates the window title or primary action.
-- [ ] [Auto + Manual] Remove the Refresh and New Folder buttons.
-- [ ] [Auto] Remove or disable the Refresh and New Folder functionality so the removed buttons do not leave hidden shortcuts or unreachable actions behind.
-- [ ] [Auto + Manual] Verify keyboard and pointer navigation still allow entering folders, going back, going up, going forward, selecting a file, confirming Open or Save, and canceling the dialog.
-- [ ] [Manual] Manually verify the simplified Open and Save dialogs against the Files app breadcrumb behavior and confirm the removed controls no longer appear in either mode.
