@@ -73,7 +73,7 @@ Lambda is not daily-driver complete until these gates are closed.
 | P2 | Settings | Owner config editing plus live-apply clarity | Mostly done |
 | P3 | Files | Safe file-management live UI beyond the model layer | Open |
 | P4 | Terminal | Daily terminal UI completeness | Open |
-| P5 | Shared services and missing core apps | Shared desktop backends, editor, document viewer | Unspecced/integrated backlog |
+| P5 | Shared services and missing core apps | Shared desktop backends, editor, document viewer | Editor backlog integrated; other apps remain preliminary |
 
 ## Detailed Workstream Index
 
@@ -153,6 +153,17 @@ Terminal:
 - TE-11: Preferences, profiles, and Settings handoff.
 - TE-12: Desktop integration.
 - TE-13: Tests and validation.
+
+Editor:
+
+- ED-1: Document model, file I/O, dirty state, and save prompts.
+- ED-2: Platform file dialogs, print/page setup, and desktop integration.
+- ED-3: Text editing engine, undo/redo, selection, scrolling, and performance.
+- ED-4: Find, replace, go-to-line, time/date insertion, and editor commands.
+- ED-5: Menus, shortcuts, context menus, status bar, zoom, wrap, and font settings.
+- ED-6: Tabs, session restore, and unsaved-content recovery.
+- ED-7: Encoding, newline, file-type policy, spellcheck, autocorrect, and optional AI features.
+- ED-8: Tests and validation.
 
 ## P0 Window Manager
 
@@ -403,15 +414,70 @@ Shared desktop services:
 - Portal direction for screenshot/screencast/file chooser and untrusted clients.
 - Secrets/keyring.
 
-Preliminary text editor:
+Editor current implementation:
 
-- Plain-text open/edit/save/save-as.
-- New file flow.
-- Encoding/newline handling.
-- Dirty state.
-- Search.
-- Clipboard.
-- Files/open-with integration.
+- `lambda-editor` is a compact single-document app implemented almost entirely in `apps/lambda-editor/main.cpp`.
+- Current UI has a manual path field, `New`, `Open`, and `Save` buttons, a multiline `TextInput`, status text, and a byte-count-style character count.
+- Current file I/O reads and writes raw bytes through `std::ifstream`/`std::ofstream`; save creates missing parent directories and truncates the target path.
+- Current shortcut registration covers Copy, Cut, Paste, Select All, and Quit. The shared `TextInput` layer already has UTF-8 movement, pointer selection, keyboard selection, clipboard action claims, and layout helpers.
+- Current app behavior does not include File/Edit/View/Help menus, native file dialogs, save-as flow, close/quit save prompts, undo/redo, find/replace, line/column status, scrolling editor viewport, word-wrap toggle, status-bar toggle, zoom, font settings, printing, tabs, session restore, spellcheck, or tests specific to editor document behavior.
+
+Editor open gate:
+
+- Replace the manual path textbox workflow with real `New`, `Open`, `Save`, `Save As`, and `Exit` commands.
+- Add a Lambda platform file-dialog abstraction for open/save panels; this likely also serves Files/open-with and future portal work.
+- Add a document model with current path, display name, saved revision/hash, dirty state, file existence/read-only/error state, and command-line file-open handling.
+- Prompt before data loss on new, open, close-window, quit, and tab-close flows.
+- Make `Save` route to `Save As` for untitled documents, and stop silently creating parent directories unless a deliberate product decision keeps that behavior.
+- Update window and future tab titles with filename and unsaved marker.
+- Handle missing files, directory paths, permission errors, large files, invalid text, encoding, and newline policy explicitly.
+- Preserve or intentionally convert UTF-8 BOM, UTF-16 LE/BE, CRLF, LF, and final-newline state; show the effective format in the status bar where useful.
+- Add real status-bar fields for line, column, selection, character count, encoding, newline mode, and zoom.
+- Add word wrap, status bar visibility, zoom in/out/default, and editor font family/size settings with persistence.
+- Add multi-level undo/redo in the shared text-editing layer or an editor-specific buffer layer; register `edit.undo` and `edit.redo`.
+- Add editor actions and enabled states for Delete, Cut, Copy, Paste, Select All, Undo, Redo, Find, Replace, Go To, Time/Date, Save, Save As, Print, and Page Setup.
+- Add find UI with next/previous, match case, wrap-around behavior, and visible match feedback.
+- Add replace UI with replace, replace next, and replace all.
+- Add Go To line and time/date insertion.
+- Add a context menu for the editor surface with editing, find/replace, and spellcheck actions as they become available.
+- Add multiline editor viewport scrolling, PageUp/PageDown, Ctrl/Home/End-style document navigation, platform-correct modifiers, and caret visibility while typing or navigating.
+- Add large-file performance guardrails so typing, selection, find, and layout do not copy or relayout the full buffer unnecessarily.
+- Add a full menu bar through `Application::setMenuBar`: File, Edit, Format, View, and Help.
+- Add File menu entries for New, New Window, Open, Save, Save As, Page Setup, Print, and Exit.
+- Add Edit menu entries for Undo, Redo, Cut, Copy, Paste, Delete, Find, Find Next, Find Previous, Replace, Go To, Select All, and Time/Date.
+- Add Format menu entries for Word Wrap and Font.
+- Add View menu entries for Zoom In, Zoom Out, Restore Default Zoom, and Status Bar.
+- Add Help/About entry for Lambda Editor.
+- Normalize shortcut behavior by platform; Notepad parity on Windows/Linux generally means Ctrl-style shortcuts, while macOS should keep command-style shortcuts.
+- Add Files/open-with integration so text files launch `lambda-editor` with the selected path and sensible MIME/default-app behavior.
+- Split `main.cpp` into document model, file I/O, editor view, menu/action wiring, settings, and tests.
+
+Editor tabs and recovery:
+
+- Add a tab model with multiple documents per window.
+- Add new tab, close tab, next/previous tab, dirty tab indicators, and keyboard shortcuts.
+- Add tab reorder/drag-out behavior only after the framework supports the required interactions.
+- Restore previously open tabs and unsaved tab content on launch.
+- Keep session restore separate from real file save: restored unsaved edits must not modify files until the user saves.
+- Add a setting for opening files in new tabs versus new windows.
+
+Editor printing and page setup:
+
+- Add platform print and page-setup abstractions.
+- Support Notepad-style page setup for header, footer, margins, orientation, and paper options where the platform exposes them.
+- Use filename and page-number defaults for printed header/footer unless Lambda chooses a simpler product policy.
+
+Editor spellcheck and modern Notepad parity:
+
+- Add spellcheck integration through system spell APIs or a bundled engine such as Hunspell.
+- Render misspelling diagnostics in the text editor, including red squiggles or an equivalent accessible underline.
+- Add suggestions, ignore-once/ignore-all, add-to-dictionary, and context-menu correction actions.
+- Add autocorrect and per-file-type spellcheck defaults; keep spellcheck off by default for logs and code-like files.
+- Treat AI write/rewrite/summarize, lightweight formatting, and tables as stretch goals, not part of the daily-driver editor gate.
+
+Editor deferred:
+
+- Rich text editing, Markdown rendering mode, syntax highlighting, project/workspace sidebar, collaboration, cloud sync, and AI features.
 
 Document/PDF viewer:
 
@@ -448,6 +514,7 @@ Manual validation coverage inherited from the old readiness specs:
 - Settings: build/unit checks, launch, Appearance, Display, Input, Windows, Dock & Panel, Notifications, Launcher & Clipboard, About/System, save/revert/reset, invalid values, restart-required rows, compact layout, and owner-config persistence.
 - Files: build/unit checks, launch, browsing places/root/outside-home/permission-denied/large/hidden/external-change cases, selection, safe operations, trash, clipboard/DnD behavior, open-with behavior, grid/list/sort/search behavior, and preference persistence.
 - Terminal: build/unit checks, launch, shell workflows, full-screen apps, scrollback, selection/clipboard, key input, Unicode/color/attributes, resize/performance traces, and preferences.
+- Editor: build/unit checks, launch empty document, command-line file open, native open/save/save-as, dirty prompts, missing/permission-denied/large/invalid-encoding files, newline/encoding preservation, undo/redo, selection/clipboard, find/replace, go-to-line, word wrap, zoom, font/status-bar preferences, tabs/session restore when implemented, print/page setup when implemented, Files/open-with launch, and keyboard/menu/context-menu parity.
 
 Useful targeted checks:
 
