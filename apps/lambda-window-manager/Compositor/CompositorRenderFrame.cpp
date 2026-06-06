@@ -13,10 +13,16 @@
 #include "presentation-time-server-protocol.h"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -96,6 +102,328 @@ void drawScreenshotFlash(Canvas& canvas, WaylandServer const& wayland, float opa
                   FillStyle::solid(Color{1.f, 1.f, 1.f, std::clamp(opacity, 0.f, 1.f)}),
                   StrokeStyle::none(),
                   ShadowStyle::none());
+}
+
+struct WindowCyclerSurfaceList {
+  std::vector<CommittedSurfaceSnapshot const*> surfaces;
+  std::size_t selectedIndex = 0;
+};
+
+struct WindowCyclerVisibleRange {
+  std::size_t start = 0;
+  std::size_t count = 0;
+};
+
+std::string windowCyclerTitle(CommittedSurfaceSnapshot const& surface) {
+  if (!surface.title.empty()) return surface.title;
+  if (!surface.appId.empty()) return surface.appId;
+  return "Window";
+}
+
+std::string windowCyclerBadgeText(std::string_view title, std::string_view appId) {
+  std::string_view const source = appId.empty() ? title : appId;
+  std::string initials;
+  bool wordStart = true;
+  for (unsigned char ch : source) {
+    if (std::isalnum(ch)) {
+      if (wordStart || initials.empty()) {
+        initials.push_back(static_cast<char>(std::toupper(ch)));
+        if (initials.size() == 2u) break;
+      }
+      wordStart = false;
+      continue;
+    }
+    if (ch == ' ' || ch == '-' || ch == '_' || ch == '.' || ch == '/') wordStart = true;
+  }
+  if (initials.empty()) initials = "W";
+  return initials;
+}
+
+Color windowCyclerBadgeColor(std::string_view key) {
+  std::uint32_t hash = 2166136261u;
+  for (unsigned char ch : key) {
+    hash ^= static_cast<std::uint32_t>(ch);
+    hash *= 16777619u;
+  }
+  constexpr std::array<Color, 8> palette{
+      Color{0.26f, 0.46f, 0.80f, 1.f},
+      Color{0.20f, 0.58f, 0.48f, 1.f},
+      Color{0.66f, 0.40f, 0.68f, 1.f},
+      Color{0.70f, 0.44f, 0.30f, 1.f},
+      Color{0.36f, 0.54f, 0.34f, 1.f},
+      Color{0.54f, 0.42f, 0.76f, 1.f},
+      Color{0.78f, 0.53f, 0.24f, 1.f},
+      Color{0.24f, 0.56f, 0.72f, 1.f},
+  };
+  return palette[hash % palette.size()];
+}
+
+Font windowCyclerFont(float size, float weight) {
+  Font font{};
+  font.size = size;
+  font.weight = weight;
+  return font;
+}
+
+void drawWindowCyclerText(Canvas& canvas,
+                          TextSystem& textSystem,
+                          std::string_view text,
+                          Font const& font,
+                          Color color,
+                          Rect const& bounds,
+                          HorizontalAlignment alignment = HorizontalAlignment::Center) {
+  TextLayoutOptions options{
+      .horizontalAlignment = alignment,
+      .verticalAlignment = VerticalAlignment::Center,
+      .wrapping = TextWrapping::NoWrap,
+      .maxLines = 1,
+  };
+  auto layout = textSystem.layout(text, font, color, bounds, options);
+  if (!layout) return;
+  canvas.save();
+  canvas.clipRect(bounds);
+  canvas.drawTextLayout(*layout, {0.f, 0.f});
+  canvas.restore();
+}
+
+WindowCyclerSurfaceList windowCyclerSurfaces(WindowCyclerOverlaySnapshot const& overlay,
+                                             std::vector<CommittedSurfaceSnapshot> const& surfaces) {
+  std::unordered_map<std::uint64_t, CommittedSurfaceSnapshot const*> surfaceById;
+  surfaceById.reserve(surfaces.size());
+  for (CommittedSurfaceSnapshot const& surface : surfaces) {
+    surfaceById.emplace(surface.id, &surface);
+  }
+
+  WindowCyclerSurfaceList list;
+  list.surfaces.reserve(overlay.surfaceIds.size());
+  bool selectedFound = false;
+  for (std::size_t index = 0; index < overlay.surfaceIds.size(); ++index) {
+    auto found = surfaceById.find(overlay.surfaceIds[index]);
+    if (found == surfaceById.end()) continue;
+    if (index == overlay.selectedIndex) {
+      list.selectedIndex = list.surfaces.size();
+      selectedFound = true;
+    }
+    list.surfaces.push_back(found->second);
+  }
+  if (!selectedFound && !list.surfaces.empty()) {
+    list.selectedIndex = std::min(list.selectedIndex, list.surfaces.size() - 1u);
+  }
+  return list;
+}
+
+WindowCyclerVisibleRange windowCyclerVisibleRange(std::size_t total,
+                                                  std::size_t selected,
+                                                  std::size_t maxVisible) {
+  if (total == 0u || maxVisible == 0u) return {};
+  std::size_t const count = std::min(total, maxVisible);
+  std::size_t const clampedSelected = std::min(selected, total - 1u);
+  std::size_t start = clampedSelected > count / 2u ? clampedSelected - count / 2u : 0u;
+  if (start + count > total) start = total - count;
+  return WindowCyclerVisibleRange{.start = start, .count = count};
+}
+
+bool drawWindowCyclerThumbnail(WaylandServer& wayland,
+                               Canvas& canvas,
+                               TextSystem& textSystem,
+                               SurfaceRenderState& renderState,
+                               CommittedSurfaceSnapshot const& surface,
+                               Rect const& previewRect,
+                               std::chrono::steady_clock::time_point frameTime,
+                               ChromeConfig const& chrome,
+                               bool animationsEnabled) {
+  auto& cached = renderState.clientImages[surface.id];
+  updateCachedImage(wayland, canvas, surface, cached);
+  if (!cached.image) return false;
+
+  auto& visual = renderState.surfaceVisuals[surface.id];
+  CommittedSurfaceSnapshot previewSurface = surface;
+  previewSurface.closeButtonHovered = false;
+  previewSurface.closeButtonPressed = false;
+  previewSurface.maximizeButtonHovered = false;
+  previewSurface.maximizeButtonPressed = false;
+  previewSurface.minimizeButtonHovered = false;
+  previewSurface.minimizeButtonPressed = false;
+
+  Rect const frameRect = windowFrameRect(previewSurface, chrome.contentInsetWidth);
+  if (frameRect.width <= 0.f || frameRect.height <= 0.f ||
+      previewRect.width <= 0.f || previewRect.height <= 0.f) {
+    return false;
+  }
+  float const scale = std::min(previewRect.width / frameRect.width, previewRect.height / frameRect.height);
+  if (!std::isfinite(scale) || scale <= 0.f) return false;
+  float const scaledWidth = frameRect.width * scale;
+  float const scaledHeight = frameRect.height * scale;
+  float const targetX = previewRect.x + (previewRect.width - scaledWidth) * 0.5f;
+  float const targetY = previewRect.y + (previewRect.height - scaledHeight) * 0.5f;
+
+  canvas.save();
+  canvas.clipRect(previewRect, CornerRadius{6.f}, true);
+  canvas.translate(targetX - frameRect.x * scale, targetY - frameRect.y * scale);
+  canvas.scale(scale);
+  drawCommittedSurfaceSnapshot(canvas,
+                               textSystem,
+                               previewSurface,
+                               visual,
+                               *cached.image,
+                               frameTime,
+                               chrome,
+                               animationsEnabled);
+  canvas.restore();
+  return true;
+}
+
+void drawWindowCyclerItem(WaylandServer& wayland,
+                          Canvas& canvas,
+                          TextSystem& textSystem,
+                          SurfaceRenderState& renderState,
+                          CommittedSurfaceSnapshot const& surface,
+                          Rect const& itemRect,
+                          bool selected,
+                          std::chrono::steady_clock::time_point frameTime,
+                          ChromeConfig const& chrome,
+                          bool animationsEnabled) {
+  CornerRadius const itemRadius{8.f};
+  Color const itemFill = selected ? Color{0.13f, 0.16f, 0.20f, 0.90f}
+                                  : Color{0.07f, 0.08f, 0.10f, 0.78f};
+  Color const itemStroke = selected ? Color{0.45f, 0.76f, 1.f, 0.96f}
+                                    : Color{1.f, 1.f, 1.f, 0.16f};
+  canvas.drawRect(itemRect,
+                  itemRadius,
+                  FillStyle::solid(itemFill),
+                  StrokeStyle::solid(itemStroke, selected ? 2.f : 1.f),
+                  selected ? ShadowStyle{.radius = 16.f, .offset = {0.f, 8.f}, .color = Color{0.f, 0.f, 0.f, 0.30f}}
+                           : ShadowStyle::none());
+
+  float const padding = 10.f;
+  float const previewHeight = std::max(80.f, itemRect.height - 80.f);
+  Rect const previewRect = Rect::sharp(itemRect.x + padding,
+                                       itemRect.y + padding,
+                                       itemRect.width - padding * 2.f,
+                                       previewHeight);
+  canvas.drawRect(previewRect,
+                  CornerRadius{6.f},
+                  FillStyle::solid(Color{0.02f, 0.025f, 0.03f, 0.94f}),
+                  StrokeStyle::solid(Color{1.f, 1.f, 1.f, 0.10f}, 1.f),
+                  ShadowStyle::none());
+  bool const previewDrawn = drawWindowCyclerThumbnail(wayland,
+                                                      canvas,
+                                                      textSystem,
+                                                      renderState,
+                                                      surface,
+                                                      previewRect,
+                                                      frameTime,
+                                                      chrome,
+                                                      animationsEnabled);
+  if (!previewDrawn) {
+    drawWindowCyclerText(canvas,
+                         textSystem,
+                         "No Preview",
+                         windowCyclerFont(11.f, 620.f),
+                         Color{1.f, 1.f, 1.f, 0.52f},
+                         previewRect);
+  }
+
+  std::string const title = windowCyclerTitle(surface);
+  std::string const badge = windowCyclerBadgeText(title, surface.appId);
+  std::string_view const badgeKey = surface.appId.empty() ? std::string_view{title} : std::string_view{surface.appId};
+  float const iconSize = 32.f;
+  float const iconY = previewRect.y + previewRect.height + 10.f;
+  Rect const iconRect = Rect::sharp(itemRect.x + (itemRect.width - iconSize) * 0.5f,
+                                    iconY,
+                                    iconSize,
+                                    iconSize);
+  canvas.drawCircle(iconRect.center(),
+                    iconSize * 0.5f,
+                    FillStyle::solid(windowCyclerBadgeColor(badgeKey)),
+                    StrokeStyle::solid(Color{1.f, 1.f, 1.f, 0.22f}, 1.f));
+  drawWindowCyclerText(canvas,
+                       textSystem,
+                       badge,
+                       windowCyclerFont(13.f, 760.f),
+                       Color{1.f, 1.f, 1.f, 0.96f},
+                       iconRect);
+
+  Rect const titleRect = Rect::sharp(itemRect.x + padding,
+                                     iconRect.y + iconRect.height + 3.f,
+                                     itemRect.width - padding * 2.f,
+                                     22.f);
+  drawWindowCyclerText(canvas,
+                       textSystem,
+                       title,
+                       windowCyclerFont(12.5f, selected ? 660.f : 560.f),
+                       selected ? Color{1.f, 1.f, 1.f, 0.96f} : Color{1.f, 1.f, 1.f, 0.74f},
+                       titleRect);
+}
+
+void drawWindowCyclerOverlay(WaylandServer& wayland,
+                             Canvas& canvas,
+                             TextSystem& textSystem,
+                             SurfaceRenderState& renderState,
+                             WindowCyclerOverlaySnapshot const& overlay,
+                             std::vector<CommittedSurfaceSnapshot> const& surfaces,
+                             std::chrono::steady_clock::time_point frameTime,
+                             ChromeConfig const& chrome,
+                             bool animationsEnabled) {
+  float const outputWidth = static_cast<float>(wayland.logicalOutputWidth());
+  float const outputHeight = static_cast<float>(wayland.logicalOutputHeight());
+  if (outputWidth <= 0.f || outputHeight <= 0.f) return;
+
+  WindowCyclerSurfaceList const list = windowCyclerSurfaces(overlay, surfaces);
+  if (list.surfaces.size() < 2u) return;
+
+  float const availableWidth = std::max(0.f, outputWidth - 64.f);
+  float itemWidth = std::clamp(outputWidth * 0.18f, 184.f, 280.f);
+  itemWidth = std::min(itemWidth, availableWidth);
+  float const gap = std::clamp(outputWidth * 0.012f, 12.f, 22.f);
+  float const previewHeight = std::clamp(itemWidth * 0.58f, 104.f, 162.f);
+  float const itemHeight = previewHeight + 80.f;
+  std::size_t maxVisible = static_cast<std::size_t>(std::max(1.f, std::floor((availableWidth + gap) / (itemWidth + gap))));
+  maxVisible = std::min<std::size_t>(maxVisible, 7u);
+  if (maxVisible > 2u && maxVisible % 2u == 0u) --maxVisible;
+  WindowCyclerVisibleRange const visible =
+      windowCyclerVisibleRange(list.surfaces.size(), list.selectedIndex, maxVisible);
+  if (visible.count == 0u) return;
+
+  float const stripWidth = static_cast<float>(visible.count) * itemWidth +
+                           static_cast<float>(visible.count - 1u) * gap;
+  float const panelPadding = 18.f;
+  Rect const panelRect = Rect::sharp((outputWidth - stripWidth) * 0.5f - panelPadding,
+                                     std::max(40.f, outputHeight * 0.5f - (itemHeight + panelPadding * 2.f) * 0.5f),
+                                     stripWidth + panelPadding * 2.f,
+                                     itemHeight + panelPadding * 2.f);
+
+  canvas.drawRect(Rect::sharp(0.f, 0.f, outputWidth, outputHeight),
+                  CornerRadius{},
+                  FillStyle::solid(Color{0.f, 0.f, 0.f, 0.20f}),
+                  StrokeStyle::none(),
+                  ShadowStyle::none());
+  canvas.drawBackdropBlur(panelRect, 22.f, Color{0.03f, 0.035f, 0.045f, 0.48f}, CornerRadius{8.f});
+  canvas.drawRect(panelRect,
+                  CornerRadius{8.f},
+                  FillStyle::solid(Color{0.04f, 0.045f, 0.055f, 0.46f}),
+                  StrokeStyle::solid(Color{1.f, 1.f, 1.f, 0.18f}, 1.f),
+                  ShadowStyle{.radius = 24.f, .offset = {0.f, 12.f}, .color = Color{0.f, 0.f, 0.f, 0.34f}});
+
+  float const firstX = (outputWidth - stripWidth) * 0.5f;
+  float const itemY = panelRect.y + panelPadding;
+  for (std::size_t visibleIndex = 0; visibleIndex < visible.count; ++visibleIndex) {
+    std::size_t const surfaceIndex = visible.start + visibleIndex;
+    Rect const itemRect = Rect::sharp(firstX + static_cast<float>(visibleIndex) * (itemWidth + gap),
+                                      itemY,
+                                      itemWidth,
+                                      itemHeight);
+    drawWindowCyclerItem(wayland,
+                         canvas,
+                         textSystem,
+                         renderState,
+                         *list.surfaces[surfaceIndex],
+                         itemRect,
+                         surfaceIndex == list.selectedIndex,
+                         frameTime,
+                         chrome,
+                         animationsEnabled);
+  }
 }
 
 bool surfaceEligibleForFullscreenDirectScanout(CommittedSurfaceSnapshot const& surface,
@@ -339,6 +667,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   auto committedSurfaces = ctx.wayland.committedSurfaces();
   committedSurfaceCount = committedSurfaces.size();
   auto screenshotOverlay = ctx.wayland.screenshotSelectionOverlay();
+  auto windowCyclerOverlay = ctx.wayland.windowCyclerOverlay();
   std::optional<CommittedSurfaceSnapshot> softwareCursorSnapshot;
   if (!ctx.appliedConfig.config.hardwareCursorEnabled || !ctx.hardwareCursorAvailable) {
     softwareCursorSnapshot = ctx.wayland.cursorSurface();
@@ -346,6 +675,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   bool const forceFullSceneDamage =
       snapPreview.has_value() ||
       screenshotOverlay.has_value() ||
+      windowCyclerOverlay.has_value() ||
       ctx.screenshotFlashOpacity > 0.001f;
   CompositorSceneFramePlan scenePlan =
       buildCompositorSceneFrame(ctx.surfaceRenderState.sceneGraph,
@@ -363,7 +693,8 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                                     .dpiScale = ctx.canvas.dpiScale(),
                                     .animationsEnabled = ctx.appliedConfig.config.animationsEnabled,
                                     .forceFullDamage = forceFullSceneDamage,
-                                    .selectScanout = atomicPresenter && !snapPreview && !screenshotOverlay,
+                                    .selectScanout = atomicPresenter && !snapPreview && !screenshotOverlay &&
+                                                     !windowCyclerOverlay,
                                 });
   std::vector<std::uint64_t> const& frameCallbackSurfaceIds = scenePlan.frameCallbackSurfaceIds;
   SceneDamageResult const& sceneDamage = scenePlan.damage;
@@ -444,7 +775,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   liveSurfaceIds.reserve(committedSurfaces.size());
   std::uint64_t overlaySurfaceId = 0;
   std::optional<CompositorHardwareScanoutSelection> pendingOverlay = std::move(scenePlan.scanout);
-  if (atomicPresenter && !snapPreview && !screenshotOverlay) {
+  if (atomicPresenter && !snapPreview && !screenshotOverlay && !windowCyclerOverlay) {
     overlaySurfaceId = pendingOverlay ? pendingOverlay->candidate.surfaceId : 0;
     if (!pendingOverlay) {
       atomicPresenter->clearPreparedOverlayCandidate();
@@ -662,6 +993,17 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     phaseStart = profileNow();
     if (screenshotOverlay) {
       drawScreenshotSelectionOverlay(ctx.canvas, ctx.wayland, *screenshotOverlay);
+    }
+    if (windowCyclerOverlay) {
+      drawWindowCyclerOverlay(ctx.wayland,
+                              ctx.canvas,
+                              ctx.textSystem,
+                              ctx.surfaceRenderState,
+                              *windowCyclerOverlay,
+                              committedSurfaces,
+                              frameTime,
+                              ctx.appliedConfig.config.chrome,
+                              ctx.appliedConfig.config.animationsEnabled);
     }
     double const closingMs = profileMs(phaseStart);
     atomicFrameProfile.closingMs += closingMs;

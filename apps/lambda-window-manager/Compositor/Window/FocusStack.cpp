@@ -130,8 +130,15 @@ bool focusCycleActive(WaylandServer::Impl const* server) {
 
 void clearFocusCycle(WaylandServer::Impl* server) {
   if (!server) return;
+  bool const wasActive = !server->focusCycleList_.empty();
   server->focusCycleList_.clear();
   server->focusCycleIndex_ = 0;
+  server->focusCycleStartedAtMs_ = 0;
+  server->focusCycleOverlayShown_ = false;
+  if (wasActive) {
+    ++server->contentSerial_;
+    server->notifyShellStateChanged();
+  }
 }
 
 bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs, bool forward) {
@@ -139,6 +146,8 @@ bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs, bool forward)
   if (server->focusCycleList_.empty()) {
     server->focusCycleList_ =
         focusCycleListFromOrders(server->focusOrder_, server->surfaces_, server->keyboardFocus_);
+    server->focusCycleStartedAtMs_ = timeMs;
+    server->focusCycleOverlayShown_ = false;
     auto current = std::find(server->focusCycleList_.begin(),
                              server->focusCycleList_.end(),
                              server->keyboardFocus_);
@@ -168,6 +177,15 @@ bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs, bool forward)
 } // namespace lambda::compositor::wm
 
 namespace lambda::compositor {
+
+std::optional<int> WaylandServer::Impl::windowCyclerWakeDelayMs() const {
+  if (focusCycleList_.size() < 2u || focusCycleStartedAtMs_ == 0 || focusCycleOverlayShown_) {
+    return std::nullopt;
+  }
+  std::uint32_t const elapsed = wm::monotonicMilliseconds() - focusCycleStartedAtMs_;
+  if (elapsed >= wm::kWindowCyclerOverlayDelayMs) return 0;
+  return static_cast<int>(wm::kWindowCyclerOverlayDelayMs - elapsed);
+}
 
 using wm::mostRecentToplevel;
 using wm::raiseSurface;

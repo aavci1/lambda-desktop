@@ -377,7 +377,9 @@ struct SnapFrameCapture {
 
   [[nodiscard]] bool wantsFrame(WaylandServer const& wayland) {
     if (!enabled || frames >= maxFrames) return false;
-    bool const active = wayland.hasActiveAnimations() || wayland.snapPreviewWakeDelayMs().has_value();
+    bool const active = wayland.hasActiveAnimations() ||
+                        wayland.snapPreviewWakeDelayMs().has_value() ||
+                        wayland.windowCyclerWakeDelayMs().has_value();
     if (active) {
       started = true;
       remainingTail = tailFrames;
@@ -482,7 +484,9 @@ struct SnapAnimationTrace {
 
   [[nodiscard]] bool wantsFrame(WaylandServer const& wayland) {
     if (!enabled || frames >= maxFrames) return false;
-    bool const active = wayland.hasActiveAnimations() || wayland.snapPreviewWakeDelayMs().has_value();
+    bool const active = wayland.hasActiveAnimations() ||
+                        wayland.snapPreviewWakeDelayMs().has_value() ||
+                        wayland.windowCyclerWakeDelayMs().has_value();
     if (active) {
       started = true;
       remainingTail = tailFrames;
@@ -1827,13 +1831,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     auto tryClearAtomicDirtyForEmptyDamage = [&](bool animationFrameNeededNow,
                                                  bool screenshotFlashFrameNeededNow,
                                                  bool snapPreviewFrameNeededNow,
+                                                 bool windowCyclerFrameNeededNow,
                                                  bool inputHardwareCursorFrameRequiredNow,
                                                  bool inputRenderRequiredNow,
                                                  bool configReloadedNow) {
       if (!presenter->atomicPresenter() || !atomicFrameDirty) return false;
       if (presenter->atomicPresenter()->hasPendingPageFlip() || !atomicReadyFrames.empty()) return false;
       if (forceRender || animationFrameNeededNow || screenshotFlashFrameNeededNow ||
-          snapPreviewFrameNeededNow || inputHardwareCursorFrameRequiredNow ||
+          snapPreviewFrameNeededNow || windowCyclerFrameNeededNow || inputHardwareCursorFrameRequiredNow ||
           inputRenderRequiredNow || configReloadedNow || wayland.hasPendingFrameCallbacks()) {
         return false;
       }
@@ -1920,9 +1925,14 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           snapPreviewDelayBeforePoll && *snapPreviewDelayBeforePoll <= 0;
       bool const snapPreviewCanRenderBeforePoll =
           snapPreviewFrameNeededBeforePoll && !atomicFrameBlockedBeforePoll;
+      std::optional<int> const windowCyclerDelayBeforePoll = wayland.windowCyclerWakeDelayMs();
+      bool const windowCyclerFrameNeededBeforePoll =
+          windowCyclerDelayBeforePoll && *windowCyclerDelayBeforePoll <= 0;
+      bool const windowCyclerCanRenderBeforePoll =
+          windowCyclerFrameNeededBeforePoll && !atomicFrameBlockedBeforePoll;
       bool const animationCanRenderBeforePoll =
           (animationFrameNeeded || screenshotFlashFrameNeededBeforePoll || snapPreviewCanRenderBeforePoll ||
-           atomicDirtyCanRenderBeforePoll) &&
+           windowCyclerCanRenderBeforePoll || atomicDirtyCanRenderBeforePoll) &&
           !atomicFrameBlockedBeforePoll;
       int const renderAheadDelayBeforePoll =
           diagnosticRenderAheadAllowed() ? atomicRenderAheadDelayMs() : kIdlePollMs;
@@ -1938,6 +1948,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         int const snapPreviewDelayMs = std::max(0, *snapPreviewDelayBeforePoll);
         if (snapPreviewDelayMs > 0 || snapPreviewCanRenderBeforePoll) {
           pollTimeoutMs = std::min(pollTimeoutMs, snapPreviewDelayMs);
+        }
+      }
+      if (windowCyclerDelayBeforePoll) {
+        int const windowCyclerDelayMs = std::max(0, *windowCyclerDelayBeforePoll);
+        if (windowCyclerDelayMs > 0 || windowCyclerCanRenderBeforePoll) {
+          pollTimeoutMs = std::min(pollTimeoutMs, windowCyclerDelayMs);
         }
       }
       auto timingStart = LoopInstrumentation::Clock::now();
@@ -2087,15 +2103,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           (pollResult.inputOrSystem || waylandWoke || (pollWoke && (!pageFlipWoke || !pageFlipCompleted)));
       std::optional<int> const snapPreviewDelay = wayland.snapPreviewWakeDelayMs();
       bool const snapPreviewFrameNeeded = snapPreviewDelay && *snapPreviewDelay <= 0;
+      std::optional<int> const windowCyclerDelay = wayland.windowCyclerWakeDelayMs();
+      bool const windowCyclerFrameNeeded = windowCyclerDelay && *windowCyclerDelay <= 0;
       bool const screenshotFlashFrameNeeded = screenshotFlashStartedAt.has_value();
       if (forceRender || pollResult.inputOrSystem || waylandWoke || inputRenderRequired ||
           inputHardwareCursorFrameRequired || configReloaded ||
-          animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded ||
+          animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded || windowCyclerFrameNeeded ||
           diagnosticExerciseChanged ||
           acquireWaitFrameCallbackSent) {
         if (!presenter->atomicPresenter() || forceRender || waylandWoke || inputRenderRequired ||
             inputHardwareCursorFrameRequired || configReloaded ||
-            animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded ||
+            animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded || windowCyclerFrameNeeded ||
             diagnosticExerciseChanged) {
           atomicFrameDirty = true;
         }
@@ -2104,6 +2122,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           tryClearAtomicDirtyForEmptyDamage(animationFrameNeeded,
                                             screenshotFlashFrameNeeded,
                                             snapPreviewFrameNeeded,
+                                            windowCyclerFrameNeeded,
                                             inputHardwareCursorFrameRequired,
                                             inputRenderRequired,
                                             configReloaded);
@@ -2123,9 +2142,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const animationCanRenderNow = animationFrameNeeded && !atomicFrameBlocked;
       bool const screenshotFlashCanRenderNow = screenshotFlashFrameNeeded && !atomicFrameBlocked;
       bool const snapPreviewCanRenderNow = snapPreviewFrameNeeded && !atomicFrameBlocked;
+      bool const windowCyclerCanRenderNow = windowCyclerFrameNeeded && !atomicFrameBlocked;
       bool const renderNeeded =
           forceRender || animationCanRenderNow || screenshotFlashCanRenderNow || snapPreviewCanRenderNow ||
-          renderAheadNeeded || genericRenderWake || inputRenderRequired || configReloaded ||
+          windowCyclerCanRenderNow || renderAheadNeeded || genericRenderWake || inputRenderRequired || configReloaded ||
           atomicDirtyCanRender;
       if (pollWoke || renderNeeded) {
         LAMBDA_WINDOW_MANAGER_TRACE_PACING("loop woke=%d system=%d extra=0x%llx waylandWake=%d pageFlipWake=%d "

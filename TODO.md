@@ -15,7 +15,6 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-009 | Bug | Files opens supported images in Firefox instead of Preview | Medium | P1 |
 | TODO-013 | Feature | Add Editor file watcher with reload prompt | N/A | P1 |
 | TODO-014 | Bug | Tooltips are not showing | Medium | P1 |
-| TODO-015 | Feature | Add visual Super+Tab window switcher overlay | N/A | P2 |
 
 ## TODO-002: Flux app clipboard shortcuts and shared text clipboard need cross-app validation
 
@@ -89,13 +88,3 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Verify the tooltip demo shows tooltips after hover delay for buttons, icons, toggles, and placement examples.
 - [ ] [Auto + Manual] Verify Editor toolbar buttons use the same real tooltip implementation and show their labels on hover.
 - [ ] [Auto] Add automated coverage where practical for tooltip state/lifecycle behavior, including hover enter, hover exit, timer cancellation, and avoiding stale tooltip popovers after the target unmounts.
-
-## TODO-015: Add visual Super+Tab window switcher overlay
-
-- [ ] [Manual] Add a window switcher overlay that appears while the user is cycling windows with Super+Tab or Shift+Super+Tab.
-- [ ] [Auto] Use the same stable window list built when Super+Tab starts, so the visual order does not change while the user cycles.
-- [ ] [Manual] Render each window as an item with a live or recently captured window preview at the top, then the app icon and readable window/app title underneath.
-- [ ] [Manual] Show a clear current-selection indicator that moves as the user presses Tab, without activating the selected window until the switcher is confirmed.
-- [ ] [Auto + Manual] Keep the overlay non-focusable and non-destructive: it should not steal app input, change window order during cycling, or interfere with pointer events outside the switcher flow.
-- [ ] [Manual] For many open windows, keep the selected item visible and avoid shrinking previews below a useful size; prefer a horizontally scrollable or centered-neighbor layout over showing every window at unreadable size.
-- [ ] [Auto + Manual] Verify with at least three open non-minimized windows that the overlay order matches the Super+Tab cycle list, the selected item changes on each Tab press, and releasing Super activates the selected window.

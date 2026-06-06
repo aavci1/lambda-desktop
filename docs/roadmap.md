@@ -185,7 +185,7 @@ Open gate:
 - Resolve the deferred system-titlebar/content frame-coherence issue: Settings resize on DP-1 HiDPI can still show momentary non-synced titlebar/content width even though borders stay synced and flicker is gone.
 - Finish the remaining wlroots comparison backlog in [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md): global resource hygiene, xdg toplevel configure-state parity, seat focus/grab workflow parity, data-device DnD lifecycle parity, layer-shell dynamic behavior, output-layout foundation, and a visual regression/real-app harness.
 - Continue resize/snap/maximize/restore validation across more apps; Firefox restore/fullscreen paths are fixed in the tested scenarios, but GTK/Qt/terminal coverage still needs a pass.
-- Complete the active Window Manager TODO items tracked in `TODO.md`: TODO-006 close animation as one whole-window snapshot path, TODO-007 minimized window state and Shell dock-preview handoff, TODO-008 live resize frame coherence, and TODO-015 visual Super+Tab overlay.
+- Complete the active Window Manager TODO items tracked in `TODO.md`: TODO-006 close animation as one whole-window snapshot path, TODO-007 minimized window state and Shell dock-preview handoff, and TODO-008 live resize frame coherence.
 - Re-test Shell panel behavior around fullscreen, window animations, launcher/dock popovers, dock context menus, and long-running browser/video sessions.
 - Complete live real-app validation with Lambda apps plus browser, GTK, Qt, `foot`, clipboard, menus/popups, maximize/restore/snap/minimize, screenshots, fullscreen video, mpv playback, and long idle sessions.
 - Keep popup grabs honest: config-gated until hardware validation says they can be enabled by default.

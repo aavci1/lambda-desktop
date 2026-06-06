@@ -126,6 +126,8 @@ struct WaylandServer::Impl {
   [[nodiscard]] std::vector<CommittedSurfaceSnapshot> committedSurfaces() const;
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
   [[nodiscard]] std::optional<SnapPreviewSnapshot> snapPreview() const;
+  [[nodiscard]] std::optional<WindowCyclerOverlaySnapshot> windowCyclerOverlay();
+  [[nodiscard]] std::optional<int> windowCyclerWakeDelayMs() const;
   [[nodiscard]] std::optional<int> snapPreviewWakeDelayMs() const;
   [[nodiscard]] bool hasPendingFrameCallbacks() const noexcept;
   [[nodiscard]] std::vector<int> duplicateDmabufFds(std::uint64_t surfaceId) const;
@@ -344,6 +346,8 @@ struct WaylandServer::Impl {
   bool shiftDown_ = false;
   std::vector<Surface*> focusCycleList_;
   std::size_t focusCycleIndex_ = 0;
+  std::uint32_t focusCycleStartedAtMs_ = 0;
+  bool focusCycleOverlayShown_ = false;
   std::optional<ScreenshotRequest> screenshotRequest_;
   ScreenshotSelectionState screenshotSelection_;
   std::vector<ShortcutBinding> shortcutBindings_;
@@ -970,6 +974,7 @@ WaylandServer::Impl::XxCutouts* cutoutsFor(WaylandServer::Impl* server,
 WaylandServer::Impl::XdgToplevel* toplevelForSurface(WaylandServer::Impl* server,
                                                      WaylandServer::Impl::Surface* surface);
 std::string titleForSurface(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface);
+std::string appIdForSurface(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface);
 void sendToplevelConfigure(WaylandServer::Impl* server,
                            WaylandServer::Impl::XdgToplevel* toplevel,
                            std::int32_t width,

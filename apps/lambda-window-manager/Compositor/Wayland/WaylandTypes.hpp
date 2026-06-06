@@ -115,6 +115,7 @@ struct CommittedSurfaceSnapshot {
   std::int32_t destinationHeight = 0;
   std::int32_t titleBarHeight = 0;
   std::string title;
+  std::string appId;
   bool serverSideDecorated = false;
   bool cutoutsBound = false;
   bool cutoutsRejected = false;
@@ -168,6 +169,11 @@ struct SnapPreviewSnapshot {
   std::int32_t cacheY = 0;
   std::int32_t cacheWidth = 0;
   std::int32_t cacheHeight = 0;
+};
+
+struct WindowCyclerOverlaySnapshot {
+  std::vector<std::uint64_t> surfaceIds;
+  std::size_t selectedIndex = 0;
 };
 
 enum class ShortcutAction : std::uint8_t {

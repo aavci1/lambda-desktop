@@ -54,6 +54,14 @@ std::optional<SnapPreviewSnapshot> WaylandServer::snapPreview() const {
   return impl_->snapPreview();
 }
 
+std::optional<WindowCyclerOverlaySnapshot> WaylandServer::windowCyclerOverlay() {
+  return impl_->windowCyclerOverlay();
+}
+
+std::optional<int> WaylandServer::windowCyclerWakeDelayMs() const {
+  return impl_->windowCyclerWakeDelayMs();
+}
+
 std::optional<int> WaylandServer::snapPreviewWakeDelayMs() const {
   return impl_->snapPreviewWakeDelayMs();
 }

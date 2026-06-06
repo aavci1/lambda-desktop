@@ -182,6 +182,14 @@ std::string titleForSurface(WaylandServer::Impl const* server, WaylandServer::Im
   return "Window";
 }
 
+std::string appIdForSurface(WaylandServer::Impl const* server, WaylandServer::Impl::Surface const* surface) {
+  auto found = std::find_if(server->toplevels_.begin(), server->toplevels_.end(),
+                            [surface](auto const& toplevel) {
+                              return toplevel->xdgSurface && toplevel->xdgSurface->surface == surface;
+                            });
+  return found == server->toplevels_.end() ? std::string{} : (*found)->appId;
+}
+
 void sendToplevelConfigure(WaylandServer::Impl* server,
                            WaylandServer::Impl::XdgToplevel* toplevel,
                            std::int32_t width,

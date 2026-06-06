@@ -21,6 +21,7 @@ constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
 constexpr std::uint32_t kSnapDwellMs = 250;
 constexpr std::uint32_t kSnapPreviewAnimationMs = 180;
+constexpr std::uint32_t kWindowCyclerOverlayDelayMs = 360;
 constexpr std::uint32_t kInvalidModifierIndex = ~0u;
 
 struct ChromeHitContext {

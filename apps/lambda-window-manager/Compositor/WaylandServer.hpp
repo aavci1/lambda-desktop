@@ -50,6 +50,8 @@ public:
   [[nodiscard]] std::vector<CommittedSurfaceSnapshot> committedSurfaces() const;
   [[nodiscard]] std::optional<CommittedSurfaceSnapshot> cursorSurface() const;
   [[nodiscard]] std::optional<SnapPreviewSnapshot> snapPreview() const;
+  [[nodiscard]] std::optional<WindowCyclerOverlaySnapshot> windowCyclerOverlay();
+  [[nodiscard]] std::optional<int> windowCyclerWakeDelayMs() const;
   [[nodiscard]] std::optional<int> snapPreviewWakeDelayMs() const;
   [[nodiscard]] bool hasPendingFrameCallbacks() const noexcept;
   [[nodiscard]] std::uint64_t contentSerial() const noexcept;

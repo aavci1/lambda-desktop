@@ -205,7 +205,8 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .destinationWidth = surface->viewportState.destinationSet ? surface->viewportState.destinationWidth : width,
       .destinationHeight = surface->viewportState.destinationSet ? surface->viewportState.destinationHeight : height,
       .titleBarHeight = titleBarHeight,
-      .title = decorated && !cutoutMode && !fullscreen ? titleForSurface(server, surface) : std::string{},
+      .title = xdgToplevel ? titleForSurface(server, surface) : std::string{},
+      .appId = xdgToplevel ? appIdForSurface(server, surface) : std::string{},
       .serverSideDecorated = decorated && !fullscreen,
       .cutoutsBound = bound,
       .cutoutsRejected = rejected,
@@ -416,22 +417,26 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
           surface->viewportState.sourceSet ? surface->viewportState.sourceWidth : static_cast<float>(surface->width),
       .sourceHeight =
           surface->viewportState.sourceSet ? surface->viewportState.sourceHeight : static_cast<float>(surface->height),
-      .destinationWidth = surface->viewportState.destinationSet ? surface->viewportState.destinationWidth : displayWidth(surface),
-      .destinationHeight = surface->viewportState.destinationSet ? surface->viewportState.destinationHeight : displayHeight(surface),
+      .destinationWidth =
+          surface->viewportState.destinationSet ? surface->viewportState.destinationWidth : displayWidth(surface),
+      .destinationHeight =
+          surface->viewportState.destinationSet ? surface->viewportState.destinationHeight : displayHeight(surface),
       .titleBarHeight = 0,
       .title = {},
-	      .focused = false,
-	      .activeSizing = false,
-	      .serial = surface->serial,
-	      .backgroundBlurRects = {},
-	      .bufferDamageRects = surface->damageState.bufferRects,
-	      .rgbaPixels = surface->rgbaPixels,
-	      .shmPixels = surface->shmPixels,
-	      .shmPixelBytes = surface->shmPixelBytes,
-	      .pixelFormat = surface->pixelFormat,
-	      .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,
-	      .dmabufFormat = 0,
-	      .dmabufPlanes = {},
+      .appId = {},
+      .focused = false,
+      .activeSizing = false,
+      .serial = surface->serial,
+      .backgroundBlurRects = {},
+      .opaqueRegionRects = {},
+      .bufferDamageRects = surface->damageState.bufferRects,
+      .rgbaPixels = surface->rgbaPixels,
+      .shmPixels = surface->shmPixels,
+      .shmPixelBytes = surface->shmPixelBytes,
+      .pixelFormat = surface->pixelFormat,
+      .dmabufBufferId = surface->dmabufBuffer ? surface->dmabufBuffer->id : 0,
+      .dmabufFormat = 0,
+      .dmabufPlanes = {},
   };
   if (surface->dmabufBuffer) {
     snapshot.dmabufFormat = surface->dmabufBuffer->format;
@@ -445,6 +450,31 @@ std::optional<CommittedSurfaceSnapshot> WaylandServer::Impl::cursorSurface() con
     }
   }
   return snapshot;
+}
+
+std::optional<WindowCyclerOverlaySnapshot> WaylandServer::Impl::windowCyclerOverlay() {
+  if (focusCycleList_.size() < 2u) return std::nullopt;
+  if (focusCycleStartedAtMs_ == 0) return std::nullopt;
+  std::uint32_t const elapsed = wm::monotonicMilliseconds() - focusCycleStartedAtMs_;
+  if (elapsed < wm::kWindowCyclerOverlayDelayMs) return std::nullopt;
+
+  WindowCyclerOverlaySnapshot overlay;
+  overlay.surfaceIds.reserve(focusCycleList_.size());
+  WaylandServer::Impl::Surface* const selectedSurface =
+      focusCycleIndex_ < focusCycleList_.size() ? focusCycleList_[focusCycleIndex_] : nullptr;
+  bool selectedFound = false;
+  for (WaylandServer::Impl::Surface* surface : focusCycleList_) {
+    if (!wm::surfaceFocusableInOrder(surface)) continue;
+    if (surface == selectedSurface) {
+      overlay.selectedIndex = overlay.surfaceIds.size();
+      selectedFound = true;
+    }
+    overlay.surfaceIds.push_back(surface->id);
+  }
+  if (overlay.surfaceIds.size() < 2u) return std::nullopt;
+  if (!selectedFound) overlay.selectedIndex = std::min(overlay.selectedIndex, overlay.surfaceIds.size() - 1u);
+  focusCycleOverlayShown_ = true;
+  return overlay;
 }
 
 std::vector<int> WaylandServer::Impl::duplicateDmabufFds(std::uint64_t surfaceId) const {
