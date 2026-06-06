@@ -114,6 +114,7 @@ struct RestoreDragGeometry {
   WindowGeometry restoreWindow{};
   OutputGeometry output{};
   std::int32_t topInset = kCompositorTitleBarHeight;
+  std::int32_t frameOutset = 0;
 };
 
 struct PopupPositionerGeometry {
@@ -142,22 +143,31 @@ struct PopupGeometry {
 
 [[nodiscard]] std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window,
                                                                OutputGeometry output,
-                                                               std::int32_t topInset = kCompositorTitleBarHeight);
+                                                               std::int32_t topInset = kCompositorTitleBarHeight,
+                                                               std::int32_t frameOutset = 0);
 [[nodiscard]] std::optional<SnapTarget> snapTargetForWindow(WindowGeometry const& window,
                                                             OutputGeometry output,
-                                                            std::int32_t topInset = kCompositorTitleBarHeight);
+                                                            std::int32_t topInset = kCompositorTitleBarHeight,
+                                                            std::int32_t frameOutset = 0);
 [[nodiscard]] WindowGeometry snapTargetGeometry(OutputGeometry output,
                                                 SnapTarget target,
-                                                std::int32_t topInset = kCompositorTitleBarHeight);
+                                                std::int32_t topInset = kCompositorTitleBarHeight,
+                                                std::int32_t frameOutset = 0);
 [[nodiscard]] WindowGeometry snappedWindowGeometry(OutputGeometry output,
                                                   bool leftHalf,
-                                                  std::int32_t topInset = kCompositorTitleBarHeight);
+                                                  std::int32_t topInset = kCompositorTitleBarHeight,
+                                                  std::int32_t frameOutset = 0);
 [[nodiscard]] WindowGeometry maximizedWindowGeometry(OutputGeometry output,
-                                                    std::int32_t topInset = kCompositorTitleBarHeight);
+                                                    std::int32_t topInset = kCompositorTitleBarHeight,
+                                                    std::int32_t frameOutset = 0);
 [[nodiscard]] WindowGeometry centerSnappedWindowGeometry(WindowGeometry window,
                                                         OutputGeometry output,
                                                         std::int32_t topInset = kCompositorTitleBarHeight,
-                                                        std::int32_t threshold = kCompositorCenterSnapThreshold);
+                                                        std::int32_t threshold = kCompositorCenterSnapThreshold,
+                                                        std::int32_t frameOutset = 0);
+[[nodiscard]] WindowGeometry windowFrameGeometryForContent(WindowGeometry const& content,
+                                                          std::int32_t topInset = kCompositorTitleBarHeight,
+                                                          std::int32_t frameOutset = 0);
 [[nodiscard]] WindowGeometry restoredDragGeometry(RestoreDragGeometry const& geometry);
 [[nodiscard]] WindowGeometry resizedWindowGeometry(ResizeDragGeometry const& geometry);
 [[nodiscard]] PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry);

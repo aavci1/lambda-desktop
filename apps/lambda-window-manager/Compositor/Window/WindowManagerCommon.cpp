@@ -185,6 +185,13 @@ std::int32_t externalTitleBarHeight(WaylandServer::Impl* server, WaylandServer::
              : 0;
 }
 
+std::int32_t frameOutsetForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
+  if (!server || !surface) return 0;
+  if (!surfaceServerSideDecorated(server, surface) || surfaceUsesCutouts(server, surface)) return 0;
+  if (externalTitleBarHeight(server, surface) <= 0) return 0;
+  return static_cast<std::int32_t>(std::ceil(std::max(0.f, server->chromeConfig_.contentInsetWidth)));
+}
+
 std::int32_t topInsetForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
   return externalTitleBarHeight(server, surface);
 }

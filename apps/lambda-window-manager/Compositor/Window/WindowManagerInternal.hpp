@@ -197,6 +197,7 @@ OutputGeometry snapOutputGeometryFor(WaylandServer::Impl const* server);
 std::int32_t titleBarHeightFor(WaylandServer::Impl const* server);
 std::int32_t resizeGripSizeFor(WaylandServer::Impl const* server);
 std::int32_t externalTitleBarHeight(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface);
+std::int32_t frameOutsetForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface);
 bool surfaceUsesCutouts(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface);
 std::int32_t topInsetForSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface);
 ResizeEdge resizeEdgesFromXdg(std::uint32_t edges);

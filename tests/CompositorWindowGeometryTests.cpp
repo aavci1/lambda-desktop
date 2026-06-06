@@ -155,6 +155,67 @@ TEST_CASE("compositor maximized geometry uses the same top inset as snap") {
   CHECK(maximized.height == 740);
 }
 
+TEST_CASE("compositor snap and maximize geometry keep the chrome ring inside target bounds") {
+  lambda::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
+  constexpr std::int32_t titleBar = lambda::compositor::kCompositorTitleBarHeight;
+  constexpr std::int32_t ring = 4;
+
+  auto left = lambda::compositor::snappedWindowGeometry(output, true, titleBar, ring);
+  CHECK(left.x == ring);
+  CHECK(left.y == titleBar);
+  CHECK(left.width == 952);
+  CHECK(left.height == 1048);
+  auto leftFrame = lambda::compositor::windowFrameGeometryForContent(left, titleBar, ring);
+  CHECK(leftFrame.x == 0);
+  CHECK(leftFrame.y == 0);
+  CHECK(leftFrame.width == 960);
+  CHECK(leftFrame.height == 1080);
+
+  auto right = lambda::compositor::snappedWindowGeometry(output, false, titleBar, ring);
+  CHECK(right.x == 964);
+  CHECK(right.y == titleBar);
+  CHECK(right.width == 952);
+  CHECK(right.height == 1048);
+  auto rightFrame = lambda::compositor::windowFrameGeometryForContent(right, titleBar, ring);
+  CHECK(rightFrame.x == 960);
+  CHECK(rightFrame.y == 0);
+  CHECK(rightFrame.width == 960);
+  CHECK(rightFrame.height == 1080);
+
+  auto maximized = lambda::compositor::maximizedWindowGeometry(output, titleBar, ring);
+  CHECK(maximized.x == ring);
+  CHECK(maximized.y == titleBar);
+  CHECK(maximized.width == 1912);
+  CHECK(maximized.height == 1048);
+  auto maximizedFrame = lambda::compositor::windowFrameGeometryForContent(maximized, titleBar, ring);
+  CHECK(maximizedFrame.x == 0);
+  CHECK(maximizedFrame.y == 0);
+  CHECK(maximizedFrame.width == 1920);
+  CHECK(maximizedFrame.height == 1080);
+}
+
+TEST_CASE("compositor snap edge detection uses the chrome ring as the visible window edge") {
+  lambda::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
+  constexpr std::int32_t titleBar = lambda::compositor::kCompositorTitleBarHeight;
+  constexpr std::int32_t ring = 4;
+
+  auto leftTarget =
+      lambda::compositor::snapTargetForWindow({.x = ring, .y = 120, .width = 600, .height = 400},
+                                              output,
+                                              titleBar,
+                                              ring);
+  REQUIRE(leftTarget);
+  CHECK(*leftTarget == lambda::compositor::SnapTarget::LeftHalf);
+
+  auto rightTarget =
+      lambda::compositor::snapTargetForWindow({.x = 1316, .y = 120, .width = 600, .height = 400},
+                                              output,
+                                              titleBar,
+                                              ring);
+  REQUIRE(rightTarget);
+  CHECK(*rightTarget == lambda::compositor::SnapTarget::RightHalf);
+}
+
 TEST_CASE("compositor snap geometry uses output work area with reserved dock already removed") {
   lambda::compositor::OutputGeometry const workArea{.width = 1920, .height = 1000};
 

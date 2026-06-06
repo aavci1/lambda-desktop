@@ -7,25 +7,29 @@ namespace lambda::compositor {
 
 std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window,
                                                  OutputGeometry output,
-                                                 std::int32_t topInset) {
-  auto const target = snapTargetForWindow(window, output, topInset);
+                                                 std::int32_t topInset,
+                                                 std::int32_t frameOutset) {
+  auto const target = snapTargetForWindow(window, output, topInset, frameOutset);
   if (!target) return std::nullopt;
-  return snapTargetGeometry(output, *target, topInset);
+  return snapTargetGeometry(output, *target, topInset, frameOutset);
 }
 
 std::optional<SnapTarget> snapTargetForWindow(WindowGeometry const& window,
                                              OutputGeometry output,
-                                             std::int32_t topInset) {
+                                             std::int32_t topInset,
+                                             std::int32_t frameOutset) {
   if (window.width <= 0 || window.height <= 0 || output.width <= 0 || output.height <= 0) {
     return std::nullopt;
   }
   topInset = std::max(0, topInset);
-  bool const left = window.x <= kCompositorSnapEdgeThreshold;
-  bool const right = window.x + window.width >= output.width - kCompositorSnapEdgeThreshold;
+  frameOutset = std::max(0, frameOutset);
+  WindowGeometry const frame = windowFrameGeometryForContent(window, topInset, frameOutset);
+  bool const left = frame.x <= kCompositorSnapEdgeThreshold;
+  bool const right = frame.x + frame.width >= output.width - kCompositorSnapEdgeThreshold;
   bool const top = window.y <= topInset + kCompositorSnapEdgeThreshold;
-  bool const bottom = window.y + window.height >= output.height - kCompositorSnapEdgeThreshold;
+  bool const bottom = frame.y + frame.height >= output.height - kCompositorSnapEdgeThreshold;
   if (left || right) {
-    bool const useLeft = left && (!right || window.x + window.width / 2 <= output.width / 2);
+    bool const useLeft = left && (!right || frame.x + frame.width / 2 <= output.width / 2);
     if (top) return useLeft ? SnapTarget::TopLeftQuarter : SnapTarget::TopRightQuarter;
     if (bottom) return useLeft ? SnapTarget::BottomLeftQuarter : SnapTarget::BottomRightQuarter;
     return useLeft ? SnapTarget::LeftHalf : SnapTarget::RightHalf;
@@ -34,7 +38,23 @@ std::optional<SnapTarget> snapTargetForWindow(WindowGeometry const& window,
   return std::nullopt;
 }
 
-WindowGeometry snapTargetGeometry(OutputGeometry output, SnapTarget target, std::int32_t topInset) {
+namespace {
+
+WindowGeometry insetTargetForFrameOutset(WindowGeometry geometry, std::int32_t frameOutset) {
+  frameOutset = std::max(0, frameOutset);
+  if (frameOutset <= 0) return geometry;
+  geometry.x += frameOutset;
+  geometry.width = std::max(kCompositorMinWindowWidth, geometry.width - frameOutset * 2);
+  geometry.height = std::max(kCompositorMinWindowHeight, geometry.height - frameOutset);
+  return geometry;
+}
+
+} // namespace
+
+WindowGeometry snapTargetGeometry(OutputGeometry output,
+                                  SnapTarget target,
+                                  std::int32_t topInset,
+                                  std::int32_t frameOutset) {
   topInset = std::max(0, topInset);
   std::int32_t const halfWidth = std::max(kCompositorMinWindowWidth, output.width / 2);
   std::int32_t const availableHeight = std::max(0, output.height - topInset);
@@ -44,65 +64,81 @@ WindowGeometry snapTargetGeometry(OutputGeometry output, SnapTarget target, std:
   switch (target) {
   case SnapTarget::LeftHalf:
   case SnapTarget::RightHalf:
-    return snappedWindowGeometry(output, target == SnapTarget::LeftHalf, topInset);
+    return snappedWindowGeometry(output, target == SnapTarget::LeftHalf, topInset, frameOutset);
   case SnapTarget::TopLeftQuarter:
-    return {.x = 0, .y = topInset, .width = halfWidth, .height = topHalfHeight};
+    return insetTargetForFrameOutset({.x = 0, .y = topInset, .width = halfWidth, .height = topHalfHeight},
+                                     frameOutset);
   case SnapTarget::TopRightQuarter:
-    return {.x = std::max(0, output.width - halfWidth),
-            .y = topInset,
-            .width = halfWidth,
-            .height = topHalfHeight};
+    return insetTargetForFrameOutset({.x = std::max(0, output.width - halfWidth),
+                                      .y = topInset,
+                                      .width = halfWidth,
+                                      .height = topHalfHeight},
+                                     frameOutset);
   case SnapTarget::BottomLeftQuarter:
-    return {.x = 0,
-            .y = std::max(topInset, output.height - bottomHalfHeight),
-            .width = halfWidth,
-            .height = bottomHalfHeight};
+    return insetTargetForFrameOutset({.x = 0,
+                                      .y = std::max(topInset, output.height - bottomHalfHeight),
+                                      .width = halfWidth,
+                                      .height = bottomHalfHeight},
+                                     frameOutset);
   case SnapTarget::BottomRightQuarter:
-    return {.x = std::max(0, output.width - halfWidth),
-            .y = std::max(topInset, output.height - bottomHalfHeight),
-            .width = halfWidth,
-            .height = bottomHalfHeight};
-  case SnapTarget::Maximized: return maximizedWindowGeometry(output, topInset);
+    return insetTargetForFrameOutset({.x = std::max(0, output.width - halfWidth),
+                                      .y = std::max(topInset, output.height - bottomHalfHeight),
+                                      .width = halfWidth,
+                                      .height = bottomHalfHeight},
+                                     frameOutset);
+  case SnapTarget::Maximized: return maximizedWindowGeometry(output, topInset, frameOutset);
   }
-  return maximizedWindowGeometry(output, topInset);
+  return maximizedWindowGeometry(output, topInset, frameOutset);
 }
 
-WindowGeometry snappedWindowGeometry(OutputGeometry output, bool leftHalf, std::int32_t topInset) {
+WindowGeometry snappedWindowGeometry(OutputGeometry output,
+                                     bool leftHalf,
+                                     std::int32_t topInset,
+                                     std::int32_t frameOutset) {
   topInset = std::max(0, topInset);
   std::int32_t const width = std::max(kCompositorMinWindowWidth, output.width / 2);
   std::int32_t const height = std::max(kCompositorMinWindowHeight, output.height - topInset);
-  return {
-      .x = leftHalf ? 0 : std::max(0, output.width - width),
-      .y = topInset,
-      .width = width,
-      .height = height,
-  };
+  return insetTargetForFrameOutset(
+      {
+          .x = leftHalf ? 0 : std::max(0, output.width - width),
+          .y = topInset,
+          .width = width,
+          .height = height,
+      },
+      frameOutset);
 }
 
-WindowGeometry maximizedWindowGeometry(OutputGeometry output, std::int32_t topInset) {
+WindowGeometry maximizedWindowGeometry(OutputGeometry output,
+                                       std::int32_t topInset,
+                                       std::int32_t frameOutset) {
   topInset = std::max(0, topInset);
-  return {
-      .x = 0,
-      .y = topInset,
-      .width = std::max(kCompositorMinWindowWidth, output.width),
-      .height = std::max(kCompositorMinWindowHeight, output.height - topInset),
-  };
+  return insetTargetForFrameOutset(
+      {
+          .x = 0,
+          .y = topInset,
+          .width = std::max(kCompositorMinWindowWidth, output.width),
+          .height = std::max(kCompositorMinWindowHeight, output.height - topInset),
+      },
+      frameOutset);
 }
 
 WindowGeometry centerSnappedWindowGeometry(WindowGeometry window,
                                            OutputGeometry output,
                                            std::int32_t topInset,
-                                           std::int32_t threshold) {
+                                           std::int32_t threshold,
+                                           std::int32_t frameOutset) {
   if (window.width <= 0 || window.height <= 0 || output.width <= 0 || output.height <= 0) return window;
   topInset = std::max(0, topInset);
   threshold = std::max(0, threshold);
+  frameOutset = std::max(0, frameOutset);
 
-  std::int32_t const maxX = std::max(0, output.width - window.width);
-  std::int32_t const maxY = std::max(topInset, output.height - window.height);
-  window.x = std::clamp(window.x, 0, maxX);
+  std::int32_t const minX = std::min(frameOutset, std::max(0, output.width - window.width));
+  std::int32_t const maxX = std::max(minX, output.width - window.width - frameOutset);
+  std::int32_t const maxY = std::max(topInset, output.height - window.height - frameOutset);
+  window.x = std::clamp(window.x, minX, maxX);
   window.y = std::clamp(window.y, topInset, maxY);
 
-  std::int32_t const centeredX = std::clamp((output.width - window.width) / 2, 0, maxX);
+  std::int32_t const centeredX = std::clamp((output.width - window.width) / 2, minX, maxX);
   std::int32_t const availableHeight = std::max(0, output.height - topInset);
   std::int32_t const centeredY = std::clamp(topInset + (availableHeight - window.height) / 2,
                                             topInset,
@@ -110,6 +146,19 @@ WindowGeometry centerSnappedWindowGeometry(WindowGeometry window,
   if (std::abs(window.x - centeredX) <= threshold) window.x = centeredX;
   if (std::abs(window.y - centeredY) <= threshold) window.y = centeredY;
   return window;
+}
+
+WindowGeometry windowFrameGeometryForContent(WindowGeometry const& content,
+                                             std::int32_t topInset,
+                                             std::int32_t frameOutset) {
+  topInset = std::max(0, topInset);
+  frameOutset = std::max(0, frameOutset);
+  return {
+      .x = content.x - frameOutset,
+      .y = content.y - topInset,
+      .width = content.width + frameOutset * 2,
+      .height = content.height + topInset + frameOutset,
+  };
 }
 
 WindowGeometry restoredDragGeometry(RestoreDragGeometry const& geometry) {
@@ -122,12 +171,14 @@ WindowGeometry restoredDragGeometry(RestoreDragGeometry const& geometry) {
                      static_cast<float>(snappedWidth),
                  0.f,
                  1.f);
-  int const maxX = std::max(0, geometry.output.width - restore.width);
+  std::int32_t const frameOutset = std::max(0, geometry.frameOutset);
+  int const minX = std::min(frameOutset, std::max(0, geometry.output.width - restore.width));
+  int const maxX = std::max(minX, geometry.output.width - restore.width - frameOutset);
   std::int32_t const topInset = std::max(0, geometry.topInset);
-  int const maxY = std::max(topInset, geometry.output.height - restore.height);
+  int const maxY = std::max(topInset, geometry.output.height - restore.height - frameOutset);
   restore.x = std::clamp(static_cast<int>(std::lround(geometry.pointerX -
                                                        horizontalRatio * static_cast<float>(restore.width))),
-                         0,
+                         minX,
                          maxX);
   restore.y = std::clamp(static_cast<int>(std::lround(geometry.pointerY - geometry.dragOffsetY)),
                          topInset,
