@@ -40,6 +40,7 @@ set(_lambda_test_sources
   ${PROJECT_SOURCE_DIR}/apps/lambda-settings/SettingsBackend.cpp
   SettingsBackendTests.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/ShellAppRegistry.cpp
+  ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/ShellAudioControl.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/ShellConnection.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/ShellIpc.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/ShellJson.cpp
@@ -49,6 +50,7 @@ set(_lambda_test_sources
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/UI/LambdaDock.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/UI/LambdaShellTypes.cpp
   ShellAppRegistryTests.cpp
+  ShellAudioControlTests.cpp
   ShellConnectionTests.cpp
   ShellDockTests.cpp
   ShellIpcTests.cpp
@@ -146,6 +148,11 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
   endif()
   if(DEFINED LAMBDA_WAYLAND_PROTOCOL_DIR)
     target_include_directories(lambda_tests PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
+  endif()
+  pkg_check_modules(LIBPULSE QUIET IMPORTED_TARGET libpulse)
+  if(LIBPULSE_FOUND)
+    target_compile_definitions(lambda_tests PRIVATE LAMBDA_SHELL_HAVE_LIBPULSE=1)
+    target_link_libraries(lambda_tests PRIVATE PkgConfig::LIBPULSE)
   endif()
 endif()
 

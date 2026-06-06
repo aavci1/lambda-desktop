@@ -424,7 +424,9 @@ Element dockSeparator(int itemSize) {
 
 Element statusIcon(Reactive::Bindable<IconName> iconName,
                    Reactive::Bindable<bool> available,
-                   int itemSize) {
+                   int itemSize,
+                   std::string itemId = {},
+                   std::function<void(std::string const&, DockStatusAction)> onStatusAction = {}) {
   Reactive::Signal<bool> hovered = useHover();
   Reactive::Signal<bool> pressed = usePress();
   Reactive::Bindable<Color> const fill{[hovered, pressed] {
@@ -439,26 +441,43 @@ Element statusIcon(Reactive::Bindable<IconName> iconName,
   float const cellSize = static_cast<float>(dockStatusCellSize(itemSize));
   float const iconSize = static_cast<float>(dockStatusIconSize(itemSize));
 
-  return ZStack{
-             .horizontalAlignment = Alignment::Center,
-             .verticalAlignment = Alignment::Center,
-             .children = children(
-                 Rectangle{}
-                     .size(cellSize, cellSize)
-                     .cornerRadius(std::min(8.f, cellSize * 0.28f))
-                     .fill(fill),
-                 Icon{.name = std::move(iconName),
-                      .size = iconSize,
-                      .weight = 520.f,
-                      .color = color})}
-      .size(cellSize, cellSize)
-      .cursor(Cursor::Hand);
+  Element element = Element{ZStack{
+      .horizontalAlignment = Alignment::Center,
+      .verticalAlignment = Alignment::Center,
+      .children = children(
+          Rectangle{}
+              .size(cellSize, cellSize)
+              .cornerRadius(std::min(8.f, cellSize * 0.28f))
+              .fill(fill),
+          Icon{.name = std::move(iconName),
+               .size = iconSize,
+               .weight = 520.f,
+               .color = color})}};
+  element = std::move(element).size(cellSize, cellSize).cursor(Cursor::Hand);
+  if (!itemId.empty() && onStatusAction) {
+    element = std::move(element)
+                  .onTap([itemId, available, onStatusAction](MouseButton button, Modifiers) {
+                    if (!available.evaluate()) return;
+                    if (button == MouseButton::Left) {
+                      onStatusAction(itemId, DockStatusAction::Primary);
+                    } else if (button == MouseButton::Right) {
+                      onStatusAction(itemId, DockStatusAction::Secondary);
+                    }
+                  })
+                  .onScroll([itemId, available, onStatusAction](Vec2 delta) {
+                    if (!available.evaluate() || delta.y == 0.f) return;
+                    onStatusAction(itemId, delta.y > 0.f ? DockStatusAction::ScrollUp
+                                                         : DockStatusAction::ScrollDown);
+                  });
+  }
+  return element;
 }
 
 Element statusDockletIcon(std::string id,
                           IconName fallbackIcon,
                           Reactive::Bindable<SystemStatus> system,
-                          int itemSize) {
+                          int itemSize,
+                          std::function<void(std::string const&, DockStatusAction)> onStatusAction = {}) {
   std::string const itemId = std::move(id);
   return statusIcon(Reactive::Bindable<IconName>{[itemId, fallbackIcon, system] {
                       for (DockletStatusItem const& item : dockletStatusItems(system.evaluate())) {
@@ -472,14 +491,18 @@ Element statusDockletIcon(std::string id,
                       }
                       return false;
                     }},
-                    itemSize);
+                    itemSize,
+                    itemId,
+                    std::move(onStatusAction));
 }
 
 Element fixedStatusIcon(IconName iconName, bool available, int itemSize) {
   return statusIcon(Reactive::Bindable<IconName>{iconName}, Reactive::Bindable<bool>{available}, itemSize);
 }
 
-Element statusIconGrid(Reactive::Bindable<SystemStatus> system, int itemSize) {
+Element statusIconGrid(Reactive::Bindable<SystemStatus> system,
+                       int itemSize,
+                       std::function<void(std::string const&, DockStatusAction)> onStatusAction = {}) {
   float const gap = static_cast<float>(dockStatusGridGap(itemSize));
   float const width = static_cast<float>(dockStatusGridWidth(itemSize));
   float const height = static_cast<float>(dockStatusGridHeight(itemSize));
@@ -488,7 +511,7 @@ Element statusIconGrid(Reactive::Bindable<SystemStatus> system, int itemSize) {
   icons.reserve(kDockStatusItemCount);
   icons.push_back(statusDockletIcon("network", IconName::WifiOff, system, itemSize));
   icons.push_back(statusDockletIcon("bluetooth", IconName::BluetoothDisabled, system, itemSize));
-  icons.push_back(statusDockletIcon("volume", IconName::VolumeOff, system, itemSize));
+  icons.push_back(statusDockletIcon("volume", IconName::VolumeOff, system, itemSize, onStatusAction));
   icons.push_back(statusDockletIcon("battery", IconName::BatteryUnknown, system, itemSize));
   icons.push_back(fixedStatusIcon(IconName::NotificationsOff, false, itemSize));
   icons.push_back(fixedStatusIcon(IconName::ContentPasteOff, false, itemSize));
@@ -596,6 +619,7 @@ Element LambdaDock::body() const {
   auto const onOpenLauncher = props.onOpenLauncher;
   auto const onActivateItem = props.onActivateItem;
   auto const onShowMenu = props.onShowMenu;
+  auto const onStatusAction = props.onStatusAction;
   int const hoverIndex = props.hoverIndex;
   int const itemSize = itemSizeSignal();
 
@@ -648,7 +672,7 @@ Element LambdaDock::body() const {
         .children = children(std::move(appSection),
                              Spacer{},
                              dockSeparator(itemSize),
-                             statusIconGrid(system, itemSize),
+                             statusIconGrid(system, itemSize, onStatusAction),
                              dockSeparator(itemSize),
                              clockDocklet(timeText, clockWidth, itemSize)),
     }.height(static_cast<float>(dockHeight(itemSize)));
@@ -666,7 +690,7 @@ Element LambdaDock::body() const {
   std::vector<Element> sections;
   sections.push_back(std::move(appSection));
   sections.push_back(dockSeparator(itemSize));
-  sections.push_back(statusIconGrid(system, itemSize));
+  sections.push_back(statusIconGrid(system, itemSize, onStatusAction));
   sections.push_back(dockSeparator(itemSize));
   sections.push_back(clockDocklet(timeText, clockWidth, itemSize));
 

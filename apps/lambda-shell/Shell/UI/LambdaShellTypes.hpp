@@ -145,6 +145,13 @@ enum class StatusAvailability : std::uint8_t {
   Available,
 };
 
+enum class DockStatusAction : std::uint8_t {
+  Primary,
+  Secondary,
+  ScrollUp,
+  ScrollDown,
+};
+
 struct DockletStatusItem {
   std::string id;
   lambda::IconName icon = lambda::IconName::Circle;
@@ -171,6 +178,7 @@ struct DockProps {
   std::function<void()> onOpenLauncher;
   std::function<void(DockItem const&)> onActivateItem;
   std::function<void(DockItem const&)> onShowMenu;
+  std::function<void(std::string const&, DockStatusAction)> onStatusAction;
 };
 
 struct DockMenuProps {

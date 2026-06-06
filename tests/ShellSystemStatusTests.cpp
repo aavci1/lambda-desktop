@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 #include <unistd.h>
 
 namespace {
@@ -22,6 +23,14 @@ void writeFile(std::filesystem::path const& path, std::string const& text) {
   std::ofstream(path) << text;
 }
 
+lambda_shell::AudioControlContext noAudioContext() {
+  return lambda_shell::AudioControlContext{
+      .run = [](std::vector<std::string> const&) {
+        return lambda_shell::AudioCommandResult{.exitCode = 127, .output = {}};
+      },
+  };
+}
+
 } // namespace
 
 TEST_CASE("Shell system status reads docklet data without compositor snapshots") {
@@ -34,7 +43,7 @@ TEST_CASE("Shell system status reads docklet data without compositor snapshots")
   writeFile(root / "class" / "power_supply" / "BAT0" / "type", "Battery\n");
   writeFile(root / "class" / "power_supply" / "BAT0" / "capacity", "88\n");
 
-  auto status = lambda_shell::readShellSystemStatus(root);
+  auto status = lambda_shell::readShellSystemStatus(root, noAudioContext());
   CHECK(status.network == "online");
   CHECK(status.wifi == "wlan0");
   CHECK(status.bluetooth == "on");
@@ -52,11 +61,29 @@ TEST_CASE("Shell system status reports unavailable or off states from shell prov
   writeFile(root / "class" / "rfkill" / "rfkill0" / "type", "bluetooth\n");
   writeFile(root / "class" / "rfkill" / "rfkill0" / "state", "0\n");
 
-  auto status = lambda_shell::readShellSystemStatus(root);
+  auto status = lambda_shell::readShellSystemStatus(root, noAudioContext());
   CHECK(status.network == "off");
   CHECK(status.wifi == "unavailable");
   CHECK(status.bluetooth == "off");
   CHECK(status.battery == "unavailable");
+
+  std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Shell system status reports audio state from injected backend") {
+  auto root = tempRoot("lambda-shell-system-status-audio-test");
+  lambda_shell::AudioControlContext audio{
+      .run = [](std::vector<std::string> const& command) {
+        if (command == std::vector<std::string>{"wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"}) {
+          return lambda_shell::AudioCommandResult{.exitCode = 0, .output = "Volume: 0.64\n"};
+        }
+        return lambda_shell::AudioCommandResult{.exitCode = 127, .output = {}};
+      },
+  };
+
+  auto status = lambda_shell::readShellSystemStatus(root, audio);
+
+  CHECK(status.volume == "64%");
 
   std::filesystem::remove_all(root);
 }

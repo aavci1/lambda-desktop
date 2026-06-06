@@ -17,6 +17,7 @@ struct ShellDockView {
   std::function<void()> onOpenLauncher;
   std::function<void(DockItem const&)> onActivateItem;
   std::function<void(DockItem const&)> onShowMenu;
+  std::function<void(std::string const&, DockStatusAction)> onStatusAction;
   bool fullWidth = false;
 
   lambda::Element body() const {
@@ -40,6 +41,7 @@ struct ShellDockView {
         .onOpenLauncher = onOpenLauncher,
         .onActivateItem = onActivateItem,
         .onShowMenu = onShowMenu,
+        .onStatusAction = onStatusAction,
     }}};
   }
 };

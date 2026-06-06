@@ -7,6 +7,7 @@
 #include <Lambda/UI/Application.hpp>
 #include <Lambda/UI/Window.hpp>
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -15,6 +16,8 @@
 #include <vector>
 
 namespace lambda_shell {
+
+enum class AudioControlAction;
 
 class ShellController {
 public:
@@ -47,6 +50,9 @@ private:
   void handleIpcLine(std::string_view line);
   void checkShellConfigReload();
   [[nodiscard]] bool refreshSystemStatus();
+  void performAudioControlAsync(AudioControlAction action);
+  void queueVolumeAdjustment(int steps);
+  void runVolumeAdjustmentWorker();
   void syncLauncherWindow();
   void openDockMenu(DockItem const& item);
   void syncDockMenuOverlay();
@@ -56,6 +62,7 @@ private:
 
   std::function<void(DockItem const&)> makeActivateCallback();
   std::function<void(DockItem const&)> makeShowDockMenuCallback();
+  std::function<void(std::string const&, DockStatusAction)> makeStatusActionCallback();
   std::function<void(DockItem const&)> makeNewWindowCallback();
   std::function<void(DockItem const&)> makeTogglePinnedCallback();
   std::function<void(DockItem const&)> makeQuitCallback();
@@ -92,6 +99,8 @@ private:
   std::vector<AppRegistryEntry> appRegistry_;
   ShellConfig shellConfig_;
   std::string lastSnapshotLine_;
+  std::atomic<int> pendingVolumeSteps_{0};
+  std::atomic<bool> volumeAdjustmentWorkerRunning_{false};
 };
 
 lambda::WindowConfig dockWindowConfig(int width,

@@ -1,6 +1,7 @@
 #include "Shell/ShellController.hpp"
 
 #include "Shell/ShellAppRegistry.hpp"
+#include "Shell/ShellAudioControl.hpp"
 #include "Shell/ShellDesktopView.hpp"
 #include "Shell/ShellJson.hpp"
 #include "Shell/ShellSystemStatus.hpp"
@@ -25,6 +26,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 
 namespace lambda_shell {
 
@@ -34,6 +36,12 @@ using namespace lambda;
 using namespace lambda::keys;
 
 inline constexpr int kDockMenuGap = 10;
+inline constexpr int kDockVolumeStepPercent = 5;
+inline constexpr auto kDockVolumeCoalesceDelay = std::chrono::milliseconds{28};
+
+struct ShellAudioCommandCompleted {
+  bool changed = false;
+};
 
 std::optional<std::filesystem::file_time_type> configLastWriteTime(std::filesystem::path const& path) {
   if (path.empty()) return std::nullopt;
@@ -205,6 +213,14 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
       handleIpcLine(*line);
     }
   });
+
+  app_.eventQueue().on<ShellAudioCommandCompleted>([this](ShellAudioCommandCompleted const& event) {
+    if (event.changed) {
+      (void)refreshSystemStatus();
+    } else {
+      requestDockRedraw();
+    }
+  });
 }
 
 void ShellController::setConfigReloadSource(std::filesystem::path path,
@@ -232,6 +248,25 @@ std::function<void(DockItem const&)> ShellController::makeActivateCallback() {
 std::function<void(DockItem const&)> ShellController::makeShowDockMenuCallback() {
   return [this](DockItem const& item) {
     openDockMenu(item);
+  };
+}
+
+std::function<void(std::string const&, DockStatusAction)> ShellController::makeStatusActionCallback() {
+  return [this](std::string const& id, DockStatusAction action) {
+    if (id != "volume") return;
+
+    switch (action) {
+    case DockStatusAction::Primary:
+      performAudioControlAsync(AudioControlAction::ToggleMute);
+      return;
+    case DockStatusAction::Secondary:
+    case DockStatusAction::ScrollUp:
+      queueVolumeAdjustment(1);
+      return;
+    case DockStatusAction::ScrollDown:
+      queueVolumeAdjustment(-1);
+      return;
+    }
   };
 }
 
@@ -414,6 +449,7 @@ void ShellController::mountDockView() {
       [this] { openLauncher(); },
       makeActivateCallback(),
       makeShowDockMenuCallback(),
+      makeStatusActionCallback(),
       shellConfig_.dockFullWidth,
   });
 }
@@ -442,6 +478,7 @@ void ShellController::mountPreviewView() {
       [this] { openLauncher(); },
       makeActivateCallback(),
       makeShowDockMenuCallback(),
+      makeStatusActionCallback(),
       makeActivateCallback(),
       [this] { closeLauncher(); },
       {},
@@ -475,6 +512,45 @@ bool ShellController::refreshSystemStatus() {
   requestDockRedraw();
   if (previewHandle_) requestLauncherRedraw();
   return true;
+}
+
+void ShellController::performAudioControlAsync(AudioControlAction action) {
+  std::thread([this, action] {
+    bool const changed = controlAudioVolume(action);
+    app_.eventQueue().post(ShellAudioCommandCompleted{.changed = changed});
+  }).detach();
+}
+
+void ShellController::queueVolumeAdjustment(int steps) {
+  if (steps == 0) return;
+  pendingVolumeSteps_.fetch_add(steps, std::memory_order_relaxed);
+  bool expected = false;
+  if (volumeAdjustmentWorkerRunning_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+    std::thread([this] { runVolumeAdjustmentWorker(); }).detach();
+  }
+}
+
+void ShellController::runVolumeAdjustmentWorker() {
+  bool changed = false;
+  while (true) {
+    std::this_thread::sleep_for(kDockVolumeCoalesceDelay);
+    int const steps = pendingVolumeSteps_.exchange(0, std::memory_order_acq_rel);
+    if (steps != 0) {
+      changed = adjustAudioVolumeByPercent(steps * kDockVolumeStepPercent) || changed;
+    }
+
+    if (pendingVolumeSteps_.load(std::memory_order_acquire) == 0) {
+      volumeAdjustmentWorkerRunning_.store(false, std::memory_order_release);
+      if (pendingVolumeSteps_.load(std::memory_order_acquire) == 0) {
+        break;
+      }
+      bool expected = false;
+      if (!volumeAdjustmentWorkerRunning_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+        break;
+      }
+    }
+  }
+  app_.eventQueue().post(ShellAudioCommandCompleted{.changed = changed});
 }
 
 int ShellController::measureDockClockWidth() {

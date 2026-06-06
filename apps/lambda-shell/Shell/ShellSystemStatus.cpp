@@ -1,5 +1,7 @@
 #include "Shell/ShellSystemStatus.hpp"
 
+#include "Shell/ShellAudioControl.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -7,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace lambda_shell {
@@ -128,18 +131,25 @@ std::string readBatteryStatus(std::filesystem::path const& sysRoot) {
   return "unavailable";
 }
 
-std::string readVolumeStatus(std::filesystem::path const& sysRoot) {
-  (void)sysRoot;
-  return "unavailable";
+std::string readVolumeStatus(AudioControlContext const& audioContext) {
+  AudioVolumeState const state = readAudioVolumeState(audioContext);
+  if (!state.available) return "unavailable";
+  if (state.muted) return "off";
+  return std::to_string(std::max(0, state.percent)) + "%";
 }
 
 } // namespace
 
 SystemStatus readShellSystemStatus(std::filesystem::path sysRoot) {
+  return readShellSystemStatus(std::move(sysRoot), defaultAudioControlContext());
+}
+
+SystemStatus readShellSystemStatus(std::filesystem::path sysRoot,
+                                   AudioControlContext const& audioContext) {
   SystemStatus status;
   populateNetworkStatus(sysRoot, status);
   status.bluetooth = readBluetoothStatus(sysRoot);
-  status.volume = readVolumeStatus(sysRoot);
+  status.volume = readVolumeStatus(audioContext);
   status.battery = readBatteryStatus(sysRoot);
   return status;
 }

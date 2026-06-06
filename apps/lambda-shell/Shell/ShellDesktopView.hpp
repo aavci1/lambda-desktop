@@ -16,6 +16,7 @@ struct ShellDesktopView {
   std::function<void()> onOpenLauncher;
   std::function<void(DockItem const&)> onActivateItem;
   std::function<void(DockItem const&)> onShowDockItemMenu;
+  std::function<void(std::string const&, DockStatusAction)> onStatusAction;
   std::function<void(DockItem const&)> onActivateLauncherResult;
   std::function<void()> onDismissLauncher;
   std::function<void(lambda::KeyCode, lambda::Modifiers)> onLauncherKeyDown;
@@ -45,6 +46,7 @@ struct ShellDesktopView {
                 onOpenLauncher,
                 onActivateItem,
                 onShowDockItemMenu,
+                onStatusAction,
                 false,
             }},
             static_cast<float>(dockW),
