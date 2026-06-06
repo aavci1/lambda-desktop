@@ -8,17 +8,20 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 | ID | Type | Item | Severity | Priority |
 | --- | --- | --- | --- | --- |
-| TODO-002 | Bug | Copy/paste is not working across applications | High | P1 |
+| TODO-002 | Bug | Flux app clipboard shortcuts and shared text clipboard need cross-app validation | High | P1 |
 | TODO-006 | Bug | Window close animation is inconsistent across window types | Medium | P2 |
-| TODO-007 | Bug | Minimized apps do not move to the dock with previews | Medium | P2 |
-| TODO-008 | Bug | Window content can stretch while resizing | Medium | P1 |
+| TODO-007 | Bug | Minimized windows and dock previews are not wired across Window Manager and Shell | Medium | P2 |
+| TODO-008 | Bug | Live resize can stretch stale window content | Medium | P1 |
 | TODO-009 | Bug | Files opens supported images in Firefox instead of Preview | Medium | P1 |
-| TODO-011 | Feature | Fix and enhance Super+Tab window cycler | N/A | P1 |
+| TODO-011 | Bug | Super+Tab window cycler only cycles through two windows | High | P1 |
 | TODO-013 | Feature | Add Editor file watcher with reload prompt | N/A | P1 |
 | TODO-014 | Bug | Tooltips are not showing | Medium | P1 |
+| TODO-015 | Feature | Add visual Super+Tab window switcher overlay | N/A | P2 |
 
-## TODO-002: Copy/paste is not working across applications
+## TODO-002: Flux app clipboard shortcuts and shared text clipboard need cross-app validation
 
+- [ ] [Auto] Keep this item scoped to Flux app text editing shortcuts, Terminal-specific clipboard shortcuts, and shared plain-text copy/paste behavior; do not treat Shell clipboard history as the same feature.
+- [ ] [Auto] Treat the existing Wayland clipboard/data-device protocol path as supporting infrastructure that still needs app-level shortcut and cross-application workflow validation.
 - [ ] [Auto + Manual] Fix copy/paste as one cross-application clipboard feature instead of handling per-app bugs separately.
 - [ ] [Auto + Manual] Plain text copy and paste should work consistently anywhere text can be selected or edited across Flux apps.
 - [ ] [Auto] Regular editable text surfaces should use Ctrl+C for copy and Ctrl+V for paste.
@@ -35,19 +38,22 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Ensure close behavior is consistent for apps with system titlebars, apps with integrated/custom titlebars, transparent content, undecorated windows, and normal opaque content.
 - [ ] [Manual] Verify by closing representative windows from multiple app types and confirming chrome, shadow, and content fade together with no separate disappearance.
 
-## TODO-007: Minimized apps do not move to the dock with previews
+## TODO-007: Minimized windows and dock previews are not wired across Window Manager and Shell
 
+- [ ] [Auto] Keep the ownership boundary explicit: Window Manager owns minimized window state, focus/stacking exclusion, Super+Tab eligibility, preview/snapshot source, and restore requests; Shell owns dock item presentation, opening space in the dock, click targets, and dock-side animation.
+- [ ] [Auto + Manual] Define or reuse a Window Manager/Shell IPC contract for minimized window identity, preview updates, restore requests, and animation timing instead of letting Shell infer minimized state from the normal running-app list alone.
 - [ ] [Auto + Manual] Minimized windows should disappear from the desktop and should not appear in the Super+Tab window list while minimized.
-- [ ] [Manual] When minimizing, the dock should animate open space for the minimized window item while the window simultaneously scales down and moves into that dock space.
+- [ ] [Manual] When minimizing, Shell should animate open space for the minimized window item while Window Manager simultaneously scales the window down and moves it into that dock space.
 - [ ] [Auto + Manual] The dock item should show a window preview, and the preview should stay up to date during the minimized period.
 - [ ] [Manual] Clicking the minimized window preview in the dock should restore the window with the reverse animation.
 - [ ] [Auto + Manual] Restoring should return the window to the size, position, stacking behavior, and focus state it had before minimization.
 - [ ] [Auto] Support multiple minimized windows as distinct restorable window previews rather than losing per-window identity.
 - [ ] [Manual] Verify with multiple app windows that minimized windows leave the desktop, are excluded from Super+Tab, keep their dock previews current, and restore with the reverse animation.
 
-## TODO-008: Window content can stretch while resizing
+## TODO-008: Live resize can stretch stale window content
 
 - [ ] [Manual] Resizing the terminal app sometimes causes the content to stretch, even when the terminal is minimal.
+- [ ] [Auto + Manual] Keep this tied to the compositor frame-coherence work in `docs/compositor-wlroots-improvement-plan.md` WM-COMP-1: the fix should build one coherent frame model for chrome, borders, background, and client content from a single committed geometry snapshot.
 - [ ] [Auto + Manual] During live resize, existing window content/framebuffer should remain unscaled and aligned to the top-left.
 - [ ] [Auto + Manual] Newly exposed space should be filled immediately with the correct window/app background during live resize.
 - [ ] [Auto + Manual] The terminal is the known reproduction case, but verify other app windows too and fix any shared compositor or rendering path that can stretch content during resize.
@@ -63,20 +69,14 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Add or update tests around local `lambda-preview` registration and Files default open-with resolution so supported images choose Preview instead of Firefox/browser fallback.
 - [ ] [Manual] Verify manually by running from the development build and opening PNG, JPEG, and SVG files from Files.
 
-## TODO-011: Fix and enhance Super+Tab window cycler
+## TODO-011: Super+Tab window cycler only cycles through two windows
 
 - [ ] [Manual] The window manager can only cycle through two apps with Super+Tab.
 - [ ] [Auto] When Super+Tab starts, build a stable ordered list of eligible windows and cycle through that list until the switcher interaction ends.
 - [ ] [Auto] Order the cycle list by most-recently-used window order.
 - [ ] [Auto] Exclude minimized windows from the cycle list.
 - [ ] [Auto + Manual] Super+Tab should cycle forward; Shift+Super+Tab should cycle backward.
-- [ ] [Manual] Add a window switcher overlay that appears while the user is cycling windows with Super+Tab or Shift+Super+Tab.
-- [ ] [Auto] Use the same stable window list built when Super+Tab starts, so the visual order does not change while the user cycles.
-- [ ] [Manual] Render each window as an item with a live or recently captured window preview at the top, then the app icon and readable window/app title underneath.
-- [ ] [Manual] Show a clear current-selection indicator that moves as the user presses Tab, without activating the selected window until the switcher is confirmed.
-- [ ] [Auto + Manual] Keep the overlay non-focusable and non-destructive: it should not steal app input, change window order during cycling, or interfere with pointer events outside the switcher flow.
 - [ ] [Auto + Manual] On Super release, activate the selected window. If cancellation is supported, return focus to the original window without changing the active window.
-- [ ] [Manual] For many open windows, keep the selected item visible and avoid shrinking previews below a useful size; prefer a horizontally scrollable or centered-neighbor layout over showing every window at unreadable size.
 - [ ] [Auto + Manual] Verify with at least three open non-minimized windows that repeated Super+Tab visits every window in MRU order, wraps correctly, and Shift+Super+Tab cycles backward.
 
 ## TODO-013: Add Editor file watcher with reload prompt
@@ -100,3 +100,13 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Verify the tooltip demo shows tooltips after hover delay for buttons, icons, toggles, and placement examples.
 - [ ] [Auto + Manual] Verify Editor toolbar buttons use the same real tooltip implementation and show their labels on hover.
 - [ ] [Auto] Add automated coverage where practical for tooltip state/lifecycle behavior, including hover enter, hover exit, timer cancellation, and avoiding stale tooltip popovers after the target unmounts.
+
+## TODO-015: Add visual Super+Tab window switcher overlay
+
+- [ ] [Manual] Add a window switcher overlay that appears while the user is cycling windows with Super+Tab or Shift+Super+Tab.
+- [ ] [Auto] Use the same stable window list built when Super+Tab starts, so the visual order does not change while the user cycles.
+- [ ] [Manual] Render each window as an item with a live or recently captured window preview at the top, then the app icon and readable window/app title underneath.
+- [ ] [Manual] Show a clear current-selection indicator that moves as the user presses Tab, without activating the selected window until the switcher is confirmed.
+- [ ] [Auto + Manual] Keep the overlay non-focusable and non-destructive: it should not steal app input, change window order during cycling, or interfere with pointer events outside the switcher flow.
+- [ ] [Manual] For many open windows, keep the selected item visible and avoid shrinking previews below a useful size; prefer a horizontally scrollable or centered-neighbor layout over showing every window at unreadable size.
+- [ ] [Auto + Manual] Verify with at least three open non-minimized windows that the overlay order matches the Super+Tab cycle list, the selected item changes on each Tab press, and releasing Super activates the selected window.
