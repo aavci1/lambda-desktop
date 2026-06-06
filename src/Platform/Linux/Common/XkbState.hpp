@@ -11,6 +11,10 @@ struct xkb_state;
 
 namespace lambda::linux_platform {
 
+[[nodiscard]] inline bool shouldEmitTextInputForModifiers(Modifiers modifiers) noexcept {
+  return !any(modifiers & (Modifiers::Ctrl | Modifiers::Alt | Modifiers::Meta));
+}
+
 class XkbState {
 public:
   XkbState();

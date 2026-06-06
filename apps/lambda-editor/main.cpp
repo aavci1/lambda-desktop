@@ -79,18 +79,23 @@ TextInput::Style compactInputStyle() {
   return style;
 }
 
+constexpr Shortcut ctrlShortcut(KeyCode key, Modifiers extra = Modifiers::None) {
+  return Shortcut{key, Modifiers::Ctrl | extra};
+}
+
 struct ToolbarButton {
   IconName icon;
   std::string tooltip;
   std::function<void()> onTap;
-  bool disabled = false;
+  Reactive::Bindable<bool> disabled{false};
 
   Element body() const {
     useTooltip(TooltipConfig{.text = tooltip, .placement = PopoverPlacement::Below});
     Reactive::Signal<bool> hovered = useHover();
     auto theme = useEnvironment<ThemeKey>();
-    auto handleTap = [onTap = onTap, disabled = disabled] {
-      if (!disabled && onTap) {
+    auto disabledBinding = disabled;
+    auto handleTap = [onTap = onTap, disabledBinding] {
+      if (!disabledBinding.evaluate() && onTap) {
         onTap();
       }
     };
@@ -105,44 +110,55 @@ struct ToolbarButton {
         .verticalAlignment = Alignment::Center,
         .children = children(
             Rectangle{}
-                .size(34.f, 34.f)
-                .cornerRadius(CornerRadius{6.f})
-                .fill([hovered, theme, disabled = disabled] {
-                  if (disabled) {
-                    return FillStyle::solid(Color{0.f, 0.f, 0.f, 0.02f});
+                .size(42.f, 42.f)
+                .cornerRadius(CornerRadius{7.f})
+                .fill([hovered, theme, disabledBinding] {
+                  if (disabledBinding.evaluate()) {
+                    return FillStyle::solid(Colors::transparent);
                   }
                   return FillStyle::solid(hovered() ? theme().hoveredControlBackgroundColor
-                                                    : Color{0.f, 0.f, 0.f, 0.035f});
+                                                    : Colors::transparent);
                 }),
             Icon{
                 .name = icon,
-                .size = 20.f,
-                .weight = 440.f,
-                .color = disabled ? Color::secondary() : Color::primary(),
+                .size = 26.f,
+                .weight = 430.f,
+                .color = [disabledBinding] {
+                  return disabledBinding.evaluate() ? Color::secondary() : Color::primary();
+                },
             })}
-        .size(34.f, 34.f)
-        .cursor(disabled ? Cursor::Inherit : Cursor::Hand)
-        .focusable(!disabled)
+        .size(42.f, 42.f)
+        .cursor([disabledBinding] {
+          return disabledBinding.evaluate() ? Cursor::Inherit : Cursor::Hand;
+        })
+        .focusable([disabledBinding] {
+          return !disabledBinding.evaluate();
+        })
         .onKeyDown(std::function<void(KeyCode, Modifiers)>{handleKey})
         .onTap(std::function<void()>{handleTap});
   }
 };
 
+struct AutoFocusTextInput {
+  TextInput input;
+  Reactive::Signal<int> focusGeneration;
+
+  Element body() const {
+    useAutoFocus(focusGeneration);
+    return input;
+  }
+};
+
 Element toolbarDivider() {
-  return Divider{.orientation = Divider::Orientation::Vertical}.height(34.f);
+  return Spacer{}.flex(0.f, 0.f, 12.f);
 }
 
 Element toolbarGroup(std::vector<Element> items) {
   return HStack{
-      .spacing = 4.f,
+      .spacing = 3.f,
       .alignment = Alignment::Center,
       .children = std::move(items),
-  }
-      .padding(3.f, 4.f, 3.f, 4.f)
-      .height(42.f)
-      .fill(FillStyle::solid(Color::controlBackground()))
-      .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-      .cornerRadius(CornerRadius{7.f});
+  };
 }
 
 struct LambdaEditor {
@@ -164,15 +180,15 @@ struct LambdaEditor {
     auto historyReady = useState(false);
     auto canUndo = useState(false);
     auto canRedo = useState(false);
+    auto clipboardHasText = useState(
+        Application::hasInstance() && Application::instance().clipboard().hasText());
     auto activePanel = useState(EditorPanel::None);
+    auto panelFocusGeneration = useState(0);
     auto findQuery = useState(std::string{});
     auto replaceValue = useState(std::string{});
     auto gotoLineValue = useState(std::string{});
     auto wordWrap = useState(true);
     auto fontSize = useState(14.f);
-    auto fontIndex = useState(0);
-
-    std::vector<std::string> const fontFamilies{"monospace", "sans-serif", "serif"};
 
     auto refreshHistoryState = [history, canUndo, canRedo] {
       canUndo.set(history.peek()->canUndo());
@@ -309,7 +325,7 @@ struct LambdaEditor {
         applySnapshot(*snapshot, false, "Redo");
       }
     };
-    auto copySelection = [text, selection, status] {
+    auto copySelection = [text, selection, clipboardHasText, status] {
       std::string selected = selectedText(text.peek(), selection.peek());
       if (selected.empty()) {
         status.set("No selection to copy.");
@@ -317,6 +333,7 @@ struct LambdaEditor {
       }
       if (Application::hasInstance()) {
         Application::instance().clipboard().writeText(selected);
+        clipboardHasText.set(true);
       }
       status.set("Copied selection.");
     };
@@ -328,36 +345,37 @@ struct LambdaEditor {
       copySelection();
       applySnapshot(replaceSelection(text.peek(), selection.peek(), ""), true, "Cut selection.");
     };
-    auto pasteClipboard = [text, selection, applySnapshot, status] {
+    auto pasteClipboard = [text, selection, clipboardHasText, applySnapshot, status] {
       if (!Application::hasInstance()) {
+        clipboardHasText.set(false);
         return;
       }
       std::optional<std::string> clipboard = Application::instance().clipboard().readText();
       if (!clipboard || clipboard->empty()) {
+        clipboardHasText.set(false);
         status.set("Clipboard is empty.");
         return;
       }
+      clipboardHasText.set(true);
       applySnapshot(insertAtSelection(text.peek(), selection.peek(), *clipboard), true, "Pasted text.");
     };
-    auto deleteText = [text, selection, applySnapshot] {
-      applySnapshot(deleteSelectionOrForwardChar(text.peek(), selection.peek()), true, "Deleted text.");
+    auto requestPanelFocus = [panelFocusGeneration] {
+      panelFocusGeneration.set(panelFocusGeneration.peek() + 1);
     };
-    auto selectAll = [text, selection, status] {
-      selection.set(detail::selectAllSelection(text.peek()));
-      status.set("Selected all.");
-    };
-
-    auto showFind = [activePanel, status] {
+    auto showFind = [activePanel, requestPanelFocus, status] {
       activePanel.set(EditorPanel::Find);
+      requestPanelFocus();
       status.set("Find");
     };
-    auto showReplace = [activePanel, status] {
+    auto showReplace = [activePanel, requestPanelFocus, status] {
       activePanel.set(EditorPanel::Replace);
+      requestPanelFocus();
       status.set("Replace");
     };
-    auto showGoToLine = [activePanel, gotoLineValue, text, selection, status] {
+    auto showGoToLine = [activePanel, requestPanelFocus, gotoLineValue, text, selection, status] {
       activePanel.set(EditorPanel::GoToLine);
       gotoLineValue.set(std::to_string(lineNumberForSelection(text.peek(), selection.peek())));
+      requestPanelFocus();
       status.set("Go to line");
     };
     auto closePanel = [activePanel, status] {
@@ -423,82 +441,67 @@ struct LambdaEditor {
       fontSize.set(next);
       status.set("Zoom " + std::to_string(static_cast<int>(next)) + " pt.");
     };
-    auto cycleFont = [fontIndex, fontFamilies, status] {
-      int const next = (fontIndex.peek() + 1) % static_cast<int>(fontFamilies.size());
-      fontIndex.set(next);
-      status.set("Font: " + fontFamilies[static_cast<std::size_t>(next)] + ".");
-    };
-
     useWindowAction("file.new", newFile, ActionDescriptor{
         .label = "New",
-        .shortcut = shortcuts::New,
+        .shortcut = ctrlShortcut(keys::N),
         .isEnabled = [] { return true; },
     });
     useWindowAction("file.open", openFile, ActionDescriptor{
         .label = "Open",
-        .shortcut = shortcuts::Open,
+        .shortcut = ctrlShortcut(keys::O),
         .isEnabled = [] { return true; },
     });
     useWindowAction("file.save", saveFile, ActionDescriptor{
         .label = "Save",
-        .shortcut = shortcuts::Save,
+        .shortcut = ctrlShortcut(keys::S),
         .isEnabled = [] { return true; },
     });
     useWindowAction("file.saveAs", saveFileAs, ActionDescriptor{
         .label = "Save As",
-        .shortcut = Shortcut{keys::S, Modifiers::Meta | Modifiers::Shift},
+        .shortcut = ctrlShortcut(keys::S, Modifiers::Shift),
         .isEnabled = [] { return true; },
     });
     useWindowAction("edit.undo", undo, ActionDescriptor{
         .label = "Undo",
-        .shortcut = shortcuts::Undo,
+        .shortcut = ctrlShortcut(keys::Z),
         .isEnabled = [canUndo] { return canUndo.peek(); },
     });
     useWindowAction("edit.redo", redo, ActionDescriptor{
         .label = "Redo",
-        .shortcut = shortcuts::Redo,
+        .shortcut = ctrlShortcut(keys::Z, Modifiers::Shift),
         .isEnabled = [canRedo] { return canRedo.peek(); },
     });
     useWindowAction("edit.cut", cutSelection, ActionDescriptor{
         .label = "Cut",
-        .shortcut = shortcuts::Cut,
+        .shortcut = ctrlShortcut(keys::X),
         .isEnabled = [selection] { return selection.peek().hasSelection(); },
     });
     useWindowAction("edit.copy", copySelection, ActionDescriptor{
         .label = "Copy",
-        .shortcut = shortcuts::Copy,
+        .shortcut = ctrlShortcut(keys::C),
         .isEnabled = [selection] { return selection.peek().hasSelection(); },
     });
     useWindowAction("edit.paste", pasteClipboard, ActionDescriptor{
         .label = "Paste",
-        .shortcut = shortcuts::Paste,
-        .isEnabled = [] { return Application::hasInstance() && Application::instance().clipboard().hasText(); },
-    });
-    useWindowAction("edit.delete", deleteText, ActionDescriptor{
-        .label = "Delete",
-        .isEnabled = [text, selection] {
-          return selection.peek().hasSelection() ||
-                 selection.peek().caretByte < static_cast<int>(text.peek().size());
+        .shortcut = ctrlShortcut(keys::V),
+        .isEnabled = [clipboardHasText] {
+          return clipboardHasText.peek() ||
+                 (Application::hasInstance() && Application::instance().clipboard().hasText());
         },
-    });
-    useWindowAction("edit.selectAll", selectAll, ActionDescriptor{
-        .label = "Select All",
-        .shortcut = shortcuts::SelectAll,
-        .isEnabled = [text] { return !text.peek().empty(); },
     });
     useWindowAction("editor.find", showFind, ActionDescriptor{
         .label = "Find",
-        .shortcut = shortcuts::Find,
+        .shortcut = ctrlShortcut(keys::F),
         .isEnabled = [] { return true; },
     });
     useWindowAction("editor.replace", showReplace, ActionDescriptor{
         .label = "Replace",
-        .shortcut = Shortcut{keys::H, Modifiers::Meta},
+        .shortcut = ctrlShortcut(keys::H),
         .isEnabled = [] { return true; },
     });
     useWindowAction("editor.goToLine", showGoToLine, ActionDescriptor{
         .label = "Go To Line",
-        .shortcut = Shortcut{keys::G, Modifiers::Meta},
+        .shortcut = ctrlShortcut(keys::G),
         .isEnabled = [] { return true; },
     });
     useWindowAction("view.wordWrap", toggleWordWrap, ActionDescriptor{
@@ -507,37 +510,29 @@ struct LambdaEditor {
     });
     useWindowAction("view.zoomOut", zoomOut, ActionDescriptor{
         .label = "Zoom Out",
-        .shortcut = Shortcut{keys::Minus, Modifiers::Meta},
+        .shortcut = ctrlShortcut(keys::Minus),
         .isEnabled = [fontSize] { return fontSize.peek() > 10.f; },
     });
     useWindowAction("view.zoomIn", zoomIn, ActionDescriptor{
         .label = "Zoom In",
-        .shortcut = Shortcut{keys::Equal, Modifiers::Meta},
+        .shortcut = ctrlShortcut(keys::Equal),
         .isEnabled = [fontSize] { return fontSize.peek() < 32.f; },
     });
-    useWindowAction("view.font", cycleFont, ActionDescriptor{
-        .label = "Font",
-        .isEnabled = [] { return true; },
-    });
-
-    bool const hasSelection = selection().hasSelection();
-    bool const canDelete =
-        hasSelection || selection().caretByte < static_cast<int>(text().size());
-    bool const canPaste =
-        Application::hasInstance() && Application::instance().clipboard().hasText();
-    bool const canZoomOut = fontSize() > 10.f;
-    bool const canZoomIn = fontSize() < 32.f;
 
     TextInput::Style editorStyle = TextInput::Style::plain();
-    editorStyle.font = Font{
-        .family = fontFamilies[static_cast<std::size_t>(fontIndex())],
-        .size = fontSize(),
+    editorStyle.font = [fontSize] {
+      return Font{
+          .family = "monospace",
+          .size = fontSize(),
+      };
     };
     editorStyle.textColor = Color::primary();
     editorStyle.placeholderColor = Color::secondary();
     editorStyle.paddingH = 12.f;
     editorStyle.paddingV = 12.f;
-    editorStyle.lineHeight = fontSize() + 6.f;
+    editorStyle.lineHeight = [fontSize] {
+      return fontSize() + 6.f;
+    };
 
     TextInput::Style panelInputStyle = compactInputStyle();
 
@@ -545,93 +540,145 @@ struct LambdaEditor {
         [activePanel] {
           return activePanel() != EditorPanel::None;
         },
-        [activePanel, findQuery, replaceValue, gotoLineValue, findNext, replaceOne, replaceAll,
-         goToLine, closePanel, panelInputStyle, theme] {
+        [activePanel, panelFocusGeneration, findQuery, replaceValue, gotoLineValue, findNext,
+         replaceOne, replaceAll, goToLine, closePanel, panelInputStyle, theme] {
           return HStack{
-                     .spacing = 8.f,
-                     .alignment = Alignment::Center,
-                     .children = children(
-                         Show(
-                             [activePanel] {
-                               return activePanel() == EditorPanel::Find ||
-                                      activePanel() == EditorPanel::Replace;
-                             },
-                             [findQuery, findNext, panelInputStyle] {
-                               return HStack{
-                                   .spacing = 6.f,
-                                   .alignment = Alignment::Center,
-                                   .children = children(
-                                       TextInput{
-                                           .value = findQuery,
-                                           .placeholder = "Find",
-                                           .style = panelInputStyle,
-                                           .onSubmit = [findNext](std::string const&) { findNext(); },
-                                       }.width(220.f),
-                                       Button{
-                                           .label = "Next",
-                                           .variant = ButtonVariant::Secondary,
-                                           .disabled = [findQuery] { return findQuery().empty(); },
-                                           .onTap = findNext,
-                                       })};
-                             }),
-                         Show(
-                             [activePanel] {
-                               return activePanel() == EditorPanel::Replace;
-                             },
-                             [replaceValue, replaceOne, replaceAll, panelInputStyle] {
-                               return HStack{
-                                   .spacing = 6.f,
-                                   .alignment = Alignment::Center,
-                                   .children = children(
-                                       TextInput{
-                                           .value = replaceValue,
-                                           .placeholder = "Replace",
-                                           .style = panelInputStyle,
-                                           .onSubmit = [replaceOne](std::string const&) { replaceOne(); },
-                                       }.width(220.f),
-                                       Button{
-                                           .label = "Replace",
-                                           .variant = ButtonVariant::Secondary,
-                                           .onTap = replaceOne,
-                                       },
-                                       Button{
-                                           .label = "All",
-                                           .variant = ButtonVariant::Secondary,
-                                           .onTap = replaceAll,
-                                       })};
-                             }),
-                         Show(
-                             [activePanel] {
-                               return activePanel() == EditorPanel::GoToLine;
-                             },
-                             [gotoLineValue, goToLine, panelInputStyle] {
-                               return HStack{
-                                   .spacing = 6.f,
-                                   .alignment = Alignment::Center,
-                                   .children = children(
-                                       TextInput{
-                                           .value = gotoLineValue,
-                                           .placeholder = "Line",
-                                           .style = panelInputStyle,
-                                           .onSubmit = [goToLine](std::string const&) { goToLine(); },
-                                       }.width(120.f),
-                                       Button{
-                                           .label = "Go",
-                                           .variant = ButtonVariant::Secondary,
-                                           .onTap = goToLine,
-                                       })};
-                             }),
-                         Spacer{}.flex(1.f, 1.f, 0.f),
-                         Button{
-                             .label = "Close",
-                             .variant = ButtonVariant::Ghost,
-                             .onTap = closePanel,
-                         })}
-                 .height(44.f)
-                 .padding(5.f, theme().space3, 5.f, theme().space3)
-                 .fill(FillStyle::solid(Color::windowBackground()))
-                 .stroke(StrokeStyle::solid(Color::separator(), 1.f));
+              .spacing = 8.f,
+              .alignment = Alignment::Center,
+              .children = children(
+                  Show(
+                      [activePanel] {
+                        return activePanel() == EditorPanel::Find ||
+                               activePanel() == EditorPanel::Replace;
+                      },
+                      [findQuery, findNext, panelFocusGeneration, panelInputStyle] {
+                        return HStack{
+                            .spacing = 6.f,
+                            .alignment = Alignment::Center,
+                            .children = children(
+                                Element{AutoFocusTextInput{
+                                            .input = TextInput{
+                                                .value = findQuery,
+                                                .placeholder = "Find",
+                                                .style = panelInputStyle,
+                                                .onSubmit = [findNext](std::string const &) { findNext(); },
+                                            },
+                                            .focusGeneration = panelFocusGeneration,
+                                        }}
+                                    .width(220.f),
+                                Button{
+                                    .label = "Next",
+                                    .variant = ButtonVariant::Secondary,
+                                    .disabled = [findQuery] { return findQuery().empty(); },
+                                    .onTap = findNext,
+                                })};
+                      }),
+                  Show(
+                      [activePanel] {
+                        return activePanel() == EditorPanel::Replace;
+                      },
+                      [replaceValue, replaceOne, replaceAll, panelInputStyle] {
+                        return HStack{
+                            .spacing = 6.f,
+                            .alignment = Alignment::Center,
+                            .children = children(
+                                TextInput{
+                                    .value = replaceValue,
+                                    .placeholder = "Replace",
+                                    .style = panelInputStyle,
+                                    .onSubmit = [replaceOne](std::string const &) { replaceOne(); },
+                                }
+                                    .width(220.f),
+                                Button{
+                                    .label = "Replace",
+                                    .variant = ButtonVariant::Secondary,
+                                    .onTap = replaceOne,
+                                },
+                                Button{
+                                    .label = "All",
+                                    .variant = ButtonVariant::Secondary,
+                                    .onTap = replaceAll,
+                                })};
+                      }),
+                  Show(
+                      [activePanel] {
+                        return activePanel() == EditorPanel::GoToLine;
+                      },
+                      [gotoLineValue, goToLine, panelFocusGeneration, panelInputStyle] {
+                        return HStack{
+                            .spacing = 6.f,
+                            .alignment = Alignment::Center,
+                            .children = children(
+                                Element{AutoFocusTextInput{
+                                            .input = TextInput{
+                                                .value = gotoLineValue,
+                                                .placeholder = "Line",
+                                                .style = panelInputStyle,
+                                                .onSubmit = [goToLine](std::string const &) { goToLine(); },
+                                            },
+                                            .focusGeneration = panelFocusGeneration,
+                                        }}
+                                    .width(120.f),
+                                Button{
+                                    .label = "Go",
+                                    .variant = ButtonVariant::Secondary,
+                                    .onTap = goToLine,
+                                })};
+                      }),
+                  Spacer{}.flex(1.f, 1.f, 0.f),
+                  Button{
+                      .label = "Close",
+                      .variant = ButtonVariant::Ghost,
+                      .onTap = closePanel,
+                  })}
+              .height(44.f)
+              .padding(5.f, theme().space3, 5.f, theme().space3)
+              .fill(FillStyle::solid(Color::windowBackground()))
+              .stroke(StrokeStyle::solid(Color::separator(), 1.f));
         });
+
+    auto editorArea = [text, selection, document, history, refreshHistoryState,
+                       editorStyle](bool wrap) {
+      return ScrollView{
+          .axis = wrap ? ScrollAxis::Vertical : ScrollAxis::Both,
+          .children = children(
+              TextInput{
+                  .value = text,
+                  .selection = selection,
+                  .placeholder = "Start typing...",
+                  .style = editorStyle,
+                  .multiline = true,
+                  .wrapping = wrap ? TextWrapping::Wrap : TextWrapping::NoWrap,
+                  .multilineHeight = {.fixed = 0.f, .minIntrinsic = 560.f},
+                  .onEdit = [document, history, refreshHistoryState](
+                                std::string const& value,
+                                detail::TextEditSelection editSelection) {
+                    EditorDocument current = document.peek();
+                    current.setText(value);
+                    document.set(std::move(current));
+                    history.peek()->record(EditorSnapshot{
+                        .text = value,
+                        .selection = editSelection,
+                    });
+                    refreshHistoryState();
+                  },
+              }
+                  .fill(FillStyle::solid(Color::controlBackground()))),
+      }
+          .flex(1.f, 1.f, 0.f)
+          .fill(FillStyle::solid(Color::controlBackground()));
+    };
+
+    auto editorContent = Element{Show(
+        [wordWrap] {
+          return wordWrap();
+        },
+        [editorArea] {
+          return editorArea(true);
+        },
+        [editorArea] {
+          return editorArea(false);
+        })}.flex(1.f, 1.f, 0.f);
 
     return VStack{
                .spacing = 0.f,
@@ -659,33 +706,33 @@ struct LambdaEditor {
                                ToolbarButton{.icon = IconName::Undo,
                                              .tooltip = "Undo",
                                              .onTap = undo,
-                                             .disabled = !canUndo()},
+                                             .disabled = [canUndo] { return !canUndo(); }},
                                ToolbarButton{.icon = IconName::Redo,
                                              .tooltip = "Redo",
                                              .onTap = redo,
-                                             .disabled = !canRedo()})),
+                                             .disabled = [canRedo] { return !canRedo(); }})),
                            toolbarDivider(),
                            toolbarGroup(children(
                                ToolbarButton{.icon = IconName::ContentCut,
                                              .tooltip = "Cut",
                                              .onTap = cutSelection,
-                                             .disabled = !hasSelection},
+                                             .disabled = [selection] {
+                                               return !selection().hasSelection();
+                                             }},
                                ToolbarButton{.icon = IconName::ContentCopy,
                                              .tooltip = "Copy",
                                              .onTap = copySelection,
-                                             .disabled = !hasSelection},
+                                             .disabled = [selection] {
+                                               return !selection().hasSelection();
+                                             }},
                                ToolbarButton{.icon = IconName::ContentPaste,
                                              .tooltip = "Paste",
                                              .onTap = pasteClipboard,
-                                             .disabled = !canPaste},
-                               ToolbarButton{.icon = IconName::Delete,
-                                             .tooltip = "Delete",
-                                             .onTap = deleteText,
-                                             .disabled = !canDelete},
-                               ToolbarButton{.icon = IconName::SelectAll,
-                                             .tooltip = "Select All",
-                                             .onTap = selectAll,
-                                             .disabled = text().empty()})),
+                                             .disabled = [clipboardHasText] {
+                                               return !clipboardHasText() &&
+                                                      (!Application::hasInstance() ||
+                                                       !Application::instance().clipboard().hasText());
+                                             }})),
                            toolbarDivider(),
                            toolbarGroup(children(
                                ToolbarButton{.icon = IconName::Search,
@@ -700,51 +747,25 @@ struct LambdaEditor {
                            toolbarDivider(),
                            toolbarGroup(children(
                                ToolbarButton{.icon = IconName::WrapText,
-                                             .tooltip = wordWrap() ? "Word Wrap: On" : "Word Wrap: Off",
-                                             .onTap = toggleWordWrap},
+                                             .tooltip = "Word Wrap",
+                                             .onTap = toggleWordWrap})),
+                           toolbarDivider(),
+                           toolbarGroup(children(
                                ToolbarButton{.icon = IconName::ZoomOut,
                                              .tooltip = "Zoom Out",
                                              .onTap = zoomOut,
-                                             .disabled = !canZoomOut},
+                                             .disabled = [fontSize] { return fontSize() <= 10.f; }},
                                ToolbarButton{.icon = IconName::ZoomIn,
                                              .tooltip = "Zoom In",
                                              .onTap = zoomIn,
-                                             .disabled = !canZoomIn},
-                               ToolbarButton{.icon = IconName::TextFields,
-                                             .tooltip = "Font",
-                                             .onTap = cycleFont})),
+                                             .disabled = [fontSize] { return fontSize() >= 32.f; }})),
                            Spacer{})}
                        .height(56.f)
-                       .padding(7.f, theme().space3, 7.f, theme().space3)
+                       .padding(5.f, theme().space3, 5.f, theme().space3)
                        .fill(FillStyle::solid(Color::windowBackground()))
                        .stroke(StrokeStyle::solid(Color::separator(), 1.f)),
                    std::move(panel),
-                   ScrollView{
-                       .axis = wordWrap() ? ScrollAxis::Vertical : ScrollAxis::Both,
-                       .children = children(
-                           TextInput{
-                               .value = text,
-                               .selection = selection,
-                               .placeholder = "Start typing...",
-                               .style = editorStyle,
-                               .multiline = true,
-                               .wrapping = wordWrap() ? TextWrapping::Wrap : TextWrapping::NoWrap,
-                               .multilineHeight = {.fixed = 0.f, .minIntrinsic = 560.f},
-                               .onEdit = [document, history, refreshHistoryState](
-                                             std::string const& value,
-                                             detail::TextEditSelection editSelection) {
-                                 EditorDocument current = document.peek();
-                                 current.setText(value);
-                                 document.set(std::move(current));
-                                 history.peek()->record(EditorSnapshot{
-                                     .text = value,
-                                     .selection = editSelection,
-                                 });
-                                 refreshHistoryState();
-                               },
-                           }.fill(FillStyle::solid(Color::controlBackground()))),
-                   }.flex(1.f, 1.f, 0.f)
-                       .fill(FillStyle::solid(Color::controlBackground())),
+                   std::move(editorContent),
                    HStack{
                        .spacing = theme().space2,
                        .alignment = Alignment::Center,

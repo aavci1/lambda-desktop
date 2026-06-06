@@ -185,21 +185,19 @@ inline Reactive::Signal<bool>& signalSlot(InteractionSignalBundle& signals,
 }
 
 inline Reactive::Signal<bool> useInteractionSignal(InteractionSignalKind kind) {
-  Reactive::Signal<bool> signal{false};
   Reactive::detail::ScopeState* owner = Reactive::detail::sCurrentOwner;
   if (!owner) {
-    return signal;
+    return Reactive::Signal<bool>{false};
   }
 
   auto& entry = ownerInteractionSignals()[owner];
-  signalSlot(entry.signals, kind) = signal;
   if (!entry.cleanupRegistered) {
     entry.cleanupRegistered = true;
     Reactive::onCleanup([owner] {
       ownerInteractionSignals().erase(owner);
     });
   }
-  return signal;
+  return signalSlot(entry.signals, kind);
 }
 
 #ifndef NDEBUG
@@ -395,6 +393,25 @@ inline Reactive::Signal<bool> useHover() {
 
 inline Reactive::Signal<bool> usePress() {
   return detail::useInteractionSignal(detail::InteractionSignalKind::Press);
+}
+
+inline void useAutoFocus(Reactive::Signal<int> generation) {
+  Runtime* runtime = Runtime::current();
+  Reactive::detail::ScopeState* scope = Reactive::detail::sCurrentOwner;
+  if (!runtime || !scope) {
+    return;
+  }
+
+  ComponentKey const key = ComponentKey::fromScope(scope);
+  Reactive::Signal<int> lastFocusedGeneration = useState(-1);
+  useEffect([runtime, key, generation, lastFocusedGeneration] {
+    int const currentGeneration = generation.get();
+    if (lastFocusedGeneration.peek() == currentGeneration) {
+      return;
+    }
+    runtime->requestFocusAfterLayout(key);
+    lastFocusedGeneration.set(currentGeneration);
+  });
 }
 
 inline LayoutConstraints const* useLayoutConstraints() {

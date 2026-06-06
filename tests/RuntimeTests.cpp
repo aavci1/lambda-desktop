@@ -4,6 +4,8 @@
 #include <Lambda/UI/Shortcut.hpp>
 #include <Lambda/UI/ActionRegistry.hpp>
 
+#include "Platform/Linux/Common/XkbState.hpp"
+
 #include <unordered_map>
 
 TEST_CASE("runtime tests are parked for the v5 mount runtime rewrite") {
@@ -52,6 +54,24 @@ TEST_CASE("action registry unregisters view claims by id") {
 
   CHECK_FALSE(registry.dispatchShortcut({}, lambda::keys::S, lambda::Modifiers::Meta, descriptors));
   CHECK(fired == 1);
+}
+
+TEST_CASE("linux text input emission ignores command modifiers") {
+  CHECK(lambda::linux_platform::shouldEmitTextInputForModifiers(lambda::Modifiers::None));
+  CHECK(lambda::linux_platform::shouldEmitTextInputForModifiers(lambda::Modifiers::Shift));
+
+  CHECK_FALSE(lambda::linux_platform::shouldEmitTextInputForModifiers(lambda::Modifiers::Ctrl));
+  CHECK_FALSE(lambda::linux_platform::shouldEmitTextInputForModifiers(lambda::Modifiers::Alt));
+  CHECK_FALSE(lambda::linux_platform::shouldEmitTextInputForModifiers(lambda::Modifiers::Meta));
+  CHECK_FALSE(lambda::linux_platform::shouldEmitTextInputForModifiers(
+      lambda::Modifiers::Ctrl | lambda::Modifiers::Shift));
+}
+
+TEST_CASE("unknown key code does not match Ctrl+A shortcut") {
+  lambda::Shortcut selectAll{lambda::keys::A, lambda::Modifiers::Ctrl};
+
+  CHECK(selectAll.matches(lambda::keys::A, lambda::Modifiers::Ctrl));
+  CHECK_FALSE(selectAll.matches(lambda::keys::Unknown, lambda::Modifiers::Ctrl));
 }
 
 TEST_CASE("component keys minted from scopes are non-empty and stable") {

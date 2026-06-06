@@ -1458,7 +1458,7 @@ public:
 
   void handleKeyboardKey(linux_platform::XkbState* xkb, std::uint32_t key, std::uint32_t state) {
     bool const pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
-    KeyCode const keyCode = xkb ? xkb->keyCodeForEvdevKey(key) : KeyCode{0};
+    KeyCode const keyCode = xkb ? xkb->keyCodeForEvdevKey(key) : keys::Unknown;
     if (pressed && keyCode == keys::Escape && popupMenu_) {
       dismissPopupMenu();
       return;
@@ -1468,7 +1468,7 @@ public:
                                                          .handle = handle_,
                                                          .key = keyCode,
                                                          .modifiers = currentModifiers_});
-    if (pressed) {
+    if (pressed && linux_platform::shouldEmitTextInputForModifiers(currentModifiers_)) {
       std::string text = xkb ? xkb->utf8ForEvdevKey(key) : std::string{};
       if (!text.empty()) {
         Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::TextInput,
@@ -1482,9 +1482,9 @@ public:
                                    std::uint32_t key, std::uint32_t state) {
     if (WaylandPopoverSurfaceState* popover = popoverForSurface(surface)) {
       bool const pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
-      KeyCode const keyCode = xkb ? xkb->keyCodeForEvdevKey(key) : KeyCode{0};
+      KeyCode const keyCode = xkb ? xkb->keyCodeForEvdevKey(key) : keys::Unknown;
       dispatchPopoverKey(*popover, keyCode, pressed);
-      if (pressed) {
+      if (pressed && linux_platform::shouldEmitTextInputForModifiers(currentModifiers_)) {
         std::string text = xkb ? xkb->utf8ForEvdevKey(key) : std::string{};
         if (!text.empty()) {
           dispatchPopoverText(*popover, std::move(text));

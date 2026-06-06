@@ -11,6 +11,8 @@
 
 namespace lambda::keys {
 
+constexpr std::uint16_t Unknown = 0xFFFF;
+
 // Printable keys (macOS virtual key codes, layout-independent)
 constexpr std::uint16_t A = 0x00;
 constexpr std::uint16_t S = 0x01;

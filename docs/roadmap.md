@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-06-03
+**Last updated:** 2026-06-06
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -416,39 +416,33 @@ Shared desktop services:
 
 Editor current implementation:
 
-- `lambda-editor` is a compact single-document app implemented almost entirely in `apps/lambda-editor/main.cpp`.
-- Current UI has a manual path field, `New`, `Open`, and `Save` buttons, a multiline `TextInput`, status text, and a byte-count-style character count.
-- Current file I/O reads and writes raw bytes through `std::ifstream`/`std::ofstream`; save creates missing parent directories and truncates the target path.
-- Current shortcut registration covers Copy, Cut, Paste, Select All, and Quit. The shared `TextInput` layer already has UTF-8 movement, pointer selection, keyboard selection, clipboard action claims, and layout helpers.
-- Current app behavior does not include File/Edit/View/Help menus, native file dialogs, save-as flow, close/quit save prompts, undo/redo, find/replace, line/column status, scrolling editor viewport, word-wrap toggle, status-bar toggle, zoom, font settings, printing, tabs, session restore, spellcheck, or tests specific to editor document behavior.
+- `lambda-editor` is a compact single-document app with document/file helpers plus the live app view in `apps/lambda-editor/main.cpp`.
+- Current UI has a toolbar for New, Open, Save, Save As, Undo, Redo, Cut, Copy, Paste, Find, Replace, Go To Line, Word Wrap, Zoom Out, and Zoom In; toolbar buttons use shared tooltip hooks.
+- Current file I/O uses the Lambda open/save dialog path, tracks document path/display name/dirty state, updates the window title with an unsaved marker, and supports command-line file open.
+- Current editing behavior includes controlled selection state, multi-level editor undo/redo, Ctrl-style file/edit/find/zoom shortcuts, Ctrl+A handling in `TextInput`, cut/copy/paste enabled states, a scrolling multiline editor viewport, word-wrap toggling, font-size zoom, find/replace/go-to-line panels, and status text with character count and current line.
+- Current validation covers editor command helpers, Linux modifier text-input filtering, controlled `TextInput` Ctrl+A/edit-selection behavior, and scoped autofocus request behavior. Live compositor validation is still required for panel autofocus, toolbar tooltips, and visual layout.
 
 Editor open gate:
 
-- Replace the manual path textbox workflow with real `New`, `Open`, `Save`, `Save As`, and `Exit` commands.
-- Add a Lambda platform file-dialog abstraction for open/save panels; this likely also serves Files/open-with and future portal work.
-- Add a document model with current path, display name, saved revision/hash, dirty state, file existence/read-only/error state, and command-line file-open handling.
 - Prompt before data loss on new, open, close-window, quit, and tab-close flows.
-- Make `Save` route to `Save As` for untitled documents, and stop silently creating parent directories unless a deliberate product decision keeps that behavior.
-- Update window and future tab titles with filename and unsaved marker.
 - Handle missing files, directory paths, permission errors, large files, invalid text, encoding, and newline policy explicitly.
 - Preserve or intentionally convert UTF-8 BOM, UTF-16 LE/BE, CRLF, LF, and final-newline state; show the effective format in the status bar where useful.
-- Add real status-bar fields for line, column, selection, character count, encoding, newline mode, and zoom.
-- Add word wrap, status bar visibility, zoom in/out/default, and editor font family/size settings with persistence.
-- Add multi-level undo/redo in the shared text-editing layer or an editor-specific buffer layer; register `edit.undo` and `edit.redo`.
-- Add editor actions and enabled states for Delete, Cut, Copy, Paste, Select All, Undo, Redo, Find, Replace, Go To, Time/Date, Save, Save As, Print, and Page Setup.
-- Add find UI with next/previous, match case, wrap-around behavior, and visible match feedback.
-- Add replace UI with replace, replace next, and replace all.
-- Add Go To line and time/date insertion.
+- Add fuller status-bar fields for column, selection, encoding, newline mode, and zoom, plus status bar visibility controls if they remain desired.
+- Add restore-default zoom and persisted editor font-size settings. Do not reintroduce Editor toolbar/menu actions for font family selection unless the product decision changes.
+- Add remaining editor actions and enabled states for Time/Date, Print, and Page Setup. Delete and Select All should remain basic `TextInput` behavior rather than Editor toolbar actions.
+- Extend find UI with previous match, match case, wrap-around behavior, and visible match feedback.
+- Extend replace UI with clearer replace-next behavior and visible match feedback.
+- Add time/date insertion.
 - Add a context menu for the editor surface with editing, find/replace, and spellcheck actions as they become available.
-- Add multiline editor viewport scrolling, PageUp/PageDown, Ctrl/Home/End-style document navigation, platform-correct modifiers, and caret visibility while typing or navigating.
+- Add PageUp/PageDown, Ctrl/Home/End-style document navigation, platform-correct modifiers where needed, and caret visibility while typing or navigating.
 - Add large-file performance guardrails so typing, selection, find, and layout do not copy or relayout the full buffer unnecessarily.
 - Add a full menu bar through `Application::setMenuBar`: File, Edit, Format, View, and Help.
 - Add File menu entries for New, New Window, Open, Save, Save As, Page Setup, Print, and Exit.
-- Add Edit menu entries for Undo, Redo, Cut, Copy, Paste, Delete, Find, Find Next, Find Previous, Replace, Go To, Select All, and Time/Date.
-- Add Format menu entries for Word Wrap and Font.
-- Add View menu entries for Zoom In, Zoom Out, Restore Default Zoom, and Status Bar.
+- Add Edit menu entries for Undo, Redo, Cut, Copy, Paste, Find, Find Next, Find Previous, Replace, Go To, and Time/Date.
+- Add Format menu entries for Word Wrap.
+- Add View menu entries for Zoom In, Zoom Out, Restore Default Zoom, and Status Bar if status-bar visibility remains desired.
 - Add Help/About entry for Lambda Editor.
-- Normalize shortcut behavior by platform; Notepad parity on Windows/Linux generally means Ctrl-style shortcuts, while macOS should keep command-style shortcuts.
+- Keep shortcut behavior aligned with current product direction: Ctrl-style editor shortcuts, including Ctrl+Shift+C/V for terminal copy/paste only.
 - Add Files/open-with integration so text files launch `lambda-editor` with the selected path and sensible MIME/default-app behavior.
 - Split `main.cpp` into document model, file I/O, editor view, menu/action wiring, settings, and tests.
 

@@ -44,6 +44,8 @@ public:
   std::optional<ComponentKey> lastTapTargetKey() const noexcept;
   std::optional<ComponentKey> hoverTargetKey() const noexcept;
   std::optional<ComponentKey> focusTargetKey() const noexcept;
+  bool requestFocus(ComponentKey const& key);
+  void requestFocusAfterLayout(ComponentKey key);
   Window& window() noexcept;
   Window const& window() const noexcept;
 

@@ -15,6 +15,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-009 | Bug | Files opens supported images in Firefox instead of Preview | Medium | P1 |
 | TODO-011 | Feature | Fix and enhance Super+Tab window cycler | N/A | P1 |
 | TODO-013 | Feature | Add Editor file watcher with reload prompt | N/A | P1 |
+| TODO-014 | Bug | Tooltips are not showing | Medium | P1 |
 
 ## TODO-002: Copy/paste is not working across applications
 
@@ -23,8 +24,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Regular editable text surfaces should use Ctrl+C for copy and Ctrl+V for paste.
 - [ ] [Auto] Terminal should use terminal-standard Ctrl+Shift+C for copy and Ctrl+Shift+V for paste, so Ctrl+C remains available for terminal interrupt behavior.
 - [ ] [Auto] Do not add or rely on Super+C or Super+V clipboard behavior.
-- [ ] [Auto] The text editor selection bug is part of this item: pressing Ctrl+C currently replaces the selected text with `c`, and there is no way to bring the text back because Ctrl+Z is not working.
-- [ ] [Auto + Manual] Verify copy and paste across multiple apps or text surfaces, including the Editor app, Terminal, and at least one other application.
+- [ ] [Auto + Manual] Verify copy and paste across multiple apps or text surfaces, including Terminal and at least two regular editable text surfaces. Editor-local Ctrl+A/C/X/V and Ctrl+Z/Shift+Ctrl+Z behavior has focused automated coverage, but the shared cross-application clipboard path still needs validation.
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -92,3 +92,11 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Update the watcher when the user opens a different file, creates a new file, or closes the document, and avoid leaving stale watchers running.
 - [ ] [Auto] Coalesce duplicate filesystem events so one external save produces one reload prompt.
 - [ ] [Auto] Automate verification if possible by opening a file in Editor, changing it externally, asserting the reload banner/toast appears, accepting reload, and checking that scroll and caret position are preserved.
+
+## TODO-014: Tooltips are not showing
+
+- [ ] [Manual] Tooltips are not showing at all when running the tooltip demo, even though they previously worked at least on macOS.
+- [ ] [Auto + Manual] Fix the shared `Tooltip`/`useTooltip` implementation rather than adding local tooltip popover behavior per app or demo.
+- [ ] [Auto + Manual] Verify the tooltip demo shows tooltips after hover delay for buttons, icons, toggles, and placement examples.
+- [ ] [Auto + Manual] Verify Editor toolbar buttons use the same real tooltip implementation and show their labels on hover.
+- [ ] [Auto] Add automated coverage where practical for tooltip state/lifecycle behavior, including hover enter, hover exit, timer cancellation, and avoiding stale tooltip popovers after the target unmounts.

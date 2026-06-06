@@ -68,6 +68,11 @@ struct RuntimeInputState {
   Cursor currentCursor = Cursor::Arrow;
 };
 
+struct RuntimeFocusRequestEvent {
+  unsigned int handle = 0;
+  ComponentKey key;
+};
+
 std::optional<Rect> windowRectForTarget(RuntimeTargetSnapshot const& target, Window& window);
 void focusSingleTargetOnWindowFocus(RuntimeInputState& input, Window& window);
 
@@ -100,6 +105,12 @@ Runtime::Runtime(Window& window)
         [this, handle, alive](WindowEvent const& event) {
           if (*alive && event.handle == handle) {
             handleWindowEvent(event);
+          }
+        });
+    Application::instance().eventQueue().on<RuntimeFocusRequestEvent>(
+        [this, handle, alive](RuntimeFocusRequestEvent const& event) {
+          if (*alive && event.handle == handle) {
+            requestFocus(event.key);
           }
         });
   }
@@ -642,11 +653,53 @@ void resetTransientTargets(RuntimeInputState& input, Window& window) {
 
 } // namespace
 
+bool Runtime::requestFocus(ComponentKey const& key) {
+  if (key.empty()) {
+    return false;
+  }
+
+  std::vector<HitTarget> targets = focusableTargets(d->window);
+  for (HitTarget const& target : targets) {
+    if (target.interaction &&
+        target.interaction->stableTargetKey_.hasPrefix(key)) {
+      setFocus(d->input, target, true, FocusInputKind::Keyboard);
+      return true;
+    }
+  }
+  return false;
+}
+
+void Runtime::requestFocusAfterLayout(ComponentKey key) {
+  if (key.empty()) {
+    return;
+  }
+
+  if (Application::hasInstance()) {
+    Application::instance().eventQueue().post(RuntimeFocusRequestEvent{
+        .handle = d->window.handle(),
+        .key = std::move(key),
+    });
+    return;
+  }
+
+  requestFocus(key);
+}
+
 void Runtime::handleInput(InputEvent const& event) {
   if (Application::hasInstance() &&
       Application::instance().isWindowInputBlockedByModal(d->window.handle())) {
     return;
   }
+
+  Runtime* previousRuntime = current_;
+  current_ = this;
+  struct RestoreCurrentRuntime {
+    Runtime*& slot;
+    Runtime* previous;
+    ~RestoreCurrentRuntime() {
+      slot = previous;
+    }
+  } restoreCurrentRuntime{current_, previousRuntime};
 
   Point const point = eventPoint(event);
 

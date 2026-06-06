@@ -126,7 +126,7 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
                                                                .handle = window->handle(),
                                                                .key = key,
                                                                .modifiers = modifiers});
-  if (pressed) {
+  if (pressed && linux_platform::shouldEmitTextInputForModifiers(modifiers)) {
     std::string text = xkb.utf8ForEvdevKey(evdevKey);
     if (!text.empty()) {
       ::lambda::Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::TextInput,

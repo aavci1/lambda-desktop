@@ -36,6 +36,8 @@ struct ResolvedTextInputStyle {
   ResolvedInputFieldChrome chrome{};
   float lineHeight = 0.f;
   float height = 0.f;
+
+  bool operator==(ResolvedTextInputStyle const& other) const = default;
 };
 
 ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const& style,
@@ -53,22 +55,24 @@ ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const& style,
 
   ResolvedInputFieldChrome chrome = resolveInputFieldChrome(chromeSpec, theme);
   return ResolvedTextInputStyle{
-      .font = resolveFont(style.font, theme.bodyFont, theme),
+      .font = resolveFont(style.font.evaluate(), theme.bodyFont, theme),
       .textColor = resolveColor(style.textColor, theme.labelColor, theme),
       .placeholderColor = resolveColor(style.placeholderColor, theme.placeholderTextColor, theme),
       .caretColor = resolveColor(style.caretColor, theme.accentColor, theme),
       .selectionColor = resolveColor(style.selectionColor, theme.accentColor, theme),
       .chrome = chrome,
-      .lineHeight = std::max(0.f, style.lineHeight),
+      .lineHeight = std::max(0.f, style.lineHeight.evaluate()),
       .height = std::max(0.f, style.height),
   };
 }
 
-TextLayoutOptions textInputLayoutOptions(TextInput const& input) {
+TextLayoutOptions textInputLayoutOptions(TextInput const& input,
+                                         ResolvedTextInputStyle const& style) {
   TextLayoutOptions options{};
   options.wrapping = input.multiline ? input.wrapping : TextWrapping::NoWrap;
   options.horizontalAlignment = HorizontalAlignment::Leading;
   options.verticalAlignment = input.multiline ? VerticalAlignment::Top : VerticalAlignment::Center;
+  options.lineHeight = style.lineHeight;
   return options;
 }
 
@@ -161,7 +165,7 @@ Size textInputFrameSize(TextInput const& input, ResolvedTextInputStyle const& st
   if (assignedSingleLineWidth) {
     measured.width = constraints.maxWidth;
   } else {
-    TextLayoutOptions const options = textInputLayoutOptions(input);
+    TextLayoutOptions const options = textInputLayoutOptions(input, style);
     measured = textSystem.measure(attributedText(input, style), maxTextWidth, options);
     measured.width += 2.f * padX;
     measured.height += 2.f * padY;
@@ -209,7 +213,7 @@ void setTextLayout(scenegraph::TextNode& node, TextInput const& input,
   Rect const layoutBox = Rect::sharp(0.f, 0.f, box.width, box.height);
   node.setBounds(box);
   auto layout = textSystem.layout(attributedText(input, style), layoutBox,
-                                  textInputLayoutOptions(input));
+                                  textInputLayoutOptions(input, style));
   node.setLayout(layout);
   if (layoutResult) {
     *layoutResult = detail::makeTextEditLayoutResult(
@@ -329,6 +333,7 @@ Size TextInput::measure(MeasureContext& ctx, LayoutConstraints const& constraint
 std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const {
   Theme const theme = ctx.environmentBinding().value<ThemeKey>();
   ResolvedTextInputStyle const resolved = resolveTextInputStyle(style, theme);
+  auto resolvedStyle = std::make_shared<ResolvedTextInputStyle>(resolved);
   auto frameSize = std::make_shared<Size>(
       textInputFrameSize(*this, resolved, ctx.constraints(), ctx.textSystem()));
 
@@ -366,15 +371,17 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   interaction->focusable_ = !disabled;
   Signal<bool> focusState = interaction->focusSignal;
   Animated<float> caretOpacity{1.f};
+  bool const hasControlledSelection = selection.has_value();
 
   auto selectionLayer = std::make_unique<scenegraph::RenderNode>(
       Rect{0.f, 0.f, frameSize->width, frameSize->height},
-      [layoutResult, valueState, selectionState, focusState, frameSize, resolved](Canvas& canvas, Rect) {
-        if (!focusState.peek()) {
+      [layoutResult, valueState, selectionState, focusState, frameSize, resolvedStyle,
+       hasControlledSelection](Canvas& canvas, Rect) {
+        if (!focusState.peek() && !hasControlledSelection) {
           return;
         }
         drawSelection(canvas, *layoutResult, selectionState.peek(), valueState.peek(),
-                      *frameSize, resolved);
+                      *frameSize, *resolvedStyle);
       });
   selectionLayer->setPurity(scenegraph::RenderNode::Purity::Live);
   scenegraph::RenderNode* rawSelectionLayer = selectionLayer.get();
@@ -383,12 +390,13 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
 
   auto caretLayer = std::make_unique<scenegraph::RenderNode>(
       Rect{0.f, 0.f, frameSize->width, frameSize->height},
-      [layoutResult, selectionState, focusState, frameSize, resolved, caretOpacity](
+      [layoutResult, selectionState, focusState, frameSize, resolvedStyle, caretOpacity,
+       hasControlledSelection](
           Canvas& canvas, Rect) {
-        if (!focusState.peek() || caretOpacity.peek() < 0.5f) {
+        if ((!focusState.peek() && !hasControlledSelection) || caretOpacity.peek() < 0.5f) {
           return;
         }
-        drawCaret(canvas, *layoutResult, selectionState.peek(), *frameSize, resolved);
+        drawCaret(canvas, *layoutResult, selectionState.peek(), *frameSize, *resolvedStyle);
       });
   caretLayer->setPurity(scenegraph::RenderNode::Purity::Live);
   scenegraph::RenderNode* rawCaretLayer = caretLayer.get();
@@ -403,23 +411,23 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   bool const isDisabled = disabled;
   auto draggingSelection = std::make_shared<bool>(false);
 
-  interaction->onPointerDown = [selectionState, valueState, layoutResult, frameSize, resolved,
+  interaction->onPointerDown = [selectionState, valueState, layoutResult, frameSize, resolvedStyle,
                                 draggingSelection, isDisabled](Point point, MouseButton button) {
     if (isDisabled || button != MouseButton::Left || !layoutResult || layoutResult->empty()) {
       return;
     }
     int const byte = detail::caretByteAtPoint(
-        *layoutResult, textLayoutPoint(point, *frameSize, resolved), valueState.peek());
+        *layoutResult, textLayoutPoint(point, *frameSize, *resolvedStyle), valueState.peek());
     selectionState = detail::moveSelectionToByte(valueState.peek(), selectionState.peek(), byte, false);
     *draggingSelection = true;
   };
-  interaction->onPointerMove = [selectionState, valueState, layoutResult, frameSize, resolved,
+  interaction->onPointerMove = [selectionState, valueState, layoutResult, frameSize, resolvedStyle,
                                 draggingSelection, isDisabled](Point point) {
     if (isDisabled || !*draggingSelection || !layoutResult || layoutResult->empty()) {
       return;
     }
     int const byte = detail::caretByteAtPoint(
-        *layoutResult, textLayoutPoint(point, *frameSize, resolved), valueState.peek());
+        *layoutResult, textLayoutPoint(point, *frameSize, *resolvedStyle), valueState.peek());
     selectionState = detail::moveSelectionToByte(valueState.peek(), selectionState.peek(), byte, true);
   };
   interaction->onPointerUp = [draggingSelection](Point, MouseButton) {
@@ -443,10 +451,11 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
     bool const shift = any(modifiers & Modifiers::Shift);
     bool const alt = any(modifiers & Modifiers::Alt);
     bool const meta = any(modifiers & Modifiers::Meta);
+    bool const ctrl = any(modifiers & Modifiers::Ctrl);
     detail::TextEditSelection const current = selectionState.peek();
     std::string const& text = valueState.peek();
 
-    if (meta && key == keys::A) {
+    if ((ctrl || meta) && key == keys::A) {
       selectionState = detail::selectAllSelection(text);
       return;
     }
@@ -507,21 +516,22 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   auto* rawWrapper = wrapper.get();
   TextSystem* textSystem = &ctx.textSystem();
   rawWrapper->setLayoutConstraints(ctx.constraints());
-  rawWrapper->setRelayout([rawWrapper, rawText, rawSelectionLayer, rawCaretLayer, input = *this, resolved,
+  rawWrapper->setRelayout([rawWrapper, rawText, rawSelectionLayer, rawCaretLayer, input = *this,
+                           resolvedStyle,
                            frameSize, layoutResult, textSystem, lastLayoutText,
                            lastLayoutBox](LayoutConstraints const& constraints) mutable {
-    *frameSize = textInputFrameSize(input, resolved, constraints, *textSystem);
+    *frameSize = textInputFrameSize(input, *resolvedStyle, constraints, *textSystem);
     rawWrapper->setSize(*frameSize);
     rawSelectionLayer->setBounds(Rect{0.f, 0.f, frameSize->width, frameSize->height});
     rawCaretLayer->setBounds(Rect{0.f, 0.f, frameSize->width, frameSize->height});
-    setTextLayoutIfNeeded(*rawText, input, resolved, *textSystem, *frameSize,
+    setTextLayoutIfNeeded(*rawText, input, *resolvedStyle, *textSystem, *frameSize,
                           layoutResult, lastLayoutText, lastLayoutBox);
   });
 
   Reactive::withOwner(ctx.owner(), [rawWrapper, rawText, rawSelectionLayer, rawCaretLayer,
                                     valueState, selectionState, focusState, caretOpacity,
                                     input = *this,
-                                    resolved, frameSize, layoutResult, textSystem = &ctx.textSystem(),
+                                    theme, resolvedStyle, frameSize, layoutResult, textSystem = &ctx.textSystem(),
                                     lastLayoutText, lastLayoutBox,
                                     requestRedraw = ctx.redrawCallback()] {
     auto lastMeasuredText = std::make_shared<std::string>(valueState.peek());
@@ -529,11 +539,16 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
       caretOpacity.stop();
     });
     Reactive::Effect([rawWrapper, rawText, rawSelectionLayer, rawCaretLayer, valueState,
-                      selectionState, focusState, caretOpacity, input, resolved, frameSize,
+                      selectionState, focusState, caretOpacity, input, theme, resolvedStyle, frameSize,
                       layoutResult, textSystem, lastLayoutText, lastLayoutBox,
                       lastMeasuredText, requestRedraw] {
+      ResolvedTextInputStyle const nextStyle = resolveTextInputStyle(input.style, theme);
+      bool const styleChanged = !(nextStyle == *resolvedStyle);
+      if (styleChanged) {
+        *resolvedStyle = nextStyle;
+      }
       std::string const& text = valueState.get();
-      if (input.multiline && text != *lastMeasuredText) {
+      if (input.multiline && (styleChanged || text != *lastMeasuredText)) {
         *lastMeasuredText = text;
         Size const oldSize = rawWrapper->size();
         rawWrapper->invalidateSubtreeLayout();
@@ -547,8 +562,18 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
       if (!sameSelection(currentSelection, clamped)) {
         selectionState = clamped;
       }
-      setTextLayoutIfNeeded(*rawText, input, resolved, *textSystem, *frameSize,
-                            layoutResult, lastLayoutText, lastLayoutBox);
+      if (styleChanged) {
+        setTextLayout(*rawText, input, *resolvedStyle, *textSystem, *frameSize, layoutResult);
+        if (lastLayoutText) {
+          *lastLayoutText = text;
+        }
+        if (lastLayoutBox) {
+          *lastLayoutBox = textBox(*frameSize, *resolvedStyle);
+        }
+      } else {
+        setTextLayoutIfNeeded(*rawText, input, *resolvedStyle, *textSystem, *frameSize,
+                              layoutResult, lastLayoutText, lastLayoutBox);
+      }
       bool const focused = focusState.get();
       if (focused && !input.disabled) {
         caretOpacity.set(1.f, Transition::instant());
@@ -561,10 +586,10 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
         caretOpacity.set(1.f, Transition::instant());
       }
       rawWrapper->setStroke(focused && !input.disabled
-                                ? StrokeStyle::solid(resolved.chrome.borderFocusColor,
-                                                     resolved.chrome.borderFocusWidth)
-                                : StrokeStyle::solid(resolved.chrome.borderColor,
-                                                     resolved.chrome.borderWidth));
+                                ? StrokeStyle::solid(resolvedStyle->chrome.borderFocusColor,
+                                                     resolvedStyle->chrome.borderFocusWidth)
+                                : StrokeStyle::solid(resolvedStyle->chrome.borderColor,
+                                                     resolvedStyle->chrome.borderWidth));
       rawSelectionLayer->invalidate();
       rawCaretLayer->invalidate();
       if (requestRedraw) {
@@ -587,7 +612,7 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
 Element TextInput::body() const {
   return Text{
       .text = value.get().empty() ? placeholder : value.get(),
-      .font = style.font,
+      .font = style.font.evaluate(),
       .color = style.textColor,
       .wrapping = multiline ? TextWrapping::Wrap : TextWrapping::NoWrap,
   };

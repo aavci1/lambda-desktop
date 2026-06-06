@@ -20,39 +20,8 @@ using namespace lambda;
 namespace {
 
 Element attachTooltip(Element element, TooltipConfig config) {
-    auto [showPopover, hidePopover, presented] = usePopover();
-    (void)presented;
-    auto show = [showPopover, config = std::move(config)] {
-        if (config.text.empty()) {
-            return;
-        }
-        showPopover(Popover {
-            .content = Element {Text {
-                .text = config.text,
-                .font = Font::footnote(),
-                .color = Color::primary(),
-                .wrapping = TextWrapping::Wrap,
-            }},
-            .placement = config.placement,
-            .gap = 6.f,
-            .arrow = false,
-            .backgroundColor = Color::elevatedBackground(),
-            .borderColor = Color::separator(),
-            .borderWidth = 1.f,
-            .cornerRadius = 8.f,
-            .contentPadding = 8.f,
-            .maxSize = Size {240.f, 0.f},
-            .backdropColor = Colors::transparent,
-            .dismissOnEscape = true,
-            .dismissOnOutsideTap = false,
-            .useTapAnchor = false,
-            .useHoverLeafAnchor = true,
-            .debugName = "tooltip",
-        });
-    };
-    return std::move(element)
-        .onPointerEnter(std::function<void()> {show})
-        .onPointerExit(std::function<void()> {hidePopover});
+    useTooltip(config);
+    return std::move(element);
 }
 
 } // namespace

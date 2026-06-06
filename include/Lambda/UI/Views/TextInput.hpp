@@ -42,7 +42,7 @@ struct TextInputHeight {
 struct TextInput : ViewModifiers<TextInput> {
     struct Style {
         /// Text font.
-        Font font = Font::theme();
+        Reactive::Bindable<Font> font{Font::theme()};
         /// Main text color.
         Color textColor = Color::theme();
         /// Placeholder text color.
@@ -70,7 +70,7 @@ struct TextInput : ViewModifiers<TextInput> {
         /// Vertical text inset.
         float paddingV = kFloatFromTheme;
         /// Explicit line height override. `0` uses font metrics.
-        float lineHeight = 0.f;
+        Reactive::Bindable<float> lineHeight{0.f};
         /// Legacy single-line height override. Prefer modifiers or `multilineHeight` for new code.
         float height = 0.f;
 

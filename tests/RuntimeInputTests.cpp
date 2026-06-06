@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <Lambda/UI/Application.hpp>
+#include <Lambda/UI/EventQueue.hpp>
 #include <Lambda/UI/Events.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
 #include <Lambda/UI/Shortcut.hpp>
@@ -198,6 +199,24 @@ struct TextInputFocusRoot {
   }
 };
 
+struct ControlledTextInputRoot {
+  lambda::Reactive::Signal<std::string>* text = nullptr;
+  lambda::Reactive::Signal<lambda::detail::TextEditSelection>* selection = nullptr;
+  int* editCount = nullptr;
+
+  lambda::Element body() const {
+    return lambda::TextInput{
+        .value = *text,
+        .selection = *selection,
+        .placeholder = "Controlled",
+        .onEdit = [editCount = editCount](
+                      std::string const&, lambda::detail::TextEditSelection) {
+          ++*editCount;
+        },
+    };
+  }
+};
+
 struct StatefulOverlayProbe {
   int* bodyCalls = nullptr;
   int* cleanups = nullptr;
@@ -227,6 +246,42 @@ struct TwoProbeRoot {
         .children = lambda::children(
             ProbeView{nullptr, nullptr, firstFocus, nullptr},
             ProbeView{nullptr, nullptr, secondFocus, nullptr}),
+    };
+  }
+};
+
+struct ScopedAutoFocusProbe {
+  lambda::Reactive::Signal<int> focusGeneration;
+  lambda::Reactive::Signal<bool>* firstFocus = nullptr;
+  lambda::Reactive::Signal<bool>* secondFocus = nullptr;
+
+  lambda::Element body() const {
+    lambda::useAutoFocus(focusGeneration);
+    return lambda::HStack{
+        .spacing = 8.f,
+        .children = lambda::children(
+            ProbeView{nullptr, nullptr, firstFocus, nullptr},
+            ProbeView{nullptr, nullptr, secondFocus, nullptr}),
+    };
+  }
+};
+
+struct AutoFocusScopeRoot {
+  lambda::Reactive::Signal<int> focusGeneration;
+  lambda::Reactive::Signal<bool>* outsideFocus = nullptr;
+  lambda::Reactive::Signal<bool>* firstInsideFocus = nullptr;
+  lambda::Reactive::Signal<bool>* secondInsideFocus = nullptr;
+
+  lambda::Element body() const {
+    return lambda::HStack{
+        .spacing = 8.f,
+        .children = lambda::children(
+            ProbeView{nullptr, nullptr, outsideFocus, nullptr},
+            ScopedAutoFocusProbe{
+                .focusGeneration = focusGeneration,
+                .firstFocus = firstInsideFocus,
+                .secondFocus = secondInsideFocus,
+            }),
     };
   }
 };
@@ -611,6 +666,39 @@ TEST_CASE("root mount does not select among multiple focusable targets") {
   CHECK_FALSE(secondFocus.get());
 }
 
+TEST_CASE("auto focus requests first focusable target inside hook scope") {
+  RuntimeHarness harness;
+  lambda::Reactive::Signal<int> focusGeneration{0};
+  lambda::Reactive::Signal<bool> outsideFocus;
+  lambda::Reactive::Signal<bool> firstInsideFocus;
+  lambda::Reactive::Signal<bool> secondInsideFocus;
+  harness.setRoot(AutoFocusScopeRoot{
+      .focusGeneration = focusGeneration,
+      .outsideFocus = &outsideFocus,
+      .firstInsideFocus = &firstInsideFocus,
+      .secondInsideFocus = &secondInsideFocus,
+  });
+
+  focusGeneration.set(1);
+  harness.app.eventQueue().dispatch();
+
+  CHECK_FALSE(outsideFocus.get());
+  CHECK(firstInsideFocus.get());
+  CHECK_FALSE(secondInsideFocus.get());
+
+  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambda::keys::Tab);
+  REQUIRE(outsideFocus.get());
+  REQUIRE_FALSE(firstInsideFocus.get());
+
+  focusGeneration.set(2);
+  harness.app.eventQueue().dispatch();
+
+  CHECK_FALSE(outsideFocus.get());
+  CHECK(firstInsideFocus.get());
+  CHECK_FALSE(secondInsideFocus.get());
+}
+
 TEST_CASE("text input participates in keyboard focus traversal") {
   RuntimeHarness harness;
   lambda::Reactive::Signal<std::string> first{""};
@@ -626,6 +714,32 @@ TEST_CASE("text input participates in keyboard focus traversal") {
 
   CHECK(first.get() == "A");
   CHECK(second.get() == "B");
+}
+
+TEST_CASE("controlled text input handles Ctrl+A and reports edit selection") {
+  RuntimeHarness harness;
+  lambda::Reactive::Signal<std::string> text{"abc"};
+  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection{
+      lambda::detail::TextEditSelection{.caretByte = 3, .anchorByte = 3}};
+  int editCount = 0;
+  harness.setRoot(ControlledTextInputRoot{
+      .text = &text,
+      .selection = &selection,
+      .editCount = &editCount,
+  });
+
+  harness.keyDown(lambda::keys::A, lambda::Modifiers::Ctrl);
+
+  CHECK(selection.get().anchorByte == 0);
+  CHECK(selection.get().caretByte == 3);
+  CHECK(selection.get().hasSelection());
+
+  harness.textInput("x");
+
+  CHECK(text.get() == "x");
+  CHECK(selection.get().anchorByte == 1);
+  CHECK(selection.get().caretByte == 1);
+  CHECK(editCount == 1);
 }
 
 TEST_CASE("view action fires only for the focused view") {

@@ -196,7 +196,9 @@ static KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym) {
   case XKB_KEY_7: return keys::Digit7;
   case XKB_KEY_8: return keys::Digit8;
   case XKB_KEY_9: return keys::Digit9;
-  case XKB_KEY_Return: return keys::Return;
+  case XKB_KEY_Return:
+  case XKB_KEY_KP_Enter:
+    return keys::Return;
   case XKB_KEY_Tab: return keys::Tab;
   case XKB_KEY_space: return keys::Space;
   case XKB_KEY_BackSpace: return keys::Delete;
@@ -233,7 +235,7 @@ static KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym) {
   case XKB_KEY_comma: return keys::Comma;
   case XKB_KEY_period: return keys::Period;
   case XKB_KEY_slash: return keys::Slash;
-  default: return 0;
+  default: return keys::Unknown;
   }
 }
 
