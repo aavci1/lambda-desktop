@@ -15,6 +15,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-009 | Bug | Files opens supported images in Firefox instead of Preview | Medium | P1 |
 | TODO-013 | Feature | Add Editor file watcher with reload prompt | N/A | P1 |
 | TODO-014 | Bug | Tooltips are not showing | Medium | P1 |
+| TODO-015 | Feature | Add a cross-window command registry and command palette | N/A | P2 |
 
 ## TODO-002: Flux app clipboard shortcuts and shared text clipboard need cross-app validation
 
@@ -88,3 +89,32 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Verify the tooltip demo shows tooltips after hover delay for buttons, icons, toggles, and placement examples.
 - [ ] [Auto + Manual] Verify Editor toolbar buttons use the same real tooltip implementation and show their labels on hover.
 - [ ] [Auto] Add automated coverage where practical for tooltip state/lifecycle behavior, including hover enter, hover exit, timer cancellation, and avoiding stale tooltip popovers after the target unmounts.
+
+## TODO-015: Add a cross-window command registry and command palette
+
+- [ ] [Auto + Manual] Use `lambda-editor` as the first pilot app/window for the command registry and command palette.
+- [ ] [Auto + Manual] Use `Ctrl+P` as the v1 command palette shortcut for the focused editor window. This does not currently clash with an existing Flux shortcut, but revisit before any compositor-global implementation because `Ctrl+P` can be meaningful in terminal/readline-style contexts.
+- [ ] [Auto] Keep v1 window-scoped only; do not include app-level, Shell-level, compositor-level, or cross-window/global command scopes in the first implementation.
+- [ ] [Auto] Give each command a stable public ID so future user keybinding configuration can refer to commands without depending on display titles.
+- [ ] [Auto] Use namespaced command IDs for standard and app commands, such as `edit.copy`, `edit.cut`, `edit.paste`, `edit.selectAll`, `file.open`, and `editor.find`, instead of plain unscoped names.
+- [ ] [Auto + Manual] Disabled commands should remain visible in the command palette, but be visually clear as disabled and should not invoke.
+- [ ] [Auto] Commands should not take invocation arguments in v1. Treat a command as the non-visual representation of a toolbar/menu/keybinding action: the command handler decides what to do from current window/view state.
+- [ ] [Auto + Manual] Dispatch command shortcuts through a focus-first bubbling model, similar to other input events: the focused view gets first chance to handle a matching command/shortcut; if it handles the command, propagation stops, and only unhandled commands bubble through containing view/window command scopes. For example, text input can handle `Ctrl+X`, while unrelated commands such as a future `Super+Q` can bubble to a higher scope.
+- [ ] [Auto + Manual] Separate physical keybindings from semantic commands: framework/window-level keybinding resolution should translate shortcuts into command IDs, and views should handle commands such as `copy`, `cut`, or `selectAll` without needing to know whether the shortcut was `Ctrl+C`, `Ctrl+Shift+C`, or a user-configured binding.
+- [ ] [Auto + Manual] Deliberate and define the first standard command list before implementation. Treat common editing actions as likely standard commands, including copy, cut, paste, select all, undo, redo, find, replace, delete, delete word, select word, move by word, and related text navigation/editing commands.
+- [ ] [Auto + Manual] Standard commands should allow different surfaces to bind the same semantic command to different physical shortcuts when necessary. For example, normal text inputs can map `Ctrl+C` to `copy`, while Terminal can map `Ctrl+Shift+C` to `copy` and keep `Ctrl+C` available for terminal interrupt behavior.
+- [ ] [Auto + Manual] Text input and editor views should expose command handlers for semantic editing commands instead of embedding all keybinding policy locally, so global/user keybinding changes can happen without rewriting each view.
+- [ ] [Auto + Manual] Use a responder-chain style command handling model for v1 unless implementation reveals a better local pattern: focused view handlers get first chance to handle semantic commands; handled commands are consumed and stop propagation, while unhandled commands continue to containing views/window-level handlers. Keep room for document/window state to register palette-visible commands and metadata.
+- [ ] [Auto] If multiple commands register the same shortcut in the same effective scope, the last registered command wins for dispatch.
+- [ ] [Auto + Manual] Add conflict diagnostics for duplicate shortcuts where practical: use compile-time/static checks for static command definitions and first-run/runtime diagnostics for dynamic registrations.
+- [ ] [Auto] Model a command as a centrally registered action with at least a stable ID, title, optional description, optional icon, optional shortcut, optional group/category, enabled/disabled state, visibility state, and an invocation handler.
+- [ ] [Auto + Manual] Keep the first implementation window-scoped: each active window can register and unregister its commands as its focused view/document state changes.
+- [ ] [Auto + Manual] Build one shared command registry path that can be used by shortcuts, toolbar buttons, context-specific action surfaces, and a searchable command palette instead of each UI surface owning separate action logic.
+- [ ] [Auto + Manual] Add a searchable command palette for the focused window, inspired by VS Code's Command Palette: commands should be searchable by title/category/description, grouped for discoverability, and invokable without requiring toolbar placement.
+- [ ] [Auto] Use clear command names and group/category labels so users can discover related actions without memorizing shortcuts.
+- [ ] [Auto] Shortcuts should dispatch through the same command registry used by the palette and toolbar actions; do not keep independent shortcut-only action paths for commands that are registered.
+- [ ] [Auto + Manual] Toolbar buttons should be able to bind to command IDs so enabled state, tooltip/title, icon, shortcut display, and action execution come from the command metadata.
+- [ ] [Auto + Manual] The registry should make rich app functionality discoverable without requiring traditional menus or permanently visible toolbar buttons.
+- [ ] [Auto] Design the API so it can later grow from per-window commands into app-level, Shell-level, compositor-level, and individual-view command scopes without rewriting the initial command metadata model.
+- [ ] [Auto + Manual] Add focused tests for command registration/unregistration, command lookup, command invocation, enabled/visibility filtering, shortcut dispatch, and toolbar/palette binding behavior.
+- [ ] [Manual] Verify manually with a representative app that commands can be invoked from the palette, toolbar buttons, and shortcuts while staying synchronized as app state changes.
