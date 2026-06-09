@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  macos:
+    name: macOS (Metal)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DLAMBDA_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -j "$(sysctl -n hw.ncpu)"
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  linux-wayland:
+    name: Linux (Wayland/Vulkan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build pkg-config \
+            libwayland-dev wayland-protocols \
+            libxkbcommon-dev libvulkan-dev glslang-tools \
+            libfreetype-dev libfontconfig-dev libharfbuzz-dev zlib1g-dev \
+            libdrm-dev libinput-dev libudev-dev
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DLAMBDA_PLATFORM=LINUX_WAYLAND
+          -DLAMBDA_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build
+
+      # Headless runners have no Wayland display or Vulkan device, so only the
+      # display-independent reactive suite runs here. The full lambda_tests
+      # suite runs on macOS above and locally on Linux hardware.
+      - name: Reactive tests
+        run: ./build/tests/lambda_reactive_tests
+
+      - name: Module dependency check
+        run: ./scripts/check_module_dependencies.sh

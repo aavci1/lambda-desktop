@@ -1,5 +1,7 @@
 # Build
 /build/
+/build-asan/
+/build-review/
 /build-debug/
 /build-release/
 /build-reactive-*/

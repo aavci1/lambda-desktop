@@ -9,7 +9,6 @@ project(lambda-desktop VERSION 5.0.0 LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_RELEASE_FLAGS "-march=native -O3 -flto")
 
 include(GNUInstallDirs)
 include(FetchContent)
@@ -57,8 +56,8 @@ endif()
 
 FetchContent_Declare(libtess2
   GIT_REPOSITORY https://github.com/memononen/libtess2.git
-  GIT_TAG master
-  GIT_SHALLOW TRUE
+  # Pinned for reproducible builds (master as of 2025-10-16).
+  GIT_TAG 8dbd6483e920311a58c9af10a10beb278efebc36
 )
 FetchContent_MakeAvailable(libtess2)
 if(NOT TARGET libtess2)
