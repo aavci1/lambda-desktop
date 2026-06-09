@@ -18,6 +18,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-015 | Feature | Add a cross-window command registry and command palette | N/A | P2 |
 | TODO-016 | Bug | useAutoFocus cannot focus targets inside nested child components | Medium | P2 |
 | TODO-017 | Bug | Overlay rebuild test trips stack-use-after-scope under ASan | Medium | P2 |
+| TODO-018 | Improvement | Work through the Vulkan improvement plan (Linux machine required) | Medium | P2 |
 
 ## TODO-002: Flux app clipboard shortcuts and shared text clipboard need cross-app validation
 
@@ -134,3 +135,14 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] `tests/RuntimeInputTests.cpp` "overlay rebuild relayouts mounted content without remounting state" aborts with AddressSanitizer stack-use-after-scope in `StatefulOverlayProbe::body()`'s `onCleanup` lambda (`++*cleanups` reading a dead stack int) when a scope is disposed after the probe's stack captures are gone.
 - [ ] [Auto] Reproduce with `-DCMAKE_BUILD_TYPE=Debug -DLAMBDA_ENABLE_ASAN=ON` and `--test-case="overlay rebuild relayouts mounted content without remounting state"`. The test passes in Release because the read goes unnoticed.
 - [ ] [Auto] Determine whether the late cleanup is a framework scope-disposal ordering bug (cleanup running after unmount should not outlive the owning mount) or a test lifetime bug, and fix accordingly.
+
+## TODO-018: Work through the Vulkan improvement plan (Linux machine required)
+
+- [ ] [Auto + Manual] Follow `docs/vulkan-improvement-plan.md`. It contains seven workstreams (VK-1 through VK-7) with file/line evidence, fix approaches, and Linux verification steps for each.
+- [ ] [Auto + Manual] VK-1 (highest impact): replace hot-path `vkDeviceWaitIdle` in `~VulkanImage`, frame capture, and screenshots with fence-scoped deferred destruction.
+- [ ] [Auto] VK-2/VK-4 (quick wins): shared `vkCheck`/`vkResultName` helper across the four current copies; move `VMA_IMPLEMENTATION` into its own translation unit.
+- [ ] [Auto] VK-3: remove Vulkan types from `src/UI/Platform/Application.hpp` behind an opaque surface-provider interface.
+- [ ] [Auto] VK-5: split the 5,804-line `VulkanGpuCanvas.cpp` into core/pipelines/swapchain/images/glyph-atlas/canvas modules.
+- [ ] [Auto + Manual] VK-6: share Metal's CPU-side clip/transform geometry helpers with the Vulkan canvas and add a lavapipe-based frame-capture parity test.
+- [ ] [Auto] VK-7: wire `lambda_vulkan_shaders_check` (and, if stable, lavapipe Vulkan tests) into the Linux CI job; add a diagnostic to silent `loadImage` failures.
+- [ ] [Auto] Delete each VK item from the plan document as it is completed, and remove this TODO plus the document when all are done.
