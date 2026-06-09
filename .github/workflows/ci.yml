@@ -58,8 +58,10 @@ jobs:
       - name: Vulkan tests (lavapipe)
         run: |
           if [ -f /usr/share/vulkan/icd.d/lvp_icd.x86_64.json ]; then
+            # "Compositor*" picks up the glass-material cases in
+            # VulkanRenderTargetTests.cpp whose names lack "Vulkan".
             VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
-              ./build/tests/lambda_tests --test-case="*Vulkan*"
+              ./build/tests/lambda_tests --test-case="*Vulkan*,Compositor*"
           else
             echo "lavapipe ICD not found; skipping Vulkan tests"
           fi

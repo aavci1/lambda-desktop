@@ -697,11 +697,11 @@ public:
 
   ~Impl() { cleanup(); }
 
-	  void cleanup() {
-	    if (canvas_) canvas_.reset();
-	    VkDevice device = lambda::VulkanContext::instance().device();
-	    // Intentional presenter teardown wait before destroying KMS buffers.
-	    if (device) vkDeviceWaitIdle(device);
+  void cleanup() {
+    if (canvas_) canvas_.reset();
+    VkDevice device = lambda::VulkanContext::instance().device();
+    // Intentional presenter teardown wait before destroying KMS buffers.
+    if (device) vkDeviceWaitIdle(device);
     destroyOverlayFramebuffers();
     for (auto& buffer : buffers_) {
       closeRenderFence(buffer);
@@ -2535,10 +2535,10 @@ private:
     }
   }
 
-	  void destroyBuffers() {
-	    VkDevice device = lambda::VulkanContext::instance().device();
-	    // Intentional output-buffer teardown wait before freeing scanout images.
-	    if (device) vkDeviceWaitIdle(device);
+  void destroyBuffers() {
+    VkDevice device = lambda::VulkanContext::instance().device();
+    // Intentional output-buffer teardown wait before freeing scanout images.
+    if (device) vkDeviceWaitIdle(device);
     for (auto& buffer : buffers_) {
       closeRenderFence(buffer);
       if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);

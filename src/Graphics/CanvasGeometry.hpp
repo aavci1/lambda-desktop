@@ -29,6 +29,9 @@ inline Rect intersectRects(Rect const& a, Rect const& b) {
   return Rect::sharp(x0, y0, x1 - x0, y1 - y0);
 }
 
+/// When `visible` is the axis-aligned bbox of (roundRect ∩ clip), corners on cut edges must be
+/// sharp — the SDF round-rect assumes `visible` is the full shape, not a truncated round-rect
+/// (see Path::rect).
 inline CornerRadius cornerRadiiAfterAxisAlignedClip(Rect const& full,
                                                     Rect const& visible,
                                                     CornerRadius const& radii) {

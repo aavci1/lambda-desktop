@@ -288,13 +288,13 @@
     q.radii[3] = cr.bottomLeft;
     RecordingTarget target = recordingTarget();
     std::uint32_t first = static_cast<std::uint32_t>(target.quads.size());
-	    target.quads.push_back(q);
-	    if (!captureTarget_) {
-	      batches_.push_back(ImageBatch{texture, first, 1});
-	    } else {
-	      captureTarget_->replayable = false;
-	    }
-	    DrawOp op = makeDrawOp(DrawOp::Kind::Image, texture, first, 1);
+    target.quads.push_back(q);
+    if (!captureTarget_) {
+      batches_.push_back(ImageBatch{texture, first, 1});
+    } else {
+      captureTarget_->replayable = false;
+    }
+    DrawOp op = makeDrawOp(DrawOp::Kind::Image, texture, first, 1);
     op.premultipliedAlpha = imagePremultipliedAlpha_;
     appendSignedDrawOp(target, op);
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
@@ -712,13 +712,13 @@ private:
     return nonZeroSignature(h);
   }
 
-	  bool recordedGlyphAtlasCurrent(VulkanFrameRecorder const &recorded) const {
-	    if (!recorded.replayable) {
-	      return false;
-	    }
-	    return recorded.glyphAtlasGeneration == 0 ||
-	           recorded.glyphAtlasGeneration == resources().atlasGeneration;
-	  }
+  bool recordedGlyphAtlasCurrent(VulkanFrameRecorder const &recorded) const {
+    if (!recorded.replayable) {
+      return false;
+    }
+    return recorded.glyphAtlasGeneration == 0 ||
+           recorded.glyphAtlasGeneration == resources().atlasGeneration;
+  }
 
   void uploadRecorderBuffer(VmaAllocation allocation, void const *data, VkDeviceSize size) {
     if (!data || size == 0) {
