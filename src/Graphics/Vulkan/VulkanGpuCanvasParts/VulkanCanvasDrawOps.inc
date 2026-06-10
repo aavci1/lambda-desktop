@@ -781,6 +781,7 @@ private:
     if (!prepareRecorderOwnership(recorded))
       return false;
     if (buffer && capacity >= size) {
+      uploadRecorderBuffer(allocation, data, size);
       return true;
     }
     if (buffer) {
@@ -801,6 +802,10 @@ private:
             "vmaCreateBuffer");
     uploadRecorderBuffer(allocation, data, size);
     return true;
+  }
+
+  static constexpr bool recorderPreparedGeometryFastPathEnabled() {
+    return false;
   }
 
   bool ensureRecorderStorageDescriptor(VulkanFrameRecorder const &recorded, VkDescriptorSet &set,
@@ -830,6 +835,9 @@ private:
   }
 
   bool prepareRecorderBuffers(VulkanFrameRecorder const &recorded) {
+    if (!recorderPreparedGeometryFastPathEnabled()) {
+      return true;
+    }
     if (!prepareRecorderOwnership(recorded))
       return false;
     if (!ensureRecorderBuffer(recorded, recorded.preparedRectBuffer, recorded.preparedRectAllocation,
@@ -927,7 +935,7 @@ private:
     bool const canUsePreparedGeometry =
         // RADV can crash while recording draws that bind prepared replay descriptors for cached composite
         // content. Copy recorded geometry into this canvas' frame buffers until descriptor replay is fixed.
-        false &&
+        recorderPreparedGeometryFastPathEnabled() &&
         (!localReplay || std::abs(opacityScale - 1.f) <= eps) &&
         !hasTranslatedBackdropBlur &&
         (recorded.rects.empty() ||

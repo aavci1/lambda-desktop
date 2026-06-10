@@ -434,10 +434,8 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   CHECK(recorded.rects.size() == 1);
 
   REQUIRE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded));
-  CHECK(recorded.preparedRectBuffer != VK_NULL_HANDLE);
-  CHECK(recorded.preparedRectDescriptor != VK_NULL_HANDLE);
-  VkBuffer const firstPreparedRectBuffer = recorded.preparedRectBuffer;
-  VkDescriptorSet const firstPreparedRectDescriptor = recorded.preparedRectDescriptor;
+  CHECK(recorded.preparedRectBuffer == VK_NULL_HANDLE);
+  CHECK(recorded.preparedRectDescriptor == VK_NULL_HANDLE);
   canvas->present();
 
   VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -473,8 +471,8 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   secondCanvas->translate(lambda::Point{16.f, 0.f});
   REQUIRE(replayRecordedLocalOpsForCanvas(secondCanvas.get(), recorded));
   secondCanvas->restore();
-  CHECK(recorded.preparedRectBuffer == firstPreparedRectBuffer);
-  CHECK(recorded.preparedRectDescriptor == firstPreparedRectDescriptor);
+  CHECK(recorded.preparedRectBuffer == VK_NULL_HANDLE);
+  CHECK(recorded.preparedRectDescriptor == VK_NULL_HANDLE);
   secondCanvas->present();
 
   VulkanReadbackBuffer secondReadback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -495,6 +493,46 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   CHECK(translatedPixels[oldLeftEdge + 2] < 32);
   CHECK(translatedPixels[oldLeftEdge + 1] < 32);
   CHECK(translatedPixels[oldLeftEdge + 0] < 32);
+
+  for (int i = 0; i < 4; ++i) {
+    recorded.rects[0].fill0[i] = i == 1 || i == 3 ? 1.f : 0.f;
+    recorded.rects[0].fill1[i] = recorded.rects[0].fill0[i];
+    recorded.rects[0].fill2[i] = recorded.rects[0].fill0[i];
+    recorded.rects[0].fill3[i] = recorded.rects[0].fill0[i];
+  }
+
+  VulkanImageTarget mutatedTargetImage{vk.physicalDevice(), vk.device(), width, height};
+  VulkanRenderTargetSpec mutatedSpec{
+      .image = mutatedTargetImage.image,
+      .view = mutatedTargetImage.view,
+      .format = mutatedTargetImage.format,
+      .width = width,
+      .height = height,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+  };
+  std::unique_ptr<Canvas> mutatedCanvas = createVulkanRenderTargetCanvas(mutatedSpec, textSystem);
+  REQUIRE(mutatedCanvas);
+  mutatedCanvas->resize(static_cast<int>(width), static_cast<int>(height));
+  mutatedCanvas->beginFrame();
+  mutatedCanvas->clear(Colors::black);
+  REQUIRE(replayRecordedLocalOpsForCanvas(mutatedCanvas.get(), recorded));
+  CHECK(recorded.preparedRectBuffer == VK_NULL_HANDLE);
+  CHECK(recorded.preparedRectDescriptor == VK_NULL_HANDLE);
+  mutatedCanvas->present();
+
+  VulkanReadbackBuffer mutatedReadback{vk.physicalDevice(), vk.device(), width * height * 4u};
+  copy.copyImageToBuffer(mutatedTargetImage.image, mutatedReadback.buffer, width, height);
+  std::vector<std::uint8_t> mutatedPixels(width * height * 4u);
+  mapped = nullptr;
+  vkCheck(vkMapMemory(vk.device(), mutatedReadback.memory, 0, mutatedReadback.size, 0, &mapped),
+          "vkMapMemory");
+  std::memcpy(mutatedPixels.data(), mapped, mutatedPixels.size());
+  vkUnmapMemory(vk.device(), mutatedReadback.memory);
+
+  CHECK(mutatedPixels[center + 1] > 200);
+  CHECK(mutatedPixels[center + 2] < 32);
+  CHECK(mutatedPixels[center + 0] < 32);
 }
 
 TEST_CASE("VulkanFrameRecorder rejects captured image texture replay") {

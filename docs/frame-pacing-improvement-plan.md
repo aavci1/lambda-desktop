@@ -251,10 +251,10 @@ Verification on Linux:
 
 What to do:
 
-- [ ] [Auto] Fix the upload-skip first: always `uploadRecorderBuffer` when `data` is provided, or skip only when the recorded geometry signature is unchanged (signatures already exist — `prepareRecordedGeometrySignatures`).
-- [ ] [Auto] While the fast path stays off, stop allocating the unused prepared buffers/descriptors in `prepareRecorderBuffers()` (alloc only when the fast path will bind them).
+- [x] [Auto] Fix the upload-skip first: always `uploadRecorderBuffer` when `data` is provided, or skip only when the recorded geometry signature is unchanged (signatures already exist — `prepareRecordedGeometrySignatures`).
+- [x] [Auto] While the fast path stays off, stop allocating the unused prepared buffers/descriptors in `prepareRecorderBuffers()` (alloc only when the fast path will bind them).
 - [ ] [Auto + Manual] Reproduce the RADV crash on Linux (record + replay with prepared descriptors under RADV), fix or scope the workaround to the affected driver via `VkPhysicalDeviceDriverProperties::driverID`, and flip `canUsePreparedGeometry` on for unaffected drivers (lavapipe, ANV, NVIDIA).
-- [ ] [Auto] Add a lavapipe regression test that replays a recorder twice with mutated geometry between replays (catches the stale-upload bug) — extend `tests/VulkanRenderTargetTests.cpp`.
+- [x] [Auto] Add a lavapipe regression test that replays a recorder twice with mutated geometry between replays (catches the stale-upload bug) — extend `tests/VulkanRenderTargetTests.cpp`.
 
 Verification on Linux:
 
