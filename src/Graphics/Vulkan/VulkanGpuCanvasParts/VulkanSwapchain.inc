@@ -50,24 +50,26 @@
     } else {
       swapExtent_ = requestedExtent;
     }
-    std::fprintf(stderr,
-                 "Lambda Vulkan: swapchain extent window=%u framebuffer=%dx%d target=%dx%d "
-                 "caps current=%ux%u min=%ux%u max=%ux%u requested=%ux%u chosen=%ux%u\n",
-                 handle_,
-                 framebufferWidth_,
-                 framebufferHeight_,
-                 swapchainTargetWidth_,
-                 swapchainTargetHeight_,
-                 caps.currentExtent.width,
-                 caps.currentExtent.height,
-                 caps.minImageExtent.width,
-                 caps.minImageExtent.height,
-                 caps.maxImageExtent.width,
-                 caps.maxImageExtent.height,
-                 requestedExtent.width,
-                 requestedExtent.height,
-                 swapExtent_.width,
-                 swapExtent_.height);
+    if (detail::resizeTraceEnabled()) {
+      std::fprintf(stderr,
+                   "Lambda Vulkan: swapchain extent window=%u framebuffer=%dx%d target=%dx%d "
+                   "caps current=%ux%u min=%ux%u max=%ux%u requested=%ux%u chosen=%ux%u\n",
+                   handle_,
+                   framebufferWidth_,
+                   framebufferHeight_,
+                   swapchainTargetWidth_,
+                   swapchainTargetHeight_,
+                   caps.currentExtent.width,
+                   caps.currentExtent.height,
+                   caps.minImageExtent.width,
+                   caps.minImageExtent.height,
+                   caps.maxImageExtent.width,
+                   caps.maxImageExtent.height,
+                   requestedExtent.width,
+                   requestedExtent.height,
+                   swapExtent_.width,
+                   swapExtent_.height);
+    }
     std::uint32_t const preferredImageCount =
         std::max<std::uint32_t>(caps.minImageCount + 2u, static_cast<std::uint32_t>(kMaxFramesInFlight));
     std::uint32_t imageCount = std::clamp(preferredImageCount,
@@ -184,4 +186,3 @@
       swapchain_ = VK_NULL_HANDLE;
     }
   }
-

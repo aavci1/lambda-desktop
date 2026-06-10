@@ -89,6 +89,7 @@
   bool imagePremultipliedAlpha_ = false;
   std::unordered_map<VulkanImage const *, std::unique_ptr<Texture>> imageTextures_;
   std::vector<PendingTextureDestroy> pendingTextureDestroys_;
+  std::vector<PendingTextureTransition> pendingTextureTransitions_;
   std::vector<PendingTextureUpload> pendingTextureUploads_;
   std::vector<PendingBufferDestroy> pendingBufferDestroys_;
   std::vector<PendingOwnedVulkanImageDestroy> pendingOwnedImageDestroys_;

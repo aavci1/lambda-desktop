@@ -3,6 +3,7 @@
     if (it != imageTextures_.end())
       return it->second.get();
     auto tex = std::make_unique<Texture>();
+    bool importedNeedsTransition = false;
     try {
       if (image.external || image.ownsGpuResource) {
         tex->image = image.image;
@@ -13,9 +14,7 @@
         tex->height = image.height;
         tex->ownsImage = false;
         tex->ownsView = false;
-        if (image.ownsImportedMemory) {
-          transitionImmediate(*tex, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-        }
+        importedNeedsTransition = image.ownsImportedMemory;
       } else {
         createTexture(*tex, image.width, image.height, image.format, image.pixels.data(), false);
         queueTextureUpload(*tex, image.pixels.data());
@@ -27,6 +26,9 @@
     }
     auto [inserted, ok] = imageTextures_.emplace(&image, std::move(tex));
     (void)ok;
+    if (importedNeedsTransition) {
+      queueTextureTransition(*inserted->second, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+    }
     return inserted->second.get();
   }
 
@@ -161,6 +163,18 @@
     pendingTextureUploads_.push_back(std::move(uploadJob));
   }
 
+  void queueTextureTransition(Texture& tex, VkImageLayout layout) {
+    if (!tex.image || tex.layout == layout)
+      return;
+    for (PendingTextureTransition& transition : pendingTextureTransitions_) {
+      if (transition.texture == &tex) {
+        transition.layout = layout;
+        return;
+      }
+    }
+    pendingTextureTransitions_.push_back(PendingTextureTransition{&tex, layout});
+  }
+
   void recordTextureUpload(VkCommandBuffer cmd, Texture& tex, PendingTextureUpload& uploadJob) {
     Buffer& staging = uploadJob.staging;
     if (!staging.buffer || tex.width <= 0 || tex.height <= 0)
@@ -192,6 +206,15 @@
                                                             kMaxFramesInFlight + 1u});
     }
     pendingTextureUploads_.clear();
+  }
+
+  void recordPendingTextureTransitions(VkCommandBuffer cmd) {
+    for (PendingTextureTransition const& pending : pendingTextureTransitions_) {
+      if (pending.texture) {
+        transition(cmd, *pending.texture, pending.layout);
+      }
+    }
+    pendingTextureTransitions_.clear();
   }
 
   VkFormat backdropRenderTargetFormat() const {
@@ -314,6 +337,7 @@
     submit.commandBufferInfoCount = 1;
     submit.pCommandBufferInfos = &commandBufferInfo;
     vkCheck(vkQueueSubmit2(queue_, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit2");
+    // Keep immediate submissions off per-frame paths; this wait is only for one-shot setup work.
     vkQueueWaitIdle(queue_);
     vkFreeCommandBuffers(device_, commandPool_, 1, &cmd);
   }
@@ -526,4 +550,3 @@
     }
     return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
   }
-

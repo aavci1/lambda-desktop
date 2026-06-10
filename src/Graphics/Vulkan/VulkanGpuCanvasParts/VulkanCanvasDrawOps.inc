@@ -468,6 +468,22 @@
     auto it = imageTextures_.find(image);
     if (it == imageTextures_.end())
       return;
+    Texture* texture = it->second.get();
+    pendingTextureTransitions_.erase(std::remove_if(pendingTextureTransitions_.begin(),
+                                                    pendingTextureTransitions_.end(),
+                                                    [&](PendingTextureTransition const& transition) {
+                                                      return transition.texture == texture;
+                                                    }),
+                                     pendingTextureTransitions_.end());
+    for (auto uploadIt = pendingTextureUploads_.begin(); uploadIt != pendingTextureUploads_.end();) {
+      if (uploadIt->texture == texture) {
+        pendingBufferDestroys_.push_back(PendingBufferDestroy{takeBuffer(uploadIt->staging),
+                                                              kMaxFramesInFlight + 1u});
+        uploadIt = pendingTextureUploads_.erase(uploadIt);
+      } else {
+        ++uploadIt;
+      }
+    }
     pendingTextureDestroys_.push_back(PendingTextureDestroy{std::move(it->second), kMaxFramesInFlight + 1u});
     imageTextures_.erase(it);
   }
@@ -541,6 +557,11 @@ private:
     std::uint32_t y = 0;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+  };
+
+  struct PendingTextureTransition {
+    Texture* texture = nullptr;
+    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
   };
 
   struct PendingBufferDestroy {

@@ -474,6 +474,29 @@ Rect logicalRect(RegionRect const& rect) {
                      static_cast<float>(rect.height));
 }
 
+std::optional<Rect> logicalDamageBounds(SceneDamageResult const& damage) {
+  std::optional<RegionRect> bounds;
+  for (RegionRect const& rect : damage.rects) {
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    if (!bounds) {
+      bounds = rect;
+      continue;
+    }
+    std::int32_t const left = std::min(bounds->x, rect.x);
+    std::int32_t const top = std::min(bounds->y, rect.y);
+    std::int32_t const right = std::max(bounds->x + bounds->width, rect.x + rect.width);
+    std::int32_t const bottom = std::max(bounds->y + bounds->height, rect.y + rect.height);
+    bounds = RegionRect{
+        .x = left,
+        .y = top,
+        .width = right - left,
+        .height = bottom - top,
+    };
+  }
+  if (!bounds) return std::nullopt;
+  return logicalRect(*bounds);
+}
+
 std::uint64_t damageArea(SceneDamageResult const& damage) {
   std::uint64_t area = 0;
   for (RegionRect const& rect : damage.rects) {
@@ -1022,11 +1045,14 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     ctx.frameProfile.cursorMs += cursorMs;
   };
   if (partialDamageFrame) {
-    for (RegionRect const& rect : sceneDamage.rects) {
+    std::optional<Rect> const damageBounds = logicalDamageBounds(sceneDamage);
+    if (damageBounds) {
       ctx.canvas.save();
-      ctx.canvas.clipRect(logicalRect(rect));
+      ctx.canvas.clipRect(*damageBounds);
       drawFrameContent();
       ctx.canvas.restore();
+    } else {
+      drawFrameContent();
     }
   } else {
     drawFrameContent();

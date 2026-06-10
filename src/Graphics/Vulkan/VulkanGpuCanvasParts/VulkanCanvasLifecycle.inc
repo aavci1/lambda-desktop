@@ -459,7 +459,7 @@ public:
     VkSemaphore const renderFinished = imageRenderFinished_[imageIndex];
 
     start = phaseStart();
-    uploadAtlasIfNeeded();
+    queueAtlasUploadIfNeeded();
     double const atlasMs = phaseMs(start);
     start = phaseStart();
     auto backdropRuns = prepareBackdropBlurRuns();
@@ -477,6 +477,7 @@ public:
     clear.color.float32[1] = clearColor_.g;
     clear.color.float32[2] = clearColor_.b;
     clear.color.float32[3] = clearColor_.a;
+    recordPendingTextureTransitions(commandBuffer);
     recordPendingTextureUploads(commandBuffer);
     if (!backdropRuns.empty() && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
       VkImageLayout targetLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -655,7 +656,7 @@ public:
     };
 
     auto start = phaseStart();
-    uploadAtlasIfNeeded();
+    queueAtlasUploadIfNeeded();
     if (stats) stats->atlasMs = phaseMs(start);
     start = phaseStart();
     std::vector<BackdropBlurRun> backdropRuns = prepareBackdropBlurRuns();
@@ -667,6 +668,7 @@ public:
     uploadFrameBuffers();
     if (stats) stats->uploadMs = phaseMs(start);
     start = phaseStart();
+    recordPendingTextureTransitions(commandBuffer);
     recordPendingTextureUploads(commandBuffer);
     if (stats) stats->textureUploadRecordMs = phaseMs(start);
 

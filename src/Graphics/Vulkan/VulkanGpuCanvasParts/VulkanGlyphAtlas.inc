@@ -124,11 +124,10 @@
 
   void ensureAtlasDescriptor() { ensureTextureDescriptor(resources().atlas); }
 
-  void uploadAtlasIfNeeded() {
+  void queueAtlasUploadIfNeeded() {
     auto &res = resources();
     if (!res.atlasDirty)
       return;
-    uploadTexture(res.atlas, res.atlasPixels.data());
+    queueTextureUpload(res.atlas, res.atlasPixels.data());
     res.atlasDirty = false;
   }
-

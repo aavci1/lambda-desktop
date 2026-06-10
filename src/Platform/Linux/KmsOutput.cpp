@@ -634,6 +634,8 @@ public:
 
 class KmsAtomicPresenter::Impl {
 public:
+  static constexpr std::size_t kMaxTrackedDamageRects = 32;
+
   Impl(std::shared_ptr<KmsOutput::Impl> output, TextSystem& textSystem)
       : output_(std::move(output)),
         fd_(output_ ? output_->drmFd() : -1),
@@ -752,6 +754,108 @@ public:
     return directScanoutRender_ ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   }
 
+  [[nodiscard]] KmsAtomicPresenter::DamageRect fullDamageRect() const noexcept {
+    return KmsAtomicPresenter::DamageRect{
+        .x = 0,
+        .y = 0,
+        .width = connector_.mode.hdisplay,
+        .height = connector_.mode.vdisplay,
+    };
+  }
+
+  [[nodiscard]] std::optional<KmsAtomicPresenter::DamageRect>
+  clippedDamageRect(KmsAtomicPresenter::DamageRect const& rect) const noexcept {
+    std::int32_t const outputWidth = static_cast<std::int32_t>(connector_.mode.hdisplay);
+    std::int32_t const outputHeight = static_cast<std::int32_t>(connector_.mode.vdisplay);
+    if (outputWidth <= 0 || outputHeight <= 0 || rect.width == 0 || rect.height == 0) return std::nullopt;
+    std::int32_t const x1 = std::clamp(rect.x, 0, outputWidth);
+    std::int32_t const y1 = std::clamp(rect.y, 0, outputHeight);
+    std::int64_t const rectRight = static_cast<std::int64_t>(rect.x) + static_cast<std::int64_t>(rect.width);
+    std::int64_t const rectBottom = static_cast<std::int64_t>(rect.y) + static_cast<std::int64_t>(rect.height);
+    std::int32_t const x2 = static_cast<std::int32_t>(std::clamp<std::int64_t>(rectRight, 0, outputWidth));
+    std::int32_t const y2 = static_cast<std::int32_t>(std::clamp<std::int64_t>(rectBottom, 0, outputHeight));
+    if (x2 <= x1 || y2 <= y1) return std::nullopt;
+    return KmsAtomicPresenter::DamageRect{
+        .x = x1,
+        .y = y1,
+        .width = static_cast<std::uint32_t>(x2 - x1),
+        .height = static_cast<std::uint32_t>(y2 - y1),
+    };
+  }
+
+  [[nodiscard]] bool isFullDamageRect(KmsAtomicPresenter::DamageRect const& rect) const noexcept {
+    return rect.x <= 0 &&
+           rect.y <= 0 &&
+           static_cast<std::int64_t>(rect.x) + rect.width >= connector_.mode.hdisplay &&
+           static_cast<std::int64_t>(rect.y) + rect.height >= connector_.mode.vdisplay;
+  }
+
+  [[nodiscard]] bool damageRectsOverlapOrTouch(KmsAtomicPresenter::DamageRect const& a,
+                                               KmsAtomicPresenter::DamageRect const& b) const noexcept {
+    std::int64_t const ax2 = static_cast<std::int64_t>(a.x) + a.width;
+    std::int64_t const ay2 = static_cast<std::int64_t>(a.y) + a.height;
+    std::int64_t const bx2 = static_cast<std::int64_t>(b.x) + b.width;
+    std::int64_t const by2 = static_cast<std::int64_t>(b.y) + b.height;
+    return a.x <= bx2 && b.x <= ax2 && a.y <= by2 && b.y <= ay2;
+  }
+
+  [[nodiscard]] KmsAtomicPresenter::DamageRect mergeDamageRects(KmsAtomicPresenter::DamageRect const& a,
+                                                                KmsAtomicPresenter::DamageRect const& b) const noexcept {
+    std::int32_t const left = std::min(a.x, b.x);
+    std::int32_t const top = std::min(a.y, b.y);
+    std::int64_t const right = std::max(static_cast<std::int64_t>(a.x) + a.width,
+                                        static_cast<std::int64_t>(b.x) + b.width);
+    std::int64_t const bottom = std::max(static_cast<std::int64_t>(a.y) + a.height,
+                                         static_cast<std::int64_t>(b.y) + b.height);
+    return KmsAtomicPresenter::DamageRect{
+        .x = left,
+        .y = top,
+        .width = static_cast<std::uint32_t>(right - left),
+        .height = static_cast<std::uint32_t>(bottom - top),
+    };
+  }
+
+  void appendTrackedDamageRect(std::vector<KmsAtomicPresenter::DamageRect>& rects,
+                               KmsAtomicPresenter::DamageRect rect) {
+    std::optional<KmsAtomicPresenter::DamageRect> clipped = clippedDamageRect(rect);
+    if (!clipped) return;
+    rect = *clipped;
+    if (isFullDamageRect(rect)) {
+      rects.assign(1, fullDamageRect());
+      return;
+    }
+    bool merged = true;
+    while (merged) {
+      merged = false;
+      for (auto it = rects.begin(); it != rects.end(); ++it) {
+        if (damageRectsOverlapOrTouch(*it, rect)) {
+          rect = mergeDamageRects(*it, rect);
+          rects.erase(it);
+          merged = true;
+          break;
+        }
+      }
+    }
+    rects.push_back(rect);
+    if (rects.size() > kMaxTrackedDamageRects) {
+      rects.assign(1, fullDamageRect());
+    }
+  }
+
+  [[nodiscard]] std::vector<KmsAtomicPresenter::DamageRect>
+  mergedDamageRects(std::span<KmsAtomicPresenter::DamageRect const> first,
+                    std::span<KmsAtomicPresenter::DamageRect const> second = {}) {
+    std::vector<KmsAtomicPresenter::DamageRect> merged;
+    merged.reserve(first.size() + second.size());
+    for (KmsAtomicPresenter::DamageRect const& rect : first) {
+      appendTrackedDamageRect(merged, rect);
+    }
+    for (KmsAtomicPresenter::DamageRect const& rect : second) {
+      appendTrackedDamageRect(merged, rect);
+    }
+    return merged;
+  }
+
   [[nodiscard]] bool canPreparePartialFrame(std::span<KmsAtomicPresenter::DamageRect const> damage) const noexcept {
     if (damage.empty() || !modesetDone_ || pageFlipPending_ || pendingBuffer_ >= 0 ||
         renderBuffer_ < 0 || displayedBuffer_ < 0) {
@@ -770,14 +874,18 @@ public:
            primaryRenderImage(renderBuffer_) != VK_NULL_HANDLE;
   }
 
-  void copyDisplayedPrimaryToRenderTarget(int destinationBuffer) {
-    if (displayedBuffer_ < 0 || displayedBuffer_ >= static_cast<int>(buffers_.size())) return;
-    if (destinationBuffer < 0 || destinationBuffer >= static_cast<int>(buffers_.size())) return;
+  [[nodiscard]] bool copyDisplayedPrimaryToRenderTarget(int destinationBuffer,
+                                                        std::span<KmsAtomicPresenter::DamageRect const> damage,
+                                                        bool forceFullCopy) {
+    if (displayedBuffer_ < 0 || displayedBuffer_ >= static_cast<int>(buffers_.size())) return false;
+    if (destinationBuffer < 0 || destinationBuffer >= static_cast<int>(buffers_.size())) return false;
     VkImage const sourceImage = primaryRenderImage(displayedBuffer_);
     VkImage const destinationImage = primaryRenderImage(destinationBuffer);
-    if (sourceImage == VK_NULL_HANDLE || destinationImage == VK_NULL_HANDLE || sourceImage == destinationImage) return;
+    if (sourceImage == VK_NULL_HANDLE || destinationImage == VK_NULL_HANDLE || sourceImage == destinationImage) return false;
+    bool const fullCopy = forceFullCopy || damage.empty();
+    if (!fullCopy && directScanoutRender_) return false;
     VkCommandBuffer commandBuffer = buffers_[static_cast<std::size_t>(destinationBuffer)].commandBuffer;
-    if (!commandBuffer) return;
+    if (!commandBuffer) return false;
 
     VkImageLayout const sourceFinalLayout = primaryRenderFinalLayout();
     if (sourceFinalLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
@@ -790,28 +898,63 @@ public:
                       VK_ACCESS_2_MEMORY_READ_BIT,
                       VK_ACCESS_2_TRANSFER_READ_BIT);
     }
+    VkImageLayout const destinationOldLayout =
+        fullCopy || !buffers_[static_cast<std::size_t>(destinationBuffer)].primaryContentsValid
+            ? VK_IMAGE_LAYOUT_UNDEFINED
+            : primaryRenderFinalLayout();
     transitionImage(commandBuffer,
                     destinationImage,
-                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    destinationOldLayout,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_PIPELINE_STAGE_2_NONE,
+                    destinationOldLayout == VK_IMAGE_LAYOUT_UNDEFINED
+                        ? VK_PIPELINE_STAGE_2_NONE
+                        : VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                     VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                    VK_ACCESS_2_NONE,
+                    destinationOldLayout == VK_IMAGE_LAYOUT_UNDEFINED
+                        ? VK_ACCESS_2_NONE
+                        : VK_ACCESS_2_MEMORY_READ_BIT,
                     VK_ACCESS_2_TRANSFER_WRITE_BIT);
 
-    VkImageCopy copy{};
-    copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy.srcSubresource.layerCount = 1;
-    copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy.dstSubresource.layerCount = 1;
-    copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
-    vkCmdCopyImage(commandBuffer,
-                   sourceImage,
-                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                   destinationImage,
-                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                   1,
-                   &copy);
+    if (fullCopy) {
+      VkImageCopy copy{};
+      copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      copy.srcSubresource.layerCount = 1;
+      copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      copy.dstSubresource.layerCount = 1;
+      copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
+      vkCmdCopyImage(commandBuffer,
+                     sourceImage,
+                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                     destinationImage,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     1,
+                     &copy);
+    } else {
+      std::vector<VkImageCopy> copies;
+      copies.reserve(damage.size());
+      for (KmsAtomicPresenter::DamageRect const& rect : damage) {
+        std::optional<KmsAtomicPresenter::DamageRect> clipped = clippedDamageRect(rect);
+        if (!clipped) continue;
+        VkImageCopy copy{};
+        copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copy.srcSubresource.layerCount = 1;
+        copy.srcOffset = {clipped->x, clipped->y, 0};
+        copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copy.dstSubresource.layerCount = 1;
+        copy.dstOffset = {clipped->x, clipped->y, 0};
+        copy.extent = {clipped->width, clipped->height, 1};
+        copies.push_back(copy);
+      }
+      if (!copies.empty()) {
+        vkCmdCopyImage(commandBuffer,
+                       sourceImage,
+                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       destinationImage,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                       static_cast<std::uint32_t>(copies.size()),
+                       copies.data());
+      }
+    }
 
     if (sourceFinalLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
       transitionImage(commandBuffer,
@@ -823,6 +966,7 @@ public:
                       VK_ACCESS_2_TRANSFER_READ_BIT,
                       VK_ACCESS_2_MEMORY_READ_BIT);
     }
+    return true;
   }
 
   bool prepareFrame(std::span<KmsAtomicPresenter::DamageRect const> damage = {}) {
@@ -843,29 +987,50 @@ public:
     }
     if (!next) throw std::runtime_error("No reusable KMS atomic render buffers");
     renderBuffer_ = static_cast<int>(*next);
+    Buffer& buffer = buffers_[*next];
     bool const partialFrame = canPreparePartialFrame(damage);
-    closeRenderFence(buffers_[*next]);
+    closeRenderFence(buffer);
     if (useAsyncRenderFence_) {
-      resetRenderSemaphore(buffers_[*next]);
+      resetRenderSemaphore(buffer);
     }
-    buffers_[*next].renderComplete = bufferHasNoAsyncRenderFence(buffers_[*next]);
-    buffers_[*next].renderSubmittedNsec = 0;
-    buffers_[*next].renderReadyNsec = 0;
-    buffers_[*next].prepared = false;
-    buffers_[*next].discardWhenReady = false;
-    buffers_[*next].damageRects.clear();
-    buffers_[*next].partialFrame = false;
-    beginRenderCommandBuffer(buffers_[*next]);
+    buffer.renderComplete = bufferHasNoAsyncRenderFence(buffer);
+    buffer.renderSubmittedNsec = 0;
+    buffer.renderReadyNsec = 0;
+    buffer.prepared = false;
+    buffer.discardWhenReady = false;
+    buffer.damageRects.clear();
+    buffer.scanoutCopyRects.clear();
+    buffer.partialFrame = false;
+    beginRenderCommandBuffer(buffer);
+    VkImageLayout partialInitialLayout = primaryRenderFinalLayout();
     if (partialFrame) {
-      copyDisplayedPrimaryToRenderTarget(renderBuffer_);
-      buffers_[*next].damageRects.assign(damage.begin(), damage.end());
-      buffers_[*next].partialFrame = true;
+      buffer.damageRects = mergedDamageRects(damage);
+      bool const staleFullCopy = directScanoutRender_ ||
+                                 !buffer.primaryContentsValid ||
+                                 std::any_of(buffer.staleRects.begin(),
+                                             buffer.staleRects.end(),
+                                             [&](KmsAtomicPresenter::DamageRect const& rect) {
+                                               return isFullDamageRect(rect);
+                                             });
+      std::span<KmsAtomicPresenter::DamageRect const> staleDamage =
+          staleFullCopy ? std::span<KmsAtomicPresenter::DamageRect const>{}
+                        : std::span<KmsAtomicPresenter::DamageRect const>{buffer.staleRects};
+      bool const copiedPreservedContent =
+          staleFullCopy || !staleDamage.empty()
+              ? copyDisplayedPrimaryToRenderTarget(renderBuffer_, staleDamage, staleFullCopy)
+              : false;
+      if (copiedPreservedContent) {
+        partialInitialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+      }
+      if (!directScanoutRender_ && !staleFullCopy) {
+        buffer.scanoutCopyRects = mergedDamageRects(staleDamage, buffer.damageRects);
+      }
+      buffer.partialFrame = true;
     }
     std::uint64_t const targetStart = kmsTraceStart();
-    buffers_[*next].spec.initialLayout =
-        partialFrame ? VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-    buffers_[*next].spec.preserveContents = partialFrame;
-    if (!lambda::setVulkanRenderTargetSpecForCanvas(canvas_.get(), buffers_[*next].spec)) {
+    buffer.spec.initialLayout = partialFrame ? partialInitialLayout : VK_IMAGE_LAYOUT_UNDEFINED;
+    buffer.spec.preserveContents = partialFrame;
+    if (!lambda::setVulkanRenderTargetSpecForCanvas(canvas_.get(), buffer.spec)) {
       throw std::runtime_error("Failed to switch atomic KMS render target");
     }
     recordKmsTraceSince(KmsTraceBucket::SetTarget, targetStart);
@@ -881,9 +1046,14 @@ public:
     buffer.renderReadyNsec = 0;
     closeRenderFence(buffer);
     if (buffer.renderFinished == VK_NULL_HANDLE) {
-      vkQueueWaitIdle(lambda::VulkanContext::instance().queue());
       buffer.renderComplete = true;
       buffer.renderReadyNsec = buffer.renderSubmittedNsec;
+      static bool loggedMissingRenderFence = false;
+      if (useAsyncRenderFence_ && !loggedMissingRenderFence) {
+        std::fprintf(stderr,
+                     "lambda-window-manager: KMS render semaphore missing; treating frame as synchronously complete\n");
+        loggedMissingRenderFence = true;
+      }
     } else {
       buffer.renderFenceFd = exportRenderSemaphoreFd(buffer.renderFinished);
       buffer.renderComplete = false;
@@ -1538,13 +1708,19 @@ public:
         drmModeDestroyPropertyBlob(fd_, damageBlob);
         damageBlob = 0;
       }
-      modesetDone_ = true;
-      pendingBuffer_ = index;
-      buffer.prepared = false;
-      buffer.discardWhenReady = false;
-      buffer.damageRects.clear();
-      buffer.partialFrame = false;
-      buffer.primaryContentsValid = true;
+	      modesetDone_ = true;
+	      pendingBuffer_ = index;
+	      if (buffer.partialFrame) {
+	        markPrimaryDamagePresented(index, buffer.damageRects);
+	      } else {
+	        markPrimaryDamagePresented(index, {});
+	      }
+	      buffer.prepared = false;
+	      buffer.discardWhenReady = false;
+	      buffer.damageRects.clear();
+	      buffer.scanoutCopyRects.clear();
+	      buffer.partialFrame = false;
+	      buffer.primaryContentsValid = true;
       if (activePreparedBuffer_ == index) activePreparedBuffer_ = -1;
       pendingOverlayPlaneId_ = preparedOverlay_ ? preparedOverlay_->planeId : 0;
       pendingOverlayFbId_ = preparedOverlay_ ? preparedOverlay_->fbId : 0;
@@ -1793,13 +1969,15 @@ private:
     bool renderComplete = true;
     bool prepared = false;
     bool discardWhenReady = false;
-    bool partialFrame = false;
-    bool primaryContentsValid = false;
-    std::uint64_t renderSubmittedNsec = 0;
-    std::uint64_t renderReadyNsec = 0;
-    std::vector<KmsAtomicPresenter::DamageRect> damageRects;
-    VulkanRenderTargetSpec spec{};
-  };
+	    bool partialFrame = false;
+	    bool primaryContentsValid = false;
+	    std::uint64_t renderSubmittedNsec = 0;
+	    std::uint64_t renderReadyNsec = 0;
+	    std::vector<KmsAtomicPresenter::DamageRect> damageRects;
+	    std::vector<KmsAtomicPresenter::DamageRect> staleRects;
+	    std::vector<KmsAtomicPresenter::DamageRect> scanoutCopyRects;
+	    VulkanRenderTargetSpec spec{};
+	  };
 
   std::uint32_t tokenForBuffer(int index) const noexcept {
     return index >= 0 ? static_cast<std::uint32_t>(index + 1) : 0u;
@@ -1827,10 +2005,31 @@ private:
     buffer.discardWhenReady = false;
     buffer.partialFrame = false;
     buffer.damageRects.clear();
+    buffer.scanoutCopyRects.clear();
     buffer.renderComplete = true;
     buffer.renderSubmittedNsec = 0;
     buffer.renderReadyNsec = 0;
     if (activePreparedBuffer_ == index) activePreparedBuffer_ = -1;
+  }
+
+  void markPrimaryDamagePresented(int presentedIndex,
+                                  std::span<KmsAtomicPresenter::DamageRect const> changedDamage) {
+    if (presentedIndex < 0 || presentedIndex >= static_cast<int>(buffers_.size())) return;
+    for (std::size_t i = 0; i < buffers_.size(); ++i) {
+      Buffer& buffer = buffers_[i];
+      if (static_cast<int>(i) == presentedIndex) {
+        buffer.staleRects.clear();
+        continue;
+      }
+      if (!buffer.primaryContentsValid) continue;
+      if (changedDamage.empty()) {
+        buffer.staleRects.assign(1, fullDamageRect());
+      } else {
+        for (KmsAtomicPresenter::DamageRect const& rect : changedDamage) {
+          appendTrackedDamageRect(buffer.staleRects, rect);
+        }
+      }
+    }
   }
 
   void releaseDiscardedPreparedBuffer(int index) {
@@ -2770,34 +2969,57 @@ private:
     buffer.commandBufferRecording = true;
   }
 
-  void finishRenderCommandBuffer(Buffer& buffer) {
-    KmsTraceScope trace(KmsTraceBucket::FinishCommand);
-    if (!buffer.commandBuffer || !buffer.commandBufferRecording) return;
-    if (!directScanoutRender_) {
-      transitionImage(buffer.commandBuffer,
-                      buffer.image,
-                      VK_IMAGE_LAYOUT_UNDEFINED,
-                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                      VK_PIPELINE_STAGE_2_NONE,
-                      VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                      VK_ACCESS_2_NONE,
-                      VK_ACCESS_2_TRANSFER_WRITE_BIT);
-      VkImageCopy copy{};
-      copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      copy.srcSubresource.layerCount = 1;
-      copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      copy.dstSubresource.layerCount = 1;
-      copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
-      vkCmdCopyImage(buffer.commandBuffer,
-                     buffer.offscreenImage,
-                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                     buffer.image,
-                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                     1,
-                     &copy);
-      transitionImage(buffer.commandBuffer,
-                      buffer.image,
-                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+	  void finishRenderCommandBuffer(Buffer& buffer) {
+	    KmsTraceScope trace(KmsTraceBucket::FinishCommand);
+	    if (!buffer.commandBuffer || !buffer.commandBufferRecording) return;
+	    if (!directScanoutRender_) {
+	      bool const regionCopy = buffer.partialFrame &&
+	                              buffer.primaryContentsValid &&
+	                              !buffer.scanoutCopyRects.empty();
+	      transitionImage(buffer.commandBuffer,
+	                      buffer.image,
+	                      regionCopy ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED,
+	                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+	                      regionCopy ? VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_2_NONE,
+	                      VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+	                      regionCopy ? VK_ACCESS_2_MEMORY_READ_BIT : VK_ACCESS_2_NONE,
+	                      VK_ACCESS_2_TRANSFER_WRITE_BIT);
+	      std::vector<VkImageCopy> copies;
+	      if (regionCopy) {
+	        copies.reserve(buffer.scanoutCopyRects.size());
+	        for (KmsAtomicPresenter::DamageRect const& rect : buffer.scanoutCopyRects) {
+	          std::optional<KmsAtomicPresenter::DamageRect> clipped = clippedDamageRect(rect);
+	          if (!clipped) continue;
+	          VkImageCopy copy{};
+	          copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	          copy.srcSubresource.layerCount = 1;
+	          copy.srcOffset = {clipped->x, clipped->y, 0};
+	          copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	          copy.dstSubresource.layerCount = 1;
+	          copy.dstOffset = {clipped->x, clipped->y, 0};
+	          copy.extent = {clipped->width, clipped->height, 1};
+	          copies.push_back(copy);
+	        }
+	      }
+	      if (copies.empty()) {
+	        VkImageCopy copy{};
+	        copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	        copy.srcSubresource.layerCount = 1;
+	        copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	        copy.dstSubresource.layerCount = 1;
+	        copy.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
+	        copies.push_back(copy);
+	      }
+	      vkCmdCopyImage(buffer.commandBuffer,
+	                     buffer.offscreenImage,
+	                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+	                     buffer.image,
+	                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+	                     static_cast<std::uint32_t>(copies.size()),
+	                     copies.data());
+	      transitionImage(buffer.commandBuffer,
+	                      buffer.image,
+	                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                       VK_IMAGE_LAYOUT_GENERAL,
                       VK_PIPELINE_STAGE_2_TRANSFER_BIT,
                       VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
