@@ -740,6 +740,8 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
 }
 
 void Application::flushRedraw() {
+  // Platform frame callbacks use this to present in the same dispatch turn.
+  // The normal event loop still uses the frame-ready gate before this point.
   processFrameCallbacks();
   presentRequestedWindows(false, AnimationClock::instance().needsFramePump());
 }

@@ -1911,6 +1911,7 @@ private:
     auto& queue = Application::instance().eventQueue();
     queue.post(FrameEvent{nowNanos(), self->handle_});
     queue.dispatch();
+    Application::instance().flushRedraw();
     self->wakeEventLoop();
   }
 
