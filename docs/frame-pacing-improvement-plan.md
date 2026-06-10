@@ -116,9 +116,9 @@ Three related problems:
 
 What to do:
 
-- [ ] [Auto + Manual] Add a cursor-only commit path in `KmsOutput`: an atomic request containing only cursor-plane properties (`CRTC_X/CRTC_Y`, FB if the image changed), `DRM_MODE_ATOMIC_NONBLOCK`, no page-flip event, retry on `EBUSY`/`EAGAIN` like the existing cursor commit. It must be schedulable while a primary-plane flip is pending.
-- [ ] [Auto] In the compositor loop, when the only dirtiness is hardware-cursor motion, call the cursor-only commit and **skip** `renderAtomicFrame()` entirely (keep the existing full-frame path for software cursor).
-- [ ] [Auto] Include `inputHardwareCursorFrameRequired` in the scheduling decision so cursor updates are never starved behind a blocked present queue.
+- [x] [Auto] Add a cursor-only commit path in `KmsOutput`: an atomic request containing only cursor-plane properties (`CRTC_X/CRTC_Y`, FB if the image changed), `DRM_MODE_ATOMIC_NONBLOCK`, no page-flip event, retry on `EBUSY`/`EAGAIN` like the existing cursor commit. It must be schedulable while a primary-plane flip is pending.
+- [x] [Auto] In the compositor loop, when the only dirtiness is hardware-cursor motion, call the cursor-only commit and **skip** `renderAtomicFrame()` entirely (keep the existing full-frame path for software cursor).
+- [x] [Auto] Handle hardware-cursor motion in input dispatch so cursor updates are not starved behind a blocked present queue.
 
 Verification on Linux (KMS TTY):
 
@@ -136,9 +136,9 @@ Verification on Linux (KMS TTY):
 
 What to do:
 
-- [ ] [Auto] Split server-side decoration chrome into its own recorded layer (or own scene node) so the client-content op cache stays valid across hover changes; only the titlebar layer re-records on hover/press transitions.
-- [ ] [Auto] Emit damage only for the titlebar bounds when hover state changes; pointer motion that changes no hover state and moves only the hardware cursor must not set `inputRenderRequired` (pairs with FP-4).
-- [ ] [Auto] Add a diagnostics counter delta check: `recordSurfaceDrawCacheBlock(…TransientChrome)` should stop incrementing during plain pointer sweeps over a window.
+- [x] [Auto] Split server-side decoration chrome into its own recorded layer (or own scene node) so the client-content op cache stays valid across hover changes; only the titlebar layer re-records on hover/press transitions.
+- [x] [Auto] Emit damage only for the titlebar bounds when hover state changes; pointer motion that changes no hover state and moves only the hardware cursor must not set `inputRenderRequired` (pairs with FP-4).
+- [x] [Auto] Add a diagnostics counter delta check: `recordSurfaceDrawCacheBlock(…TransientChrome)` should stop incrementing during plain pointer sweeps over a window.
 
 Verification on Linux (KMS TTY):
 
