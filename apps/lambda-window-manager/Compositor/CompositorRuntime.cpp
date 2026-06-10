@@ -982,6 +982,15 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (presenter->atomicPresenter()->canScheduleDirectScanoutRepeat()) {
         auto const traceStart = diagnostics::cpuTraceNow();
         std::uint32_t const presentId = presenter->atomicPresenter()->scheduleDirectScanoutRepeat();
+        if (presentId == 0) {
+          diagnostics::recordCpuAtomicLoop({
+              .scheduleAttempts = 1,
+              .scheduleSuccess = 0,
+              .scheduleDirectRepeat = 1,
+              .scheduleMs = diagnostics::cpuTraceElapsedMilliseconds(traceStart),
+          });
+          return false;
+        }
         diagnostics::recordCpuAtomicLoop({
             .scheduleAttempts = 1,
             .scheduleSuccess = 1,
@@ -1130,11 +1139,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                       static_cast<unsigned long long>(frame.contentSerial),
                       static_cast<unsigned long long>(candidateBufferId),
                       static_cast<double>(monotonicNanoseconds() - prepareStartNsec) / 1'000'000.0);
-	        }
-	        if (!fdReadableNow(presenter->atomicPresenter()->preparedDirectScanoutAcquireFenceFd())) return false;
-	        if (!presenter->atomicPresenter()->canScheduleDirectScanout()) return false;
+        }
+        if (!fdReadableNow(presenter->atomicPresenter()->preparedDirectScanoutAcquireFenceFd())) return false;
+        if (!presenter->atomicPresenter()->canScheduleDirectScanout()) return false;
         std::uint64_t const frameContentSerial = frame.contentSerial;
         std::uint32_t const presentId = presenter->atomicPresenter()->scheduleDirectScanout();
+        if (presentId == 0) return false;
         std::uint64_t const scheduledNsec = monotonicNanoseconds();
         LAMBDA_WINDOW_MANAGER_TRACE_PACING("scanout-schedule-done mode=direct id=%u contentSerial=%llu buffer=%llu "
                     "elapsed=%.3fms commitCall=%.3fms\n",
@@ -1231,11 +1241,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                       static_cast<unsigned long long>(frame.contentSerial),
                       static_cast<unsigned long long>(candidateBufferId),
                       static_cast<double>(monotonicNanoseconds() - prepareStartNsec) / 1'000'000.0);
-	        }
-	        if (!fdReadableNow(presenter->atomicPresenter()->preparedOverlayAcquireFenceFd())) return false;
-	        if (!presenter->atomicPresenter()->canScheduleOverlayOnly()) return false;
+        }
+        if (!fdReadableNow(presenter->atomicPresenter()->preparedOverlayAcquireFenceFd())) return false;
+        if (!presenter->atomicPresenter()->canScheduleOverlayOnly()) return false;
         std::uint64_t const frameContentSerial = frame.contentSerial;
         std::uint32_t const presentId = presenter->atomicPresenter()->scheduleOverlayOnly();
+        if (presentId == 0) return false;
         std::uint64_t const scheduledNsec = monotonicNanoseconds();
         LAMBDA_WINDOW_MANAGER_TRACE_PACING("scanout-schedule-done mode=overlay id=%u contentSerial=%llu buffer=%llu elapsed=%.3fms\n",
                     presentId,
@@ -1310,6 +1321,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (!presenter->atomicPresenter()->canSchedulePresent(frame.presentToken)) return false;
       std::uint64_t const frameContentSerial = frame.contentSerial;
       std::uint32_t const presentId = presenter->atomicPresenter()->schedulePresent(frame.presentToken);
+      if (presentId == 0) return false;
       std::uint64_t const scheduledNsec = monotonicNanoseconds();
       double const sinceLastFlipMs =
           lastAtomicFlipNsec > 0 && scheduledNsec >= lastAtomicFlipNsec

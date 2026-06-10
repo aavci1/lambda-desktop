@@ -731,6 +731,18 @@ public:
     return *canvas_;
   }
 
+  [[nodiscard]] bool transientAtomicCommitFailure(int error, char const* operation) noexcept {
+    if (error != EBUSY && error != EAGAIN) return false;
+    if (!atomicCommitBusyLogged_) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: %s temporarily busy; retrying on a later loop\n",
+                   operation);
+      atomicCommitBusyLogged_ = true;
+    }
+    pendingTiming_ = {};
+    return true;
+  }
+
   bool canPrepareFrame() {
     reapDiscardedPreparedFrames();
     if (buffers_.empty()) return false;
@@ -1167,7 +1179,15 @@ public:
       pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
       recordKmsTraceElapsed(KmsTraceBucket::AtomicCommit, pendingTiming_.commitDurationNsec);
       if (rc != 0) {
-        throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit overlay-only");
+        int const error = errno;
+        if (transientAtomicCommitFailure(error, "drmModeAtomicCommit overlay-only")) {
+          std::uint64_t const freeStart = kmsTraceStart();
+          drmModeAtomicFree(request);
+          recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
+          request = nullptr;
+          return 0;
+        }
+        throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit overlay-only");
       }
       if (output_) output_->markAtomicCursorScheduled();
       std::uint64_t const freeStart = kmsTraceStart();
@@ -1498,7 +1518,15 @@ public:
       pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
       recordKmsTraceElapsed(KmsTraceBucket::AtomicCommit, pendingTiming_.commitDurationNsec);
       if (rc != 0) {
-        throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit direct scanout");
+        int const error = errno;
+        if (transientAtomicCommitFailure(error, "drmModeAtomicCommit direct scanout")) {
+          std::uint64_t const freeStart = kmsTraceStart();
+          drmModeAtomicFree(request);
+          recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
+          request = nullptr;
+          return 0;
+        }
+        throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit direct scanout");
       }
       if (output_) output_->markAtomicCursorScheduled();
       std::uint64_t const freeStart = kmsTraceStart();
@@ -1556,7 +1584,15 @@ public:
       pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
       recordKmsTraceElapsed(KmsTraceBucket::AtomicCommit, pendingTiming_.commitDurationNsec);
       if (rc != 0) {
-        throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit direct scanout repeat");
+        int const error = errno;
+        if (transientAtomicCommitFailure(error, "drmModeAtomicCommit direct scanout repeat")) {
+          std::uint64_t const freeStart = kmsTraceStart();
+          drmModeAtomicFree(request);
+          recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
+          request = nullptr;
+          return 0;
+        }
+        throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit direct scanout repeat");
       }
       if (output_) output_->markAtomicCursorScheduled();
       std::uint64_t const freeStart = kmsTraceStart();
@@ -1693,7 +1729,19 @@ public:
       pendingTiming_.commitDurationNsec = pendingTiming_.commitReturnMonotonicNsec - commitStartNsec;
       recordKmsTraceElapsed(KmsTraceBucket::AtomicCommit, pendingTiming_.commitDurationNsec);
       if (rc != 0) {
-        throw std::system_error(errno, std::generic_category(), "drmModeAtomicCommit");
+        int const error = errno;
+        if (transientAtomicCommitFailure(error, "drmModeAtomicCommit")) {
+          std::uint64_t const freeStart = kmsTraceStart();
+          drmModeAtomicFree(request);
+          recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
+          request = nullptr;
+          if (damageBlob != 0) {
+            drmModeDestroyPropertyBlob(fd_, damageBlob);
+            damageBlob = 0;
+          }
+          return 0;
+        }
+        throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit");
       }
       if (output_) output_->markAtomicCursorScheduled();
       if (useRenderFence) {
@@ -1741,7 +1789,9 @@ public:
   }
 
   KmsAtomicPresenter::PageFlipTiming present() {
-    schedulePresent();
+    if (schedulePresent() == 0) {
+      throw std::system_error(EBUSY, std::generic_category(), "drmModeAtomicCommit");
+    }
     waitForPageFlip();
     return pendingTiming_;
   }
@@ -3298,6 +3348,7 @@ private:
   bool directScanoutPreparedLogged_ = false;
   bool directScanoutTestFailureLogged_ = false;
   bool damageClipFailureLogged_ = false;
+  bool atomicCommitBusyLogged_ = false;
   bool useRenderInFence_ = false;
   bool useAsyncRenderFence_ = false;
   bool directScanoutRenderForced_ = false;
