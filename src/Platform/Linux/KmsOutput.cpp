@@ -608,6 +608,7 @@ public:
 
   bool ensureAtomicCursorPlane() const;
   bool commitAtomicCursor(std::int32_t x, std::int32_t y, bool visible) const noexcept;
+  drmModeAtomicReq* cursorAtomicRequest() const noexcept;
   bool addAtomicCursorProperties(drmModeAtomicReq* request) const;
   void markAtomicCursorScheduled() const noexcept;
 
@@ -625,6 +626,7 @@ public:
   mutable bool atomicCursorZposMutable_ = false;
   mutable bool atomicCursorLogged_ = false;
   mutable bool cursorUploadLogged_ = false;
+  mutable drmModeAtomicReq* atomicCursorRequest_ = nullptr;
   mutable std::int32_t cursorX_ = 0;
   mutable std::int32_t cursorY_ = 0;
   mutable std::int32_t cursorHotspotX_ = 0;
@@ -704,6 +706,10 @@ public:
     VkDevice device = lambda::VulkanContext::instance().device();
     // Intentional presenter teardown wait before destroying KMS buffers.
     if (device) vkDeviceWaitIdle(device);
+    if (atomicRequest_) {
+      drmModeAtomicFree(atomicRequest_);
+      atomicRequest_ = nullptr;
+    }
     destroyOverlayFramebuffers();
     for (auto& buffer : buffers_) {
       closeRenderFence(buffer);
@@ -741,6 +747,21 @@ public:
     }
     pendingTiming_ = {};
     return true;
+  }
+
+  drmModeAtomicReq* reusableAtomicRequest() {
+    if (!atomicRequest_) {
+      std::uint64_t const allocStart = kmsTraceStart();
+      atomicRequest_ = drmModeAtomicAlloc();
+      recordKmsTraceSince(KmsTraceBucket::AtomicAlloc, allocStart);
+    } else {
+      drmModeAtomicSetCursor(atomicRequest_, 0);
+    }
+    return atomicRequest_;
+  }
+
+  void resetReusableAtomicRequest() noexcept {
+    if (atomicRequest_) drmModeAtomicSetCursor(atomicRequest_, 0);
   }
 
   bool canPrepareFrame() {
@@ -1157,9 +1178,7 @@ public:
     if (preparedOverlay_ && fenceFdReadableNow(preparedOverlay_->acquireFenceFd)) {
       closePreparedOverlayFence(*preparedOverlay_);
     }
-    std::uint64_t const allocStart = kmsTraceStart();
-    drmModeAtomicReq* request = drmModeAtomicAlloc();
-    recordKmsTraceSince(KmsTraceBucket::AtomicAlloc, allocStart);
+    drmModeAtomicReq* request = reusableAtomicRequest();
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
       std::uint64_t const populateStart = kmsTraceStart();
@@ -1181,19 +1200,11 @@ public:
       if (rc != 0) {
         int const error = errno;
         if (transientAtomicCommitFailure(error, "drmModeAtomicCommit overlay-only")) {
-          std::uint64_t const freeStart = kmsTraceStart();
-          drmModeAtomicFree(request);
-          recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
-          request = nullptr;
           return 0;
         }
         throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit overlay-only");
       }
       if (output_) output_->markAtomicCursorScheduled();
-      std::uint64_t const freeStart = kmsTraceStart();
-      drmModeAtomicFree(request);
-      recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
-      request = nullptr;
       pendingBuffer_ = displayedBuffer_;
       pendingOverlayPlaneId_ = preparedOverlay_ ? preparedOverlay_->planeId : 0;
       pendingOverlayFbId_ = preparedOverlay_ ? preparedOverlay_->fbId : 0;
@@ -1206,7 +1217,7 @@ public:
       pageFlipPending_ = true;
       return pendingTiming_.presentId;
     } catch (...) {
-      if (request) drmModeAtomicFree(request);
+      resetReusableAtomicRequest();
       throw;
     }
   }
@@ -1496,9 +1507,7 @@ public:
     if (preparedDirectScanout_ && fenceFdReadableNow(preparedDirectScanout_->acquireFenceFd)) {
       closePreparedDirectScanoutFence(*preparedDirectScanout_);
     }
-    std::uint64_t const allocStart = kmsTraceStart();
-    drmModeAtomicReq* request = drmModeAtomicAlloc();
-    recordKmsTraceSince(KmsTraceBucket::AtomicAlloc, allocStart);
+    drmModeAtomicReq* request = reusableAtomicRequest();
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
       std::uint64_t const populateStart = kmsTraceStart();
@@ -1520,19 +1529,11 @@ public:
       if (rc != 0) {
         int const error = errno;
         if (transientAtomicCommitFailure(error, "drmModeAtomicCommit direct scanout")) {
-          std::uint64_t const freeStart = kmsTraceStart();
-          drmModeAtomicFree(request);
-          recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
-          request = nullptr;
           return 0;
         }
         throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit direct scanout");
       }
       if (output_) output_->markAtomicCursorScheduled();
-      std::uint64_t const freeStart = kmsTraceStart();
-      drmModeAtomicFree(request);
-      recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
-      request = nullptr;
       pendingBuffer_ = displayedBuffer_;
       pendingOverlayPlaneId_ = 0;
       pendingOverlayFbId_ = 0;
@@ -1546,7 +1547,7 @@ public:
       pageFlipPending_ = true;
       return pendingTiming_.presentId;
     } catch (...) {
-      if (request) drmModeAtomicFree(request);
+      resetReusableAtomicRequest();
       throw;
     }
   }
@@ -1562,9 +1563,7 @@ public:
     }
     PreparedDirectScanout repeat = *activeDirectScanoutState_;
     repeat.acquireFenceFd = -1;
-    std::uint64_t const allocStart = kmsTraceStart();
-    drmModeAtomicReq* request = drmModeAtomicAlloc();
-    recordKmsTraceSince(KmsTraceBucket::AtomicAlloc, allocStart);
+    drmModeAtomicReq* request = reusableAtomicRequest();
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
       std::uint64_t const populateStart = kmsTraceStart();
@@ -1586,19 +1585,11 @@ public:
       if (rc != 0) {
         int const error = errno;
         if (transientAtomicCommitFailure(error, "drmModeAtomicCommit direct scanout repeat")) {
-          std::uint64_t const freeStart = kmsTraceStart();
-          drmModeAtomicFree(request);
-          recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
-          request = nullptr;
           return 0;
         }
         throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit direct scanout repeat");
       }
       if (output_) output_->markAtomicCursorScheduled();
-      std::uint64_t const freeStart = kmsTraceStart();
-      drmModeAtomicFree(request);
-      recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
-      request = nullptr;
       pendingBuffer_ = displayedBuffer_;
       pendingOverlayPlaneId_ = 0;
       pendingOverlayFbId_ = 0;
@@ -1610,7 +1601,7 @@ public:
       pageFlipPending_ = true;
       return pendingTiming_.presentId;
     } catch (...) {
-      if (request) drmModeAtomicFree(request);
+      resetReusableAtomicRequest();
       throw;
     }
   }
@@ -1698,9 +1689,7 @@ public:
     if (!canSchedulePresent(token)) throw std::runtime_error("KMS atomic render buffer is not ready");
     Buffer& buffer = buffers_[static_cast<std::size_t>(index)];
     std::uint32_t damageBlob = createDamageClipBlob(buffer);
-    std::uint64_t const allocStart = kmsTraceStart();
-    drmModeAtomicReq* request = drmModeAtomicAlloc();
-    recordKmsTraceSince(KmsTraceBucket::AtomicAlloc, allocStart);
+    drmModeAtomicReq* request = reusableAtomicRequest();
     if (!request) throw std::runtime_error("drmModeAtomicAlloc failed");
     try {
       bool const useRenderFence = !buffer.renderComplete && canUseRenderFence(buffer);
@@ -1731,10 +1720,6 @@ public:
       if (rc != 0) {
         int const error = errno;
         if (transientAtomicCommitFailure(error, "drmModeAtomicCommit")) {
-          std::uint64_t const freeStart = kmsTraceStart();
-          drmModeAtomicFree(request);
-          recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
-          request = nullptr;
           if (damageBlob != 0) {
             drmModeDestroyPropertyBlob(fd_, damageBlob);
             damageBlob = 0;
@@ -1748,10 +1733,6 @@ public:
         closeRenderFence(buffer);
         buffer.renderComplete = true;
       }
-      std::uint64_t const freeStart = kmsTraceStart();
-      drmModeAtomicFree(request);
-      recordKmsTraceSince(KmsTraceBucket::AtomicFree, freeStart);
-      request = nullptr;
       if (damageBlob != 0) {
         drmModeDestroyPropertyBlob(fd_, damageBlob);
         damageBlob = 0;
@@ -1782,7 +1763,7 @@ public:
       pageFlipPending_ = true;
       return pendingTiming_.presentId;
     } catch (...) {
-      if (request) drmModeAtomicFree(request);
+      resetReusableAtomicRequest();
       if (damageBlob != 0) drmModeDestroyPropertyBlob(fd_, damageBlob);
       throw;
     }
@@ -2542,7 +2523,7 @@ private:
 
   bool testAtomicOverlay(Buffer const& buffer, PreparedOverlay const& overlay) {
     KmsTraceScope trace(KmsTraceBucket::TestAtomic);
-    drmModeAtomicReq* request = drmModeAtomicAlloc();
+    drmModeAtomicReq* request = reusableAtomicRequest();
     if (!request) return false;
     bool accepted = false;
     try {
@@ -2577,13 +2558,12 @@ private:
       }
       accepted = false;
     }
-    drmModeAtomicFree(request);
     return accepted;
   }
 
   bool testAtomicDirectScanout(PreparedDirectScanout const& direct) {
     KmsTraceScope trace(KmsTraceBucket::TestAtomic);
-    drmModeAtomicReq* request = drmModeAtomicAlloc();
+    drmModeAtomicReq* request = reusableAtomicRequest();
     if (!request) return false;
     bool accepted = false;
     try {
@@ -2618,7 +2598,6 @@ private:
       }
       accepted = false;
     }
-    drmModeAtomicFree(request);
     return accepted;
   }
 
@@ -3388,6 +3367,7 @@ private:
   int activePreparedBuffer_ = -1;
   std::uint32_t nextPresentId_ = 1;
   KmsAtomicPresenter::PageFlipTiming pendingTiming_{};
+  drmModeAtomicReq* atomicRequest_ = nullptr;
   std::vector<Buffer> buffers_;
   std::unique_ptr<Canvas> canvas_;
   static constexpr std::size_t kOverlayFramebufferCacheLimit = 12;
@@ -3395,6 +3375,10 @@ private:
 };
 
 KmsOutput::Impl::~Impl() {
+  if (atomicCursorRequest_) {
+    drmModeAtomicFree(atomicCursorRequest_);
+    atomicCursorRequest_ = nullptr;
+  }
   destroyCursorBuffer();
 }
 
@@ -3541,6 +3525,15 @@ void KmsOutput::Impl::markAtomicCursorScheduled() const noexcept {
   atomicCursorActive_ = cursorVisible_ && atomicCursorPlaneId_ != 0 && cursorBuffer_.fbId != 0;
 }
 
+drmModeAtomicReq* KmsOutput::Impl::cursorAtomicRequest() const noexcept {
+  if (!atomicCursorRequest_) {
+    atomicCursorRequest_ = drmModeAtomicAlloc();
+  } else {
+    drmModeAtomicSetCursor(atomicCursorRequest_, 0);
+  }
+  return atomicCursorRequest_;
+}
+
 bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool visible) const noexcept {
   KmsTraceScope trace(KmsTraceBucket::CursorCommit);
   if (!ensureAtomicCursorPlane()) return false;
@@ -3548,7 +3541,7 @@ bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool vi
 
   int const fd = drmFd();
   if (fd < 0) return false;
-  drmModeAtomicReq* request = drmModeAtomicAlloc();
+  drmModeAtomicReq* request = cursorAtomicRequest();
   if (!request) return false;
   bool committed = false;
   int commitErrno = 0;
@@ -3576,8 +3569,8 @@ bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool vi
     }
   } catch (...) {
     committed = false;
+    commitErrno = errno != 0 ? errno : EINVAL;
   }
-  drmModeAtomicFree(request);
 
   bool const retryOnFrameCommit = commitErrno == EBUSY || commitErrno == EAGAIN;
   if (!committed && !retryOnFrameCommit && !atomicCursorFailureLogged_) {
