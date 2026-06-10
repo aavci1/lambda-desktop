@@ -17,6 +17,7 @@ namespace {
 using RegionRect = CommittedSurfaceSnapshot::RegionRect;
 
 constexpr std::size_t kMaxDamageRects = 96;
+constexpr std::uint64_t kDamageMergeAreaSlackDivisor = 5;
 
 std::uint64_t kindBits(CompositorSceneNodeKind kind) {
   return static_cast<std::uint64_t>(kind);
@@ -135,6 +136,20 @@ RegionRect unionRect(RegionRect const& a, RegionRect const& b) {
   return RegionRect{.x = left, .y = top, .width = right - left, .height = bottom - top};
 }
 
+std::uint64_t rectArea(RegionRect const& rect) {
+  if (rect.width <= 0 || rect.height <= 0) return 0;
+  return static_cast<std::uint64_t>(rect.width) * static_cast<std::uint64_t>(rect.height);
+}
+
+bool damageRectsMergeable(RegionRect const& a, RegionRect const& b) {
+  RegionRect const merged = unionRect(a, b);
+  std::uint64_t const combinedArea = rectArea(a) + rectArea(b);
+  std::uint64_t const mergedArea = rectArea(merged);
+  if (combinedArea == 0) return false;
+  if (mergedArea <= combinedArea) return true;
+  return mergedArea - combinedArea <= combinedArea / kDamageMergeAreaSlackDivisor;
+}
+
 void makeFullDamage(SceneDamageResult& damage, std::int32_t outputWidth, std::int32_t outputHeight) {
   damage.fullOutput = outputWidth > 0 && outputHeight > 0;
   damage.rects.clear();
@@ -159,7 +174,7 @@ void appendDamageRect(SceneDamageResult& damage,
     merged = false;
     for (auto it = damage.rects.begin(); it != damage.rects.end(); ++it) {
       if (rectContains(*it, rect)) return;
-      if (rectContains(rect, *it) || rectsOverlap(*it, rect)) {
+      if (rectContains(rect, *it) || damageRectsMergeable(*it, rect)) {
         rect = clippedRect(unionRect(rect, *it), outputWidth, outputHeight);
         damage.rects.erase(it);
         if (rect.x <= 0 && rect.y <= 0 && rect.width >= outputWidth && rect.height >= outputHeight) {

@@ -64,6 +64,19 @@ bool rectEquals(RegionRect actual, RegionRect expected) {
          actual.height == expected.height;
 }
 
+bool rectCovers(RegionRect outer, RegionRect inner) {
+  return inner.x >= outer.x &&
+         inner.y >= outer.y &&
+         inner.x + inner.width <= outer.x + outer.width &&
+         inner.y + inner.height <= outer.y + outer.height;
+}
+
+bool anyRectCovers(std::vector<RegionRect> const& rects, RegionRect expected) {
+  return std::any_of(rects.begin(), rects.end(), [&](RegionRect const& rect) {
+    return rectCovers(rect, expected);
+  });
+}
+
 #ifdef LAMBDA_TESTS_HAVE_COMPOSITOR_SCENE_GRAPH
 bool rectContainedBy(RegionRect inner, RegionRect outer) {
   return inner.x >= outer.x &&
@@ -136,8 +149,8 @@ TEST_CASE("scene damage covers old and new frame rectangles when a surface moves
   auto damage = lambda::compositor::updateSceneDamage(state, {moved}, std::nullopt, 800, 600);
 
   CHECK_FALSE(damage.fullOutput);
-  CHECK(containsRect(damage.rects, RegionRect{.x = 10, .y = 12, .width = 100, .height = 108}));
-  CHECK(containsRect(damage.rects, RegionRect{.x = 70, .y = 62, .width = 100, .height = 108}));
+  CHECK(anyRectCovers(damage.rects, RegionRect{.x = 10, .y = 12, .width = 100, .height = 108}));
+  CHECK(anyRectCovers(damage.rects, RegionRect{.x = 70, .y = 62, .width = 100, .height = 108}));
 }
 
 TEST_CASE("scene damage maps buffer damage into stable surface coordinates") {
@@ -159,6 +172,40 @@ TEST_CASE("scene damage maps buffer damage into stable surface coordinates") {
   CHECK_FALSE(damage.fullOutput);
   REQUIRE(damage.rects.size() == 1);
   CHECK(rectEquals(damage.rects[0], RegionRect{.x = 110, .y = 140, .width = 40, .height = 10}));
+}
+
+TEST_CASE("scene damage merges adjacent rects before the max rect fallback") {
+  SceneDamageState state;
+  auto first = surface(1, 0, 0, 800, 20, 1);
+  auto next = first;
+  next.serial = 2;
+  for (std::int32_t i = 0; i < 70; ++i) {
+    next.bufferDamageRects.push_back(RegionRect{.x = i * 10, .y = 0, .width = 10, .height = 10});
+  }
+
+  (void)lambda::compositor::updateSceneDamage(state, {first}, std::nullopt, 800, 600);
+  auto damage = lambda::compositor::updateSceneDamage(state, {next}, std::nullopt, 800, 600);
+
+  CHECK_FALSE(damage.fullOutput);
+  REQUIRE(damage.rects.size() == 1);
+  CHECK(rectEquals(damage.rects[0], RegionRect{.x = 0, .y = 0, .width = 700, .height = 10}));
+}
+
+TEST_CASE("scene damage keeps sparse rects separate") {
+  SceneDamageState state;
+  auto first = surface(1, 0, 0, 800, 200, 1);
+  auto next = first;
+  next.serial = 2;
+  next.bufferDamageRects.push_back(RegionRect{.x = 0, .y = 0, .width = 100, .height = 100});
+  next.bufferDamageRects.push_back(RegionRect{.x = 300, .y = 0, .width = 100, .height = 100});
+
+  (void)lambda::compositor::updateSceneDamage(state, {first}, std::nullopt, 800, 600);
+  auto damage = lambda::compositor::updateSceneDamage(state, {next}, std::nullopt, 800, 600);
+
+  CHECK_FALSE(damage.fullOutput);
+  REQUIRE(damage.rects.size() == 2);
+  CHECK(containsRect(damage.rects, RegionRect{.x = 0, .y = 0, .width = 100, .height = 100}));
+  CHECK(containsRect(damage.rects, RegionRect{.x = 300, .y = 0, .width = 100, .height = 100}));
 }
 
 TEST_CASE("scene damage uses full output damage when stacking order changes") {
@@ -202,6 +249,56 @@ TEST_CASE("scene damage includes old and new software cursor rectangles") {
 }
 
 #ifdef LAMBDA_TESTS_HAVE_COMPOSITOR_SCENE_GRAPH
+TEST_CASE("scene graph damage merges adjacent rects before the max rect fallback") {
+  lambda::compositor::ChromeConfig chrome;
+  chrome.glass.blurRadius = 0.f;
+  chrome.focusedShadowRadius = 0.f;
+  chrome.unfocusedShadowRadius = 0.f;
+  auto first = surface(77, 0, 0, 800, 20, 1);
+  std::vector<CommittedSurfaceSnapshot> surfaces{first};
+  std::optional<CommittedSurfaceSnapshot> cursor;
+  std::unordered_map<std::uint64_t, SurfaceVisualState> visuals;
+
+  CompositorSceneGraphState state;
+  auto initial = lambda::compositor::buildCompositorSceneFrame(
+      state,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = surfaces,
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  auto next = first;
+  next.serial = 2;
+  for (std::int32_t i = 0; i < 100; ++i) {
+    next.bufferDamageRects.push_back(RegionRect{.x = i * 8, .y = 0, .width = 8, .height = 10});
+  }
+  surfaces = {next};
+  auto damagePlan = lambda::compositor::buildCompositorSceneFrame(
+      initial.nextState,
+      CompositorSceneFrameInput{
+          .duplicateDmabufFds = {},
+          .chrome = chrome,
+          .surfaceVisuals = visuals,
+          .surfaces = surfaces,
+          .softwareCursor = cursor,
+          .logicalOutputWidth = 800,
+          .logicalOutputHeight = 600,
+          .animationsEnabled = false,
+          .selectScanout = false,
+      });
+
+  CHECK_FALSE(damagePlan.damage.fullOutput);
+  REQUIRE(damagePlan.damage.rects.size() == 1);
+  CHECK(rectEquals(damagePlan.damage.rects[0], RegionRect{.x = 0, .y = 0, .width = 800, .height = 10}));
+}
+
 TEST_CASE("scene damage for chrome hover is constrained to control bounds") {
   lambda::compositor::ChromeConfig chrome;
   chrome.glass.blurRadius = 0.f;

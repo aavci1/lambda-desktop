@@ -73,9 +73,9 @@ Verification on Linux:
 
 What to do:
 
-- [ ] [Auto] Replace the per-rect loop with a single pass: push all damage rects as one clip region (add a multi-rect clip helper on `Canvas` if needed — Vulkan scissor-list or a stencil/union-clip; a bounding-union `clipRect` is an acceptable first step when rect count is small) and call `drawFrameContent()` once.
-- [ ] [Auto] Merge overlapping/adjacent damage rects before use: both damage systems cap rect count with a cliff to full-output damage (`SceneDamage.cpp:51-53` at >64, `CompositorSceneGraph.cpp:173-175` at >96). Add a union/merge step (merge rects whose union area is within ~20% of the sum) so busy scenes degrade to fewer larger rects instead of full-screen damage.
-- [ ] [Auto] Keep the KMS `damageRects` passed to the presenter unchanged — only the compositing pass collapses; scanout damage stays per-rect.
+- [x] [Auto] Replace the per-rect loop with a single pass: push all damage rects as one clip region (add a multi-rect clip helper on `Canvas` if needed — Vulkan scissor-list or a stencil/union-clip; a bounding-union `clipRect` is an acceptable first step when rect count is small) and call `drawFrameContent()` once.
+- [x] [Auto] Merge overlapping/adjacent damage rects before use: both damage systems cap rect count with a cliff to full-output damage (`SceneDamage.cpp:51-53` at >64, `CompositorSceneGraph.cpp:173-175` at >96). Add a union/merge step (merge rects whose union area is within ~20% of the sum) so busy scenes degrade to fewer larger rects instead of full-screen damage.
+- [x] [Auto] Keep the KMS `damageRects` passed to the presenter unchanged — only the compositing pass collapses; scanout damage stays per-rect.
 
 Verification on Linux (KMS TTY):
 

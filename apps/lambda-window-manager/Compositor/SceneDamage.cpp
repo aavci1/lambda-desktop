@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <unordered_map>
 
 namespace lambda::compositor {
@@ -12,6 +13,7 @@ namespace {
 using RegionRect = CommittedSurfaceSnapshot::RegionRect;
 
 constexpr std::size_t kMaxDamageRects = 64;
+constexpr std::uint64_t kDamageMergeAreaSlackDivisor = 5;
 
 bool rectEmpty(RegionRect const& rect) {
   return rect.width <= 0 || rect.height <= 0;
@@ -27,6 +29,39 @@ RegionRect clippedRect(RegionRect rect, std::int32_t outputWidth, std::int32_t o
   std::int32_t const right = std::clamp(rect.x + rect.width, 0, outputWidth);
   std::int32_t const bottom = std::clamp(rect.y + rect.height, 0, outputHeight);
   return RegionRect{.x = left, .y = top, .width = right - left, .height = bottom - top};
+}
+
+std::uint64_t rectArea(RegionRect const& rect) {
+  if (rect.width <= 0 || rect.height <= 0) return 0;
+  return static_cast<std::uint64_t>(rect.width) * static_cast<std::uint64_t>(rect.height);
+}
+
+bool rectContains(RegionRect const& outer, RegionRect const& inner) {
+  std::int64_t const outerRight = static_cast<std::int64_t>(outer.x) + std::max(0, outer.width);
+  std::int64_t const outerBottom = static_cast<std::int64_t>(outer.y) + std::max(0, outer.height);
+  std::int64_t const innerRight = static_cast<std::int64_t>(inner.x) + std::max(0, inner.width);
+  std::int64_t const innerBottom = static_cast<std::int64_t>(inner.y) + std::max(0, inner.height);
+  return outer.x <= inner.x &&
+         outer.y <= inner.y &&
+         outerRight >= innerRight &&
+         outerBottom >= innerBottom;
+}
+
+RegionRect unionRect(RegionRect const& a, RegionRect const& b) {
+  std::int32_t const left = std::min(a.x, b.x);
+  std::int32_t const top = std::min(a.y, b.y);
+  std::int32_t const right = std::max(a.x + std::max(0, a.width), b.x + std::max(0, b.width));
+  std::int32_t const bottom = std::max(a.y + std::max(0, a.height), b.y + std::max(0, b.height));
+  return RegionRect{.x = left, .y = top, .width = right - left, .height = bottom - top};
+}
+
+bool damageRectsMergeable(RegionRect const& a, RegionRect const& b) {
+  RegionRect const merged = unionRect(a, b);
+  std::uint64_t const combinedArea = rectArea(a) + rectArea(b);
+  std::uint64_t const mergedArea = rectArea(merged);
+  if (combinedArea == 0) return false;
+  if (mergedArea <= combinedArea) return true;
+  return mergedArea - combinedArea <= combinedArea / kDamageMergeAreaSlackDivisor;
 }
 
 void makeFullDamage(SceneDamageResult& damage,
@@ -47,6 +82,23 @@ void appendDamageRect(SceneDamageResult& damage,
   if (rect.x <= 0 && rect.y <= 0 && rect.width >= outputWidth && rect.height >= outputHeight) {
     makeFullDamage(damage, outputWidth, outputHeight);
     return;
+  }
+  bool merged = true;
+  while (merged) {
+    merged = false;
+    for (auto it = damage.rects.begin(); it != damage.rects.end(); ++it) {
+      if (rectContains(*it, rect)) return;
+      if (rectContains(rect, *it) || damageRectsMergeable(*it, rect)) {
+        rect = clippedRect(unionRect(rect, *it), outputWidth, outputHeight);
+        damage.rects.erase(it);
+        if (rect.x <= 0 && rect.y <= 0 && rect.width >= outputWidth && rect.height >= outputHeight) {
+          makeFullDamage(damage, outputWidth, outputHeight);
+          return;
+        }
+        merged = true;
+        break;
+      }
+    }
   }
   if (damage.rects.size() >= kMaxDamageRects) {
     makeFullDamage(damage, outputWidth, outputHeight);
