@@ -497,7 +497,7 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
   }
   if (canDrawPlainClientSurfaceDirectly(surface, chrome, visual, frameTime, animationsEnabled)) {
     drawPlainClientSurface(canvas, surface, *cached.image);
-    visual.lastSnapshot = surface;
+    visual.lastSnapshot = retainedSurfaceRenderSnapshot(surface);
     visual.hasLastSnapshot = true;
     return;
   }
@@ -532,7 +532,7 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
     if (replayed) {
       drawTransientChromeControls(canvas, surface, chrome);
       diagnostics::recordSurfaceDrawCache(true, 0.0);
-      visual.lastSnapshot = surface;
+      visual.lastSnapshot = retainedSurfaceRenderSnapshot(surface);
       visual.hasLastSnapshot = true;
       return;
     }
@@ -550,7 +550,7 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
       diagnostics::recordSurfaceDrawCache(false, recordMs);
       if (replayRecordedOpsForCanvas(&canvas, *recorder)) {
         drawTransientChromeControls(canvas, surface, chrome);
-        visual.lastSnapshot = surface;
+        visual.lastSnapshot = retainedSurfaceRenderSnapshot(surface);
         visual.hasLastSnapshot = true;
         cached.recordedSignature = signature;
         cached.recordedX = recordedSurface.x;

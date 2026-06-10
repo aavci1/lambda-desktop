@@ -34,13 +34,34 @@ struct CompositorSceneNodeSnapshot {
   bool primaryPlane = true;
 };
 
+struct RetainedSceneSurfaceSnapshot {
+  std::uint64_t id = 0;
+  std::uint64_t serial = 0;
+  std::int32_t x = 0;
+  std::int32_t y = 0;
+  std::int32_t width = 0;
+  std::int32_t height = 0;
+  std::int32_t committedWidth = 0;
+  std::int32_t committedHeight = 0;
+  std::int32_t bufferWidth = 0;
+  std::int32_t bufferHeight = 0;
+  std::int32_t bufferTransform = 0;
+  float sourceX = 0.f;
+  float sourceY = 0.f;
+  float sourceWidth = 0.f;
+  float sourceHeight = 0.f;
+  std::int32_t destinationWidth = 0;
+  std::int32_t destinationHeight = 0;
+  std::uint64_t chromeSignature = 0;
+};
+
 struct CompositorSceneGraphState {
   bool initialized = false;
   std::int32_t outputWidth = 0;
   std::int32_t outputHeight = 0;
   std::vector<CompositorSceneNodeSnapshot> nodes;
-  std::vector<CommittedSurfaceSnapshot> surfaces;
-  std::optional<CommittedSurfaceSnapshot> cursor;
+  std::vector<RetainedSceneSurfaceSnapshot> surfaces;
+  std::optional<RetainedSceneSurfaceSnapshot> cursor;
   std::unordered_map<std::uint64_t, std::uint64_t> rejectedScanoutSignaturesBySurface;
   std::uint64_t primaryReuseSignature = 0;
   std::uint64_t primaryReuseOverlaySurfaceId = 0;

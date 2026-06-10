@@ -426,6 +426,30 @@ void drawSurfaceMaterialBorder(Canvas& canvas,
 
 } // namespace
 
+SurfaceRenderSnapshot retainedSurfaceRenderSnapshot(CommittedSurfaceSnapshot const& surface) {
+  return SurfaceRenderSnapshot{
+      .id = surface.id,
+      .serial = surface.serial,
+      .x = surface.x,
+      .y = surface.y,
+      .width = surface.width,
+      .height = surface.height,
+      .committedWidth = surface.committedWidth,
+      .committedHeight = surface.committedHeight,
+      .bufferWidth = surface.bufferWidth,
+      .bufferHeight = surface.bufferHeight,
+      .bufferTransform = surface.bufferTransform,
+      .sourceX = surface.sourceX,
+      .sourceY = surface.sourceY,
+      .sourceWidth = surface.sourceWidth,
+      .sourceHeight = surface.sourceHeight,
+      .destinationWidth = surface.destinationWidth,
+      .destinationHeight = surface.destinationHeight,
+      .activeSizing = surface.activeSizing,
+      .geometryAnimationGrowing = surface.geometryAnimationGrowing,
+  };
+}
+
 bool shouldTraceRenderSnapshot(CommittedSurfaceSnapshot const& current,
                                SurfaceVisualState const& visual) {
   return detail::resizeTraceEnabled() && renderSnapshotChanged(current, visual);
@@ -464,7 +488,7 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
         surface.destinationHeight,
         static_cast<unsigned long long>(surface.serial));
   }
-  visual.lastSnapshot = surface;
+  visual.lastSnapshot = retainedSurfaceRenderSnapshot(surface);
   visual.hasLastSnapshot = true;
 
   float const windowWidth = static_cast<float>(surface.width);

@@ -484,16 +484,6 @@ bool nodeOrderChanged(std::vector<CompositorSceneNodeSnapshot> const& previous,
   return previousIds != currentIds;
 }
 
-bool canMapBufferDamage(CommittedSurfaceSnapshot const& previous,
-                        CommittedSurfaceSnapshot const& current) {
-  return committedSurfaceContentMappingEqual(previous, current) &&
-         current.bufferTransform == 0 &&
-         current.bufferWidth > 0 &&
-         current.bufferHeight > 0 &&
-         current.width > 0 &&
-         current.height > 0;
-}
-
 RegionRect mapBufferDamageToSurface(CommittedSurfaceSnapshot const& surface,
                                     RegionRect const& damage,
                                     ChromeConfig const& chrome,
@@ -531,29 +521,56 @@ RegionRect mapBufferDamageToSurface(CommittedSurfaceSnapshot const& surface,
   return RegionRect{.x = x0, .y = y0, .width = x1 - x0, .height = y1 - y0};
 }
 
-CommittedSurfaceSnapshot retainedSceneSnapshot(CommittedSurfaceSnapshot snapshot) {
-  snapshot.bufferDamageRects.clear();
-  snapshot.rgbaPixels.reset();
-  snapshot.shmPixels = nullptr;
-  snapshot.shmPixelBytes = 0;
-  snapshot.dmabufPlanes.clear();
-  return snapshot;
+RetainedSceneSurfaceSnapshot retainedSceneSnapshot(CommittedSurfaceSnapshot const& snapshot,
+                                                   ChromeConfig const& chrome) {
+  return RetainedSceneSurfaceSnapshot{
+      .id = snapshot.id,
+      .serial = snapshot.serial,
+      .x = snapshot.x,
+      .y = snapshot.y,
+      .width = snapshot.width,
+      .height = snapshot.height,
+      .committedWidth = snapshot.committedWidth,
+      .committedHeight = snapshot.committedHeight,
+      .bufferWidth = snapshot.bufferWidth,
+      .bufferHeight = snapshot.bufferHeight,
+      .bufferTransform = snapshot.bufferTransform,
+      .sourceX = snapshot.sourceX,
+      .sourceY = snapshot.sourceY,
+      .sourceWidth = snapshot.sourceWidth,
+      .sourceHeight = snapshot.sourceHeight,
+      .destinationWidth = snapshot.destinationWidth,
+      .destinationHeight = snapshot.destinationHeight,
+      .chromeSignature = chromeNodeSignature(snapshot, chrome),
+  };
 }
 
-std::vector<CommittedSurfaceSnapshot>
-retainedSceneSnapshots(std::vector<CommittedSurfaceSnapshot> const& surfaces) {
-  std::vector<CommittedSurfaceSnapshot> retained;
+std::vector<RetainedSceneSurfaceSnapshot>
+retainedSceneSnapshots(std::vector<CommittedSurfaceSnapshot> const& surfaces,
+                       ChromeConfig const& chrome) {
+  std::vector<RetainedSceneSurfaceSnapshot> retained;
   retained.reserve(surfaces.size());
   for (auto const& surface : surfaces) {
-    retained.push_back(retainedSceneSnapshot(surface));
+    retained.push_back(retainedSceneSnapshot(surface, chrome));
   }
   return retained;
 }
 
-std::optional<CommittedSurfaceSnapshot>
-retainedSceneSnapshot(std::optional<CommittedSurfaceSnapshot> const& cursor) {
+std::optional<RetainedSceneSurfaceSnapshot>
+retainedSceneSnapshot(std::optional<CommittedSurfaceSnapshot> const& cursor,
+                      ChromeConfig const& chrome) {
   if (!cursor) return std::nullopt;
-  return retainedSceneSnapshot(*cursor);
+  return retainedSceneSnapshot(*cursor, chrome);
+}
+
+std::unordered_map<std::uint64_t, RetainedSceneSurfaceSnapshot const*>
+retainedSurfaceMap(std::vector<RetainedSceneSurfaceSnapshot> const& surfaces) {
+  std::unordered_map<std::uint64_t, RetainedSceneSurfaceSnapshot const*> map;
+  map.reserve(surfaces.size());
+  for (auto const& surface : surfaces) {
+    if (surface.id != 0) map[surface.id] = &surface;
+  }
+  return map;
 }
 
 std::unordered_map<std::uint64_t, CommittedSurfaceSnapshot const*>
@@ -564,6 +581,37 @@ surfaceMap(std::vector<CommittedSurfaceSnapshot> const& surfaces) {
     if (surface.id != 0) map[surface.id] = &surface;
   }
   return map;
+}
+
+bool canMapBufferDamage(RetainedSceneSurfaceSnapshot const& previous,
+                        CommittedSurfaceSnapshot const& current) {
+  return previous.x == current.x &&
+         previous.y == current.y &&
+         previous.width == current.width &&
+         previous.height == current.height &&
+         previous.bufferWidth == current.bufferWidth &&
+         previous.bufferHeight == current.bufferHeight &&
+         previous.bufferTransform == current.bufferTransform &&
+         previous.sourceX == current.sourceX &&
+         previous.sourceY == current.sourceY &&
+         previous.sourceWidth == current.sourceWidth &&
+         previous.sourceHeight == current.sourceHeight &&
+         previous.destinationWidth == current.destinationWidth &&
+         previous.destinationHeight == current.destinationHeight &&
+         current.bufferTransform == 0 &&
+         current.bufferWidth > 0 &&
+         current.bufferHeight > 0 &&
+         current.width > 0 &&
+         current.height > 0;
+}
+
+RegionRect sceneSurfaceContentRect(RetainedSceneSurfaceSnapshot const& surface) {
+  return RegionRect{
+      .x = surface.x,
+      .y = surface.y,
+      .width = std::max(0, surface.width),
+      .height = std::max(0, surface.height),
+  };
 }
 
 SceneDamageResult computeSceneDamage(CompositorSceneGraphState const& previous,
@@ -585,7 +633,7 @@ SceneDamageResult computeSceneDamage(CompositorSceneGraphState const& previous,
     return damage;
   }
 
-  auto const previousSurfacesById = surfaceMap(previous.surfaces);
+  auto const previousSurfacesById = retainedSurfaceMap(previous.surfaces);
   auto const currentSurfacesById = surfaceMap(currentSurfaces);
 
   std::unordered_map<std::uint64_t, CompositorSceneNodeSnapshot const*> previousNodesById;
@@ -920,8 +968,8 @@ CompositorSceneFramePlan buildCompositorSceneFrame(CompositorSceneGraphState con
   plan.nextState.outputWidth = input.logicalOutputWidth;
   plan.nextState.outputHeight = input.logicalOutputHeight;
   plan.nextState.nodes = nodes;
-  plan.nextState.surfaces = retainedSceneSnapshots(input.surfaces);
-  plan.nextState.cursor = retainedSceneSnapshot(input.softwareCursor);
+  plan.nextState.surfaces = retainedSceneSnapshots(input.surfaces, input.chrome);
+  plan.nextState.cursor = retainedSceneSnapshot(input.softwareCursor, input.chrome);
   pruneRejectedScanoutState(plan.nextState, input.surfaces);
 
   plan.scanout = selectHardwareScanoutSurface(previous, input);
