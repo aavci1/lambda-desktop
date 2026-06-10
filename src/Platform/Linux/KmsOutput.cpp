@@ -611,6 +611,7 @@ public:
   drmModeAtomicReq* cursorAtomicRequest() const noexcept;
   bool addAtomicCursorProperties(drmModeAtomicReq* request) const;
   void markAtomicCursorScheduled() const noexcept;
+  void setAtomicPageFlipPending(bool pending) const noexcept;
 
   std::shared_ptr<KmsDevice::Impl> device_;
   KmsConnector connector_{};
@@ -626,6 +627,7 @@ public:
   mutable bool atomicCursorZposMutable_ = false;
   mutable bool atomicCursorLogged_ = false;
   mutable bool cursorUploadLogged_ = false;
+  mutable bool atomicPageFlipPending_ = false;
   mutable drmModeAtomicReq* atomicCursorRequest_ = nullptr;
   mutable std::int32_t cursorX_ = 0;
   mutable std::int32_t cursorY_ = 0;
@@ -1204,7 +1206,6 @@ public:
         }
         throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit overlay-only");
       }
-      if (output_) output_->markAtomicCursorScheduled();
       pendingBuffer_ = displayedBuffer_;
       pendingOverlayPlaneId_ = preparedOverlay_ ? preparedOverlay_->planeId : 0;
       pendingOverlayFbId_ = preparedOverlay_ ? preparedOverlay_->fbId : 0;
@@ -1215,6 +1216,10 @@ public:
       pendingDirectScanoutState_.reset();
       clearPreparedOverlayCandidate();
       pageFlipPending_ = true;
+      if (output_) {
+        output_->setAtomicPageFlipPending(true);
+        output_->markAtomicCursorScheduled();
+      }
       return pendingTiming_.presentId;
     } catch (...) {
       resetReusableAtomicRequest();
@@ -1533,7 +1538,6 @@ public:
         }
         throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit direct scanout");
       }
-      if (output_) output_->markAtomicCursorScheduled();
       pendingBuffer_ = displayedBuffer_;
       pendingOverlayPlaneId_ = 0;
       pendingOverlayFbId_ = 0;
@@ -1545,6 +1549,10 @@ public:
       pendingDirectScanoutState_->acquireFenceFd = -1;
       clearPreparedDirectScanout();
       pageFlipPending_ = true;
+      if (output_) {
+        output_->setAtomicPageFlipPending(true);
+        output_->markAtomicCursorScheduled();
+      }
       return pendingTiming_.presentId;
     } catch (...) {
       resetReusableAtomicRequest();
@@ -1589,7 +1597,6 @@ public:
         }
         throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit direct scanout repeat");
       }
-      if (output_) output_->markAtomicCursorScheduled();
       pendingBuffer_ = displayedBuffer_;
       pendingOverlayPlaneId_ = 0;
       pendingOverlayFbId_ = 0;
@@ -1599,6 +1606,10 @@ public:
       pendingDirectScanoutBufferId_ = repeat.bufferId;
       pendingDirectScanoutState_ = repeat;
       pageFlipPending_ = true;
+      if (output_) {
+        output_->setAtomicPageFlipPending(true);
+        output_->markAtomicCursorScheduled();
+      }
       return pendingTiming_.presentId;
     } catch (...) {
       resetReusableAtomicRequest();
@@ -1728,7 +1739,6 @@ public:
         }
         throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit");
       }
-      if (output_) output_->markAtomicCursorScheduled();
       if (useRenderFence) {
         closeRenderFence(buffer);
         buffer.renderComplete = true;
@@ -1737,19 +1747,19 @@ public:
         drmModeDestroyPropertyBlob(fd_, damageBlob);
         damageBlob = 0;
       }
-	      modesetDone_ = true;
-	      pendingBuffer_ = index;
-	      if (buffer.partialFrame) {
-	        markPrimaryDamagePresented(index, buffer.damageRects);
-	      } else {
-	        markPrimaryDamagePresented(index, {});
-	      }
-	      buffer.prepared = false;
-	      buffer.discardWhenReady = false;
-	      buffer.damageRects.clear();
-	      buffer.scanoutCopyRects.clear();
-	      buffer.partialFrame = false;
-	      buffer.primaryContentsValid = true;
+      modesetDone_ = true;
+      pendingBuffer_ = index;
+      if (buffer.partialFrame) {
+        markPrimaryDamagePresented(index, buffer.damageRects);
+      } else {
+        markPrimaryDamagePresented(index, {});
+      }
+      buffer.prepared = false;
+      buffer.discardWhenReady = false;
+      buffer.damageRects.clear();
+      buffer.scanoutCopyRects.clear();
+      buffer.partialFrame = false;
+      buffer.primaryContentsValid = true;
       if (activePreparedBuffer_ == index) activePreparedBuffer_ = -1;
       pendingOverlayPlaneId_ = preparedOverlay_ ? preparedOverlay_->planeId : 0;
       pendingOverlayFbId_ = preparedOverlay_ ? preparedOverlay_->fbId : 0;
@@ -1761,6 +1771,10 @@ public:
       clearPreparedOverlayCandidate();
       clearPreparedDirectScanout();
       pageFlipPending_ = true;
+      if (output_) {
+        output_->setAtomicPageFlipPending(true);
+        output_->markAtomicCursorScheduled();
+      }
       return pendingTiming_.presentId;
     } catch (...) {
       resetReusableAtomicRequest();
@@ -1831,6 +1845,7 @@ public:
     pendingDirectScanoutState_.reset();
     pruneOverlayFramebufferCache();
     pageFlipPending_ = false;
+    if (output_) output_->setAtomicPageFlipPending(false);
     return pendingTiming_;
   }
 
@@ -1840,6 +1855,7 @@ public:
 
   void syncModeStateFromKernel() noexcept {
     modesetDone_ = currentKernelModeMatchesTarget();
+    if (output_) output_->setAtomicPageFlipPending(false);
     clearPreparedOverlayCandidate();
     clearPreparedDirectScanout();
   }
@@ -3288,6 +3304,7 @@ private:
         pendingDirectScanoutState_.reset();
         pruneOverlayFramebufferCache();
         pageFlipPending_ = false;
+        if (output_) output_->setAtomicPageFlipPending(false);
       }
     }
   }
@@ -3525,6 +3542,10 @@ void KmsOutput::Impl::markAtomicCursorScheduled() const noexcept {
   atomicCursorActive_ = cursorVisible_ && atomicCursorPlaneId_ != 0 && cursorBuffer_.fbId != 0;
 }
 
+void KmsOutput::Impl::setAtomicPageFlipPending(bool pending) const noexcept {
+  atomicPageFlipPending_ = pending;
+}
+
 drmModeAtomicReq* KmsOutput::Impl::cursorAtomicRequest() const noexcept {
   if (!atomicCursorRequest_) {
     atomicCursorRequest_ = drmModeAtomicAlloc();
@@ -3539,6 +3560,13 @@ bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool vi
   if (!ensureAtomicCursorPlane()) return false;
   if (visible && (cursorBuffer_.fbId == 0 || cursorBuffer_.width == 0 || cursorBuffer_.height == 0)) return false;
 
+  cursorX_ = x;
+  cursorY_ = y;
+  if (atomicPageFlipPending_) {
+    atomicCursorActive_ = false;
+    return false;
+  }
+
   int const fd = drmFd();
   if (fd < 0) return false;
   drmModeAtomicReq* request = cursorAtomicRequest();
@@ -3546,8 +3574,6 @@ bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool vi
   bool committed = false;
   int commitErrno = 0;
   try {
-    cursorX_ = x;
-    cursorY_ = y;
     if (visible) {
       committed = addAtomicCursorProperties(request) &&
                   drmModeAtomicCommit(fd, request, DRM_MODE_ATOMIC_NONBLOCK, nullptr) == 0;
