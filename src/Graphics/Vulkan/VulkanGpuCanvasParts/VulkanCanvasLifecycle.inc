@@ -60,6 +60,10 @@ public:
     return getPastPresentationTiming_ != nullptr && swapchain_ != VK_NULL_HANDLE;
   }
 
+  bool usesMailboxPresentMode() const noexcept {
+    return swapchain_ != VK_NULL_HANDLE && presentMode_ == VK_PRESENT_MODE_MAILBOX_KHR;
+  }
+
   bool setImagePremultipliedAlpha(bool enabled) {
     bool const previous = imagePremultipliedAlpha_;
     imagePremultipliedAlpha_ = enabled;

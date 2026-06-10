@@ -1314,6 +1314,17 @@ public:
       return;
     }
     framePending_ = true;
+    if (!vulkanCanvasUsesMailboxPresentMode(canvas_)) {
+      if (detail::resizeTraceEnabled()) {
+        LAMBDA_RESIZE_TRACE("wayland-window", "request-frame-fifo window=%u size=%dx%d\n",
+                     handle_, static_cast<int>(std::lround(size_.width)),
+                     static_cast<int>(std::lround(size_.height)));
+      }
+      auto& queue = Application::instance().eventQueue();
+      queue.post(FrameEvent{nowNanos(), handle_});
+      wakeEventLoop();
+      return;
+    }
     if (detail::resizeTraceEnabled()) {
       LAMBDA_RESIZE_TRACE("wayland-window", "request-frame window=%u size=%dx%d\n",
                    handle_, static_cast<int>(std::lround(size_.width)),

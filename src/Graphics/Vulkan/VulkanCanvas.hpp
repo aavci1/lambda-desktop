@@ -78,6 +78,7 @@ bool drawVulkanCalloutMaterial(Canvas* canvas,
                                float arrowWidth,
                                float arrowHeight);
 bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas);
+bool vulkanCanvasUsesMailboxPresentMode(Canvas* canvas);
 std::uint32_t lastVulkanCanvasPresentId(Canvas* canvas);
 std::vector<VulkanPastPresentationTiming> pollVulkanCanvasPastPresentationTimings(Canvas* canvas);
 

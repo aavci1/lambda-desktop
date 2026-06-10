@@ -37,6 +37,7 @@
         break;
       }
     }
+    presentMode_ = mode;
     std::uint32_t const requestedW =
         static_cast<std::uint32_t>(std::max({1, framebufferWidth_, swapchainTargetWidth_}));
     std::uint32_t const requestedH =
@@ -86,7 +87,7 @@
     info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.preTransform = caps.currentTransform;
     info.compositeAlpha = chooseCompositeAlpha(caps.supportedCompositeAlpha);
-    info.presentMode = mode;
+    info.presentMode = presentMode_;
     info.clipped = VK_TRUE;
     info.oldSwapchain = oldSwapchain;
     vkCheck(vkCreateSwapchainKHR(device_, &info, nullptr, &swapchain_), "vkCreateSwapchainKHR");

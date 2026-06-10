@@ -47,6 +47,7 @@
   std::size_t resetFrameFenceIndex_ = kNoResetFrameFence;
   std::size_t currentFrame_ = 0;
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
+  VkPresentModeKHR presentMode_ = VK_PRESENT_MODE_FIFO_KHR;
   VkSurfaceFormatKHR surfaceFormat_{};
   VkExtent2D swapExtent_{};
   std::vector<VkImage> swapchainImages_;

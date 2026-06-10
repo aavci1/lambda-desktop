@@ -302,7 +302,7 @@ What to do:
 What to do:
 
 - [x] [Auto] Call `Application::flushRedraw()` from `frameDone` after dispatch (mirroring macOS), or re-run the present pass after Wayland dispatch within the same loop iteration.
-- [ ] [Auto] When the active present mode is FIFO (no MAILBOX), drop the `wl_frame` gate and let FIFO pace presentation; keep the gate under MAILBOX. Consider `VK_PRESENT_MODE_FIFO_RELAXED_KHR` where available.
+- [x] [Auto] When the active present mode is FIFO (no MAILBOX), drop the `wl_frame` gate and let FIFO pace presentation; keep the gate under MAILBOX. Consider `VK_PRESENT_MODE_FIFO_RELAXED_KHR` where available.
 - [ ] [Auto] Legacy CVDisplayLink path: `CFRunLoopPerformBlock` to the main run loop with `flushRedraw`, matching the modern CADisplayLink path.
 - [x] [Auto] Document (or unify) the `requireFrameReady` asymmetry between `Application.cpp` exec and `Application.mm flushRedraw` so future platform work doesn't diverge further.
 

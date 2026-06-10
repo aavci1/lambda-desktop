@@ -164,6 +164,11 @@ bool vulkanCanvasSupportsDisplayTiming(Canvas* canvas) {
   return vulkan && vulkan->supportsDisplayTiming();
 }
 
+bool vulkanCanvasUsesMailboxPresentMode(Canvas* canvas) {
+  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
+  return vulkan && vulkan->usesMailboxPresentMode();
+}
+
 std::uint32_t lastVulkanCanvasPresentId(Canvas* canvas) {
   auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
   return vulkan ? vulkan->lastPresentId() : 0u;
