@@ -150,6 +150,39 @@ struct RegionStats {
   std::uint64_t pixels = 0;
 };
 
+struct LoopSurfaceSnapshotCache {
+  std::vector<CommittedSurfaceSnapshot> surfaces;
+  std::optional<CommittedSurfaceSnapshot> softwareCursor;
+  bool surfacesValid = false;
+  bool softwareCursorValid = false;
+  bool softwareCursorRequested = false;
+
+  void reset() {
+    surfacesValid = false;
+    softwareCursorValid = false;
+    softwareCursorRequested = false;
+    surfaces.clear();
+    softwareCursor.reset();
+  }
+
+  std::vector<CommittedSurfaceSnapshot> const& committedSurfaces(WaylandServer& wayland) {
+    if (!surfacesValid) {
+      surfaces = wayland.committedSurfaces();
+      surfacesValid = true;
+    }
+    return surfaces;
+  }
+
+  std::optional<CommittedSurfaceSnapshot> const& cursorSurface(WaylandServer& wayland, bool requested) {
+    if (!softwareCursorValid || softwareCursorRequested != requested) {
+      softwareCursor = requested ? wayland.cursorSurface() : std::optional<CommittedSurfaceSnapshot>{};
+      softwareCursorValid = true;
+      softwareCursorRequested = requested;
+    }
+    return softwareCursor;
+  }
+};
+
 struct ActiveWindowScreenshotTarget {
   ScreenshotRegion region;
   CornerRadius cornerRadius{};
@@ -533,11 +566,19 @@ struct SnapAnimationTrace {
                  directory.string().c_str());
   }
 
-  void recordFrame(WaylandServer const& wayland, AtomicReadyFrame const* readyFrame, bool renderAheadFrame) {
+  void recordFrame(WaylandServer const& wayland,
+                   std::vector<CommittedSurfaceSnapshot> const* surfacesOverride,
+                   AtomicReadyFrame const* readyFrame,
+                   bool renderAheadFrame) {
     if (!enabled || !csv || frames >= maxFrames) return;
     std::uint64_t const nowNsec = monotonicNanoseconds();
     double const nowMs = static_cast<double>(nowNsec) / 1'000'000.0;
-    auto surfaces = wayland.committedSurfaces();
+    std::vector<CommittedSurfaceSnapshot> localSurfaces;
+    std::vector<CommittedSurfaceSnapshot> const* surfaces = surfacesOverride;
+    if (!surfaces) {
+      localSurfaces = wayland.committedSurfaces();
+      surfaces = &localSurfaces;
+    }
     bool const snapPreview = wayland.snapPreview().has_value();
     bool const activeAnimations = wayland.hasActiveAnimations();
     auto const writeCommon = [&](char const* event, std::uint64_t surfaceId) {
@@ -548,7 +589,7 @@ struct SnapAnimationTrace {
           << wayland.contentSerial() << ','
           << wayland.logicalOutputWidth() << ','
           << wayland.logicalOutputHeight() << ','
-          << surfaces.size() << ','
+          << surfaces->size() << ','
           << (snapPreview ? 1 : 0) << ','
           << (activeAnimations ? 1 : 0) << ','
           << surfaceId << ',';
@@ -566,7 +607,7 @@ struct SnapAnimationTrace {
         << profile.surfaceMs << ','
         << profile.presentMs << '\n';
 
-    for (auto const& surface : surfaces) {
+    for (auto const& surface : *surfaces) {
       double const configureToCommitMs =
           surface.lastConfigureSentNsec > 0 && surface.lastCommitNsec >= surface.lastConfigureSentNsec
               ? static_cast<double>(surface.lastCommitNsec - surface.lastConfigureSentNsec) / 1'000'000.0
@@ -1702,6 +1743,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       });
       return true;
     };
+    LoopSurfaceSnapshotCache loopSnapshots;
     CompositorRenderFrameContext renderFrameCtx{
         .wayland = wayland,
         .output = output,
@@ -1748,6 +1790,16 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       renderFrameCtx.screenshotFlashOpacity = screenshotFlashOpacityAt(frameTime);
       renderFrameCtx.vulkanDisplayTimingSupportLogged = displayTimingSupportLogged;
       renderFrameCtx.useVulkanPresentationCompletion = useVulkanPresentationCompletion;
+      std::vector<CommittedSurfaceSnapshot> const* cachedCommittedSurfaces = nullptr;
+      std::optional<CommittedSurfaceSnapshot> const* cachedSoftwareCursor = nullptr;
+      if (!renderFrameCtx.idleBlanked) {
+        cachedCommittedSurfaces = &loopSnapshots.committedSurfaces(wayland);
+        bool const softwareCursorRequested =
+            !renderFrameCtx.appliedConfig.config.hardwareCursorEnabled || !renderFrameCtx.hardwareCursorAvailable;
+        cachedSoftwareCursor = &loopSnapshots.cursorSurface(wayland, softwareCursorRequested);
+      }
+      renderFrameCtx.committedSurfaces = cachedCommittedSurfaces;
+      renderFrameCtx.softwareCursorSnapshot = cachedSoftwareCursor;
       lambda::compositor::renderCompositorFrame(renderFrameCtx, frameTime, renderStart, presentationTiming, renderAheadFrame);
       if (atomicRenderedFrame.ready) {
         if ((atomicRenderedFrame.overlayOnly || atomicRenderedFrame.directScanout) && presenter->atomicPresenter()) {
@@ -1770,6 +1822,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       useVulkanPresentationCompletion = renderFrameCtx.useVulkanPresentationCompletion;
       if (snapTraceThisFrame) {
         snapAnimationTrace.recordFrame(wayland,
+                                       cachedCommittedSurfaces,
                                        atomicReadyFrames.empty() ? nullptr : &atomicReadyFrames.back(),
                                        renderAheadFrame);
       }
@@ -1810,6 +1863,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     auto noteContentSerialChange = [&] {
       std::uint64_t const contentSerial = wayland.contentSerial();
       if (contentSerial == lastKnownContentSerial) return false;
+      loopSnapshots.reset();
       atomicFrameDirty = true;
       lastKnownContentSerial = contentSerial;
       return true;
@@ -1854,11 +1908,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
 
       auto const traceStart = diagnostics::cpuTraceNow();
-      std::optional<CommittedSurfaceSnapshot> softwareCursorSnapshot;
-      if (!appliedConfig.config.hardwareCursorEnabled || !hardwareCursorAvailable) {
-        softwareCursorSnapshot = wayland.cursorSurface();
-      }
-      auto const committedSurfaces = wayland.committedSurfaces();
+      bool const softwareCursorRequested = !appliedConfig.config.hardwareCursorEnabled || !hardwareCursorAvailable;
+      auto const& softwareCursorSnapshot = loopSnapshots.cursorSurface(wayland, softwareCursorRequested);
+      auto const& committedSurfaces = loopSnapshots.committedSurfaces(wayland);
       CompositorSceneFramePlan scenePlan =
           buildCompositorSceneFrame(surfaceRenderState.sceneGraph,
                                     CompositorSceneFrameInput{
@@ -1901,9 +1953,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     };
 
     while (running.load(std::memory_order_relaxed) && !device->shouldTerminate()) {
+      loopSnapshots.reset();
       ++loopStats.loops;
       diagnostics::recordCpuLoop();
       wayland.dispatchShellIpc();
+      loopSnapshots.reset();
       auto const animationCheckTime = std::chrono::steady_clock::now();
       bool const animationFrameNeeded =
           wayland.hasActiveAnimations() ||
@@ -2013,15 +2067,18 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const acquireWaitFrameCallbackSent = maybeSendAcquireWaitFrameCallback();
       if (shellWoke) {
         wayland.dispatchShellIpc();
+        loopSnapshots.reset();
       }
       if (waylandWoke) {
         timingStart = LoopInstrumentation::Clock::now();
         wayland.dispatch();
+        loopSnapshots.reset();
         loopStats.recordDispatch(timingStart);
         bool const contentChanged = noteContentSerialChange();
         diagnostics::recordWaylandDispatch(contentChanged);
       }
       wayland.dispatchShellIpc();
+      loopSnapshots.reset();
       queueScreenshotIfRequested();
       maybeCrashHeartbeat("main-loop");
       bool const hadInputActivity = inputActivityThisLoop;
@@ -2074,6 +2131,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         timingStart = LoopInstrumentation::Clock::now();
         wayland.dispatch();
         wayland.dispatchShellIpc();
+        loopSnapshots.reset();
         loopStats.recordDispatch(timingStart);
         bool const contentChanged = noteContentSerialChange();
         diagnostics::recordWaylandDispatch(contentChanged);
@@ -2283,6 +2341,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       timingStart = LoopInstrumentation::Clock::now();
       wayland.dispatch();
       wayland.dispatchShellIpc();
+      loopSnapshots.reset();
       loopStats.recordDispatch(timingStart);
       bool const contentChanged = noteContentSerialChange();
       diagnostics::recordWaylandDispatch(contentChanged);

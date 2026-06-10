@@ -62,6 +62,8 @@ struct CompositorRenderFrameContext {
   bool hardwareCursorAvailable = false;
   float screenshotFlashOpacity = 0.f;
   bool detailedFrameProfile = false;
+  std::vector<CommittedSurfaceSnapshot> const* committedSurfaces = nullptr;
+  std::optional<CommittedSurfaceSnapshot> const* softwareCursorSnapshot = nullptr;
   AtomicReadyFrame* atomicReadyFrame = nullptr;
   bool* atomicFrameDirty = nullptr;
   std::uint64_t* lastKnownContentSerial = nullptr;

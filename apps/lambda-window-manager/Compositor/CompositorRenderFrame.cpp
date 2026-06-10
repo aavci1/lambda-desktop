@@ -674,14 +674,25 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   }
   auto snapPreview = ctx.wayland.snapPreview();
   bool snapPreviewDrawn = false;
-  auto committedSurfaces = ctx.wayland.committedSurfaces();
+  std::vector<CommittedSurfaceSnapshot> localCommittedSurfaces;
+  std::vector<CommittedSurfaceSnapshot> const* committedSurfacesPtr = ctx.committedSurfaces;
+  if (!committedSurfacesPtr) {
+    localCommittedSurfaces = ctx.wayland.committedSurfaces();
+    committedSurfacesPtr = &localCommittedSurfaces;
+  }
+  std::vector<CommittedSurfaceSnapshot> const& committedSurfaces = *committedSurfacesPtr;
   committedSurfaceCount = committedSurfaces.size();
   auto screenshotOverlay = ctx.wayland.screenshotSelectionOverlay();
   auto windowCyclerOverlay = ctx.wayland.windowCyclerOverlay();
-  std::optional<CommittedSurfaceSnapshot> softwareCursorSnapshot;
-  if (!ctx.appliedConfig.config.hardwareCursorEnabled || !ctx.hardwareCursorAvailable) {
-    softwareCursorSnapshot = ctx.wayland.cursorSurface();
+  std::optional<CommittedSurfaceSnapshot> localSoftwareCursorSnapshot;
+  std::optional<CommittedSurfaceSnapshot> const* softwareCursorSnapshotPtr = ctx.softwareCursorSnapshot;
+  if (!softwareCursorSnapshotPtr) {
+    if (!ctx.appliedConfig.config.hardwareCursorEnabled || !ctx.hardwareCursorAvailable) {
+      localSoftwareCursorSnapshot = ctx.wayland.cursorSurface();
+    }
+    softwareCursorSnapshotPtr = &localSoftwareCursorSnapshot;
   }
+  std::optional<CommittedSurfaceSnapshot> const& softwareCursorSnapshot = *softwareCursorSnapshotPtr;
   bool const forceFullSceneDamage =
       snapPreview.has_value() ||
       screenshotOverlay.has_value() ||

@@ -210,7 +210,7 @@ Verification on Linux (KMS TTY, ideally 4K):
 
 What to do:
 
-- [ ] [Auto] Build `committedSurfaces()` once per loop iteration and pass it to both consumers; longer term, keep a persistent snapshot store updated on `contentSerial` change and expose `std::span<CommittedSurfaceSnapshot const>`.
+- [x] [Auto] Build `committedSurfaces()` once per loop iteration and pass it to both consumers; longer term, keep a persistent snapshot store updated on `contentSerial` change and expose `std::span<CommittedSurfaceSnapshot const>`.
 - [ ] [Auto] Replace retained scene-state snapshots and `visual.lastSnapshot` with a trimmed struct (id, serial, geometry, mapping, chrome hash) — no strings, no blur-rect vectors.
 - [ ] [Auto] Upload SHM damage directly from the mapped buffer with a row stride (extend `Image::updatePixelsRegion` to take stride) and reuse a persistent staging buffer per surface; coalesce adjacent rects first (shares the merge helper from FP-2).
 - [ ] [Auto] Allow `TextNode` to prepare render ops for static layouts (key the cache on layout pointer + dpiScale; invalidate via the existing glyph-atlas generation check).
