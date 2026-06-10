@@ -869,13 +869,13 @@ public:
   }
 
   [[nodiscard]] bool canPreparePartialFrame(std::span<KmsAtomicPresenter::DamageRect const> damage) const noexcept {
-    if (damage.empty() || !modesetDone_ || pageFlipPending_ || pendingBuffer_ >= 0 ||
-        renderBuffer_ < 0 || displayedBuffer_ < 0) {
+    if (damage.empty() || !modesetDone_ || pageFlipPending_ || renderBuffer_ < 0 || displayedBuffer_ < 0) {
       return false;
     }
     if (activeDirectScanout_ || pendingDirectScanout_ || activeOverlayPlaneId_ != 0 || pendingOverlayPlaneId_ != 0) {
       return false;
     }
+    if (displayedBuffer_ == pendingBuffer_) return false;
     if (displayedBuffer_ >= static_cast<int>(buffers_.size()) ||
         renderBuffer_ >= static_cast<int>(buffers_.size())) {
       return false;

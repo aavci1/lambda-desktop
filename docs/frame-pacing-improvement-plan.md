@@ -188,9 +188,9 @@ Verification on Linux (KMS TTY):
 
 What to do:
 
-- [ ] [Auto] When `buffer.damageRects` is non-empty, issue one `VkImageCopy` region per (merged) damage rect for both the displayed-primary preservation copy and the offscreen→scanout copy, instead of full-extent copies.
-- [ ] [Auto] Relax `canPreparePartialFrame` to gate on `pageFlipPending_` only, provided the partial source buffer is not the pending one.
-- [ ] [Auto] Prefer direct scanout (`directScanoutRender_`) when modifiers allow — audit why it is not chosen on the test hardware and log the reason once at startup.
+- [x] [Auto] When `buffer.damageRects` is non-empty, issue one `VkImageCopy` region per (merged) damage rect for both the displayed-primary preservation copy and the offscreen→scanout copy, instead of full-extent copies.
+- [x] [Auto] Relax `canPreparePartialFrame` to gate on `pageFlipPending_` only, provided the partial source buffer is not the pending one.
+- [x] [Auto] Prefer direct scanout (`directScanoutRender_`) when modifiers allow — audit why it is not chosen on the test hardware and log the reason once at startup.
 - [ ] [Auto] Low priority, same file: reuse the `drmModeAtomicAlloc` request across commits if the driver allows (allocation per schedule at `CompositorRuntime.cpp:1496-1534`).
 
 Verification on Linux (KMS TTY, ideally 4K):
