@@ -3858,9 +3858,12 @@ bool KmsOutput::setCursorImage(std::span<std::uint32_t const> premultipliedArgbP
 bool KmsOutput::moveCursor(std::int32_t x, std::int32_t y) const {
   if (!impl_ || !impl_->cursorVisible_) return false;
   if (impl_->atomicCursorAvailable_ || !impl_->atomicCursorInitialized_) {
-    impl_->cursorX_ = x;
-    impl_->cursorY_ = y;
-    if (impl_->ensureAtomicCursorPlane()) return true;
+    if (impl_->ensureAtomicCursorPlane()) {
+      if (impl_->atomicCursorActive_ && impl_->cursorX_ == x && impl_->cursorY_ == y) {
+        return true;
+      }
+      return impl_->commitAtomicCursor(x, y, true);
+    }
   }
   return drmModeMoveCursor(impl_->drmFd(), impl_->connector_.crtcId, x, y) == 0;
 }

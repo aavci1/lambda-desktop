@@ -667,7 +667,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     auto lastInputActivity = SteadyClock::now();
     bool inputActivityThisLoop = false;
     bool inputRenderRequiredThisLoop = false;
-    bool inputHardwareCursorFrameRequiredThisLoop = false;
     bool idleBlanked = false;
     bool displayTimingSupportLogged = false;
     bool useVulkanPresentationCompletion = false;
@@ -800,7 +799,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                     cursorState,
                                     appliedConfig.config.hardwareCursorEnabled && hardwareCursorAvailable);
       if (hardwareCursorMoved) {
-        inputHardwareCursorFrameRequiredThisLoop = true;
+        return;
       } else {
         inputRenderRequiredThisLoop = true;
       }
@@ -1832,13 +1831,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                                  bool screenshotFlashFrameNeededNow,
                                                  bool snapPreviewFrameNeededNow,
                                                  bool windowCyclerFrameNeededNow,
-                                                 bool inputHardwareCursorFrameRequiredNow,
                                                  bool inputRenderRequiredNow,
                                                  bool configReloadedNow) {
       if (!presenter->atomicPresenter() || !atomicFrameDirty) return false;
       if (presenter->atomicPresenter()->hasPendingPageFlip() || !atomicReadyFrames.empty()) return false;
       if (forceRender || animationFrameNeededNow || screenshotFlashFrameNeededNow ||
-          snapPreviewFrameNeededNow || windowCyclerFrameNeededNow || inputHardwareCursorFrameRequiredNow ||
+          snapPreviewFrameNeededNow || windowCyclerFrameNeededNow ||
           inputRenderRequiredNow || configReloadedNow || wayland.hasPendingFrameCallbacks()) {
         return false;
       }
@@ -2016,12 +2014,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       maybeCrashHeartbeat("main-loop");
       bool const hadInputActivity = inputActivityThisLoop;
       bool const inputRenderRequired = inputRenderRequiredThisLoop;
-      bool const inputHardwareCursorFrameRequired = inputHardwareCursorFrameRequiredThisLoop;
       if (hadInputActivity) {
         lastInputActivity = SteadyClock::now();
         inputActivityThisLoop = false;
         inputRenderRequiredThisLoop = false;
-        inputHardwareCursorFrameRequiredThisLoop = false;
       }
       ++loopStats.configChecks;
       bool configReloaded = false;
@@ -2073,7 +2069,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           lastInputActivity = SteadyClock::now();
           inputActivityThisLoop = false;
           inputRenderRequiredThisLoop = false;
-          inputHardwareCursorFrameRequiredThisLoop = false;
         }
         if (!device->isVtForeground()) {
           loopStats.maybeLog();
@@ -2106,13 +2101,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       std::optional<int> const windowCyclerDelay = wayland.windowCyclerWakeDelayMs();
       bool const windowCyclerFrameNeeded = windowCyclerDelay && *windowCyclerDelay <= 0;
       bool const screenshotFlashFrameNeeded = screenshotFlashStartedAt.has_value();
-      if (forceRender || pollResult.inputOrSystem || waylandWoke || inputRenderRequired ||
-          inputHardwareCursorFrameRequired || configReloaded ||
+      if (forceRender || pollResult.inputOrSystem || waylandWoke || inputRenderRequired || configReloaded ||
           animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded || windowCyclerFrameNeeded ||
           diagnosticExerciseChanged ||
           acquireWaitFrameCallbackSent) {
         if (!presenter->atomicPresenter() || forceRender || waylandWoke || inputRenderRequired ||
-            inputHardwareCursorFrameRequired || configReloaded ||
+            configReloaded ||
             animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded || windowCyclerFrameNeeded ||
             diagnosticExerciseChanged) {
           atomicFrameDirty = true;
@@ -2120,12 +2114,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
       bool const emptyDamageSkipped =
           tryClearAtomicDirtyForEmptyDamage(animationFrameNeeded,
-                                            screenshotFlashFrameNeeded,
-                                            snapPreviewFrameNeeded,
-                                            windowCyclerFrameNeeded,
-                                            inputHardwareCursorFrameRequired,
-                                            inputRenderRequired,
-                                            configReloaded);
+	                                            screenshotFlashFrameNeeded,
+	                                            snapPreviewFrameNeeded,
+	                                            windowCyclerFrameNeeded,
+	                                            inputRenderRequired,
+	                                            configReloaded);
       bool const atomicPageFlipPending = presenter->atomicPresenter() && presenter->atomicPresenter()->hasPendingPageFlip();
       bool const queuedAtomicCanSchedule = queuedAtomicScheduleCandidate().has_value();
       bool const atomicFrameBlocked =
