@@ -1999,15 +1999,21 @@ CVReturn MacMetalWindow::onDisplayLinkTick() {
   FrameEvent event{};
   event.deadlineNanos = nowSteadyClockNanos();
   event.windowHandle = handle();
-  if ([NSThread isMainThread]) {
+  auto dispatchAndFlush = ^{
+    if (!Application::hasInstance()) {
+      return;
+    }
     Application& app = Application::instance();
     app.eventQueue().post(event);
     app.eventQueue().dispatch();
     app.flushRedraw();
+  };
+  if ([NSThread isMainThread]) {
+    dispatchAndFlush();
     return kCVReturnSuccess;
   }
-  Application::instance().eventQueue().post(event);
-  wakeEventLoop();
+  CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, dispatchAndFlush);
+  CFRunLoopWakeUp(CFRunLoopGetMain());
   return kCVReturnSuccess;
 }
 
