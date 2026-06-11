@@ -60,7 +60,9 @@ void AsyncWallpaperLoader::workerMain(std::string path,
       if (presentation::timingTraceEnabled()) {
         LAMBDA_WINDOW_MANAGER_TRACE_TIMING("wallpaper-downscale", beforeDownscale);
       }
-      writeWallpaperCache(sourcePath, maxLongEdge, cacheRoot, *decoded);
+      if (!writeWallpaperCache(sourcePath, maxLongEdge, cacheRoot, *decoded)) {
+        std::fprintf(stderr, "lambda-window-manager: failed to write wallpaper cache for %s\n", path.c_str());
+      }
     }
   }
 

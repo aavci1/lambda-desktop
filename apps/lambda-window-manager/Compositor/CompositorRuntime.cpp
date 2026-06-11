@@ -801,11 +801,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         .canvas = *canvas,
         .effectiveConfig = effectiveConfig,
         .applyOutputScale = applyOutputScale,
+        .wallpaperCacheDir = wallpaperCacheDirectory(device->cacheDir()),
     };
     AsyncWallpaperLoader wallpaperLoader;
     configWatch.wallpaperLoader = &wallpaperLoader;
     configWatch.wallpaperMaxLongEdge = std::max(output.width(), output.height());
-    configWatch.wallpaperCacheDir = wallpaperCacheDirectory(device->cacheDir());
     applyCompositorRuntimeConfig(configWatch, true);
     applyDiagnosticFloorChrome(wayland, appliedConfig);
 
