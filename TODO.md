@@ -145,8 +145,9 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add and run the static decorated-surface cache verifier; latest run showed 500 surface draw-cache hits, 1 miss, zero transient-chrome blocks, and surface avg/max 0.011/0.012 ms.
 - [x] [Auto] Add and run the KMS synthetic chrome hover/press verifier; latest run drove close-button move, press, move-away, and release events, with 4 surface draw-cache hits, 1 miss, and zero transient-chrome blocks.
 - [x] [Auto] Harden sampled CPU tracing so pointer motion no longer crashes inside the sampler signal handler; latest KMS pointer verifier survived 180 synthetic pointer events with sampled trace output and no new compositor coredump.
-- [x] [Auto] Add and run the scripted resize-storm verifier; latest run exercised 18 resize/configure events, 522 sizing cache-block samples, zero fatal matches, and surface avg/max 1.020/1.202 ms.
+- [x] [Auto] Add and run the scripted resize-storm verifier; latest run exercised 18 resize/configure events, 522 sizing cache-block samples, zero fatal matches, and surface avg/max 1.117/1.299 ms.
 - [x] [Auto] Add and run ASan coverage for capture-heavy Vulkan recorder/render-target tests; latest run passed 22 cases/170 assertions and covered replay after the recording canvas is destroyed.
+- [x] [Auto] Rerun the full Linux verifier under `perf stat`; latest run passed atomic, pointer-fast-path, surface-cache, chrome hover/press, resize-storm, and Vulkan-display cases with zero fatal matches, 180/180 pointer fast-path moves, and `perf` counters captured in `.debug-logs/perf/frame-pacing-20260611-102353.stat`.
 - [ ] [Manual] Complete the remaining hardware/visual checks from the plan: validation layers, manual cursor/hardware input-driver checks, resize/drag visual checks, and representative app smoke checks requiring interactive input.
 - [ ] [Auto + Manual] Complete macOS compile/runtime verification for the Metal portions of FP-14/FP-16, including `debug::perf`, full `ctest`, and backdrop blur visual comparison.
 - [ ] [Auto] When the remaining manual/macOS verification is done, delete the plan document and this TODO item.
