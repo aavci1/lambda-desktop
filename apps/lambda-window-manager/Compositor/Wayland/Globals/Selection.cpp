@@ -409,6 +409,8 @@ void clearDndImpl(WaylandServer::Impl* server, bool destroyOffer = true) {
   server->dndSource_ = nullptr;
   server->dndOrigin_ = nullptr;
   server->dndTarget_ = nullptr;
+  if (surfaceIsDragIcon(server->dndIcon_)) server->dndIcon_->role = SurfaceRole::None;
+  server->dndIcon_ = nullptr;
   server->dndOffer_ = nullptr;
 }
 
@@ -483,13 +485,14 @@ void dataDeviceStartDrag(wl_client* client,
                          wl_resource* resource,
                          wl_resource* sourceResource,
                          wl_resource* originResource,
-                         wl_resource*,
+                         wl_resource* iconResource,
                          std::uint32_t serial) {
   auto* device = resourceData<WaylandServer::Impl::DataDevice>(resource);
   if (!device) return;
   auto* server = device->server;
   auto* source = resourceData<WaylandServer::Impl::DataSource>(sourceResource);
   auto* origin = resourceData<WaylandServer::Impl::Surface>(originResource);
+  auto* icon = resourceData<WaylandServer::Impl::Surface>(iconResource);
   if (!origin || wl_resource_get_client(origin->resource) != client) return;
   if (!validSerialForSurface(server, client, origin, serial, kDragStartSerialKinds)) return;
   if (source && !dataSourceCanStartDrag(source->used)) {
@@ -498,10 +501,18 @@ void dataDeviceStartDrag(wl_client* client,
                            "wl_data_device.start_drag source has already been used");
     return;
   }
+  if (!dataDeviceCanUseDragIconSurface(icon != nullptr, surfaceHasNoRole(icon))) {
+    wl_resource_post_error(resource,
+                           WL_DATA_DEVICE_ERROR_ROLE,
+                           "wl_data_device.start_drag icon surface already has a role");
+    return;
+  }
   if (source) source->used = true;
   if (server->dndSource_) clearDndImpl(server);
   server->dndSource_ = source;
   server->dndOrigin_ = origin;
+  server->dndIcon_ = icon;
+  if (server->dndIcon_) server->dndIcon_->role = SurfaceRole::DragIcon;
   if (source && source->resource &&
       wl_resource_get_version(source->resource) >= WL_DATA_SOURCE_ACTION_SINCE_VERSION) {
     wl_data_source_send_action(source->resource, WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE);

@@ -36,6 +36,7 @@ enum class SurfaceRole : std::uint8_t {
   LayerSurface,
   Subsurface,
   Cursor,
+  DragIcon,
 };
 
 enum class SeatSerialKind : std::uint8_t {
@@ -295,6 +296,7 @@ struct WaylandServer::Impl {
   DataSource* dndSource_ = nullptr;
   Surface* dndOrigin_ = nullptr;
   Surface* dndTarget_ = nullptr;
+  Surface* dndIcon_ = nullptr;
   DataOffer* dndOffer_ = nullptr;
   std::vector<wl_resource*> seatResources_;
   std::vector<wl_resource*> outputResources_;
@@ -625,6 +627,10 @@ inline bool surfaceIsSubsurface(WaylandServer::Impl::Surface const* surface) {
 
 inline bool surfaceIsCursor(WaylandServer::Impl::Surface const* surface) {
   return surface && surface->role == SurfaceRole::Cursor;
+}
+
+inline bool surfaceIsDragIcon(WaylandServer::Impl::Surface const* surface) {
+  return surface && surface->role == SurfaceRole::DragIcon;
 }
 
 inline bool surfaceIsTopLevelRenderable(WaylandServer::Impl::Surface const* surface) {

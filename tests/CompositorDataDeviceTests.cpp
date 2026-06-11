@@ -84,3 +84,12 @@ TEST_CASE("data-device source lifecycle validation enforces DnD action ordering"
   CHECK_FALSE(dataSourceCanSetSelection(false, true));
   CHECK_FALSE(dataSourceCanSetSelection(true, true));
 }
+
+TEST_CASE("data-device drag icon validation requires an unassigned surface role") {
+  using namespace lambda::compositor;
+
+  CHECK(dataDeviceCanUseDragIconSurface(false, false));
+  CHECK(dataDeviceCanUseDragIconSurface(false, true));
+  CHECK(dataDeviceCanUseDragIconSurface(true, true));
+  CHECK_FALSE(dataDeviceCanUseDragIconSurface(true, false));
+}

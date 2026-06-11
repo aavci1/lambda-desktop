@@ -190,6 +190,7 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   for (auto& token : activationTokens_) {
     if (token->surface == surface) token->surface = nullptr;
   }
+  if (dndIcon_ == surface) dndIcon_ = nullptr;
 
   while (true) {
     auto child = std::find_if(popups_.begin(), popups_.end(), [surface](auto const& popup) {

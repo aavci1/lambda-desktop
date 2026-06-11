@@ -66,4 +66,8 @@ inline bool dataSourceCanSetSelection(bool actionsAlreadySet, bool sourceAlready
   return !actionsAlreadySet && !sourceAlreadyUsed;
 }
 
+inline bool dataDeviceCanUseDragIconSurface(bool iconProvided, bool surfaceHasNoRole) {
+  return !iconProvided || surfaceHasNoRole;
+}
+
 } // namespace lambda::compositor
