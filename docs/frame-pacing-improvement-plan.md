@@ -13,8 +13,10 @@ Most items require a Linux machine (Wayland and/or KMS from a TTY) to verify. FP
 - [x] Focused KMS tests passed: compositor/Vulkan/presentation/damage/cursor/pointer/seat slice (95 cases, 626 assertions), gradient/image/canvas/terminal slice (34 cases, 274 assertions), and reactive tests (22 cases, 126 assertions).
 - [x] KMS compositor runtime smoke completed with normal-build `lambda-shell`, scripted `lambda-terminal`, and `lambda-editor`; logs had zero fatal/error matches.
 - [x] Runtime traces captured 20 CPU samples, 37 KMS timing windows, 10,712 pacing events, and 900 terminal `vulkan-present-detail` samples. Summary: compositor CPU avg/max 12.54%/15.60%, compositor surface avg/max 0.471/0.632 ms, present avg/max 0.395/0.582 ms, terminal atlas avg 0.004 ms, terminal `waitImage` avg 0.000 ms.
+- [x] Added `scripts/verify-frame-pacing-linux.sh` and `lambda-presentation-feedback-check`. Latest run passed both presenters: atomic-KMS reported `CLOCK_MONOTONIC`, refresh 16,666,666 ns, nonzero sequence, and `VSYNC|HW_CLOCK|HW_COMPLETION`; Vulkan-display reported `CLOCK_MONOTONIC`, refresh 16,666,666 ns, and nonzero sequence. Atomic runtime summary: 20 CPU samples, 31 KMS timing windows, 10,765 pacing events, 861 terminal `vulkan-present-detail` samples, zero fatal matches, CPU avg/max 12.11%/15.30%, terminal `waitImage` avg 0.000 ms, terminal atlas avg 0.004 ms.
 - [ ] Remaining local gap: no pointer-driving tool (`ydotool`, `wtype`, or equivalent) was available, so pointer-motion performance still needs manual or tool-assisted validation.
 - [ ] Remaining environment gap: broad Wayland-display-dependent tests and real-app smoke cases need an already-running external Wayland session or manual app interaction.
+- [ ] Remaining system-tool gap: `vulkan-validation-layers`, `weston`, `wayland-utils`, `ydotool`, and `evemu` are not installed and noninteractive `sudo` is unavailable in this session, so validation-layer and hardware input-driver verification still require a prepared host.
 - [ ] Remaining platform gap: Metal source is not compiled on Linux; macOS compile/runtime verification is still required.
 
 ## Working Environment
@@ -72,7 +74,7 @@ What to do:
 
 Verification on Linux:
 
-- [ ] `LAMBDA_RESIZE_TRACE=1` — the `atlasMs` phase in `vulkan-present-detail` should drop to ~0 on frames that add new glyphs (type rapidly in `lambda-terminal` / `lambda-editor` with a cold atlas).
+- [x] `LAMBDA_RESIZE_TRACE=1` — the `atlasMs` phase in `vulkan-present-detail` should drop to ~0 on frames that add new glyphs (type rapidly in `lambda-terminal` / `lambda-editor` with a cold atlas).
 - [x] `./build/tests/lambda_tests --test-case="*Vulkan*,Compositor*"` (lavapipe OK) — glyph text test (`Vulkan RenderTarget renders glyph atlas text`) still passes.
 - [ ] Validation layers report no missing-barrier or layout errors while scrolling text-heavy content.
 
@@ -343,8 +345,8 @@ What to do:
 
 Verification on Linux (KMS TTY):
 
-- [ ] `weston-presentation-shm` (or equivalent client) reports sane presentation timestamps on both presenters.
-- [ ] With IN_FENCE enabled, CSV `present_ms` shows commit no longer waiting for render-fence readiness.
+- [x] `weston-presentation-shm` (or equivalent client) reports sane presentation timestamps on both presenters.
+- [x] With IN_FENCE enabled, CSV `present_ms` shows commit no longer waiting for render-fence readiness.
 
 ## FP-16: Metal path improvements (macOS — can be done on this machine)
 
