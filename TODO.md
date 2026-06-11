@@ -149,5 +149,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add and run ASan coverage for capture-heavy Vulkan recorder/render-target tests; latest run passed 22 cases/170 assertions and covered replay after the recording canvas is destroyed.
 - [x] [Auto] Rerun the full Linux verifier under `perf stat`; latest run passed atomic, pointer-fast-path, surface-cache, chrome hover/press, resize-storm, and Vulkan-display cases with zero fatal matches, 180/180 pointer fast-path moves, and `perf` counters captured in `.debug-logs/perf/frame-pacing-20260611-102353.stat`.
 - [ ] [Manual] Complete the remaining hardware/visual checks from the plan: validation layers, manual cursor/hardware input-driver checks, resize/drag visual checks, and representative app smoke checks requiring interactive input.
-- [ ] [Auto + Manual] Complete macOS compile/runtime verification for the Metal portions of FP-14/FP-16, including `debug::perf`, full `ctest`, and backdrop blur visual comparison.
-- [ ] [Auto] When the remaining manual/macOS verification is done, delete the plan document and this TODO item.
+- [x] [Auto] macOS compile verification passed (`lambda_tests` including `MetalCanvasTests.mm`; 2026-06-11).
+- [x] [Auto] macOS focused tests passed (`*Metal*,*SceneGraph*` — 20 cases, 133 assertions; 2026-06-11).
+- [ ] [Auto + Manual] Complete remaining macOS runtime verification for FP-14/FP-16: `debug::perf`, full `ctest`, and backdrop-blur visual comparison.
+- [ ] [Auto + Manual] Work through the post-implementation review backlog (REV-V1 … REV-V12, REV-K1 … REV-K8, REV-M1 … REV-M6, REV-W1 … REV-W4, REV-F2/F4/F5/F13) in [docs/frame-pacing-improvement-plan.md](docs/frame-pacing-improvement-plan.md); delete each REV section as fixed.
+- [ ] [Auto] When all REV items, manual verification gaps, and macOS runtime checks are done, delete the plan document and this TODO item.

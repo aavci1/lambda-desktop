@@ -1,10 +1,10 @@
 # Frame Pacing Improvement Plan
 
-**Status:** Code implementation complete; retained as the verification follow-up checklist for manual, validation-layer, hardware input-driver, and macOS checks. Tracked as TODO-019 in [TODO.md](../TODO.md).
+**Status:** FP-1 … FP-16 code landed (`50d65831..HEAD`); post-implementation code review complete (2026-06-11). This document now tracks **open verification gaps** (manual, validation-layer, hardware input) and the **post-implementation review backlog** (REV-*). Tracked as TODO-019 in [TODO.md](../TODO.md).
 **Scope:** `apps/lambda-window-manager/Compositor/`, `src/Platform/Linux/` (KMS + Wayland), `src/Graphics/Vulkan/`, `src/Graphics/Metal/`, `src/Platform/Mac/`, `src/SceneGraph/`, and `src/UI/Application.*`.
-**Source:** Frame-pacing review of commit `ca4466cd` (four parallel code audits; the highest-impact claims verified directly in source). Severity reflects expected impact on smoothness and pacing, not crash risk.
+**Source:** Original frame-pacing audit at `ca4466cd`; implementation review of `50d65831..HEAD` with citation verification against current sources. Severity reflects expected impact on smoothness, pacing, and correctness.
 
-Most items require a Linux machine (Wayland and/or KMS from a TTY) to verify. FP-14 and FP-16 are macOS work and can be done on a Mac. The implementation pass completed on Linux on 2026-06-11; keep this document until the remaining manual/macOS verification is complete, then delete the document and TODO-019.
+Line numbers in the FP-* sections below describe the **original audit context** and are often stale after the implementation pass. Use the **Citation errata** table and the **REV-*** anchors for current file:line references. Delete each REV item as it is fixed; delete this document and TODO-019 when all REV items and verification gaps are closed.
 
 ## Verification Snapshot: 2026-06-11
 
@@ -25,7 +25,10 @@ Most items require a Linux machine (Wayland and/or KMS from a TTY) to verify. FP
 - [ ] Remaining local input gap: `ydotool` and `wtype` are installed and `/dev/input/event0` has an ACL for `aavci`, but `ydotoold` cannot start because `/dev/uinput` is still `root:root` mode `0600`; `evemu-event` is still missing. Real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad real-app visual smoke cases still require manual interaction with a running Lambda compositor session, especially move/drag/resize and cursor visual checks.
 - [ ] Remaining system-tool gap: `wayland-utils` and `evemu` are not installed; `aavci` is in `wheel`, but noninteractive `sudo` still prompts for a password, so this session cannot repair `/dev/uinput` permissions or install the remaining packages.
-- [ ] Remaining platform gap: Metal source is not compiled on Linux; macOS compile/runtime verification is still required.
+- [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
+- [x] macOS focused tests: `*Metal*,*SceneGraph*` — 20 cases, 133 assertions, all passed (2026-06-11).
+- [ ] Remaining macOS runtime gap: `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), full `ctest`, and backdrop-blur visual comparison.
+- [ ] Post-implementation review backlog (REV-*) below — 3 high, 9 medium, 11 low/nit items remain open.
 
 ## Working Environment
 
@@ -49,13 +52,13 @@ Measurement tooling that already exists — use it before and after every change
 
 | Tool | How | What it shows |
 | --- | --- | --- |
-| Vulkan present phases | `LAMBDA_RESIZE_TRACE=1`, `vulkan-present-detail` trace (`VulkanCanvasLifecycle.inc:602-628`) | Per-phase ms: frame fence, acquire, atlas, backdrop prep, upload, record, submit, present |
-| Compositor frame profile CSV | `recordFrame` in `CompositorRuntime.cpp:529-567` | input→render, render-ahead, snapshot/surface/present phase ms |
-| Flip interval error | `intervalErrorMs` trace at `CompositorRuntime.cpp:1634` | Render-ahead lead accuracy vs real flips |
+| Vulkan present phases | `LAMBDA_RESIZE_TRACE=1`, `vulkan-present-detail` trace (`VulkanCanvasLifecycle.inc:633-660`) | Per-phase ms: frame fence, acquire, atlas, backdrop prep, upload, record, submit, present |
+| Compositor frame profile CSV | `SnapAnimationTrace::recordFrame` in `CompositorRuntime.cpp:760-838` (header at `747-754`) | input→render, render-ahead, snapshot/surface/present phase ms |
+| Flip interval error | `intervalErrorMs` trace at `CompositorRuntime.cpp:1883-1887` | Render-ahead lead accuracy vs real flips |
 | Metal counters | `debug::perf` — `CanvasDrawableWait`, `CanvasPresent`, `DisplayLinkToPresent` | Drawable stalls vs present cost on macOS |
 | Validation layers | `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` | Sync/lifetime regressions from any of these changes |
 
-Suggested order: Phase 1 (FP-1 … FP-3) first — small, low-risk, removes the two verified hot-path stalls. Then Phase 2 (FP-4 … FP-6) for interactive smoothness, Phase 3 (FP-7 … FP-9) for steady-state cost, Phase 4 (FP-10 … FP-16) for pipeline depth and latent correctness.
+**Suggested fix order for open REV items:** REV-V1 → REV-K1 → REV-M1/M2/M3 (high-severity regressions), then medium REV-V2 … REV-W2, then lows/nits. Original FP workstreams (FP-1 … FP-16) are marked complete above; remaining manual verification checkboxes under each FP section still apply where unchecked.
 
 ---
 
@@ -387,8 +390,396 @@ Verification on macOS:
 
 ---
 
+# Post-implementation code review backlog
+
+Items found during the 2026-06-11 review of commits `50d65831..HEAD`. Each item has current file:line anchors. Delete the item when fixed and verified.
+
+## High severity
+
+### REV-V1: External-command-buffer render targets never age deferred destroys (KMS memory leak)
+
+**Severity: High (unbounded ~16 MB staging-buffer growth on the compositor output path).**
+
+`retireDeferredResourcesAfterSubmit()` (`VulkanImages.inc:265-269`) runs only after the canvas's own `vkQueueSubmit2` (`VulkanCanvasLifecycle.inc:549-558`). The KMS atomic presenter always supplies an external command buffer (`KmsOutput.cpp:2870`), so `presentRenderTarget()` returns at `VulkanCanvasLifecycle.inc:803` before line 838 — deferred texture/buffer/image destroys and staging-buffer recycling never run. Every glyph-atlas upload queues a ~16 MB staging buffer (`recordPendingTextureUploads`, `VulkanImages.inc:243-254`).
+
+What to do:
+
+- [ ] [Auto] Call `retireDeferredResourcesAfterSubmit()` (or equivalent aging) on the external-command-buffer path after the external queue submit that consumed the recorded commands.
+- [ ] [Auto] Alternatively, tie deferred-destroy aging to the exported render-fence / frame-fence completion on the KMS path.
+- [ ] [Auto + Manual] Run compositor with heavy text churn; monitor RSS / VMA allocator stats — should plateau, not grow linearly with frames.
+
+### REV-K1: Discarded frames poison partial-frame content preservation
+
+**Severity: High (ghost pixels on partial scanout reuse).**
+
+Region-limited copies (`KmsOutput.cpp:3040-3063`) assume buffer pixels equal last-presented content plus `staleRects` (`markPrimaryDamagePresented`, `2066-2084`). A frame rendered then discarded from the mailbox (`releasePreparedBuffer`, `2051-2064`) overwrites offscreen/scanout without updating `primaryContentsValid` / `staleRects`. The next partial reuse of that buffer can scan out never-presented pixels outside `staleRects ∪ new damage`.
+
+What to do:
+
+- [ ] [Auto] In `releasePreparedBuffer`, set `buffer.primaryContentsValid = false` or reset `staleRects` to full-output so the next partial use forces a full preserved-copy.
+- [ ] [Manual] Drag a window with intermediate discarded frames; verify no ghost at revert positions (caret blink, hover flicker, discontiguous moves).
+
+### REV-M1: Metal atlas grow blit races with in-flight render-queue uploads
+
+**Severity: High (permanent garbage glyphs after grow).**
+
+`GlyphAtlas::grow()` (`GlyphAtlas.mm:111-172`) blits old→new on the atlas private queue and waits only on that command buffer. Glyph uploads are encoded on the render queue via `flushUploads()` (`MetalCanvas.mm:642`). `grow()` runs from `afterPresent()` immediately after `[cmdBuf_ commit]` (`MetalCanvas.mm:873-877`) and from `prepareForFrameBegin()` after only a 3-frame semaphore wait — cross-queue execution is unordered, so the grow blit can read the old atlas before in-flight upload blits finish. Copy-preserving grow retains `entries_`, so corrupted glyphs persist.
+
+What to do:
+
+- [ ] [Auto] Encode the grow blit on `metal_.queue()` after waiting on a `MTLSharedEvent` signaled by the last upload frame, or block the grow until the render queue is idle for atlas writes.
+- [ ] [Manual] Paste large unicode-heavy text into `lambda-editor` past atlas pressure; verify no missing/corrupt glyphs.
+
+### REV-M2: Deferred mid-frame grow caches empty `AtlasEntry` forever
+
+**Severity: High (glyph permanently missing for font/size).**
+
+When shelf is full mid-frame, `beforeGrow_` blocks grow, `grow()` sets `pendingGrow_` and returns false, and `allocateAndUpload()` returns `AtlasEntry{}` which `getOrUpload()` emplaces into `entries_` (`GlyphAtlas.mm:197-201`, `220-227`). Copy-preserving grow no longer clears entries, so the empty sentinel survives after the deferred grow at `prepareForFrameBegin()` (`GlyphAtlas.mm:99-103`). `drawTextLayout` skips `entry.width == 0` (`MetalCanvas.mm:1445`).
+
+What to do:
+
+- [ ] [Auto] Do not insert the empty entry when grow is deferred; retry allocation after grow completes, or erase the sentinel entry in `prepareForFrameBegin()` before grow.
+- [ ] [Auto] Add a unit test: force deferred grow mid-frame, then verify the glyph renders on the next frame.
+
+### REV-M3: Metal backdrop uniform/clip buffers are CPU-rewritten while GPU still reads them
+
+**Severity: High (wrong blur transforms/clips under load).**
+
+`backdropUniformBuffer_` / `backdropClipBuffer_` (`MetalCanvas.mm:1930-1957`) are single persistent shared buffers, not per-frame-slot. `encodeRecorderOps` CPU-writes slots at encode time (`MetalCanvas.mm:410-426`, `2183-2186`) while prior frames' command buffers may still execute (`kFramesInFlight = 3`). Old code allocated fresh buffers each frame (safe via command-buffer retention).
+
+What to do:
+
+- [ ] [Auto] Ring-buffer or triple-buffer backdrop uniform/clip buffers per frame slot (like `metal_.advanceFrame()` arenas).
+- [ ] [Manual] Stress backdrop-blur frames under GPU load; compare visual stability to pre-change captures.
+
+---
+
+## Medium severity
+
+### REV-V2: Prepared-geometry replay omits clip intersection
+
+**Severity: Medium (draws outside parent clip on non-RADV drivers).**
+
+CPU-copy replay intersects clip (`VulkanCanvasDrawOps.inc:1100`); prepared-geometry path only translates (`:1019`). Scissor comes from `op.clip` (`VulkanCommandRecording.inc:409-414`). Enabled on non-RADV since `recorderPreparedGeometryFastPathEnabled()` (`VulkanCanvasDrawOps.inc:978-988`).
+
+What to do:
+
+- [ ] [Auto] Apply `intersectRects(translatedRect(op.clip, dx, dy), state_.clip)` in the prepared path too.
+- [ ] [Auto] Add a clipped-replay regression test under `LAMBDA_VULKAN_PREPARED_GEOMETRY=1` or on a non-RADV CI target.
+
+### REV-V3: Recorder GPU buffers overwritten every replay without in-flight guard
+
+**Severity: Medium (torn geometry; extra map/memcpy per cached node).**
+
+`ensureRecorderBuffer` re-uploads on every `prepareRecorderBuffers` call (`VulkanCanvasDrawOps.inc:806-809`) while prior frames may still bind the buffer. Identical content is benign; mutated geometry (the new test case) can race. Content-hash skip or per-frame/fence-guarded buffers would fix both perf and correctness.
+
+What to do:
+
+- [ ] [Auto] Skip upload when recorded geometry signature unchanged; or use per-frame recorder buffer slots.
+- [ ] [Auto] Extend `VulkanRenderTargetTests.cpp` to exercise in-flight overwrite (two overlapping presents with geometry mutation).
+
+### REV-V4: `evictImageTexture` cancels first-use pending upload/transition
+
+**Severity: Medium (undefined layout + garbage on same-frame draw+destroy).**
+
+`evictImageTexturesFor` erases pending uploads and transitions (`VulkanCanvasDrawOps.inc:466-487`) that `ensureImageTexture` queued (`VulkanImages.inc:22-23`, `31-33`). Texture survives in `pendingTextureDestroys_` with ops still referencing its descriptor.
+
+What to do:
+
+- [ ] [Auto] Do not erase pending upload/transition for textures still referenced by current-frame ops; or flush pending work before eviction.
+- [ ] [Auto] Add a same-frame draw-then-destroy test under validation layers.
+
+### REV-V5: `vkDestroyFence` on present fence after failed present
+
+**Severity: Medium (validation-layer fault under OUT_OF_DATE).**
+
+`VulkanCanvasLifecycle.inc:614-619` destroys the present fence immediately when `vkQueuePresentKHR` fails. Under swapchain-maintenance1 the present may still be enqueued. Use `retirePresentFence()` (pattern at `:589`) instead.
+
+What to do:
+
+- [ ] [Auto] Replace immediate destroy with `retirePresentFence(presentFence)` and a fresh signaled replacement.
+- [ ] [Auto] Resize-storm test under validation layers — no `VUID-vkDestroyFence-fence-01120`.
+
+### REV-K2: EBUSY-deferred cursor-only commit can strand the cursor
+
+**Severity: Medium (cursor stops short of final position on idle screen).**
+
+`commitAtomicCursor` defers on EBUSY/EAGAIN (`KmsOutput.cpp:3612-3616`) but replays only from `setAtomicPageFlipPending(false)` (`3551-3558`) — cursor-only commits have no page-flip event. On an otherwise idle screen the last move of a burst may never replay. Opt-in via `LAMBDA_COMPOSITOR_ENABLE_HARDWARE_CURSOR_MOTION_FAST_PATH=1`.
+
+What to do:
+
+- [ ] [Auto] Add a timer, vblank, or retry loop to replay `atomicCursorMoveDeferred_` without waiting for a primary-plane flip.
+- [ ] [Manual] 1000 Hz mouse on idle desktop — cursor reaches final position.
+
+### REV-K3: Scene damage under-covers after rendered-but-unscheduled frame
+
+**Severity: Medium (stale pixels on glass; amplified by relaxed partial guard).**
+
+Client buffer damage is consumed at render time (`SurfaceRenderer.cpp:311-348`); scene-graph baseline advances only at schedule time (`CompositorRuntime.cpp:1417-1420`). If frame N renders (consuming damage M→N), is replaced in the mailbox before schedule, and the client commits again, frame N+1 diffs against M but `bufferDamageRects` only has post-N commits.
+
+What to do:
+
+- [ ] [Auto] Advance `surfaceRenderState.sceneGraph` when a frame is rendered, not only when scheduled; or roll back consumed damage when a prepared frame is discarded.
+- [ ] [Manual] Rapid glass-window updates with mailbox replacement — no stale regions outside damage.
+
+### REV-W1: FIFO path drops `wl_surface_frame` throttling for occluded windows
+
+**Severity: Medium (event-loop stall or spin when occluded).**
+
+Non-MAILBOX `requestAnimationFrame` posts `FrameEvent` immediately (`WaylandWindow.cpp:1324-1325`) without `wl_surface_frame`. Occluded surfaces no longer pause cheaply; FIFO present may block the shared event loop. `usesMailboxPresentMode()` is false until first swapchain exists.
+
+What to do:
+
+- [ ] [Auto] Keep `wl_frame` gating when surface is occluded/minimized even under FIFO; or detect occlusion and skip present.
+- [ ] [Manual] Hide a FIFO-paced window behind another — CPU/event-loop should stay responsive.
+
+### REV-W2: Popover coalescing can stall on idle compositor without frame callbacks
+
+**Severity: Medium (frozen popover after pointer event).**
+
+`requestPopoverFrame` commits without buffer damage (`WaylandWindow.cpp:1665-1673`). Some compositors only deliver `wl_surface_frame` when they repaint; hardware-cursor-only motion may not trigger it. Event-driven paints now wait ≥1 compositor frame vs synchronous before.
+
+What to do:
+
+- [ ] [Auto] Render first paint after an event immediately; pace only subsequent updates. Or attach minimal damage / add fallback timeout.
+- [ ] [Manual] Open popover menu on idle KMS desktop; hover/click updates remain responsive.
+
+### REV-M4: Backdrop segments overwrite each other's uniform slots (pre-existing)
+
+**Severity: Medium (incorrect blur transforms when segments differ).**
+
+`encodeFrameWithBackdropBlur` calls `encodeRecorderOps` per segment with the same `finalUniformBuffer`/`finalClipBuffer`, restarting indices at 0 each call (`MetalCanvas.mm:2119-2152`, `2185-2186`). Pre-existing; persistent buffers (REV-M3) make fixing here natural.
+
+What to do:
+
+- [ ] [Auto] Continue `uniformIndex`/`clipIndex` across segments within one backdrop frame.
+- [ ] [Manual] Multi-segment backdrop frame with differing transforms — visual parity check.
+
+### REV-F4: Cursor deferred during primary page flip instead of interleaved commit
+
+**Severity: Medium (fast path skips render but cursor may not move until flip completes).**
+
+`commitAtomicCursor` returns success while deferring when `atomicPageFlipPending_` (`KmsOutput.cpp:3576-3579`). Compositor skips full frame but on-screen cursor may lag one flip period.
+
+What to do:
+
+- [ ] [Auto] Attempt cursor-only atomic commit even during page flip pending (separate from primary-plane IN_FENCE), or document as accepted trade-off.
+- [ ] [Manual] Cursor responsiveness during active primary-plane flips under GPU load.
+
+### REV-F2: Partial damage uses bounding-union clip (over-draw follow-up)
+
+**Severity: Medium (GPU over-shade when damage rects are sparse).**
+
+`logicalDamageBounds` + single `clipRect` (`CompositorRenderFrame.cpp:1106-1118`) fixes CPU N× recording but can shade the union of distant rects. Multi-rect scissor or stencil clip remains a follow-up.
+
+What to do:
+
+- [ ] [Auto] Add multi-rect clip on `Canvas` when rect count > 1 and union area ≫ sum of areas.
+- [ ] [Manual] Two distant dirty windows — `surface_ms` and GPU time should beat old per-rect loop without excess over-draw vs per-rect KMS damage.
+
+---
+
+## Low severity
+
+### REV-V6: Recorder `sourceImage` raw pointer — undocumented keep-alive contract
+
+**Severity: Low (use-after-free if caller replays after image destruction).**
+
+`VulkanCanvasTypes.hpp:76`, replay at `VulkanCanvasDrawOps.inc:947`. In-tree usage is safe (`ImageNode` retains `shared_ptr`); test keeps image alive deliberately. Frame signature hashes raw pointer (ABA-prone in theory).
+
+What to do:
+
+- [ ] [Auto] Document keep-alive requirement on `VulkanFrameRecorder`, or store `shared_ptr<Image>` in recorded ops.
+- [ ] [Auto] Add test that replay after image destruction is detected (fail gracefully).
+
+### REV-V7: Prepared text ops not refreshed after atlas rebuild
+
+**Severity: Low (permanent live-render fallback after one atlas rebuild).**
+
+`recordedGlyphAtlasCurrent` rejects stale replay (`VulkanCanvasDrawOps.inc:761-767`) but leaves stale `PreparedRenderOps` in place (`SceneRenderer.cpp:688-697`). Node is not re-prepared because key unchanged.
+
+What to do:
+
+- [ ] [Auto] Clear `preparedRenderOps_` when replay fails due to atlas generation mismatch.
+- [ ] [Auto] Scene-graph test: rebuild atlas between renders, assert prepare count increases.
+
+### REV-V8: Destructor leaks `pendingTextureUploads_` staging buffers
+
+**Severity: Low (teardown leak when uploads queued but never presented).**
+
+Destructor (`VulkanCanvasLifecycle.inc:164-193`) frees pools and deferred queues but not `pendingTextureUploads_` entries. More likely since FP-1 made queued uploads common.
+
+What to do:
+
+- [ ] [Auto] Drain `pendingTextureUploads_` in destructor (recycle or destroy staging buffers).
+
+### REV-V9: Post-acquire incomplete-image branch unreachable
+
+**Severity: Low (dead code; would corrupt acquire semaphore if reached).**
+
+Pre-acquire `swapchainImageStateReadyForAcquire()` (`VulkanCanvasLifecycle.inc:444-447`) makes post-acquire recreate branch (`460-468`) unreachable. If hit, would leave `imageAvailable` semaphore in bad state.
+
+What to do:
+
+- [ ] [Auto] Remove dead branch or rotate semaphore on that path.
+
+### REV-K4: `HW_COMPLETION` OR'd onto software-estimated flip completions
+
+**Severity: Low (wp_presentation semantics; pre-existing, preserved by refactor).**
+
+`resolvePresentationFeedbackCompletion` (`CompositorPresentation.hpp:145`, `FrameScheduler.cpp:409-416`) adds `HW_COMPLETION` even when completion lacks `HW_CLOCK`. Runtime sets hardware flags only for real flips (`CompositorRuntime.cpp:1892-1900`).
+
+What to do:
+
+- [ ] [Auto] Pass `hardwareCompletionFlag = 0` when completion flags lack `HW_CLOCK`.
+- [ ] [Auto] Extend `CompositorPresentationFeedbackTests.cpp` to assert flag semantics for software vs hardware completions.
+
+### REV-K5: Cursor hide dropped while page flip pending
+
+**Severity: Low (atomic plane may stay visible until legacy ioctl rescues).**
+
+`commitAtomicCursor(false)` while `atomicPageFlipPending_` sets `atomicCursorMoveDeferred_ = false` and returns success (`KmsOutput.cpp:3576-3579`). Disable never replays; relies on legacy `drmModeSetCursor` in `hideCursor` (`4003-4011`).
+
+What to do:
+
+- [ ] [Auto] Defer hides with `atomicCursorMoveDeferred_ = true` regardless of visible flag; replay hide on flip completion.
+
+### REV-K6: Transient chrome double-draws all three buttons
+
+**Severity: Low (cosmetic — darker/thicker glyphs, ghost under translucent hover).**
+
+Cached base layer already contains non-hover controls (`stableChromeSnapshot`); `drawTransientChromeControls` redraws all three (`SurfaceRenderer.cpp:553`, `572` → `WindowChromeRenderer.cpp:230-232`).
+
+What to do:
+
+- [ ] [Auto] Draw only hovered/pressed button(s), or erase base glyph rect before hover overlay.
+
+### REV-M5: Drawable retry can block main thread up to ~2 s
+
+**Severity: Low (stall at `beginFrame` when drawable pool exhausted).**
+
+`allowsNextDrawableTimeout = YES` on layer (`MacMetalWindow.mm:101`); retry in `acquireDrawableForFrame` (`MetalCanvas.mm:1584-1597`). Failure path re-signs semaphore and requests redraw — no deadlock.
+
+What to do:
+
+- [ ] [Auto] Consider shorter timeout or async drawable acquisition; measure `CanvasDrawableWait` p95.
+- [ ] [Manual] Exhaust drawable pool (rapid resize) — app remains interactive within bounded stall.
+
+### REV-M6: `grow()` synchronous `waitUntilCompleted` on frame-begin path
+
+**Severity: Low (pacing hitch on grow frames).**
+
+`prepareForFrameBegin()` may call `grow()` after drawable acquired (`MetalCanvas.mm:547-572`, `GlyphAtlas.mm:99-103`). Holds drawable during full GPU round-trip.
+
+What to do:
+
+- [ ] [Auto] Defer grow to `afterPresent` only, or use async handoff (pairs with REV-M1).
+
+### REV-W3: `frameDone` `flushRedraw()` bypasses dispatch deferral during resize
+
+**Severity: Low (one stale-size frame possible; self-correcting).**
+
+Configure path defers redraw while `dispatchingWaylandEvents_` (`WaylandWindow.cpp:2077`); `frameDone` renders inline (`1908-1927`).
+
+What to do:
+
+- [ ] [Auto] Optionally defer `flushRedraw` from `frameDone` when `dispatchingWaylandEvents_` is set, matching configure behavior.
+- [ ] [Manual] Interactive resize — no visible one-frame size mismatch.
+
+### REV-F5: Hardware cursor fast path permanently disables after first failure
+
+**Severity: Low (session-long fallback to full redraws).**
+
+`hardwareCursorMotionFastPathDisabled = true` after first failed fast-path attempt (`CompositorRuntime.cpp:1057`). Transient EBUSY could permanently disable.
+
+What to do:
+
+- [ ] [Auto] Retry fast path after successful flip or on a timer instead of permanent disable.
+
+### REV-F13: Present fences still attached on steady-state presents
+
+**Severity: Low (non-blocking status poll, not 1 s wait — reduced vs plan fear).**
+
+Steady-state presents still use `SwapchainPresentFenceInfoKHR` when maintenance1 available (`VulkanCanvasLifecycle.inc:575-608`). Uses `vkGetFenceStatus` + fence replacement on `NOT_READY`, not blocking wait. Retire-list handles swapchain recreation.
+
+What to do:
+
+- [ ] [Auto] Optional: disable steady-state present fences entirely; rely on acquire back-pressure only (keep `LAMBDA_VULKAN_PRESENT_FENCES=0` escape hatch).
+- [ ] [Manual] Resize trace — present phase ms stable under interactive resize.
+
+---
+
+## Nits
+
+### REV-K7: Fragile errno classification in `commitAtomicCursor`
+
+`KmsOutput.cpp:3589-3591` — if `addAtomicCursorProperties` returns false without setting errno, stale `EBUSY` could false-defer. Currently unreachable given pre-checks at `3571-3572`.
+
+- [ ] [Auto] Distinguish "props not added" from "commit failed" explicitly.
+
+### REV-K8: Stray tab indentation
+
+Tabs mixed into space-indented files, e.g. `KmsOutput.cpp:2024` (`Buffer` struct), `CompositorRuntime.cpp:2489`.
+
+- [ ] [Auto] Strip leading tabs on affected lines.
+
+### REV-W4: `renderPopover` throw through libwayland C callback
+
+`popoverFrameDone` (`WaylandWindow.cpp:1905`) calls `renderPopover` which rethrows (`1643-1658`). Undefined behavior if exception crosses C callback boundary.
+
+- [ ] [Auto] Catch and log at callback boundary (`popoverFrameDone`, `popoverXdgSurfaceConfigure`).
+
+### REV-V10: Redundant double `resolveRecordedImageTexture` in `appendRecordedOps`
+
+Pre-loop resolution (`VulkanCanvasDrawOps.inc:990-994`) plus in-loop calls in both branches — dead weight.
+
+- [ ] [Auto] Remove in-loop duplicate resolution.
+
+### REV-V11: `endImmediate` / `transitionImmediate` effectively dead code
+
+No per-frame callers remain; `uploadTexture(uploadNow=true)` has no callers; `transitionImmediate` has zero call sites. FP-1 goal achieved.
+
+- [ ] [Auto] Delete `endImmediate`, `transitionImmediate`, and the `uploadNow` branch, or mark `@deprecated` with assert if called.
+
+### REV-V12: `rasterize()` temporary canvas calls `vkDeviceWaitIdle` mid-session
+
+`VulkanCanvasLifecycle.inc:167` reachable via raster-cache builds — pre-existing whole-device stall, not introduced by frame-pacing work.
+
+- [ ] [Auto] Optional follow-up: defer raster-cache readback like FP-10 readback path.
+
+---
+
+# Citation errata (original FP audit → current sources)
+
+| Original claim | Current status | Correct anchor |
+| --- | --- | --- |
+| Atlas upload via `uploadTexture` + `vkQueueWaitIdle` on hot path | Fixed — uses `queueAtlasUploadIfNeeded` → `queueTextureUpload` | `VulkanGlyphAtlas.inc:127-132`, `VulkanImages.inc:151+`, `243-254` |
+| `transitionImmediate` on imported images | Fixed — uses `queueTextureTransition` | `VulkanImages.inc:31-33` |
+| Per-rect `drawFrameContent` loop on partial damage | Fixed — single bounding-union clip | `CompositorRenderFrame.cpp:1106-1118` |
+| `sceneUsesBackdropSampling` blocks partial damage | Removed — uses `inflateDamageForBackdropSampling` | `CompositorSceneGraph.cpp:216-243`, `CompositorRenderFrame.cpp:1005-1010` |
+| `markFrameRendered` `vkQueueWaitIdle` fallback | Fixed — no `vkQueueWaitIdle` in `KmsOutput.cpp` | `KmsOutput.cpp:1087-1095` |
+| `canUsePreparedGeometry = false &&` | Fixed — driver-gated `recorderPreparedGeometryFastPathEnabled()` | `VulkanCanvasDrawOps.inc:830-838`, `978-988` |
+| `ensureRecorderBuffer` skips upload | Fixed — always uploads when data provided | `VulkanCanvasDrawOps.inc:806-808` |
+| Deferred destroy before acquire / on early return | Fixed — `retireDeferredResourcesAfterSubmit` after submit only | `VulkanCanvasLifecycle.inc:558`, `VulkanImages.inc:265-269` |
+| Present-fence 1 s blocking wait | Fixed — `vkGetFenceStatus` + replacement | `VulkanCanvasLifecycle.inc:575-597` |
+| `recreateSwapchain` waits all frame fences | Fixed — retire list, no frame-fence drain | `VulkanSwapchain.inc:131-152` |
+| Swapchain recreate unconditional stderr | Fixed — gated by `resizeTraceEnabled()` | `VulkanSwapchain.inc:184-203` |
+| `flushFrameCapture` before present | Fixed — `pollReadbacks(false)` after submit | `VulkanCanvasLifecycle.inc:561`, `VulkanImages.inc:613-616` |
+| Transient chrome blocks recorder replay | Fixed — `stableChromeSnapshot` + `drawTransientChromeControls` | `SurfaceRenderer.cpp:137-145`, `544-572` |
+| SHM upload memcpy into `regionPixels` vector | Fixed — span subview with stride | `SurfaceRenderer.cpp:236-243` |
+| `TextNode::canPrepareRenderOps` always false | Fixed — returns `layout_ != nullptr` | `TextNode.cpp:50-52` |
+| `frameDone` present one loop late | Fixed — inline `flushRedraw()` | `WaylandWindow.cpp:1908-1927` |
+| Metal `grow()` clears and re-rasterizes all glyphs | Fixed — copy-preserving blit grow | `GlyphAtlas.mm:111-172` |
+| Metal backdrop full-res 3×2 blur, per-frame buffer alloc | Fixed — downsample + pooled buffers | `MetalCanvas.mm:1930-1957`, `2028-2040`, `2087-2090` |
+| `displaySyncEnabled` never set | Fixed — `YES` at create | `MacMetalWindow.mm:104` |
+| Presentation feedback 500 ms fake-presented fallback | Fixed — ~2 refresh periods, `discarded` on expiry | `CompositorPresentation.hpp:96-97`, `FrameScheduler.cpp:137-149` |
+
+---
+
 ## Exit criteria
 
-- [ ] All FP items above deleted as completed (each completion should also delete its section here).
-- [ ] `vulkan-present-detail`, the compositor frame CSV, and `debug::perf` counters show: no `vkQueueWaitIdle`/`vkDeviceWaitIdle` on any per-frame path, atlas/idle/blur phases within budget, pointer motion produces no full frames.
+- [ ] All REV items above deleted as fixed and verified.
+- [ ] All unchecked manual verification boxes under FP-1 … FP-16 closed.
+- [ ] `vulkan-present-detail`, compositor frame CSV, and `debug::perf` counters within budget; no `vkQueueWaitIdle` on per-frame paths (teardown/rasterize exceptions documented in REV-V11/V12).
+- [ ] Validation-layer run clean on Linux (resize storm, text scroll, capture paths).
 - [ ] Remove this document and TODO-019 from `TODO.md`, and drop the row from `docs/roadmap.md`.

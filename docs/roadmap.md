@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-06-11
+**Last updated:** 2026-06-11 (frame-pacing review backlog added)
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -15,7 +15,7 @@ This document replaces the older roadmap, Lambda desktop readiness index, compon
 | [lambda-settings-ux-plan.md](lambda-settings-ux-plan.md) | Active UX and organization plan for `lambda-settings` |
 | [compositor.md](compositor.md) | Architecture/history reference for the compositor and framework/compositor boundary |
 | [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md) | Active wlroots comparison plan for compositor protocol, state, rendering, and validation improvements |
-| [frame-pacing-improvement-plan.md](frame-pacing-improvement-plan.md) | Verification follow-up checklist and Linux verifier entry point for the completed compositor/graphics frame-pacing implementation (TODO-019) |
+| [frame-pacing-improvement-plan.md](frame-pacing-improvement-plan.md) | FP-1…FP-16 implementation log, post-implementation review backlog (REV-*), citation errata, and verification checklist (TODO-019) |
 | [compositor-user-guide.md](compositor-user-guide.md) | Build, configure, and run `lambda-window-manager` from a TTY |
 | [linux-development.md](linux-development.md) | Linux package setup and KMS/Vulkan development notes |
 | [conventions.md](conventions.md) | Repository layout, CMake, namespaces, platforms, examples |
