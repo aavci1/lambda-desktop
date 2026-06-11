@@ -455,6 +455,7 @@ bool clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
   surface->windowX = committedX;
   surface->windowY = committedY;
   setConfiguredFrameSize(surface, committedWidth, committedHeight);
+  surface->server->noteResizePacingActivity();
   surface->resizeConfigureInFlight = false;
   surface->resizeConfigureAcked = false;
   surface->resizeConfigureSerial = 0;

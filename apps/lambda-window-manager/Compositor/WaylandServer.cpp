@@ -283,6 +283,7 @@ bool WaylandServer::diagnosticExerciseTopToplevel(std::uint32_t step, bool resiz
   }
 
   if (surface->windowX == nextX && surface->windowY == nextY) return false;
+  impl_->noteResizePacingActivity();
   surface->windowX = nextX;
   surface->windowY = nextY;
   surface->geometryAnimationActive = false;

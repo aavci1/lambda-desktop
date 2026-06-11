@@ -220,9 +220,13 @@ CommittedSurfaceSnapshot snapshotForSurface(WaylandServer::Impl const* server,
       .fullscreen = fullscreen,
       .activeSizing = server->resizeSurface_ == surface ||
                       surface->geometryAnimationActive ||
-                      surface->awaitingConfigureCommit,
+                      surface->awaitingConfigureCommit ||
+                      surface->resizeConfigureInFlight ||
+                      surface->pendingResizeConfigure,
       .pacingSizing = server->resizeSurface_ == surface ||
-                      surface->geometryAnimationActive,
+                      surface->geometryAnimationActive ||
+                      surface->resizeConfigureInFlight ||
+                      surface->pendingResizeConfigure,
       .geometryAnimationGrowing = geometryAnimationGrowing,
       .shadowClipTop = 0,
       .shadowClipBottom = fullscreen ? outputHeight

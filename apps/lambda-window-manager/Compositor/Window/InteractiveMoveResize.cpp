@@ -266,6 +266,7 @@ void startGeometryAnimation(WaylandServer::Impl* server,
   if (lambda::detail::resizeTraceMetadataEnabled()) {
     surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
   }
+  if (server) server->noteResizePacingActivity();
   surface->geometryAnimationActive = true;
   LAMBDA_RESIZE_TRACE("compositor",
                               "animation-start surface=%llu start=%d,%d %dx%d target=%d,%d %dx%d\n",
@@ -619,6 +620,7 @@ void updateResize(WaylandServer::Impl* server) {
   if (lambda::detail::resizeTraceMetadataEnabled()) {
     surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
   }
+  server->noteResizePacingActivity();
   server->resizeLastX_ = nextX;
   server->resizeLastY_ = nextY;
   server->resizeLastWidth_ = next.width;

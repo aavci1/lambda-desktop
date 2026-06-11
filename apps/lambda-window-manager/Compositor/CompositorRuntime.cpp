@@ -1217,7 +1217,10 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (!envEnabled("LWM_DIAGNOSTIC_SCRIPTED_EXERCISE")) return false;
       auto const now = SteadyClock::now();
       if (now < nextDiagnosticExerciseAt) return false;
-      nextDiagnosticExerciseAt = now + diagnosticExerciseInterval();
+      auto const interval = diagnosticExerciseInterval();
+      do {
+        nextDiagnosticExerciseAt += interval;
+      } while (nextDiagnosticExerciseAt <= now);
       bool const resize = envEnabled("LWM_DIAGNOSTIC_SCRIPTED_RESIZE");
       return wayland.diagnosticExerciseTopToplevel(diagnosticExerciseStep++, resize);
     };

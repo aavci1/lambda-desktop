@@ -163,6 +163,8 @@ struct WaylandServer::Impl {
   void updateAnimations(std::uint32_t timeMs, bool animationsEnabled);
   [[nodiscard]] bool hasActiveAnimations() const noexcept;
   [[nodiscard]] bool hasActiveResizePacing() const noexcept;
+  [[nodiscard]] bool hasRecentResizePacing(std::uint64_t nowNsec = 0) const noexcept;
+  void noteResizePacingActivity(std::uint64_t nowNsec = 0) noexcept;
   [[nodiscard]] bool hasIdleInhibitors() const noexcept;
   void releasePendingBuffers();
   void sendFrameCallbacksOnly(std::uint32_t timeMs);
@@ -365,6 +367,7 @@ struct WaylandServer::Impl {
   std::uint64_t nextSurfaceId_ = 1;
   std::uint64_t nextSubsurfaceOrder_ = 1;
   std::uint64_t contentSerial_ = 1;
+  std::uint64_t lastResizePacingActivityNsec_ = 0;
   std::uint64_t nextActivationTokenId_ = 1;
   std::uint32_t nextConfigureSerial_ = 1;
   std::uint32_t nextInputSerial_ = 1;
@@ -381,6 +384,23 @@ struct WaylandServer::Impl {
   Surface* lastActivationSurface_ = nullptr;
   std::uint32_t lastActivationTimeMs_ = 0;
 };
+
+[[nodiscard]] inline std::uint64_t resizePacingGraceNanoseconds(std::uint32_t refreshMilliHz) noexcept {
+  constexpr std::uint64_t kDefaultGraceNsec = 50'000'000ull;
+  constexpr std::uint64_t kMinGraceNsec = 33'000'000ull;
+  constexpr std::uint64_t kMaxGraceNsec = 75'000'000ull;
+  if (refreshMilliHz == 0) return kDefaultGraceNsec;
+  std::uint64_t const refreshNsec = 1'000'000'000'000ull / static_cast<std::uint64_t>(refreshMilliHz);
+  std::uint64_t const graceNsec = refreshNsec * std::uint64_t{3};
+  return std::clamp(graceNsec, kMinGraceNsec, kMaxGraceNsec);
+}
+
+[[nodiscard]] inline bool resizePacingGraceActive(std::uint64_t lastActivityNsec,
+                                                  std::uint64_t nowNsec,
+                                                  std::uint32_t refreshMilliHz) noexcept {
+  if (lastActivityNsec == 0 || nowNsec < lastActivityNsec) return false;
+  return nowNsec - lastActivityNsec <= resizePacingGraceNanoseconds(refreshMilliHz);
+}
 
 struct WaylandServer::Impl::SurfaceViewportState {
   float sourceX = 0.f;

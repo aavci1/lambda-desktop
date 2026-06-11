@@ -127,6 +127,7 @@ std::uint32_t sendToplevelConfigureInternal(WaylandServer::Impl* server,
   if (serial == 0) return 0;
   if (auto* surface = toplevel->xdgSurface->surface) {
     surface->lastConfigureSerial = serial;
+    server->noteResizePacingActivity();
     if (lambda::detail::resizeTraceMetadataEnabled()) {
       surface->lastConfigureSentNsec = lambda::detail::resizeTraceTimestampNanoseconds();
       surface->lastConfigureAckNsec = 0;
@@ -206,6 +207,7 @@ bool requestToplevelResizeConfigure(WaylandServer::Impl* server,
   if (!server || !surface || width <= 0 || height <= 0) return false;
   auto* toplevel = toplevelForSurface(server, surface);
   if (!toplevel) return false;
+  server->noteResizePacingActivity();
 
   if (surface->resizeConfigureInFlight) {
     bool const sameAsInFlight =
@@ -994,6 +996,7 @@ void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t ser
       if (serial == surface->lastConfigureSerial) surface->lastConfigureAckNsec = now;
     }
     if (surface->resizeConfigureInFlight && ackedResizeConfigure) {
+      surface->server->noteResizePacingActivity();
       surface->resizeConfigureAcked = true;
       if (ackedResizeConfigure->hasWindowGeometry) {
         surface->resizeConfigureX = ackedResizeConfigure->windowX;

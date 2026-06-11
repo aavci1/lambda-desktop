@@ -24,6 +24,13 @@ constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
 constexpr std::uint32_t kShellPanelAnimationMs = 180;
 
+std::uint64_t monotonicNanoseconds() noexcept {
+  timespec now{};
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  return static_cast<std::uint64_t>(now.tv_sec) * 1'000'000'000ull +
+         static_cast<std::uint64_t>(now.tv_nsec);
+}
+
 float clamp01(float value) {
   return std::clamp(value, 0.f, 1.f);
 }
@@ -201,10 +208,22 @@ bool WaylandServer::Impl::hasActiveAnimations() const noexcept {
 }
 
 bool WaylandServer::Impl::hasActiveResizePacing() const noexcept {
-  return resizeSurface_ != nullptr || std::any_of(surfaces_.begin(), surfaces_.end(), [](auto const& surface) {
+  if (resizeSurface_ != nullptr || std::any_of(surfaces_.begin(), surfaces_.end(), [](auto const& surface) {
     return surface && (surface->geometryAnimationActive || surface->resizeConfigureInFlight ||
                        surface->pendingResizeConfigure);
-  });
+  })) {
+    return true;
+  }
+  return hasRecentResizePacing();
+}
+
+bool WaylandServer::Impl::hasRecentResizePacing(std::uint64_t nowNsec) const noexcept {
+  if (nowNsec == 0) nowNsec = monotonicNanoseconds();
+  return resizePacingGraceActive(lastResizePacingActivityNsec_, nowNsec, output_.refreshMilliHz);
+}
+
+void WaylandServer::Impl::noteResizePacingActivity(std::uint64_t nowNsec) noexcept {
+  lastResizePacingActivityNsec_ = nowNsec == 0 ? monotonicNanoseconds() : nowNsec;
 }
 
 bool WaylandServer::Impl::hasIdleInhibitors() const noexcept {
