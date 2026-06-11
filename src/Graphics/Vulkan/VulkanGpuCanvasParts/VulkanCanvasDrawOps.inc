@@ -827,8 +827,15 @@ private:
     return true;
   }
 
-  static constexpr bool recorderPreparedGeometryFastPathEnabled() {
-    return false;
+  bool recorderPreparedGeometryFastPathEnabled() const {
+    int const overrideValue = vulkanPreparedGeometryOverride();
+    if (overrideValue < 0) {
+      return false;
+    }
+    if (overrideValue > 0) {
+      return true;
+    }
+    return shared_ && shared_->driverId != VK_DRIVER_ID_MESA_RADV;
   }
 
   bool ensureRecorderStorageDescriptor(VulkanFrameRecorder const &recorded, VkDescriptorSet &set,
@@ -957,7 +964,7 @@ private:
         });
     bool const canUsePreparedGeometry =
         // RADV can crash while recording draws that bind prepared replay descriptors for cached composite
-        // content. Copy recorded geometry into this canvas' frame buffers until descriptor replay is fixed.
+        // content. Keep that driver on the CPU-copy path while allowing unaffected drivers to bind replay buffers.
         recorderPreparedGeometryFastPathEnabled() &&
         (!localReplay || std::abs(opacityScale - 1.f) <= eps) &&
         !hasTranslatedBackdropBlur &&

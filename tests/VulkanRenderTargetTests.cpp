@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -47,6 +48,46 @@ static std::filesystem::path imageFixturePath() {
 void vkCheck(VkResult result, char const* label) {
   if (result != VK_SUCCESS) {
     throw std::runtime_error(label);
+  }
+}
+
+int preparedGeometryOverride() {
+  char const* value = std::getenv("LAMBDA_VULKAN_PREPARED_GEOMETRY");
+  if (!value || !*value) {
+    return 0;
+  }
+  if (*value == '0' || std::strcmp(value, "false") == 0 || std::strcmp(value, "off") == 0) {
+    return -1;
+  }
+  if (*value == '1' || std::strcmp(value, "true") == 0 || std::strcmp(value, "on") == 0 ||
+      std::strcmp(value, "force") == 0) {
+    return 1;
+  }
+  return 0;
+}
+
+bool preparedGeometryExpected(VkPhysicalDevice physical) {
+  int const overrideValue = preparedGeometryOverride();
+  if (overrideValue < 0) {
+    return false;
+  }
+  if (overrideValue > 0) {
+    return true;
+  }
+  VkPhysicalDeviceDriverProperties driverProps{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+  VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+  props2.pNext = &driverProps;
+  vkGetPhysicalDeviceProperties2(physical, &props2);
+  return driverProps.driverID != VK_DRIVER_ID_MESA_RADV;
+}
+
+void checkPreparedRectState(VulkanFrameRecorder const& recorded, bool expected) {
+  if (expected) {
+    CHECK(recorded.preparedRectBuffer != VK_NULL_HANDLE);
+    CHECK(recorded.preparedRectDescriptor != VK_NULL_HANDLE);
+  } else {
+    CHECK(recorded.preparedRectBuffer == VK_NULL_HANDLE);
+    CHECK(recorded.preparedRectDescriptor == VK_NULL_HANDLE);
   }
 }
 
@@ -405,6 +446,7 @@ TEST_CASE("VulkanFrameRecorder supports empty lifecycle and move semantics") {
 TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarget") {
   auto& vk = VulkanContext::instance();
   vk.ensureInitialized();
+  bool const expectPreparedGeometry = preparedGeometryExpected(vk.physicalDevice());
 
   constexpr std::uint32_t width = 64;
   constexpr std::uint32_t height = 64;
@@ -434,8 +476,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   CHECK(recorded.rects.size() == 1);
 
   REQUIRE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded));
-  CHECK(recorded.preparedRectBuffer == VK_NULL_HANDLE);
-  CHECK(recorded.preparedRectDescriptor == VK_NULL_HANDLE);
+  checkPreparedRectState(recorded, expectPreparedGeometry);
   canvas->present();
 
   VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -471,8 +512,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   secondCanvas->translate(lambda::Point{16.f, 0.f});
   REQUIRE(replayRecordedLocalOpsForCanvas(secondCanvas.get(), recorded));
   secondCanvas->restore();
-  CHECK(recorded.preparedRectBuffer == VK_NULL_HANDLE);
-  CHECK(recorded.preparedRectDescriptor == VK_NULL_HANDLE);
+  checkPreparedRectState(recorded, expectPreparedGeometry);
   secondCanvas->present();
 
   VulkanReadbackBuffer secondReadback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -517,8 +557,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   mutatedCanvas->beginFrame();
   mutatedCanvas->clear(Colors::black);
   REQUIRE(replayRecordedLocalOpsForCanvas(mutatedCanvas.get(), recorded));
-  CHECK(recorded.preparedRectBuffer == VK_NULL_HANDLE);
-  CHECK(recorded.preparedRectDescriptor == VK_NULL_HANDLE);
+  checkPreparedRectState(recorded, expectPreparedGeometry);
   mutatedCanvas->present();
 
   VulkanReadbackBuffer mutatedReadback{vk.physicalDevice(), vk.device(), width * height * 4u};

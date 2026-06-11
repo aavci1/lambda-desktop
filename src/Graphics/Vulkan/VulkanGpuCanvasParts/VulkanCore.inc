@@ -95,6 +95,24 @@ bool vulkanPresentFencesDisabled() {
   return disabled;
 }
 
+int vulkanPreparedGeometryOverride() {
+  static int const overrideValue = [] {
+    char const* value = std::getenv("LAMBDA_VULKAN_PREPARED_GEOMETRY");
+    if (!value || !*value) {
+      return 0;
+    }
+    if (*value == '0' || std::strcmp(value, "false") == 0 || std::strcmp(value, "off") == 0) {
+      return -1;
+    }
+    if (*value == '1' || std::strcmp(value, "true") == 0 || std::strcmp(value, "on") == 0 ||
+        std::strcmp(value, "force") == 0) {
+      return 1;
+    }
+    return 0;
+  }();
+  return overrideValue;
+}
+
 struct VulkanImage;
 void evictImageTexturesFor(VulkanImage const *image);
 void updateImageTexturesFor(VulkanImage const* image);
@@ -549,6 +567,9 @@ struct SharedVulkanCore {
   bool googleDisplayTiming = false;
   bool swapchainMaintenance1 = false;
   std::string swapchainMaintenance1Extension;
+  VkDriverId driverId = VK_DRIVER_ID_MAX_ENUM;
+  std::string driverName;
+  std::string driverInfo;
 };
 
 std::mutex gVulkanCoreMutex;
@@ -841,6 +862,13 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
           info.pQueueCreateInfos = &q;
           info.enabledExtensionCount = static_cast<std::uint32_t>(deviceExtensionNames.size());
           info.ppEnabledExtensionNames = deviceExtensionNames.empty() ? nullptr : deviceExtensionNames.data();
+          VkPhysicalDeviceDriverProperties driverProps{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+          VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+          props2.pNext = &driverProps;
+          vkGetPhysicalDeviceProperties2(gVulkanCore.physical, &props2);
+          gVulkanCore.driverId = driverProps.driverID;
+          gVulkanCore.driverName = driverProps.driverName;
+          gVulkanCore.driverInfo = driverProps.driverInfo;
           vkCheck(vkCreateDevice(gVulkanCore.physical, &info, nullptr, &gVulkanCore.device), "vkCreateDevice");
           gVulkanCore.googleDisplayTiming =
               containsExtension(deviceExtensions, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
