@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
+#include "Compositor/CompositorPresentation.hpp"
 #include "Compositor/Wayland/BufferRelease.hpp"
 #include "Compositor/Wayland/IdleInhibitState.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
@@ -22,7 +23,6 @@ constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
 constexpr std::int32_t kMinWindowHeight = kCompositorMinWindowHeight;
 constexpr std::uint32_t kGeometryAnimationMs = 180;
 constexpr std::uint32_t kShellPanelAnimationMs = 180;
-constexpr std::uint32_t kPresentationCompletionFallbackMs = 500;
 
 float clamp01(float value) {
   return std::clamp(value, 0.f, 1.f);
@@ -108,23 +108,24 @@ void sendPresentationFeedback(WaylandServer::Impl& server,
                               PresentationTiming timing) {
   if (!feedback || !feedback->resource) return;
   normalizePresentationTiming(server.output_, timing);
-  std::uint64_t const seconds = timing.monotonicNsec / 1'000'000'000ull;
-  std::uint32_t const nsec = static_cast<std::uint32_t>(timing.monotonicNsec % 1'000'000'000ull);
-  std::uint32_t const tvSecHi = static_cast<std::uint32_t>(seconds >> 32u);
-  std::uint32_t const tvSecLo = static_cast<std::uint32_t>(seconds & 0xffffffffu);
-  std::uint32_t const seqHi = static_cast<std::uint32_t>(timing.sequence >> 32u);
-  std::uint32_t const seqLo = static_cast<std::uint32_t>(timing.sequence & 0xffffffffu);
+  auto const fields = presentation::presentedFeedbackFields(timing);
   if (wl_resource* output = outputResourceForClient(server, wl_resource_get_client(feedback->resource))) {
     wp_presentation_feedback_send_sync_output(feedback->resource, output);
   }
   wp_presentation_feedback_send_presented(feedback->resource,
-                                          tvSecHi,
-                                          tvSecLo,
-                                          nsec,
-                                          timing.refreshNsec,
-                                          seqHi,
-                                          seqLo,
-                                          timing.flags);
+                                          fields.tvSecHi,
+                                          fields.tvSecLo,
+                                          fields.tvNsec,
+                                          fields.refresh,
+                                          fields.seqHi,
+                                          fields.seqLo,
+                                          fields.flags);
+  wl_resource_destroy(feedback->resource);
+}
+
+void discardPresentationFeedback(WaylandServer::Impl::PresentationFeedback* feedback) {
+  if (!feedback || !feedback->resource) return;
+  wp_presentation_feedback_send_discarded(feedback->resource);
   wl_resource_destroy(feedback->resource);
 }
 
@@ -383,21 +384,29 @@ void WaylandServer::Impl::completePresentationFeedbacks(std::vector<Presentation
     auto completion = std::find_if(completions.begin(), completions.end(), [&](PresentationCompletion const& item) {
       return item.backendPresentId == it->backendPresentId;
     });
-    bool const expired = static_cast<std::uint32_t>(timeMs - it->queuedAtMs) >= kPresentationCompletionFallbackMs;
-    if (completion == completions.end() && !expired) {
+    std::uint32_t const refreshMilliHz =
+        output_.refreshMilliHz > 0 ? static_cast<std::uint32_t>(output_.refreshMilliHz) : 0u;
+    bool const hasCompletion = completion != completions.end();
+    auto const decision = presentation::resolvePresentationFeedbackCompletion(
+        it->fallbackTiming,
+        hasCompletion,
+        hasCompletion ? *completion : PresentationCompletion{},
+        it->queuedAtMs,
+        timeMs,
+        refreshMilliHz,
+        static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_HW_COMPLETION));
+    if (!decision.ready) {
       ++it;
       continue;
-    }
-    PresentationTiming timing = it->fallbackTiming;
-    if (completion != completions.end()) {
-      timing.monotonicNsec = completion->monotonicNsec;
-      if (completion->sequence != 0) timing.sequence = completion->sequence;
-      timing.flags |= completion->flags | static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_HW_COMPLETION);
     }
     std::vector<PresentationFeedback*> feedbacks = std::move(it->feedbacks);
     it = pendingPresentationBatches_.erase(it);
     for (auto* feedback : feedbacks) {
-      sendPresentationFeedback(*this, feedback, timing);
+      if (decision.presented) {
+        sendPresentationFeedback(*this, feedback, decision.timing);
+      } else {
+        discardPresentationFeedback(feedback);
+      }
       sent = true;
     }
   }

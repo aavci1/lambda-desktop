@@ -711,6 +711,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     bool idleBlanked = false;
     bool displayTimingSupportLogged = false;
     bool useVulkanPresentationCompletion = false;
+    std::vector<VulkanDisplayPendingFrameCallbacks> vulkanDisplayPendingFrameCallbacks;
 
     lambda::configureVulkanCanvasRuntime(device->requiredVulkanInstanceExtensions(), device->cacheDir());
     auto& vulkan = lambda::VulkanContext::instance();
@@ -854,7 +855,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     SnapFrameCapture snapFrameCapture = SnapFrameCapture::fromEnvironment();
     SnapAnimationTrace snapAnimationTrace = SnapAnimationTrace::fromEnvironment();
     if (snapAnimationTrace.enabled) snapAnimationTrace.ensureOpen();
-    bool skipNextVblank = true;
     constexpr auto kScreenshotFlashDuration = std::chrono::milliseconds(170);
     std::optional<std::chrono::steady_clock::time_point> screenshotFlashStartedAt;
     auto screenshotFlashOpacityAt = [&](std::chrono::steady_clock::time_point now) {
@@ -871,7 +871,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     };
     auto startScreenshotFlash = [&] {
       screenshotFlashStartedAt = std::chrono::steady_clock::now();
-      skipNextVblank = true;
       if (idleBlanked) idleBlanked = false;
     };
     auto processCompletedFrameCapture = [&] {
@@ -891,7 +890,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           return false;
         }
         forceRender = true;
-        skipNextVblank = true;
         return false;
       }
       frameCapturePollAttempts = 0;
@@ -1177,7 +1175,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       LAMBDA_WINDOW_MANAGER_TRACE_TIMING("vt-resume-total", resumeStart);
       vtAcquireFramePending = true;
       forceRender = true;
-      skipNextVblank = true;
       atomicFrameDirty = true;
       diagnostics::crashLog("vt-resume end logical=%dx%d serial=%llu",
                             wayland.logicalOutputWidth(),
@@ -1391,15 +1388,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         forceRender = false;
         return true;
       }
-      bool const allowRenderFence = frame.renderedAhead && frame.profile.activeSizingSurfaces == 0;
-      if (!allowRenderFence && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0 &&
-          !presenter->atomicPresenter()->updateRenderReady(frame.presentToken)) {
-        LAMBDA_WINDOW_MANAGER_TRACE_PACING("schedule-wait-render-ready token=%u surfaces=%zu contentSerial=%llu\n",
-                    frame.presentToken,
-                    frame.surfaceCount,
-                    static_cast<unsigned long long>(frame.contentSerial));
-        return false;
-      }
       if (!presenter->atomicPresenter()->canSchedulePresent(frame.presentToken)) return false;
       std::uint64_t const frameContentSerial = frame.contentSerial;
       std::uint32_t const presentId = presenter->atomicPresenter()->schedulePresent(frame.presentToken);
@@ -1530,10 +1518,6 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         if (!newest) return false;
         if (!fdReadableNow(presenter->atomicPresenter()->preparedOverlayAcquireFenceFd())) return false;
         return presenter->atomicPresenter()->canScheduleOverlayOnly();
-      }
-      bool const allowRenderFence = frame.renderedAhead && frame.profile.activeSizingSurfaces == 0;
-      if (!allowRenderFence && presenter->atomicPresenter()->renderReadyFd(frame.presentToken) >= 0) {
-        return false;
       }
       return presenter->atomicPresenter()->canSchedulePresent(frame.presentToken);
     };
@@ -1677,14 +1661,15 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           .monotonicNsec = completionNsec,
           .sequence = flip->sequence,
           .flags = flip->hardware
-	                       ? static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
-	                                                    WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK)
-	                       : 0u,
-	      };
-	      wayland.setRetainedDmabufBufferIds(presenter->atomicPresenter()->overlayBufferIdsInUse());
-	      wayland.completePresentationFeedbacks({completion}, monotonicMilliseconds());
-	      wayland.sendFrameCallbacksOnly(monotonicMilliseconds(), lastAtomicScheduledFrameSurfaceIds);
-	      lastAtomicScheduledFrameSurfaceIds.clear();
+                       ? static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
+                                                    WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK)
+                       : 0u,
+      };
+      wayland.setRetainedDmabufBufferIds(presenter->atomicPresenter()->overlayBufferIdsInUse());
+      std::uint32_t const flipTimeMs = presentation::monotonicMillisecondsFromNsec(completionNsec);
+      wayland.completePresentationFeedbacks({completion}, flipTimeMs);
+      wayland.sendFrameCallbacksOnly(flipTimeMs, lastAtomicScheduledFrameSurfaceIds);
+      lastAtomicScheduledFrameSurfaceIds.clear();
       double const renderSubmitToFlipMs =
           flip->renderSubmittedMonotonicNsec > 0 && completionNsec >= flip->renderSubmittedMonotonicNsec
               ? static_cast<double>(completionNsec - flip->renderSubmittedMonotonicNsec) / 1'000'000.0
@@ -1804,6 +1789,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         .lastKnownContentSerial = &lastKnownContentSerial,
         .vulkanDisplayTimingSupportLogged = displayTimingSupportLogged,
         .useVulkanPresentationCompletion = useVulkanPresentationCompletion,
+        .vulkanDisplayPendingFrameCallbacks = &vulkanDisplayPendingFrameCallbacks,
     };
     auto renderCompositorFrame = [&](std::chrono::steady_clock::time_point frameTime,
                                      LoopInstrumentation::Clock::time_point renderStart,
@@ -1891,10 +1877,40 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
       screenshotPending = *request;
       forceRender = true;
-      skipNextVblank = true;
       if (idleBlanked) {
         idleBlanked = false;
       }
+    };
+    auto vulkanDisplayPresentationPollDelayMs = [&] {
+      if (presenter->atomicPresenter() || vulkanDisplayPendingFrameCallbacks.empty()) return kIdlePollMs;
+      std::uint32_t const nowMs = presentation::monotonicMilliseconds();
+      std::uint32_t const pollPeriodMs =
+          presentation::refreshPeriodsMilliseconds(output.refreshRateMilliHz(), 1u);
+      std::uint32_t const fallbackMs =
+          presentation::presentationCompletionFallbackMilliseconds(output.refreshRateMilliHz());
+      std::uint32_t bestDelay = static_cast<std::uint32_t>(kIdlePollMs);
+      for (auto const& pending : vulkanDisplayPendingFrameCallbacks) {
+        std::uint32_t const elapsed = nowMs - pending.queuedAtMs;
+        if (elapsed >= fallbackMs) return 0;
+        std::uint32_t const nextPollElapsed =
+            std::min(fallbackMs, ((elapsed / pollPeriodMs) + 1u) * pollPeriodMs);
+        bestDelay = std::min(bestDelay, nextPollElapsed - elapsed);
+      }
+      return static_cast<int>(bestDelay);
+    };
+    auto maybeCompleteVulkanDisplayPresentationCallbacks = [&] {
+      if (presenter->atomicPresenter() || vulkanDisplayPendingFrameCallbacks.empty()) return false;
+      std::vector<PresentationCompletion> completions =
+          pollVulkanDisplayPresentationCompletions(*presenter,
+                                                   displayTimingSupportLogged,
+                                                   useVulkanPresentationCompletion);
+      std::uint32_t const nowMs = presentation::monotonicMilliseconds();
+      wayland.completePresentationFeedbacks(completions, nowMs);
+      return completeVulkanDisplayPendingFrameCallbacks(wayland,
+                                                        output,
+                                                        vulkanDisplayPendingFrameCallbacks,
+                                                        completions,
+                                                        nowMs);
     };
     auto noteContentSerialChange = [&] {
       std::uint64_t const contentSerial = wayland.contentSerial();
@@ -2034,15 +2050,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           (animationFrameNeeded || screenshotFlashFrameNeededBeforePoll || snapPreviewCanRenderBeforePoll ||
            windowCyclerCanRenderBeforePoll || atomicDirtyCanRenderBeforePoll) &&
           !atomicFrameBlockedBeforePoll;
-      int const renderAheadDelayBeforePoll =
-          diagnosticRenderAheadAllowed() ? atomicRenderAheadDelayMs() : kIdlePollMs;
-      int const queuedScheduleDelayBeforePoll = queuedAtomicScheduleDelayMs();
-      int const acquireWaitCallbackDelayBeforePoll = acquireWaitFrameCallbackDelayMs();
-      int pollTimeoutMs = forceRender || animationCanRenderBeforePoll || renderAheadNeededBeforePoll
-                              ? 0
-                              : std::min(kIdlePollMs, renderAheadDelayBeforePoll);
-      pollTimeoutMs = std::min(pollTimeoutMs, queuedScheduleDelayBeforePoll);
-      pollTimeoutMs = std::min(pollTimeoutMs, acquireWaitCallbackDelayBeforePoll);
+	      int const renderAheadDelayBeforePoll =
+	          diagnosticRenderAheadAllowed() ? atomicRenderAheadDelayMs() : kIdlePollMs;
+	      int const queuedScheduleDelayBeforePoll = queuedAtomicScheduleDelayMs();
+	      int const acquireWaitCallbackDelayBeforePoll = acquireWaitFrameCallbackDelayMs();
+	      int const vulkanDisplayPresentationDelayBeforePoll = vulkanDisplayPresentationPollDelayMs();
+	      int pollTimeoutMs = forceRender || animationCanRenderBeforePoll || renderAheadNeededBeforePoll
+	                              ? 0
+	                              : std::min(kIdlePollMs, renderAheadDelayBeforePoll);
+	      pollTimeoutMs = std::min(pollTimeoutMs, queuedScheduleDelayBeforePoll);
+	      pollTimeoutMs = std::min(pollTimeoutMs, acquireWaitCallbackDelayBeforePoll);
+	      pollTimeoutMs = std::min(pollTimeoutMs, vulkanDisplayPresentationDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, diagnosticExerciseDelayMs());
       if (snapPreviewDelayBeforePoll) {
         int const snapPreviewDelayMs = std::max(0, *snapPreviewDelayBeforePoll);
@@ -2100,8 +2118,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                           pageFlipWoke,
                                           renderReadyWoke);
       }
-      bool const acquireWaitFrameCallbackSent = maybeSendAcquireWaitFrameCallback();
-      if (shellWoke) {
+	      bool const acquireWaitFrameCallbackSent = maybeSendAcquireWaitFrameCallback();
+	      (void)maybeCompleteVulkanDisplayPresentationCallbacks();
+	      if (shellWoke) {
         wayland.dispatchShellIpc();
         loopSnapshots.reset();
       }
@@ -2356,20 +2375,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
             .refreshNsec = refreshNsec(output.refreshRateMilliHz()),
             .flags = 0u,
         };
-      } else if (skipNextVblank) {
-        skipNextVblank = false;
+      } else {
         presentationTiming = PresentationTiming{
             .monotonicNsec = monotonicNanoseconds(),
             .sequence = ++softwarePresentationSequence,
             .refreshNsec = refreshNsec(output.refreshRateMilliHz()),
             .flags = 0u,
         };
-      } else {
-        auto const vblank = output.waitForVblank();
-        if (!vblank.hardware) ++softwarePresentationSequence;
-        presentationTiming =
-            presentation::presentationTimingFromVblank(vblank, output.refreshRateMilliHz(), softwarePresentationSequence);
-        loopStats.recordVblank(timingStart);
       }
       if (!device->isVtForeground()) continue;
       auto const frameTime = std::chrono::steady_clock::now();

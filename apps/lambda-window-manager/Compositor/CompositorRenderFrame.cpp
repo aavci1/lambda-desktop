@@ -582,6 +582,66 @@ void storeAtomicReadyFrame(
 
 } // namespace
 
+std::vector<PresentationCompletion> pollVulkanDisplayPresentationCompletions(
+    Presenter& presenter,
+    bool& timingSupportLogged,
+    bool& usePresentationCompletion) {
+  std::vector<PresentationCompletion> completions;
+  bool const displayTimingAvailable = presenter.vulkanDisplayTimingAvailable();
+  if (!timingSupportLogged && displayTimingAvailable) {
+    std::fprintf(stderr, "lambda-window-manager: Vulkan display timing available\n");
+    timingSupportLogged = true;
+  }
+  if (displayTimingAvailable) {
+    usePresentationCompletion = true;
+  }
+  auto pastPresentationTimings = presenter.pollVulkanPresentationTimings();
+  if (!pastPresentationTimings.empty()) {
+    usePresentationCompletion = true;
+    completions.reserve(pastPresentationTimings.size());
+    for (auto const& timing : pastPresentationTimings) {
+      completions.push_back(PresentationCompletion{
+          .backendPresentId = timing.presentId,
+          .monotonicNsec = timing.actualPresentTime,
+          .sequence = timing.presentId,
+          .flags = static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC |
+                                              WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK),
+      });
+    }
+  }
+  return completions;
+}
+
+bool completeVulkanDisplayPendingFrameCallbacks(
+    WaylandServer& wayland,
+    lambda::platform::KmsOutput const& output,
+    std::vector<VulkanDisplayPendingFrameCallbacks>& pendingCallbacks,
+    std::vector<PresentationCompletion> const& completions,
+    std::uint32_t nowMs) {
+  bool sent = false;
+  for (auto it = pendingCallbacks.begin(); it != pendingCallbacks.end();) {
+    auto const completion =
+        std::find_if(completions.begin(), completions.end(), [&](PresentationCompletion const& item) {
+          return item.backendPresentId == it->backendPresentId;
+        });
+    bool const completed = completion != completions.end();
+    auto const decision = presentation::resolveFrameCallbackCompletion(
+        completed,
+        completed ? completion->monotonicNsec : 0,
+        it->queuedAtMs,
+        nowMs,
+        output.refreshRateMilliHz());
+    if (!decision.ready) {
+      ++it;
+      continue;
+    }
+    wayland.sendFrameCallbacksOnly(decision.callbackMs, it->frameCallbackSurfaceIds);
+    sent = true;
+    it = pendingCallbacks.erase(it);
+  }
+  return sent;
+}
+
 void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                            std::chrono::steady_clock::time_point frameTime,
                            std::chrono::steady_clock::time_point renderStart,
@@ -1108,21 +1168,9 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                           std::move(scenePlan.nextState),
                           frameCallbackSurfaceIds);
   } else if (!atomicPresenter) {
-    if (!ctx.vulkanDisplayTimingSupportLogged && ctx.presenter.vulkanDisplayTimingAvailable()) {
-      std::fprintf(stderr, "lambda-window-manager: Vulkan display timing available\n");
-      ctx.vulkanDisplayTimingSupportLogged = true;
-    }
-    auto pastPresentationTimings = ctx.presenter.pollVulkanPresentationTimings();
-    if (!pastPresentationTimings.empty()) {
-      ctx.useVulkanPresentationCompletion = true;
-      presentationCompletions.reserve(pastPresentationTimings.size());
-      for (auto const& timing : pastPresentationTimings) {
-        presentationCompletions.push_back(PresentationCompletion{
-            .backendPresentId = timing.presentId,
-            .monotonicNsec = timing.actualPresentTime,
-        });
-      }
-    }
+    presentationCompletions = pollVulkanDisplayPresentationCompletions(ctx.presenter,
+                                                                       ctx.vulkanDisplayTimingSupportLogged,
+                                                                       ctx.useVulkanPresentationCompletion);
     if (ctx.useVulkanPresentationCompletion) {
       presentationTiming.backendPresentId = ctx.presenter.lastVulkanPresentId();
     }
@@ -1146,10 +1194,32 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   ctx.loopStats.recordRender(renderStart);
   if (!atomicPresenter) {
     ctx.surfaceRenderState.sceneGraph = std::move(scenePlan.nextState);
-    ctx.wayland.completePresentationFeedbacks(presentationCompletions, presentation::monotonicMilliseconds());
-    ctx.wayland.sendFrameCallbacks(presentation::monotonicMilliseconds(),
-                                   presentationTiming,
-                                   frameCallbackSurfaceIds);
+    std::uint32_t const nowMs = presentation::monotonicMilliseconds();
+    if (ctx.useVulkanPresentationCompletion && presentationTiming.backendPresentId != 0 &&
+        ctx.vulkanDisplayPendingFrameCallbacks) {
+      ctx.wayland.sendPresentationFeedbacks(nowMs, presentationTiming, frameCallbackSurfaceIds);
+      ctx.vulkanDisplayPendingFrameCallbacks->push_back(VulkanDisplayPendingFrameCallbacks{
+          .backendPresentId = presentationTiming.backendPresentId,
+          .queuedAtMs = nowMs,
+          .frameCallbackSurfaceIds = frameCallbackSurfaceIds,
+      });
+      ctx.wayland.completePresentationFeedbacks(presentationCompletions, nowMs);
+      completeVulkanDisplayPendingFrameCallbacks(ctx.wayland,
+                                                 ctx.output,
+                                                 *ctx.vulkanDisplayPendingFrameCallbacks,
+                                                 presentationCompletions,
+                                                 nowMs);
+    } else {
+      ctx.wayland.completePresentationFeedbacks(presentationCompletions, nowMs);
+      ctx.wayland.sendFrameCallbacks(nowMs, presentationTiming, frameCallbackSurfaceIds);
+      if (ctx.vulkanDisplayPendingFrameCallbacks) {
+        completeVulkanDisplayPendingFrameCallbacks(ctx.wayland,
+                                                   ctx.output,
+                                                   *ctx.vulkanDisplayPendingFrameCallbacks,
+                                                   presentationCompletions,
+                                                   nowMs);
+      }
+    }
   }
 }
 

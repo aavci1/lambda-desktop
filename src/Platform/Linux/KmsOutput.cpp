@@ -265,8 +265,9 @@ bool forceLinearScanout() {
   return debug::envNonZero(value);
 }
 
-bool useKmsRenderInFence() {
-  return debug::envNonZero(std::getenv("LAMBDA_COMPOSITOR_USE_KMS_IN_FENCE"));
+bool disableKmsRenderInFence() {
+  char const* value = std::getenv("LAMBDA_COMPOSITOR_USE_KMS_IN_FENCE");
+  return value && !debug::envNonZero(value);
 }
 
 bool useDirectScanoutRender() {
@@ -633,7 +634,9 @@ public:
   mutable std::int32_t cursorY_ = 0;
   mutable std::int32_t cursorHotspotX_ = 0;
   mutable std::int32_t cursorHotspotY_ = 0;
-  mutable bool vblankWaitDisabled_ = false;
+  mutable bool vblankWaitFailureLogged_ = false;
+  mutable std::uint64_t softwareVblankSequence_ = 0;
+  mutable std::uint64_t softwareVblankPhaseNsec_ = 0;
 };
 
 class KmsAtomicPresenter::Impl {
@@ -658,7 +661,7 @@ public:
       if (output_) (void)output_->ensureAtomicCursorPlane();
       planeId_ = primaryPlaneForCrtc(fd_, connector_.crtcId);
       loadProperties();
-      useRenderInFence_ = useKmsRenderInFence() && planeInFenceFd_ != 0;
+      useRenderInFence_ = !disableKmsRenderInFence() && planeInFenceFd_ != 0;
       directScanoutRenderForced_ = useDirectScanoutRender();
       useAsyncRenderFence_ = true;
       if (planeInFenceFd_ != 0) {
@@ -3822,30 +3825,49 @@ VkSurfaceKHR KmsOutput::createVulkanSurface(VkInstance instance) const {
 }
 
 KmsOutput::VblankTiming KmsOutput::waitForVblank() const {
-  if (impl_ && !impl_->vblankWaitDisabled_) {
+  if (impl_) {
     drmVBlank vblank{};
     vblank.request.type = DRM_VBLANK_RELATIVE;
     vblank.request.sequence = 1;
     if (drmWaitVBlank(impl_->drmFd(), &vblank) == 0) {
       std::uint64_t const sec = static_cast<std::uint64_t>(vblank.reply.tval_sec);
       std::uint64_t const usec = static_cast<std::uint64_t>(vblank.reply.tval_usec);
+      impl_->softwareVblankPhaseNsec_ = sec * 1'000'000'000ull + usec * 1'000ull;
+      impl_->softwareVblankSequence_ = static_cast<std::uint64_t>(vblank.reply.sequence);
       return VblankTiming{
           .hardware = true,
           .sequence = static_cast<std::uint64_t>(vblank.reply.sequence),
-          .monotonicNsec = sec * 1'000'000'000ull + usec * 1'000ull,
+          .monotonicNsec = impl_->softwareVblankPhaseNsec_,
       };
     }
-    impl_->vblankWaitDisabled_ = true;
-    std::fprintf(stderr,
-                 "[lambda:kms] drmWaitVBlank failed for connector %s: %s; falling back to timer pacing.\n",
-                 impl_->connector_.name.c_str(),
-                 std::strerror(errno));
+    if (!impl_->vblankWaitFailureLogged_) {
+      std::fprintf(stderr,
+                   "[lambda:kms] drmWaitVBlank failed for connector %s: %s; retrying each frame with timer fallback.\n",
+                   impl_->connector_.name.c_str(),
+                   std::strerror(errno));
+      impl_->vblankWaitFailureLogged_ = true;
+    }
   }
-  std::this_thread::sleep_for(frameInterval(refreshRateMilliHz()));
+  std::uint64_t const intervalNsec = static_cast<std::uint64_t>(frameInterval(refreshRateMilliHz()).count());
+  std::uint64_t const now = monotonicNowNsec();
+  std::uint64_t target = impl_ ? impl_->softwareVblankPhaseNsec_ : 0;
+  if (target == 0 || target + intervalNsec <= now) {
+    target = now;
+  }
+  do {
+    target += intervalNsec;
+  } while (target <= now);
+  if (target > now) {
+    std::this_thread::sleep_for(std::chrono::nanoseconds(target - now));
+  }
+  if (impl_) {
+    impl_->softwareVblankPhaseNsec_ = target;
+    ++impl_->softwareVblankSequence_;
+  }
   return VblankTiming{
       .hardware = false,
-      .sequence = 0,
-      .monotonicNsec = monotonicNowNsec(),
+      .sequence = impl_ ? impl_->softwareVblankSequence_ : 0,
+      .monotonicNsec = target,
   };
 }
 

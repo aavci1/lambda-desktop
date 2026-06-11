@@ -324,11 +324,11 @@ Verification:
 
 What to do:
 
-- [ ] [Auto] Probe and enable `IN_FENCE_FD` by default when the primary plane supports it; keep the env var as an opt-out; extend `allowRenderFence` to non-render-ahead frames.
-- [ ] [Auto] Vulkan-display fallback: pick one pacing source (drop the vblank wait and let swapchain pacing rule, or use `VK_GOOGLE_display_timing` when available); buffer `wl_frame` callbacks per presentId and dispatch them from the present-timing poll, mirroring the atomic path.
-- [ ] [Auto] Presentation feedback: send `discarded` on fallback expiry (shorten to ~2 refresh periods); never substitute render-time for zero timestamps on HW-completion feedback; pass flip/vblank ms into `sendFrameCallbacksOnly`.
-- [ ] [Auto] Anchor the vblank sleep fallback to the last flip timestamp (phase-locked) and retry `drmWaitVBlank` per-CRTC instead of disabling it forever.
-- [ ] [Auto] Add the schedule→flip→feedback integration test that `tests/CompositorPresentationFeedbackTests.cpp` currently lacks (assert `tv_sec/nsec`, `refresh`, `seq`, `HW_COMPLETION` flags through a mock presenter).
+- [x] [Auto] Probe and enable `IN_FENCE_FD` by default when the primary plane supports it; keep the env var as an opt-out; extend `allowRenderFence` to non-render-ahead frames.
+- [x] [Auto] Vulkan-display fallback: pick one pacing source (drop the vblank wait and let swapchain pacing rule, or use `VK_GOOGLE_display_timing` when available); buffer `wl_frame` callbacks per presentId and dispatch them from the present-timing poll, mirroring the atomic path.
+- [x] [Auto] Presentation feedback: send `discarded` on fallback expiry (shorten to ~2 refresh periods); never substitute render-time for zero timestamps on HW-completion feedback; pass flip/vblank ms into `sendFrameCallbacksOnly`.
+- [x] [Auto] Anchor the vblank sleep fallback to the last flip timestamp (phase-locked) and retry `drmWaitVBlank` per-CRTC instead of disabling it forever.
+- [x] [Auto] Add the schedule→flip→feedback integration test that `tests/CompositorPresentationFeedbackTests.cpp` currently lacks (assert `tv_sec/nsec`, `refresh`, `seq`, `HW_COMPLETION` flags through a mock presenter).
 
 Verification on Linux (KMS TTY):
 

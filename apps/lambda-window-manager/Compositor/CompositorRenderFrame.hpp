@@ -47,6 +47,12 @@ struct AtomicReadyFrame {
   std::shared_ptr<platform::KmsAtomicPresenter::OverlayCandidate> scanoutCandidate;
 };
 
+struct VulkanDisplayPendingFrameCallbacks {
+  std::uint32_t backendPresentId = 0;
+  std::uint32_t queuedAtMs = 0;
+  std::vector<std::uint64_t> frameCallbackSurfaceIds;
+};
+
 struct CompositorRenderFrameContext {
   WaylandServer& wayland;
   lambda::platform::KmsOutput const& output;
@@ -69,7 +75,20 @@ struct CompositorRenderFrameContext {
   std::uint64_t* lastKnownContentSerial = nullptr;
   bool vulkanDisplayTimingSupportLogged = false;
   bool useVulkanPresentationCompletion = false;
+  std::vector<VulkanDisplayPendingFrameCallbacks>* vulkanDisplayPendingFrameCallbacks = nullptr;
 };
+
+[[nodiscard]] std::vector<PresentationCompletion> pollVulkanDisplayPresentationCompletions(
+    Presenter& presenter,
+    bool& timingSupportLogged,
+    bool& usePresentationCompletion);
+
+bool completeVulkanDisplayPendingFrameCallbacks(
+    WaylandServer& wayland,
+    lambda::platform::KmsOutput const& output,
+    std::vector<VulkanDisplayPendingFrameCallbacks>& pendingCallbacks,
+    std::vector<PresentationCompletion> const& completions,
+    std::uint32_t nowMs);
 
 void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                            std::chrono::steady_clock::time_point frameTime,

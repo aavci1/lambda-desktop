@@ -3,7 +3,9 @@
 #include <Lambda/Debug/DebugFlags.hpp>
 
 #include "Compositor/Diagnostics/CpuTrace.hpp"
+#include "Compositor/Wayland/WaylandTypes.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdarg>
 #include <cstdint>
@@ -26,6 +28,10 @@ using SteadyClock = std::chrono::steady_clock;
   timespec now{};
   clock_gettime(CLOCK_MONOTONIC, &now);
   return static_cast<std::uint64_t>(now.tv_sec) * 1'000'000'000ull + static_cast<std::uint64_t>(now.tv_nsec);
+}
+
+[[nodiscard]] inline std::uint32_t monotonicMillisecondsFromNsec(std::uint64_t monotonicNsec) {
+  return static_cast<std::uint32_t>(monotonicNsec / 1'000'000ull);
 }
 
 [[nodiscard]] inline double elapsedMilliseconds(SteadyClock::time_point start) {
@@ -76,6 +82,93 @@ inline void tracePacing(char const* format, ...) {
   return refreshMilliHz > 0
              ? static_cast<std::uint32_t>(1'000'000'000'000ull / static_cast<std::uint64_t>(refreshMilliHz))
              : 0u;
+}
+
+[[nodiscard]] inline std::uint32_t refreshPeriodsMilliseconds(std::uint32_t refreshMilliHz,
+                                                              std::uint32_t periods) {
+  std::uint64_t const periodNsec = refreshNsec(refreshMilliHz);
+  std::uint64_t const fallbackPeriodNsec =
+      periodNsec != 0 ? periodNsec : 1'000'000'000ull / 60ull;
+  std::uint64_t const totalNsec = fallbackPeriodNsec * std::max<std::uint32_t>(1u, periods);
+  return static_cast<std::uint32_t>(std::max<std::uint64_t>(1ull, (totalNsec + 999'999ull) / 1'000'000ull));
+}
+
+[[nodiscard]] inline std::uint32_t presentationCompletionFallbackMilliseconds(std::uint32_t refreshMilliHz) {
+  return refreshPeriodsMilliseconds(refreshMilliHz, 2u);
+}
+
+struct PresentationFeedbackCompletionDecision {
+  bool ready = false;
+  bool presented = false;
+  PresentationTiming timing;
+};
+
+struct PresentedFeedbackFields {
+  std::uint32_t tvSecHi = 0;
+  std::uint32_t tvSecLo = 0;
+  std::uint32_t tvNsec = 0;
+  std::uint32_t refresh = 0;
+  std::uint32_t seqHi = 0;
+  std::uint32_t seqLo = 0;
+  std::uint32_t flags = 0;
+};
+
+[[nodiscard]] inline PresentedFeedbackFields presentedFeedbackFields(PresentationTiming const& timing) {
+  std::uint64_t const seconds = timing.monotonicNsec / 1'000'000'000ull;
+  return PresentedFeedbackFields{
+      .tvSecHi = static_cast<std::uint32_t>(seconds >> 32u),
+      .tvSecLo = static_cast<std::uint32_t>(seconds & 0xffffffffu),
+      .tvNsec = static_cast<std::uint32_t>(timing.monotonicNsec % 1'000'000'000ull),
+      .refresh = timing.refreshNsec,
+      .seqHi = static_cast<std::uint32_t>(timing.sequence >> 32u),
+      .seqLo = static_cast<std::uint32_t>(timing.sequence & 0xffffffffu),
+      .flags = timing.flags,
+  };
+}
+
+[[nodiscard]] inline PresentationFeedbackCompletionDecision resolvePresentationFeedbackCompletion(
+    PresentationTiming fallbackTiming,
+    bool hasCompletion,
+    PresentationCompletion completion,
+    std::uint32_t queuedAtMs,
+    std::uint32_t timeMs,
+    std::uint32_t refreshMilliHz,
+    std::uint32_t hardwareCompletionFlag) {
+  bool const expired = static_cast<std::uint32_t>(timeMs - queuedAtMs) >=
+                       presentationCompletionFallbackMilliseconds(refreshMilliHz);
+  if (!hasCompletion && !expired) return {};
+
+  bool const completionValid = hasCompletion && completion.monotonicNsec != 0;
+  if (completionValid) {
+    fallbackTiming.monotonicNsec = completion.monotonicNsec;
+    if (completion.sequence != 0) fallbackTiming.sequence = completion.sequence;
+    fallbackTiming.flags |= completion.flags | hardwareCompletionFlag;
+  }
+  return PresentationFeedbackCompletionDecision{
+      .ready = true,
+      .presented = completionValid,
+      .timing = fallbackTiming,
+  };
+}
+
+struct FrameCallbackCompletionDecision {
+  bool ready = false;
+  std::uint32_t callbackMs = 0;
+};
+
+[[nodiscard]] inline FrameCallbackCompletionDecision resolveFrameCallbackCompletion(
+    bool hasCompletion,
+    std::uint64_t completionNsec,
+    std::uint32_t queuedAtMs,
+    std::uint32_t timeMs,
+    std::uint32_t refreshMilliHz) {
+  bool const expired = static_cast<std::uint32_t>(timeMs - queuedAtMs) >=
+                       presentationCompletionFallbackMilliseconds(refreshMilliHz);
+  if (!hasCompletion && !expired) return {};
+  return FrameCallbackCompletionDecision{
+      .ready = true,
+      .callbackMs = hasCompletion && completionNsec != 0 ? monotonicMillisecondsFromNsec(completionNsec) : timeMs,
+  };
 }
 
 [[nodiscard]] inline std::uint64_t clampRenderAheadLeadNsec(std::uint64_t lead, std::uint32_t refreshMilliHz) {
