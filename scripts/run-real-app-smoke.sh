@@ -23,8 +23,8 @@ prints the manual checks to perform while each app is open.
 Options:
   --no-build       Do not build Lambda app targets first.
   --include-shell  Also launch lambda-shell. Normally the shell is already running.
-  --case NAME      Run one case: lambda-settings, lambda-files, lambda-terminal,
-                   shell, terminal, browser, gtk, qt.
+  --case NAME      Run one case: lambda-settings, lambda-files, lambda-editor,
+                   lambda-terminal, shell, terminal, browser, gtk, qt.
   --seconds N      Seconds to leave each app open. Default: $SECONDS_PER_APP.
   --probe-only     Print detected apps and do not launch anything.
   --list           List candidate cases and exit.
@@ -41,6 +41,7 @@ case_catalog() {
   cat <<'EOF'
 lambda-settings|required|Lambda Settings app with system titlebar glass.
 lambda-files|required|Lambda Files app with integrated titlebar glass.
+lambda-editor|required|Lambda Editor app with text rendering, scrolling, and toolbar chrome.
 lambda-terminal|required|Lambda Terminal app with black glass terminal background.
 shell|required|Lambda Shell dock, launcher, status docklets, and focus integration.
 terminal|required|Mature Wayland terminal, preferably foot.
@@ -179,10 +180,20 @@ if case_selected "lambda-files"; then
   fi
 fi
 
+if case_selected "lambda-editor"; then
+  if [[ -x "$(lambda_exe lambda-editor)" || "$BUILD" -eq 1 ]]; then
+    add_case "lambda-editor" "required" "lambda-editor" "$(lambda_cmd lambda-editor) $(quote_path "$ROOT/TODO.md")" \
+      "Editor should render all visible text while scrolling, keep toolbar/chrome responsive, and resize without stretched or stale content."
+  else
+    add_missing "lambda-editor" "required" "$(lambda_exe lambda-editor)" \
+      "Build the lambda-editor target or rerun without --no-build."
+  fi
+fi
+
 if case_selected "lambda-terminal"; then
   if [[ -x "$(lambda_exe lambda-terminal)" || "$BUILD" -eq 1 ]]; then
     add_case "lambda-terminal" "required" "lambda-terminal" "$(lambda_cmd lambda-terminal)" \
-      "Terminal should accept typing, Ctrl+C should affect the shell process, and resize should remain responsive."
+      "Terminal should accept typing, Ctrl+C should affect the shell process, and resize should feel smooth without stretched or stale content."
   else
     add_missing "lambda-terminal" "required" "$(lambda_exe lambda-terminal)" \
       "Build the lambda-terminal target or rerun without --no-build."
@@ -275,7 +286,7 @@ if [[ "$BUILD" -eq 1 ]]; then
   for row in "${rows[@]}"; do
     IFS='|' read -r name required target command expected detail <<<"$row"
     case "$target" in
-      lambda-settings|lambda-files|lambda-terminal|lambda-shell)
+      lambda-settings|lambda-files|lambda-editor|lambda-terminal|lambda-shell)
         build_targets+=("$target")
         ;;
     esac
@@ -329,6 +340,7 @@ for row in "${rows[@]}"; do
   echo "== $name: $target =="
   echo "$expected"
   echo "Common checks: focus, move, resize edges/corner, snap, maximize, restore, minimize/restore, text input, close."
+  echo "Visual checks: cursor appearance, cursor motion during load, resize feel, no stretched/stale content, no empty text after scroll."
   echo "Command: $command"
 
   set +e
@@ -348,6 +360,11 @@ echo
 echo "Cross-app clipboard check:"
 echo "  Copy text from one mature client and paste into another, then reverse direction."
 echo "  If the source exits before paste, paste should either continue or fail cleanly without freezing the WM."
+echo
+echo "Frame-pacing visual checks:"
+echo "  Cursor should keep the expected theme/shape and remain responsive while Terminal, Editor, or browser content is busy."
+echo "  Live resize should look continuous: exposed areas fill immediately and existing content stays aligned instead of stretching."
+echo "  Scroll representative Lambda apps, especially Editor, and confirm text keeps rendering beyond the initial window height."
 echo
 echo "Logs written to: $LOG_DIR"
 if [[ "$failed" -ne 0 ]]; then
