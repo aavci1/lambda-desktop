@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-06-12 (WM-COMP-24 DnD completed-drop cleanup verified)
+**Last updated:** 2026-06-12 (WM-COMP-24 DnD post-drop abort cancellation verified)
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -174,7 +174,7 @@ Current implementation:
 - Core idle behavior, Lambda app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, and real-app smoke tooling exist.
 - Screenshot full-output, active-window, and region capture are implemented with compositor-owned region UI.
 - Protocol work includes layer-shell, xdg-shell, xdg-output, viewporter, cursor-shape, fractional-scale, activation, presentation-time, relative pointer, pointer constraints, primary selection, clipboard/data-device, idle inhibit, and background-effect paths. Clipboard/data-device protocol coverage is separate from the app-level shortcut and cross-application text workflow tracked in `TODO.md` TODO-002, and from Shell clipboard-history UI work.
-- The active wlroots comparison plan has verified core surface-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, remaining global resource hygiene through WM-COMP-21, WM-COMP-22 XDG configure/frame-size parity, WM-COMP-23 popup-grab/cursor/seat cleanup slices, and WM-COMP-24 DnD action-negotiation/data-offer/data-source/drag-icon/post-finish/completed-drop cleanup validation slices.
+- The active wlroots comparison plan has verified core surface-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, remaining global resource hygiene through WM-COMP-21, WM-COMP-22 XDG configure/frame-size parity, WM-COMP-23 popup-grab/cursor/seat cleanup slices, and WM-COMP-24 DnD action-negotiation/data-offer/data-source/drag-icon/post-finish/completed-drop/post-drop-abort validation slices.
 - Firefox dogfooding blockers addressed in the tested paths: xdg-popup lifecycle cleanup follows the wlroots-style inert-resource pattern, Firefox crash/recovery windows no longer grow on focus changes, fullscreen video can restore, and fullscreen preserves pre-fullscreen maximized/snapped/normal state.
 - Fullscreen shell-panel behavior exists for the current single-output desktop: panels leave the fullscreen area and restore afterward.
 - KMS presentation has a compositor frame queue, improved frame pacing, direct scanout/overlay paths for video, hardware-cursor motion that does not force scene redraws, and video overlay tracing for skipped-frame analysis.

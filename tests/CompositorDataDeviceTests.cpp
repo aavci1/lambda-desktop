@@ -111,3 +111,12 @@ TEST_CASE("data-device drop cleanup preserves offers after completed drops") {
   CHECK_FALSE(completed.sendLeave);
   CHECK(dndSourceShouldReceiveDropPerformed(true));
 }
+
+TEST_CASE("data-device offer destruction cancels only unfinished completed drops") {
+  using namespace lambda::compositor;
+
+  CHECK(dataOfferShouldCancelSourceOnDestroy(true, true, false));
+  CHECK_FALSE(dataOfferShouldCancelSourceOnDestroy(false, true, false));
+  CHECK_FALSE(dataOfferShouldCancelSourceOnDestroy(true, false, false));
+  CHECK_FALSE(dataOfferShouldCancelSourceOnDestroy(true, true, true));
+}

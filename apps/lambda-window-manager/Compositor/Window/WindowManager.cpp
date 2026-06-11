@@ -377,6 +377,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         }
         wl_data_device_send_drop(device->resource);
         completedDrop = true;
+        dndOffer_->dropPerformed = true;
       }
       if (dndSourceShouldReceiveDropPerformed(completedDrop) &&
           dndSource_->resource &&

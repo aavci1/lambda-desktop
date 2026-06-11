@@ -909,6 +909,7 @@ struct WaylandServer::Impl::DataOffer {
   std::uint32_t dndActions = WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
   std::uint32_t preferredAction = WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
   std::uint32_t selectedAction = WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
+  bool dropPerformed = false;
   bool finished = false;
 };
 

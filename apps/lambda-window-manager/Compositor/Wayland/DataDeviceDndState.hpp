@@ -92,4 +92,8 @@ inline bool dndSourceShouldReceiveDropPerformed(bool completedDrop) {
   return completedDrop;
 }
 
+inline bool dataOfferShouldCancelSourceOnDestroy(bool dnd, bool dropPerformed, bool finished) {
+  return dnd && dropPerformed && !finished;
+}
+
 } // namespace lambda::compositor

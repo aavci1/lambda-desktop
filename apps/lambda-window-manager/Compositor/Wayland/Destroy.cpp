@@ -1,4 +1,5 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/DataDeviceDndState.hpp"
 #include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/SeatFocusState.hpp"
@@ -605,6 +606,12 @@ void WaylandServer::Impl::destroyDataSource(DataSource* source) {
 }
 
 void WaylandServer::Impl::destroyDataOffer(DataOffer* offer) {
+  if (offer &&
+      dataOfferShouldCancelSourceOnDestroy(offer->dnd, offer->dropPerformed, offer->finished) &&
+      offer->source &&
+      offer->source->resource) {
+    wl_data_source_send_cancelled(offer->source->resource);
+  }
   if (dndOffer_ == offer) dndOffer_ = nullptr;
   eraseResource(dataOffers_, offer);
 }
