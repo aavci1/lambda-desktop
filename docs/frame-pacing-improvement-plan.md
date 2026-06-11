@@ -1,6 +1,6 @@
 # Frame Pacing Improvement Plan
 
-**Status:** Code implementation complete; retained as the verification follow-up checklist for manual, validation-layer, presentation-client, pointer-driving, and macOS checks. Tracked as TODO-019 in [TODO.md](../TODO.md).
+**Status:** Code implementation complete; retained as the verification follow-up checklist for manual, validation-layer, hardware input-driver, and macOS checks. Tracked as TODO-019 in [TODO.md](../TODO.md).
 **Scope:** `apps/lambda-window-manager/Compositor/`, `src/Platform/Linux/` (KMS + Wayland), `src/Graphics/Vulkan/`, `src/Graphics/Metal/`, `src/Platform/Mac/`, `src/SceneGraph/`, and `src/UI/Application.*`.
 **Source:** Frame-pacing review of commit `ca4466cd` (four parallel code audits; the highest-impact claims verified directly in source). Severity reflects expected impact on smoothness and pacing, not crash risk.
 
@@ -14,7 +14,8 @@ Most items require a Linux machine (Wayland and/or KMS from a TTY) to verify. FP
 - [x] KMS compositor runtime smoke completed with normal-build `lambda-shell`, scripted `lambda-terminal`, and `lambda-editor`; logs had zero fatal/error matches.
 - [x] Runtime traces captured 20 CPU samples, 37 KMS timing windows, 10,712 pacing events, and 900 terminal `vulkan-present-detail` samples. Summary: compositor CPU avg/max 12.54%/15.60%, compositor surface avg/max 0.471/0.632 ms, present avg/max 0.395/0.582 ms, terminal atlas avg 0.004 ms, terminal `waitImage` avg 0.000 ms.
 - [x] Added `scripts/verify-frame-pacing-linux.sh` and `lambda-presentation-feedback-check`. Latest run passed both presenters: atomic-KMS reported `CLOCK_MONOTONIC`, refresh 16,666,666 ns, nonzero sequence, and `VSYNC|HW_CLOCK|HW_COMPLETION`; Vulkan-display reported `CLOCK_MONOTONIC`, refresh 16,666,666 ns, and nonzero sequence. Atomic runtime summary: 20 CPU samples, 31 KMS timing windows, 10,765 pacing events, 861 terminal `vulkan-present-detail` samples, zero fatal matches, CPU avg/max 12.11%/15.30%, terminal `waitImage` avg 0.000 ms, terminal atlas avg 0.004 ms.
-- [ ] Remaining local gap: no pointer-driving tool (`ydotool`, `wtype`, or equivalent) was available, so pointer-motion performance still needs manual or tool-assisted validation.
+- [x] Added synthetic KMS raw-input pointer-motion verification to `scripts/verify-frame-pacing-linux.sh`. Latest run: 180 synthetic pointer events, 180 hardware-cursor fast-path moves, zero fallback/unavailable moves, zero runtime failures, and no pointer-triggered full redraw loops; atomic app smoke and Vulkan-display timestamp checks also passed.
+- [ ] Remaining local gap: no external pointer-driving tool (`ydotool`, `wtype`, or equivalent) was available, so real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad Wayland-display-dependent tests and real-app smoke cases need an already-running external Wayland session or manual app interaction.
 - [ ] Remaining system-tool gap: `vulkan-validation-layers`, `weston`, `wayland-utils`, `ydotool`, and `evemu` are not installed and noninteractive `sudo` is unavailable in this session, so validation-layer and hardware input-driver verification still require a prepared host.
 - [ ] Remaining platform gap: Metal source is not compiled on Linux; macOS compile/runtime verification is still required.
@@ -135,7 +136,7 @@ What to do:
 
 Verification on Linux (KMS TTY):
 
-- [ ] Frame profile CSV: pointer-motion-only periods produce no compositor frames (only cursor commits), where today every motion event renders.
+- [x] Frame profile/pacing trace: pointer-motion-only periods produce no compositor frames. `scripts/verify-frame-pacing-linux.sh` reported 180 synthetic raw-input pointer events, 180 hardware-cursor fast-path moves, zero fallback/unavailable moves, and no `input=1 render=1` redraw loops after the pointer stream began.
 - [ ] Cursor stays responsive while a heavy client animates (GPU saturated) — previously multi-frame lag.
 - [ ] No flicker or cursor tearing across primary-plane flips (cursor plane and primary commit interleave safely).
 

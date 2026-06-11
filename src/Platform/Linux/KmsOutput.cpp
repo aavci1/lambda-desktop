@@ -629,6 +629,7 @@ public:
   mutable bool atomicCursorLogged_ = false;
   mutable bool cursorUploadLogged_ = false;
   mutable bool atomicPageFlipPending_ = false;
+  mutable bool atomicCursorMoveDeferred_ = false;
   mutable drmModeAtomicReq* atomicCursorRequest_ = nullptr;
   mutable std::int32_t cursorX_ = 0;
   mutable std::int32_t cursorY_ = 0;
@@ -3544,10 +3545,16 @@ bool KmsOutput::Impl::addAtomicCursorProperties(drmModeAtomicReq* request) const
 
 void KmsOutput::Impl::markAtomicCursorScheduled() const noexcept {
   atomicCursorActive_ = cursorVisible_ && atomicCursorPlaneId_ != 0 && cursorBuffer_.fbId != 0;
+  atomicCursorMoveDeferred_ = false;
 }
 
 void KmsOutput::Impl::setAtomicPageFlipPending(bool pending) const noexcept {
   atomicPageFlipPending_ = pending;
+  if (pending || !atomicCursorMoveDeferred_) return;
+  atomicCursorMoveDeferred_ = false;
+  if (!commitAtomicCursor(cursorX_, cursorY_, cursorVisible_)) {
+    atomicCursorMoveDeferred_ = cursorVisible_;
+  }
 }
 
 drmModeAtomicReq* KmsOutput::Impl::cursorAtomicRequest() const noexcept {
@@ -3567,8 +3574,8 @@ bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool vi
   cursorX_ = x;
   cursorY_ = y;
   if (atomicPageFlipPending_) {
-    atomicCursorActive_ = false;
-    return false;
+    atomicCursorMoveDeferred_ = visible;
+    return true;
   }
 
   int const fd = drmFd();
@@ -3603,6 +3610,10 @@ bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool vi
   }
 
   bool const retryOnFrameCommit = commitErrno == EBUSY || commitErrno == EAGAIN;
+  if (!committed && retryOnFrameCommit) {
+    atomicCursorMoveDeferred_ = visible;
+    return true;
+  }
   if (!committed && !retryOnFrameCommit && !atomicCursorFailureLogged_) {
     std::fprintf(stderr,
                  "lambda-window-manager: KMS atomic cursor commit failed plane=%u: %s\n",
@@ -3979,7 +3990,8 @@ bool KmsOutput::moveCursor(std::int32_t x, std::int32_t y) const {
   if (!impl_ || !impl_->cursorVisible_) return false;
   if (impl_->atomicCursorAvailable_ || !impl_->atomicCursorInitialized_) {
     if (impl_->ensureAtomicCursorPlane()) {
-      if (impl_->atomicCursorActive_ && impl_->cursorX_ == x && impl_->cursorY_ == y) {
+      if (impl_->atomicCursorActive_ && !impl_->atomicCursorMoveDeferred_ &&
+          impl_->cursorX_ == x && impl_->cursorY_ == y) {
         return true;
       }
       return impl_->commitAtomicCursor(x, y, true);
@@ -4063,6 +4075,10 @@ bool KmsDevice::shouldTerminate() const noexcept {
 
 void KmsDevice::setInputHandler(std::function<void(KmsInputEvent const&)> handler) {
   if (impl_ && impl_->app_) impl_->app_->rawInputHandler_ = std::move(handler);
+}
+
+void KmsDevice::emitInputEventForDiagnostics(KmsInputEvent const& event) {
+  if (impl_ && impl_->app_) impl_->app_->emitRawInput(event);
 }
 
 void KmsDevice::acknowledgeVtAcquire() {

@@ -183,6 +183,7 @@ public:
   [[nodiscard]] bool shouldTerminate() const noexcept;
 
   void setInputHandler(std::function<void(KmsInputEvent const&)> handler);
+  void emitInputEventForDiagnostics(KmsInputEvent const& event);
   void acknowledgeVtAcquire();
 
   /// Services signal, VT-switch, input, wake, and hotplug events owned by the KMS device.

@@ -29,6 +29,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -64,6 +65,15 @@ int positiveEnvInt(char const* name, int fallback, int maxValue) {
   return static_cast<int>(std::min<long>(value, maxValue));
 }
 
+double envDouble(char const* name, double fallback, double minValue, double maxValue) {
+  char const* raw = std::getenv(name);
+  if (!raw || !*raw) return fallback;
+  char* end = nullptr;
+  double const value = std::strtod(raw, &end);
+  if (end == raw || !std::isfinite(value)) return fallback;
+  return std::clamp(value, minValue, maxValue);
+}
+
 bool envEnabled(char const* name) {
   char const* raw = std::getenv(name);
   if (!raw || !*raw) return false;
@@ -80,6 +90,72 @@ int millisecondsUntilCeil(SteadyClock::time_point deadline,
   long long const remainingMs = (remainingUs + 999ll) / 1000ll;
   return static_cast<int>(std::clamp<long long>(remainingMs, 1, maxDelayMs));
 }
+
+std::uint32_t monotonicMilliseconds32(SteadyClock::time_point now) {
+  auto const ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+  return static_cast<std::uint32_t>(static_cast<std::uint64_t>(std::max<long long>(0, ms)) & 0xffffffffull);
+}
+
+struct SyntheticPointerMotion {
+  bool enabled = false;
+  int remaining = 0;
+  int intervalMs = 8;
+  double dx = 7.0;
+  double dy = 3.0;
+  int emitted = 0;
+  SteadyClock::time_point nextAt{};
+
+  static SyntheticPointerMotion fromEnvironment(SteadyClock::time_point now) {
+    SyntheticPointerMotion plan;
+    if (!envEnabled("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION")) {
+      return plan;
+    }
+    plan.enabled = true;
+    plan.remaining = positiveEnvInt("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_COUNT", 240, 10000);
+    plan.intervalMs = positiveEnvInt("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_INTERVAL_MS", 8, 1000);
+    plan.dx = envDouble("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DX", 7.0, -256.0, 256.0);
+    plan.dy = envDouble("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DY", 3.0, -256.0, 256.0);
+    int const warmupMs = positiveEnvInt("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_WARMUP_MS", 1000, 30000);
+    plan.nextAt = now + std::chrono::milliseconds(warmupMs);
+    std::fprintf(stderr,
+                 "lambda-window-manager: synthetic pointer motion enabled count=%d interval_ms=%d warmup_ms=%d "
+                 "dx=%.2f dy=%.2f\n",
+                 plan.remaining,
+                 plan.intervalMs,
+                 warmupMs,
+                 plan.dx,
+                 plan.dy);
+    return plan;
+  }
+
+  [[nodiscard]] std::optional<int> delayMs(SteadyClock::time_point now) const {
+    if (!enabled || remaining <= 0) return std::nullopt;
+    return millisecondsUntilCeil(nextAt, now, intervalMs);
+  }
+
+  bool emitDue(lambda::platform::KmsDevice& device, SteadyClock::time_point now) {
+    if (!enabled || remaining <= 0 || now < nextAt) return false;
+    lambda::platform::KmsInputEvent event{
+        .kind = lambda::platform::KmsInputEvent::Kind::PointerMotion,
+        .dx = dx,
+        .dy = dy,
+        .timeMs = monotonicMilliseconds32(now),
+    };
+    device.emitInputEventForDiagnostics(event);
+    ++emitted;
+    --remaining;
+    nextAt = now + std::chrono::milliseconds(intervalMs);
+    LAMBDA_WINDOW_MANAGER_TRACE_PACING("synthetic-pointer-motion emitted=%d remaining=%d dx=%.2f dy=%.2f\n",
+                                       emitted,
+                                       remaining,
+                                       dx,
+                                       dy);
+    if (remaining == 0) {
+      std::fprintf(stderr, "lambda-window-manager: synthetic pointer motion complete emitted=%d\n", emitted);
+    }
+    return true;
+  }
+};
 
 void applyDiagnosticFloorChrome(WaylandServer& wayland, AppliedCompositorConfig& appliedConfig) {
   if (!envEnabled("LWM_DIAGNOSTIC_FLOOR_RENDERING")) return;
@@ -854,15 +930,24 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                                                    cursorState,
                                                                    hardwareCursorFastPathEnabled);
         if (hardwareCursorMoved) {
+          LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-cursor-motion-fast-path moved=1 pointer=%.1f,%.1f\n",
+                                             wayland.pointerX(),
+                                             wayland.pointerY());
           return;
         }
         if (hardwareCursorFastPathAttempted) {
+          LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-cursor-motion-fast-path moved=0 pointer=%.1f,%.1f\n",
+                                             wayland.pointerX(),
+                                             wayland.pointerY());
           hardwareCursorMotionFastPathDisabled = true;
           if (!hardwareCursorMotionFastPathFailureLogged) {
             std::fprintf(stderr,
                          "lambda-window-manager: hardware cursor motion fast path failed; using frame redraw fallback\n");
             hardwareCursorMotionFastPathFailureLogged = true;
           }
+        } else if (hardwareCursorFastPathEnabled && event.kind == lambda::platform::KmsInputEvent::Kind::PointerMotion) {
+          LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-cursor-motion-fast-path unavailable hardwareVisible=%d\n",
+                                             cursorState.hardwareVisible ? 1 : 0);
         }
         inputRenderRequiredThisLoop = true;
       } catch (std::exception const& error) {
@@ -873,6 +958,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         inputRenderRequiredThisLoop = true;
       }
     });
+    SyntheticPointerMotion syntheticPointerMotion = SyntheticPointerMotion::fromEnvironment(SteadyClock::now());
 
     bool forceRender = true;
     std::optional<ScreenshotRequest> screenshotPending;
@@ -2086,9 +2172,12 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
 	                              ? 0
 	                              : std::min(kIdlePollMs, renderAheadDelayBeforePoll);
 	      pollTimeoutMs = std::min(pollTimeoutMs, queuedScheduleDelayBeforePoll);
-	      pollTimeoutMs = std::min(pollTimeoutMs, acquireWaitCallbackDelayBeforePoll);
-	      pollTimeoutMs = std::min(pollTimeoutMs, vulkanDisplayPresentationDelayBeforePoll);
+      pollTimeoutMs = std::min(pollTimeoutMs, acquireWaitCallbackDelayBeforePoll);
+      pollTimeoutMs = std::min(pollTimeoutMs, vulkanDisplayPresentationDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, diagnosticExerciseDelayMs());
+      if (std::optional<int> syntheticPointerDelay = syntheticPointerMotion.delayMs(SteadyClock::now())) {
+        pollTimeoutMs = std::min(pollTimeoutMs, *syntheticPointerDelay);
+      }
       if (snapPreviewDelayBeforePoll) {
         int const snapPreviewDelayMs = std::max(0, *snapPreviewDelayBeforePoll);
         if (snapPreviewDelayMs > 0 || snapPreviewCanRenderBeforePoll) {
@@ -2162,6 +2251,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       wayland.dispatchShellIpc();
       loopSnapshots.reset();
       queueScreenshotIfRequested();
+      bool const syntheticPointerEmitted = syntheticPointerMotion.emitDue(*device, SteadyClock::now());
       maybeCrashHeartbeat("main-loop");
       bool const hadInputActivity = inputActivityThisLoop;
       bool const inputRenderRequired = inputRenderRequiredThisLoop;
@@ -2256,7 +2346,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (forceRender || pollResult.inputOrSystem || waylandWoke || inputRenderRequired || configReloaded ||
           animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded || windowCyclerFrameNeeded ||
           diagnosticExerciseChanged ||
-          acquireWaitFrameCallbackSent) {
+          acquireWaitFrameCallbackSent ||
+          syntheticPointerEmitted) {
         if (!presenter->atomicPresenter() || forceRender || waylandWoke || inputRenderRequired ||
             configReloaded ||
             animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded || windowCyclerFrameNeeded ||

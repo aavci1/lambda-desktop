@@ -20,6 +20,7 @@ Runs the TODO-019 Linux frame-pacing verification smoke:
   - starts lambda-window-manager with CPU, KMS, and pacing traces
   - verifies wp_presentation feedback on atomic-KMS and Vulkan-display presenters
   - runs lambda-shell, a scripted lambda-terminal workload, and lambda-editor
+  - drives synthetic pointer motion through the KMS raw-input path with the hardware-cursor fast path enabled
   - summarizes CPU/pacing/present-detail logs and fails on fatal runtime errors
 
 Environment:
@@ -65,7 +66,7 @@ summarize_runtime_logs() {
   local dir="$1"
   local label="$2"
   local fatal_count
-  fatal_count=$( (rg -n -i 'fatal|segmentation|assert|terminate called|AddressSanitizer|exception|aborted' "$dir" || true) | wc -l )
+  fatal_count=$( (rg -n -i 'fatal|segmentation|assert|terminate called|AddressSanitizer|exception|aborted|input event handling failed|hardware cursor motion fast path failed' "$dir" || true) | wc -l )
   local cpu_lines
   cpu_lines=$(rg -c '^cpu-trace:' "$dir/cpu.log" 2>/dev/null || echo 0)
   local kms_lines
@@ -77,6 +78,25 @@ summarize_runtime_logs() {
   printf 'SUMMARY %s fatal_matches=%s cpu_trace_lines=%s kms_trace_lines=%s pacing_lines=%s terminal_present_lines=%s\n' \
     "$label" "$fatal_count" "$cpu_lines" "$kms_lines" "$pacing_lines" "$terminal_present_lines"
   if [[ "$fatal_count" -ne 0 ]]; then
+    return 1
+  fi
+}
+
+summarize_pointer_fast_path() {
+  local dir="$1"
+  local label="$2"
+  local synthetic_events
+  synthetic_events=$(rg -c 'synthetic-pointer-motion emitted=' "$dir/pacing.log" 2>/dev/null || echo 0)
+  local fast_path_moves
+  fast_path_moves=$(rg -c 'hardware-cursor-motion-fast-path moved=1' "$dir/pacing.log" 2>/dev/null || echo 0)
+  local fallback_moves
+  fallback_moves=$(rg -c 'hardware-cursor-motion-fast-path moved=0|hardware-cursor-motion-fast-path unavailable' "$dir/pacing.log" 2>/dev/null || echo 0)
+  local runtime_failures
+  runtime_failures=$( (rg -n -i 'input event handling failed|hardware cursor motion fast path failed' "$dir/compositor.log" || true) | wc -l )
+  printf 'SUMMARY %s synthetic_pointer_events=%s hardware_cursor_fast_path_moves=%s fallback_or_unavailable_moves=%s runtime_failures=%s\n' \
+    "$label" "$synthetic_events" "$fast_path_moves" "$fallback_moves" "$runtime_failures"
+  if [[ "$synthetic_events" -le 0 || "$fast_path_moves" -lt "$synthetic_events" ||
+        "$fallback_moves" -ne 0 || "$runtime_failures" -ne 0 ]]; then
     return 1
   fi
 }
@@ -156,6 +176,7 @@ run_compositor_case() {
   local presenter="$2"
   local require_hardware_flags="$3"
   local run_apps="$4"
+  local synthetic_pointer="${5:-0}"
   local dir="$LOG_DIR/$label"
   mkdir -p "$dir"
 
@@ -179,6 +200,7 @@ run_compositor_case() {
     if [[ -n "$wm_pid" ]]; then
       kill -KILL -"$wm_pid" 2>/dev/null || kill -KILL "$wm_pid" 2>/dev/null || true
     fi
+    set -e
   }
   trap cleanup RETURN
 
@@ -193,6 +215,17 @@ run_compositor_case() {
   )
   if [[ -n "$presenter" ]]; then
     env_args+=(LAMBDA_WINDOW_MANAGER_PRESENT="$presenter")
+  fi
+  if [[ "$synthetic_pointer" == "1" ]]; then
+    env_args+=(
+      LAMBDA_COMPOSITOR_ENABLE_HARDWARE_CURSOR_MOTION_FAST_PATH=1
+      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION=1
+      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_COUNT=180
+      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_INTERVAL_MS=8
+      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_WARMUP_MS=1500
+      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DX=5
+      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DY=2
+    )
   fi
 
   setsid timeout --signal=TERM --kill-after=5s 60s env "${env_args[@]}" "$WM" >"$dir/compositor.log" 2>&1 &
@@ -244,6 +277,10 @@ run_compositor_case() {
     fi
   fi
 
+  if [[ "$synthetic_pointer" == "1" ]]; then
+    sleep 5
+  fi
+
   sleep 2
   cleanup
   trap - RETURN
@@ -258,12 +295,16 @@ run_compositor_case() {
   presenter_line="$(rg -o 'using (GBM/atomic-KMS|Vulkan display) presenter' "$dir/compositor.log" | tail -1 || true)"
   printf 'CASE %s display=%s %s checker=%s log_dir=%s\n' "$label" "$display" "$presenter_line" "$checker_line" "$dir"
   summarize_runtime_logs "$dir" "$label"
+  if [[ "$synthetic_pointer" == "1" ]]; then
+    summarize_pointer_fast_path "$dir" "$label"
+  fi
   summarize_cpu_trace "$dir/cpu.log"
   summarize_terminal_present "$dir/lambda-terminal-render.log"
 }
 
 echo "Frame pacing verification logs: $LOG_DIR"
 run_compositor_case atomic "" 1 1
+run_compositor_case atomic-pointer-fast-path "" 1 0 1
 run_compositor_case vulkan-display vulkan-display 0 0
 
 echo "Pointer-driving tool availability:"
