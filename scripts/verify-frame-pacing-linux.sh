@@ -23,6 +23,7 @@ Runs the TODO-019 Linux frame-pacing verification smoke:
   - drives synthetic pointer motion through the KMS raw-input path with the hardware-cursor fast path enabled
   - overlaps synthetic hardware-cursor motion with the scripted terminal workload
   - exercises a static SHM client surface and asserts compositor surface draw-cache reuse
+  - moves two decorated checker windows and asserts multi-rect partial damage stays cheap
   - drives server-side chrome hover/press transitions and asserts client surface-cache reuse
   - drives scripted resize configures and asserts the compositor sizing path stays healthy
   - captures compositor resize-storm frames and snap CSV metrics for artifact inspection
@@ -306,6 +307,73 @@ summarize_surface_cache() {
   ' "$dir/cpu.log"
 }
 
+summarize_multi_dirty_partial() {
+  local dir="$1"
+  local label="$2"
+  [[ -s "$dir/pacing.log" ]] || {
+    echo "SUMMARY $label multi_dirty_missing_pacing_log=1"
+    return 1
+  }
+  [[ -s "$dir/cpu.log" ]] || {
+    echo "SUMMARY $label multi_dirty_missing_cpu_log=1"
+    return 1
+  }
+
+  local partial_frames
+  partial_frames=$(rg -c 'scene-damage-render partial=1' "$dir/pacing.log" 2>/dev/null || echo 0)
+  local multi_rect_partial_frames
+  multi_rect_partial_frames=$(rg -c 'scene-damage-render partial=1 logicalRects=([2-9]|[1-9][0-9]+)' "$dir/pacing.log" 2>/dev/null || echo 0)
+  local multi_surface_flips
+  multi_surface_flips=$(rg -c 'flip-scheduled .*surfaces=([2-9]|[1-9][0-9]+)' "$dir/pacing.log" 2>/dev/null || echo 0)
+  local max_logical_rects
+  max_logical_rects=$(awk '
+    /scene-damage-render partial=1/ {
+      for (i = 1; i <= NF; ++i) {
+        if ($i ~ /^logicalRects=/) {
+          raw = $i
+          sub(/^logicalRects=/, "", raw)
+          if (raw + 0 > max) max = raw + 0
+        }
+      }
+    }
+    END { print max + 0 }
+  ' "$dir/pacing.log")
+  printf 'SUMMARY %s multi_dirty_partial partial_frames=%s multi_rect_partial_frames=%s max_logical_rects=%s multi_surface_flips=%s\n' \
+    "$label" "$partial_frames" "$multi_rect_partial_frames" "$max_logical_rects" "$multi_surface_flips"
+  if [[ "$partial_frames" -le 0 || "$multi_rect_partial_frames" -le 0 || "$multi_surface_flips" -le 0 ]]; then
+    return 1
+  fi
+
+  local surface_budget_ms="${LWM_MULTI_DIRTY_SURFACE_MAX_MS:-4.0}"
+  awk -v label="$label" -v surface_budget_ms="$surface_budget_ms" '
+    function phrase(pattern, key,    raw) {
+      if (!match(line, pattern)) return 0.0
+      raw = substr(line, RSTART, RLENGTH)
+      sub("^.*" key "=", "", raw)
+      return raw + 0.0
+    }
+    /^cpu-trace:/ {
+      line = $0
+      frames = phrase("frames=[0-9]+", "frames")
+      surface = phrase("phase_avg_ms total=[0-9.]+ bg=[0-9.]+ snapshot=[0-9.]+ surface=[0-9.]+", "surface")
+      if (frames <= 0) next
+      samples += 1
+      surface_sum += surface
+      if (surface > surface_max) surface_max = surface
+    }
+    END {
+      if (samples == 0) {
+        printf "SUMMARY %s multi_dirty_surface_samples=0\n", label
+        exit 1
+      }
+      surface_avg = surface_sum / samples
+      printf "SUMMARY %s multi_dirty_surface samples=%d surface_avg=%.3f surface_max=%.3f budget=%.3f\n",
+        label, samples, surface_avg, surface_max, surface_budget_ms
+      if (surface_max > surface_budget_ms) exit 1
+    }
+  ' "$dir/cpu.log"
+}
+
 summarize_cpu_trace() {
   local log="$1"
   [[ -s "$log" ]] || return 0
@@ -374,6 +442,120 @@ summarize_terminal_present() {
         n, waitImage / n, waitImageOver, atlas / n, atlasOver, record / n, recordMax, queuePresent / n
     }
   ' "$log"
+}
+
+run_multi_dirty_partial_case() {
+  local label="multi-dirty-partial"
+  local dir="$LOG_DIR/$label"
+  mkdir -p "$dir"
+
+  local display_file="$XDG_RUNTIME_DIR/lambda-window-manager-display"
+  rm -f "$display_file"
+
+  local wm_pid=""
+  local checker_a_pid=""
+  local checker_b_pid=""
+  cleanup() {
+    set +e
+    if [[ -n "$checker_a_pid" ]]; then
+      kill -TERM -"$checker_a_pid" 2>/dev/null || kill -TERM "$checker_a_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$checker_b_pid" ]]; then
+      kill -TERM -"$checker_b_pid" 2>/dev/null || kill -TERM "$checker_b_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$wm_pid" ]]; then
+      kill -TERM -"$wm_pid" 2>/dev/null || kill -TERM "$wm_pid" 2>/dev/null || true
+    fi
+    sleep 1
+    if [[ -n "$checker_a_pid" ]]; then
+      kill -KILL -"$checker_a_pid" 2>/dev/null || kill -KILL "$checker_a_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$checker_b_pid" ]]; then
+      kill -KILL -"$checker_b_pid" 2>/dev/null || kill -KILL "$checker_b_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$wm_pid" ]]; then
+      kill -KILL -"$wm_pid" 2>/dev/null || kill -KILL "$wm_pid" 2>/dev/null || true
+    fi
+    set -e
+  }
+  trap cleanup RETURN
+
+  setsid timeout --signal=TERM --kill-after=5s 35s env \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG="$dir/cpu.log" \
+    LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE=0 \
+    LAMBDA_KMS_PRESENT_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$dir/pacing.log" \
+    LWM_DIAGNOSTIC_SCRIPTED_EXERCISE=1 \
+    LWM_DIAGNOSTIC_SCRIPTED_MULTI_TOPLEVELS=1 \
+    "$WM" >"$dir/compositor.log" 2>&1 &
+  wm_pid=$!
+
+  local display=""
+  for _ in $(seq 1 150); do
+    if [[ -r "$display_file" ]]; then
+      display="$(cat "$display_file")"
+      break
+    fi
+    if ! kill -0 "$wm_pid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ -z "$display" ]]; then
+    echo "CASE $label display-not-ready log_dir=$dir" >&2
+    tail -n 120 "$dir/compositor.log" >&2 || true
+    return 20
+  fi
+
+  setsid timeout --signal=TERM --kill-after=2s 18s env \
+    WAYLAND_DISPLAY="$display" \
+    LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS=1 \
+    LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS=11000 \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUEST_SERVER_DECORATION=1 \
+    "$CHECKER" >"$dir/presentation-feedback-a.log" 2>&1 &
+  checker_a_pid=$!
+  sleep 0.4
+  setsid timeout --signal=TERM --kill-after=2s 18s env \
+    WAYLAND_DISPLAY="$display" \
+    LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS=1 \
+    LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS=11000 \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUEST_SERVER_DECORATION=1 \
+    "$CHECKER" >"$dir/presentation-feedback-b.log" 2>&1 &
+  checker_b_pid=$!
+
+  local checker_a_status=0
+  wait "$checker_a_pid" || checker_a_status=$?
+  checker_a_pid=""
+  local checker_b_status=0
+  wait "$checker_b_pid" || checker_b_status=$?
+  checker_b_pid=""
+  if [[ "$checker_a_status" -ne 0 || "$checker_b_status" -ne 0 ]]; then
+    echo "CASE $label checker_a_status=$checker_a_status checker_b_status=$checker_b_status" >&2
+    tail -n 80 "$dir/presentation-feedback-a.log" >&2 || true
+    tail -n 80 "$dir/presentation-feedback-b.log" >&2 || true
+    return 21
+  fi
+
+  sleep 1
+  cleanup
+  trap - RETURN
+  wait "$wm_pid" 2>/dev/null || true
+
+  local checker_a_line
+  local checker_b_line
+  checker_a_line="$(tr '\n' ' ' < "$dir/presentation-feedback-a.log")"
+  checker_b_line="$(tr '\n' ' ' < "$dir/presentation-feedback-b.log")"
+  local presenter_line
+  presenter_line="$(rg -o 'using (GBM/atomic-KMS|Vulkan display) presenter' "$dir/compositor.log" | tail -1 || true)"
+  printf 'CASE %s display=%s %s checker_a=%s checker_b=%s log_dir=%s\n' \
+    "$label" "$display" "$presenter_line" "$checker_a_line" "$checker_b_line" "$dir"
+  summarize_runtime_logs "$dir" "$label"
+  summarize_multi_dirty_partial "$dir" "$label"
+  summarize_cpu_trace "$dir/cpu.log"
 }
 
 run_resize_storm_case() {
@@ -813,6 +995,7 @@ run_compositor_case atomic "" 1 1
 run_compositor_case atomic-pointer-fast-path "" 1 0 1 1500 7000 80 1 0 64 72
 run_compositor_case atomic-pointer-under-terminal-load "" 1 1 1 7000
 run_surface_cache_case
+run_multi_dirty_partial_case
 run_chrome_interaction_case
 run_resize_storm_case
 run_compositor_case vulkan-display vulkan-display 0 0

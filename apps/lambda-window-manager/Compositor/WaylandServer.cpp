@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <utility>
+#include <vector>
 
 namespace lambda::compositor {
 
@@ -287,6 +288,52 @@ bool WaylandServer::diagnosticExerciseTopToplevel(std::uint32_t step, bool resiz
   surface->windowX = nextX;
   surface->windowY = nextY;
   surface->geometryAnimationActive = false;
+  ++impl_->contentSerial_;
+  return true;
+}
+
+bool WaylandServer::diagnosticExerciseToplevels(std::uint32_t step, bool resize) {
+  if (resize) {
+    return diagnosticExerciseTopToplevel(step, true);
+  }
+
+  std::vector<Impl::Surface*> targets;
+  targets.reserve(impl_->surfaces_.size());
+  for (auto const& surface : impl_->surfaces_) {
+    if (!wm::isManagedToplevel(surface.get())) continue;
+    if (surface->fullscreen || surface->maximized || surface->snapped || surface->minimized) continue;
+    targets.push_back(surface.get());
+  }
+  if (targets.empty()) return false;
+
+  bool changed = false;
+  for (std::size_t index = 0; index < targets.size(); ++index) {
+    auto* surface = targets[index];
+    std::int32_t const baseWidth = std::max(160, displayWidth(surface));
+    std::int32_t const baseHeight = std::max(96, displayHeight(surface));
+    std::int32_t const maxX = std::max(0, logicalOutputWidth() - baseWidth - 32);
+    std::int32_t const maxY = std::max(0, logicalOutputHeight() - baseHeight - 32);
+    float const phase = static_cast<float>(index) * 2.0943951f;
+    float const t = static_cast<float>(step) * 0.105f + phase;
+    std::int32_t const nextX = std::clamp(
+        32 + static_cast<std::int32_t>(
+                 std::lround((std::sin(t) * 0.5f + 0.5f) * static_cast<float>(maxX))),
+        0,
+        std::max(0, logicalOutputWidth() - baseWidth));
+    std::int32_t const nextY = std::clamp(
+        48 + static_cast<std::int32_t>(
+                 std::lround((std::cos(t * 0.7f + phase) * 0.5f + 0.5f) * static_cast<float>(maxY))),
+        0,
+        std::max(0, logicalOutputHeight() - baseHeight));
+    if (surface->windowX == nextX && surface->windowY == nextY) continue;
+    surface->windowX = nextX;
+    surface->windowY = nextY;
+    surface->geometryAnimationActive = false;
+    changed = true;
+  }
+
+  if (!changed) return false;
+  impl_->noteResizePacingActivity();
   ++impl_->contentSerial_;
   return true;
 }

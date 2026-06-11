@@ -1308,6 +1308,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         nextDiagnosticExerciseAt += interval;
       } while (nextDiagnosticExerciseAt <= now);
       bool const resize = envEnabled("LWM_DIAGNOSTIC_SCRIPTED_RESIZE");
+      if (envEnabled("LWM_DIAGNOSTIC_SCRIPTED_MULTI_TOPLEVELS")) {
+        return wayland.diagnosticExerciseToplevels(diagnosticExerciseStep++, resize);
+      }
       return wayland.diagnosticExerciseTopToplevel(diagnosticExerciseStep++, resize);
     };
     auto atomicCanPrepareFrame = [&]() {

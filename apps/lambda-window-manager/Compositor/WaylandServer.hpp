@@ -103,6 +103,7 @@ public:
   };
   [[nodiscard]] std::optional<DiagnosticPointerTarget> diagnosticTopToplevelCloseButtonCenter() const;
   bool diagnosticExerciseTopToplevel(std::uint32_t step, bool resize);
+  bool diagnosticExerciseToplevels(std::uint32_t step, bool resize);
 
   struct Impl;
 
