@@ -447,11 +447,29 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
       cached.image =
           Image::fromRgbaPixels(static_cast<std::uint32_t>(bufferWidth), static_cast<std::uint32_t>(bufferHeight),
                                 fallbackPixels, canvas.gpuDevice());
-      diagnostics::recordDmabufFallbackCopy(fallbackBytes, diagnostics::cpuTraceElapsedMilliseconds(fallbackStart),
-                                            cached.image != nullptr);
-      if (cached.image && !cached.logged) {
-        std::fprintf(stderr, "lambda-window-manager: displaying readable DMABUF contents\n");
+      double const fallbackMs = diagnostics::cpuTraceElapsedMilliseconds(fallbackStart);
+      diagnostics::recordDmabufFallbackCopy(fallbackBytes, fallbackMs, cached.image != nullptr);
+      if (cached.image && !cached.dmabufFallbackLogged) {
+        cached.dmabufFallbackLogged = true;
         cached.logged = true;
+        std::fprintf(stderr,
+                     "lambda-window-manager: dmabuf CPU fallback active surface=%llu buffer=%llu "
+                     "size=%dx%d format=0x%08x bytes=%zu elapsed=%.3fms\n",
+                     static_cast<unsigned long long>(surface.id),
+                     static_cast<unsigned long long>(surface.dmabufBufferId),
+                     bufferWidth,
+                     bufferHeight,
+                     surface.dmabufFormat,
+                     fallbackBytes,
+                     fallbackMs);
+        diagnostics::crashLog("dmabuf-cpu-fallback surface=%llu buffer=%llu size=%dx%d format=0x%08x bytes=%zu elapsed=%.3fms",
+                              static_cast<unsigned long long>(surface.id),
+                              static_cast<unsigned long long>(surface.dmabufBufferId),
+                              bufferWidth,
+                              bufferHeight,
+                              surface.dmabufFormat,
+                              fallbackBytes,
+                              fallbackMs);
       }
       if (cached.image) {
         LAMBDA_RESIZE_TRACE("compositor-render",

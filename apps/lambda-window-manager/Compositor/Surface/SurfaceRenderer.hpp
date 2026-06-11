@@ -34,6 +34,7 @@ struct CachedClientImage {
   std::int32_t shmBufferHeight = 0;
   std::shared_ptr<Image> image;
   bool logged = false;
+  bool dmabufFallbackLogged = false;
   bool dmabufImported = false;
   std::vector<DmabufEntry> dmabufImages;
   std::unique_ptr<lambda::VulkanFrameRecorder> recordedOps;

@@ -214,7 +214,7 @@ What to do:
 - [x] [Auto] Replace retained scene-state snapshots and `visual.lastSnapshot` with a trimmed struct (id, serial, geometry, mapping, chrome hash) — no strings, no blur-rect vectors.
 - [x] [Auto] Upload SHM damage directly from the mapped buffer with a row stride (extend `Image::updatePixelsRegion` to take stride) and reuse a persistent staging buffer per surface; coalesce adjacent rects first (shares the merge helper from FP-2).
 - [x] [Auto] Allow `TextNode` to prepare render ops for static layouts (key the cache on layout pointer + dpiScale; invalidate via the existing glyph-atlas generation check).
-- [ ] [Auto] Add a one-shot log/metric when the dmabuf import fallback path (`SurfaceRenderer.cpp:399-425`, CPU `copyDmabufToRgba`) triggers, so unaccelerated clients are visible instead of silently slow.
+- [x] [Auto] Add a one-shot log/metric when the dmabuf import fallback path (`SurfaceRenderer.cpp:399-425`, CPU `copyDmabufToRgba`) triggers, so unaccelerated clients are visible instead of silently slow.
 
 Verification on Linux:
 
