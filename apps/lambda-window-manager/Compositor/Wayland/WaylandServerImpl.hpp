@@ -884,6 +884,8 @@ struct WaylandServer::Impl::DataSource {
   wl_resource* resource = nullptr;
   std::vector<std::string> mimeTypes;
   std::uint32_t dndActions = WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
+  bool dndActionsSet = false;
+  bool used = false;
 };
 
 struct WaylandServer::Impl::DataDevice {

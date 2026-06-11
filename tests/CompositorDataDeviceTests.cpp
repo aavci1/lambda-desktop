@@ -67,3 +67,20 @@ TEST_CASE("data-device DnD offer request validation enforces DnD finish rules") 
   CHECK_FALSE(dataOfferCanFinishDnd(true, false, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
   CHECK_FALSE(dataOfferCanFinishDnd(true, true, WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE));
 }
+
+TEST_CASE("data-device source lifecycle validation enforces DnD action ordering") {
+  using namespace lambda::compositor;
+
+  CHECK(dataSourceCanSetDndActions(false, false));
+  CHECK_FALSE(dataSourceCanSetDndActions(true, false));
+  CHECK_FALSE(dataSourceCanSetDndActions(false, true));
+  CHECK_FALSE(dataSourceCanSetDndActions(true, true));
+
+  CHECK(dataSourceCanStartDrag(false));
+  CHECK_FALSE(dataSourceCanStartDrag(true));
+
+  CHECK(dataSourceCanSetSelection(false, false));
+  CHECK_FALSE(dataSourceCanSetSelection(true, false));
+  CHECK_FALSE(dataSourceCanSetSelection(false, true));
+  CHECK_FALSE(dataSourceCanSetSelection(true, true));
+}

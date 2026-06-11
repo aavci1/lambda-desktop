@@ -248,6 +248,13 @@ void dataSourceSetActions(wl_client*, wl_resource* resource, std::uint32_t actio
                            "invalid data source DnD action mask");
     return;
   }
+  if (!dataSourceCanSetDndActions(source->dndActionsSet, source->used)) {
+    wl_resource_post_error(resource,
+                           WL_DATA_SOURCE_ERROR_INVALID_SOURCE,
+                           "wl_data_source.set_actions must be called once before source use");
+    return;
+  }
+  source->dndActionsSet = true;
   source->dndActions = actions;
   if (source->server) {
     for (auto const& offer : source->server->dataOffers_) {
@@ -485,6 +492,13 @@ void dataDeviceStartDrag(wl_client* client,
   auto* origin = resourceData<WaylandServer::Impl::Surface>(originResource);
   if (!origin || wl_resource_get_client(origin->resource) != client) return;
   if (!validSerialForSurface(server, client, origin, serial, kDragStartSerialKinds)) return;
+  if (source && !dataSourceCanStartDrag(source->used)) {
+    wl_resource_post_error(resource,
+                           WL_DATA_DEVICE_ERROR_USED_SOURCE,
+                           "wl_data_device.start_drag source has already been used");
+    return;
+  }
+  if (source) source->used = true;
   if (server->dndSource_) clearDndImpl(server);
   server->dndSource_ = source;
   server->dndOrigin_ = origin;
@@ -504,6 +518,18 @@ void dataDeviceSetSelection(wl_client* client,
   auto* server = device->server;
   if (!validSelectionSerial(server, client, serial)) return;
   auto* source = resourceData<WaylandServer::Impl::DataSource>(sourceResource);
+  if (source && source->used) {
+    wl_resource_post_error(resource,
+                           WL_DATA_DEVICE_ERROR_USED_SOURCE,
+                           "wl_data_device.set_selection source has already been used");
+    return;
+  }
+  if (source && !dataSourceCanSetSelection(source->dndActionsSet, source->used)) {
+    wl_resource_post_error(source->resource,
+                           WL_DATA_SOURCE_ERROR_INVALID_SOURCE,
+                           "wl_data_source with DnD actions cannot be used for selection");
+    return;
+  }
   diagnostics::crashLog("data-set-selection device=%u source=%u old_source=%u",
                         resourceId(resource),
                         resourceId(sourceResource),
@@ -511,6 +537,7 @@ void dataDeviceSetSelection(wl_client* client,
   if (server->selectionSource_ && server->selectionSource_ != source && server->selectionSource_->resource) {
     wl_data_source_send_cancelled(server->selectionSource_->resource);
   }
+  if (source) source->used = true;
   server->selectionSource_ = source;
   sendSelectionForFocusImpl(server);
 }

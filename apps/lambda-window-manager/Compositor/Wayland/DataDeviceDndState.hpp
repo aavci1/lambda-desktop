@@ -54,4 +54,16 @@ inline bool dataOfferCanFinishDnd(bool dnd,
          selectedAction != WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
 }
 
+inline bool dataSourceCanSetDndActions(bool actionsAlreadySet, bool sourceAlreadyUsed) {
+  return !actionsAlreadySet && !sourceAlreadyUsed;
+}
+
+inline bool dataSourceCanStartDrag(bool sourceAlreadyUsed) {
+  return !sourceAlreadyUsed;
+}
+
+inline bool dataSourceCanSetSelection(bool actionsAlreadySet, bool sourceAlreadyUsed) {
+  return !actionsAlreadySet && !sourceAlreadyUsed;
+}
+
 } // namespace lambda::compositor
