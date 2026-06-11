@@ -3,11 +3,12 @@
 #include <Lambda/Debug/DebugFlags.hpp>
 #include <Lambda/Debug/PerfCounters.hpp>
 
+#include <atomic>
 #include <dlfcn.h>
-#include <execinfo.h>
 #include <signal.h>
 #include <sys/resource.h>
 #include <sys/time.h>
+#include <ucontext.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -25,12 +26,14 @@ namespace lambda::compositor::diagnostics {
 namespace {
 
 constexpr int kMaxCpuSamples = 4096;
-constexpr int kMaxCpuSampleFrames = 12;
 
-void *gCpuSamples[kMaxCpuSamples]{};
-volatile sig_atomic_t gCpuSampleWriteIndex = 0;
-volatile sig_atomic_t gCpuSampleTotal = 0;
-volatile sig_atomic_t gCpuSampleLastRead = 0;
+static_assert(std::atomic<std::uintptr_t>::is_always_lock_free);
+static_assert(std::atomic<unsigned int>::is_always_lock_free);
+
+std::array<std::atomic<std::uintptr_t>, kMaxCpuSamples> gCpuSamples{};
+std::atomic<unsigned int> gCpuSampleWriteIndex{0};
+std::atomic<unsigned int> gCpuSampleTotal{0};
+std::atomic<unsigned int> gCpuSampleLastRead{0};
 
 struct CpuTraceState {
   CpuTraceClock::time_point windowStart = CpuTraceClock::now();
@@ -169,15 +172,31 @@ int cpuSamplerIntervalUsec() {
   return interval;
 }
 
-void cpuSamplerSignalHandler(int) {
-  void *frames[kMaxCpuSampleFrames]{};
-  int const count = backtrace(frames, kMaxCpuSampleFrames);
-  if (count <= 2)
+void *programCounterFromSignalContext(void *context) noexcept {
+  if (!context)
+    return nullptr;
+  auto *ucontext = static_cast<ucontext_t *>(context);
+#if defined(__linux__) && defined(__x86_64__) && defined(REG_RIP)
+  return reinterpret_cast<void *>(ucontext->uc_mcontext.gregs[REG_RIP]);
+#elif defined(__linux__) && defined(__i386__) && defined(REG_EIP)
+  return reinterpret_cast<void *>(ucontext->uc_mcontext.gregs[REG_EIP]);
+#elif defined(__linux__) && defined(__aarch64__)
+  return reinterpret_cast<void *>(ucontext->uc_mcontext.pc);
+#elif defined(__linux__) && defined(__arm__)
+  return reinterpret_cast<void *>(ucontext->uc_mcontext.arm_pc);
+#else
+  (void)ucontext;
+  return nullptr;
+#endif
+}
+
+void cpuSamplerSignalHandler(int, siginfo_t *, void *context) {
+  void *pc = programCounterFromSignalContext(context);
+  if (!pc)
     return;
-  sig_atomic_t const writeIndex = gCpuSampleWriteIndex;
-  gCpuSampleWriteIndex = writeIndex + 1;
-  gCpuSamples[writeIndex % kMaxCpuSamples] = frames[2];
-  gCpuSampleTotal = gCpuSampleTotal + 1;
+  auto const writeIndex = gCpuSampleWriteIndex.fetch_add(1, std::memory_order_relaxed);
+  gCpuSamples[writeIndex % kMaxCpuSamples].store(reinterpret_cast<std::uintptr_t>(pc), std::memory_order_relaxed);
+  gCpuSampleTotal.fetch_add(1, std::memory_order_relaxed);
 }
 
 std::string symbolName(void *pc) {
@@ -209,11 +228,11 @@ std::string symbolName(void *pc) {
 void writeCpuSamples(std::FILE *file) {
   if (!cpuSamplerEnabled())
     return;
-  sig_atomic_t const total = gCpuSampleTotal;
-  sig_atomic_t const last = gCpuSampleLastRead;
-  if (total <= last)
+  unsigned int const total = gCpuSampleTotal.load(std::memory_order_relaxed);
+  unsigned int const last = gCpuSampleLastRead.load(std::memory_order_relaxed);
+  if (total == last)
     return;
-  sig_atomic_t available = total - last;
+  unsigned int available = total - last;
   if (available > kMaxCpuSamples)
     available = kMaxCpuSamples;
 
@@ -223,9 +242,10 @@ void writeCpuSamples(std::FILE *file) {
   };
   std::array<Hit, 32> hits{};
   int uniqueHits = 0;
-  for (sig_atomic_t i = 0; i < available; ++i) {
-    sig_atomic_t const sampleIndex = total - available + i;
-    void *pc = gCpuSamples[sampleIndex % kMaxCpuSamples];
+  for (unsigned int i = 0; i < available; ++i) {
+    unsigned int const sampleIndex = total - available + i;
+    void *pc =
+        reinterpret_cast<void *>(gCpuSamples[sampleIndex % kMaxCpuSamples].load(std::memory_order_relaxed));
     if (!pc)
       continue;
     auto existing = std::find_if(hits.begin(), hits.begin() + uniqueHits, [&](Hit const &hit) {
@@ -246,7 +266,7 @@ void writeCpuSamples(std::FILE *file) {
       *smallest = Hit{.pc = pc, .count = 1};
     }
   }
-  gCpuSampleLastRead = total;
+  gCpuSampleLastRead.store(total, std::memory_order_relaxed);
   if (uniqueHits == 0)
     return;
   std::sort(hits.begin(), hits.begin() + uniqueHits, [](Hit const &a, Hit const &b) {
@@ -670,9 +690,9 @@ void initializeCpuSampler() noexcept {
   if (!cpuTraceEnabled() || !cpuSamplerEnabled())
     return;
   struct sigaction action {};
-  action.sa_handler = cpuSamplerSignalHandler;
+  action.sa_sigaction = cpuSamplerSignalHandler;
   sigemptyset(&action.sa_mask);
-  action.sa_flags = SA_RESTART;
+  action.sa_flags = SA_RESTART | SA_SIGINFO;
   if (sigaction(SIGPROF, &action, nullptr) != 0)
     return;
   int const intervalUsec = cpuSamplerIntervalUsec();

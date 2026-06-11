@@ -23,6 +23,7 @@ Runs the TODO-019 Linux frame-pacing verification smoke:
   - drives synthetic pointer motion through the KMS raw-input path with the hardware-cursor fast path enabled
   - exercises a static SHM client surface and asserts compositor surface draw-cache reuse
   - drives server-side chrome hover/press transitions and asserts client surface-cache reuse
+  - drives scripted resize configures and asserts the compositor sizing path stays healthy
   - summarizes CPU/pacing/present-detail logs and fails on fatal runtime errors
 
 Environment:
@@ -119,6 +120,31 @@ summarize_chrome_interaction() {
   printf 'SUMMARY %s chrome_interaction move_close=%s press_close=%s move_away=%s release_away=%s complete=%s\n' \
     "$label" "$move_close" "$press_close" "$move_away" "$release_away" "$complete"
   if [[ "$move_close" -lt 1 || "$press_close" -lt 1 || "$move_away" -lt 1 || "$release_away" -lt 1 || "$complete" -lt 1 ]]; then
+    return 1
+  fi
+}
+
+summarize_resize_storm() {
+  local dir="$1"
+  local label="$2"
+  local resize_events
+  resize_events=$(rg -c 'resize-configure|ack-configure .* configure=[1-9][0-9]*x[1-9][0-9]*' "$dir/compositor.log" 2>/dev/null || echo 0)
+  local sizing_blocks
+  sizing_blocks=$(awk '
+    function phrase(pattern, key,    raw) {
+      if (!match(line, pattern)) return 0.0
+      raw = substr(line, RSTART, RLENGTH)
+      sub("^.*" key "=", "", raw)
+      return raw + 0.0
+    }
+    /^cpu-trace:/ {
+      line = $0
+      sizing += phrase("surface_draw_block backend=[0-9]+ clip=[0-9]+ callout=[0-9]+ material=[0-9]+ sizing=[0-9]+", "sizing")
+    }
+    END { printf "%.0f\n", sizing }
+  ' "$dir/cpu.log" 2>/dev/null || echo 0)
+  printf 'SUMMARY %s resize_events=%s sizing_cache_blocks=%s\n' "$label" "$resize_events" "$sizing_blocks"
+  if [[ "$resize_events" -le 0 || "$sizing_blocks" -le 0 ]]; then
     return 1
   fi
 }
@@ -232,6 +258,98 @@ summarize_terminal_present() {
         n, waitImage / n, waitImageOver, atlas / n, atlasOver, record / n, recordMax, queuePresent / n
     }
   ' "$log"
+}
+
+run_resize_storm_case() {
+  local label="resize-storm"
+  local dir="$LOG_DIR/$label"
+  mkdir -p "$dir"
+
+  local display_file="$XDG_RUNTIME_DIR/lambda-window-manager-display"
+  rm -f "$display_file"
+
+  local wm_pid=""
+  local checker_pid=""
+  cleanup() {
+    set +e
+    if [[ -n "$checker_pid" ]]; then
+      kill -TERM -"$checker_pid" 2>/dev/null || kill -TERM "$checker_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$wm_pid" ]]; then
+      kill -TERM -"$wm_pid" 2>/dev/null || kill -TERM "$wm_pid" 2>/dev/null || true
+    fi
+    sleep 1
+    if [[ -n "$checker_pid" ]]; then
+      kill -KILL -"$checker_pid" 2>/dev/null || kill -KILL "$checker_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$wm_pid" ]]; then
+      kill -KILL -"$wm_pid" 2>/dev/null || kill -KILL "$wm_pid" 2>/dev/null || true
+    fi
+    set -e
+  }
+  trap cleanup RETURN
+
+  setsid timeout --signal=TERM --kill-after=5s 30s env \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG="$dir/cpu.log" \
+    LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE=0 \
+    LAMBDA_KMS_PRESENT_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$dir/pacing.log" \
+    LAMBDA_RESIZE_TRACE=1 \
+    LWM_DIAGNOSTIC_SCRIPTED_EXERCISE=1 \
+    LWM_DIAGNOSTIC_SCRIPTED_RESIZE=1 \
+    "$WM" >"$dir/compositor.log" 2>&1 &
+  wm_pid=$!
+
+  local display=""
+  for _ in $(seq 1 150); do
+    if [[ -r "$display_file" ]]; then
+      display="$(cat "$display_file")"
+      break
+    fi
+    if ! kill -0 "$wm_pid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ -z "$display" ]]; then
+    echo "CASE $label display-not-ready log_dir=$dir" >&2
+    tail -n 120 "$dir/compositor.log" >&2 || true
+    return 20
+  fi
+
+  setsid timeout --signal=TERM --kill-after=2s 15s env \
+    WAYLAND_DISPLAY="$display" \
+    LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS=1 \
+    LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS=10000 \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUEST_SERVER_DECORATION=1 \
+    "$CHECKER" >"$dir/presentation-feedback.log" 2>&1 &
+  checker_pid=$!
+
+  local checker_status=0
+  wait "$checker_pid" || checker_status=$?
+  checker_pid=""
+  if [[ "$checker_status" -ne 0 ]]; then
+    echo "CASE $label checker_status=$checker_status" >&2
+    tail -n 120 "$dir/presentation-feedback.log" >&2 || true
+    return "$checker_status"
+  fi
+
+  sleep 1
+  cleanup
+  trap - RETURN
+  wait "$wm_pid" 2>/dev/null || true
+
+  local checker_line
+  checker_line="$(tr '\n' ' ' < "$dir/presentation-feedback.log")"
+  local presenter_line
+  presenter_line="$(rg -o 'using (GBM/atomic-KMS|Vulkan display) presenter' "$dir/compositor.log" | tail -1 || true)"
+  printf 'CASE %s display=%s %s checker=%s log_dir=%s\n' "$label" "$display" "$presenter_line" "$checker_line" "$dir"
+  summarize_runtime_logs "$dir" "$label"
+  summarize_resize_storm "$dir" "$label"
+  summarize_cpu_trace "$dir/cpu.log"
 }
 
 run_chrome_interaction_case() {
@@ -554,6 +672,7 @@ run_compositor_case atomic "" 1 1
 run_compositor_case atomic-pointer-fast-path "" 1 0 1
 run_surface_cache_case
 run_chrome_interaction_case
+run_resize_storm_case
 run_compositor_case vulkan-display vulkan-display 0 0
 
 echo "Pointer-driving tool availability:"
