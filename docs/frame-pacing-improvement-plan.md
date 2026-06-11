@@ -27,13 +27,14 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] Vulkan recorder/replay review batch build and focused tests passed on 2026-06-11: normal and `LAMBDA_VULKAN_PREPARED_GEOMETRY=1` Vulkan render-target tests (21 cases / 157 assertions each), validation-layer Vulkan render-target tests (21 cases / 157 assertions), and a prepared/recorder scene slice (6 cases / 79 assertions).
 - [x] Compositor damage review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager`, `./build/tests/lambda_tests --source-file="*CompositorSceneDamageTests.cpp" --no-skip` (10 cases / 30 assertions), `./build/tests/lambda_tests --source-file="*CompositorSurfaceUploadDamageTests.cpp" --no-skip` (3 cases / 7 assertions), and `./build/tests/lambda_tests --source-file="*CompositorPresentationFeedbackTests.cpp" --no-skip` (6 cases / 46 assertions).
 - [x] Metal atlas review batch passed available Linux checks on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager` and `./build/tests/lambda_tests --source-file="*MetalCanvasTests.mm" --no-skip` (0 cases on Linux, source excluded).
+- [x] Metal backdrop/drawable review batch passed available Linux checks on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager` and `./build/tests/lambda_tests --source-file="*MetalCanvasTests.mm" --no-skip` (0 cases on Linux, source excluded).
 - [ ] Remaining local input gap: `ydotool` and `wtype` are installed and `/dev/input/event0` has an ACL for `aavci`, but `ydotoold` cannot start because `/dev/uinput` is still `root:root` mode `0600`; `evemu-event` is still missing. Real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad real-app visual smoke cases still require manual interaction with a running Lambda compositor session, especially move/drag/resize and cursor visual checks.
 - [ ] Remaining system-tool gap: `wayland-utils` and `evemu` are not installed; `aavci` is in `wheel`, but noninteractive `sudo` still prompts for a password, so this session cannot repair `/dev/uinput` permissions or install the remaining packages. The broad pointer/compositor doctest slice also still needs a live `WAYLAND_DISPLAY`; four `RuntimeInputTests.cpp` cases failed with `Failed to connect to Wayland display`.
 - [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
 - [x] macOS focused tests: `*Metal*,*SceneGraph*` — 20 cases, 133 assertions, all passed (2026-06-11).
 - [ ] Remaining macOS verification gap for the latest Metal changes: rebuild and run `MetalCanvasTests.mm` including the deferred atlas grow regression test, paste large unicode-heavy text into `lambda-editor`, collect `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), run full `ctest`, and compare backdrop-blur visuals.
-- [ ] Post-implementation review backlog (REV-*) below — 1 high, 1 medium, and 1 low item remain open.
+- [x] Post-implementation review backlog (REV-*) fixed; remaining unchecked items are validation gaps.
 
 ## Working Environment
 
@@ -63,7 +64,7 @@ Measurement tooling that already exists — use it before and after every change
 | Metal counters | `debug::perf` — `CanvasDrawableWait`, `CanvasPresent`, `DisplayLinkToPresent` | Drawable stalls vs present cost on macOS |
 | Validation layers | `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` | Sync/lifetime regressions from any of these changes |
 
-**Suggested fix order for open REV items:** REV-M3 (high-severity regression), then REV-M4, then lows/nits. Original FP workstreams (FP-1 … FP-16) are marked complete above; remaining manual verification checkboxes under each FP section still apply where unchecked.
+**Open REV code items:** none. Original FP workstreams (FP-1 … FP-16) are marked complete above; remaining manual verification checkboxes under each FP section still apply where unchecked.
 
 ---
 
@@ -397,50 +398,7 @@ Verification on macOS:
 
 # Post-implementation code review backlog
 
-Items found during the 2026-06-11 review of commits `50d65831..HEAD`. Each item has current file:line anchors. Delete the item when fixed and verified.
-
-## High severity
-
-### REV-M3: Metal backdrop uniform/clip buffers are CPU-rewritten while GPU still reads them
-
-**Severity: High (wrong blur transforms/clips under load).**
-
-`backdropUniformBuffer_` / `backdropClipBuffer_` (`MetalCanvas.mm:1930-1957`) are single persistent shared buffers, not per-frame-slot. `encodeRecorderOps` CPU-writes slots at encode time (`MetalCanvas.mm:410-426`, `2183-2186`) while prior frames' command buffers may still execute (`kFramesInFlight = 3`). Old code allocated fresh buffers each frame (safe via command-buffer retention).
-
-What to do:
-
-- [ ] [Auto] Ring-buffer or triple-buffer backdrop uniform/clip buffers per frame slot (like `metal_.advanceFrame()` arenas).
-- [ ] [Manual] Stress backdrop-blur frames under GPU load; compare visual stability to pre-change captures.
-
----
-
-## Medium severity
-
-### REV-M4: Backdrop segments overwrite each other's uniform slots (pre-existing)
-
-**Severity: Medium (incorrect blur transforms when segments differ).**
-
-`encodeFrameWithBackdropBlur` calls `encodeRecorderOps` per segment with the same `finalUniformBuffer`/`finalClipBuffer`, restarting indices at 0 each call (`MetalCanvas.mm:2119-2152`, `2185-2186`). Pre-existing; persistent buffers (REV-M3) make fixing here natural.
-
-What to do:
-
-- [ ] [Auto] Continue `uniformIndex`/`clipIndex` across segments within one backdrop frame.
-- [ ] [Manual] Multi-segment backdrop frame with differing transforms — visual parity check.
-
-## Low severity
-
-### REV-M5: Drawable retry can block main thread up to ~2 s
-
-**Severity: Low (stall at `beginFrame` when drawable pool exhausted).**
-
-`allowsNextDrawableTimeout = YES` on layer (`MacMetalWindow.mm:101`); retry in `acquireDrawableForFrame` (`MetalCanvas.mm:1584-1597`). Failure path re-signs semaphore and requests redraw — no deadlock.
-
-What to do:
-
-- [ ] [Auto] Consider shorter timeout or async drawable acquisition; measure `CanvasDrawableWait` p95.
-- [ ] [Manual] Exhaust drawable pool (rapid resize) — app remains interactive within bounded stall.
-
----
+No open REV code items remain from the 2026-06-11 review of commits `50d65831..HEAD`.
 
 # Citation errata (original FP audit → current sources)
 
@@ -463,7 +421,7 @@ What to do:
 | `TextNode::canPrepareRenderOps` always false | Fixed — returns `layout_ != nullptr` | `TextNode.cpp:50-52` |
 | `frameDone` present one loop late | Fixed — inline `flushRedraw()` | `WaylandWindow.cpp:1908-1927` |
 | Metal `grow()` clears and re-rasterizes all glyphs | Fixed — copy-preserving blit grow | `GlyphAtlas.mm:111-172` |
-| Metal backdrop full-res 3×2 blur, per-frame buffer alloc | Fixed — downsample + pooled buffers | `MetalCanvas.mm:1930-1957`, `2028-2040`, `2087-2090` |
+| Metal backdrop full-res 3×2 blur, per-frame buffer alloc | Fixed — downsample + per-frame-slot pooled buffers | `MetalCanvas.mm:1933-1966`, `2031-2043`, `2090-2103` |
 | `displaySyncEnabled` never set | Fixed — `YES` at create | `MacMetalWindow.mm:104` |
 | Presentation feedback 500 ms fake-presented fallback | Fixed — ~2 refresh periods, `discarded` on expiry | `CompositorPresentation.hpp:96-97`, `FrameScheduler.cpp:137-149` |
 

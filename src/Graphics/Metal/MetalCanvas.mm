@@ -352,6 +352,11 @@ struct MetalBackdropUniforms {
   vector_float4 blurParams{};
 };
 
+struct MetalRecorderEncodeState {
+  std::uint32_t uniformIndex = 0;
+  std::uint32_t clipIndex = 0;
+};
+
 RecorderCapacitySnapshot snapshotRecorderCapacity(MetalFrameRecorder const& recorder) {
   if (!debug::perf::enabled()) {
     return {};
@@ -1512,10 +1517,10 @@ private:
   id<MTLTexture> backdropBlurTexture_{nil};
   NSUInteger backdropBlurTextureW_{0};
   NSUInteger backdropBlurTextureH_{0};
-  id<MTLBuffer> backdropUniformBuffer_{nil};
-  NSUInteger backdropUniformBufferCapacity_{0};
-  id<MTLBuffer> backdropClipBuffer_{nil};
-  NSUInteger backdropClipBufferCapacity_{0};
+  std::array<id<MTLBuffer>, kFramesInFlight> backdropUniformBuffers_{};
+  std::array<NSUInteger, kFramesInFlight> backdropUniformBufferCapacities_{};
+  std::array<id<MTLBuffer>, kFramesInFlight> backdropClipBuffers_{};
+  std::array<NSUInteger, kFramesInFlight> backdropClipBufferCapacities_{};
   id<MTLBuffer> captureBuffer_{nil};
   NSUInteger captureBytesPerRow_{0};
   std::uint32_t captureWidth_{0};
@@ -1585,9 +1590,6 @@ private:
     auto const startedAt =
         debug::perf::enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     drawable_ = [metal_.layer() nextDrawable];
-    if (!drawable_) {
-      drawable_ = [metal_.layer() nextDrawable];
-    }
     if (debug::perf::enabled()) {
       auto const elapsed = std::chrono::steady_clock::now() - startedAt;
       debug::perf::recordDuration(debug::perf::TimedMetric::CanvasDrawableWait,
@@ -1931,29 +1933,34 @@ private:
                                       id<MTLBuffer>* uniformBuffer,
                                       id<MTLBuffer>* clipBuffer) {
     NSUInteger const needed = static_cast<NSUInteger>(std::max<std::size_t>(1, stateCount));
-    if (needed > backdropUniformBufferCapacity_) {
+    std::size_t const frameIndex = metal_.currentFrameIndex();
+    id<MTLBuffer>& frameUniformBuffer = backdropUniformBuffers_[frameIndex];
+    NSUInteger& frameUniformCapacity = backdropUniformBufferCapacities_[frameIndex];
+    id<MTLBuffer>& frameClipBuffer = backdropClipBuffers_[frameIndex];
+    NSUInteger& frameClipCapacity = backdropClipBufferCapacities_[frameIndex];
+    if (needed > frameUniformCapacity) {
       NSUInteger const newCapacity =
-          backdropUniformBufferCapacity_ == 0 ? needed : std::max(needed, backdropUniformBufferCapacity_ * 2);
-      backdropUniformBuffer_ =
+          frameUniformCapacity == 0 ? needed : std::max(needed, frameUniformCapacity * 2);
+      frameUniformBuffer =
           [metal_.device() newBufferWithLength:newCapacity * sizeof(MetalDrawUniforms)
                                        options:MTLResourceStorageModeShared];
-      backdropUniformBufferCapacity_ = backdropUniformBuffer_ ? newCapacity : 0;
+      frameUniformCapacity = frameUniformBuffer ? newCapacity : 0;
     }
-    if (needed > backdropClipBufferCapacity_) {
+    if (needed > frameClipCapacity) {
       NSUInteger const newCapacity =
-          backdropClipBufferCapacity_ == 0 ? needed : std::max(needed, backdropClipBufferCapacity_ * 2);
-      backdropClipBuffer_ =
+          frameClipCapacity == 0 ? needed : std::max(needed, frameClipCapacity * 2);
+      frameClipBuffer =
           [metal_.device() newBufferWithLength:newCapacity * sizeof(MetalRoundedClipStack)
                                        options:MTLResourceStorageModeShared];
-      backdropClipBufferCapacity_ = backdropClipBuffer_ ? newCapacity : 0;
+      frameClipCapacity = frameClipBuffer ? newCapacity : 0;
     }
     if (uniformBuffer) {
-      *uniformBuffer = backdropUniformBuffer_;
+      *uniformBuffer = frameUniformBuffer;
     }
     if (clipBuffer) {
-      *clipBuffer = backdropClipBuffer_;
+      *clipBuffer = frameClipBuffer;
     }
-    return backdropUniformBuffer_ != nil && backdropClipBuffer_ != nil;
+    return frameUniformBuffer != nil && frameClipBuffer != nil;
   }
 
   static NSUInteger backdropBlurDownsample(NSUInteger width, NSUInteger height, float radius) {
@@ -2116,13 +2123,14 @@ private:
     MTLViewport finalVp = {0, 0, frameDrawableSize_.width, frameDrawableSize_.height, 0.0, 1.0};
     [finalEnc setViewport:finalVp];
 
+    MetalRecorderEncodeState finalEncodeState{};
     std::size_t cursor = 0;
     while (cursor < frame_.opOrder.size()) {
       std::size_t const blurStart = nextBackdropBlurOp(frame_, cursor);
       if (blurStart > cursor) {
         encodeRecorderOps(frame_, finalEnc, frameDrawableW_, frameDrawableH_, frameDrawablePixelsW_,
                           frameDrawablePixelsH_, finalUniformBuffer, finalClipBuffer, 1,
-                          nil, cursor, blurStart);
+                          nil, cursor, blurStart, &finalEncodeState);
       }
       if (blurStart >= frame_.opOrder.size()) {
         cursor = frame_.opOrder.size();
@@ -2147,7 +2155,7 @@ private:
       [finalEnc setViewport:finalVp];
       encodeRecorderOps(frame_, finalEnc, frameDrawableW_, frameDrawableH_, frameDrawablePixelsW_,
                         frameDrawablePixelsH_, finalUniformBuffer, finalClipBuffer, 1,
-                        blurredTexture, blurStart, blurEnd);
+                        blurredTexture, blurStart, blurEnd, &finalEncodeState);
       cursor = blurEnd;
     }
 
@@ -2172,7 +2180,8 @@ private:
                          std::uint32_t renderSampleCount = 1,
                          id<MTLTexture> backdropSource = nil,
                          std::size_t orderStart = 0,
-                         std::size_t orderEnd = std::numeric_limits<std::size_t>::max()) {
+                         std::size_t orderEnd = std::numeric_limits<std::size_t>::max(),
+                         MetalRecorderEncodeState* encodeState = nullptr) {
     MTLScissorRect const fullScissor = {0, 0, viewportPixelsW, viewportPixelsH};
     MTLScissorRect lastScissor = {0, 0, 0, 0};
     bool haveScissor = false;
@@ -2182,8 +2191,8 @@ private:
     id<MTLBuffer> clipBuf = clipBufferOverride ? clipBufferOverride : metal_.roundedClipArenaBuffer();
     auto* uniformDst = uniformBuf ? static_cast<MetalDrawUniforms*>([uniformBuf contents]) : nullptr;
     auto* clipDst = clipBuf ? static_cast<MetalRoundedClipStack*>([clipBuf contents]) : nullptr;
-    std::uint32_t uniformIndex = 0;
-    std::uint32_t clipIndex = 0;
+    std::uint32_t uniformIndex = encodeState ? encodeState->uniformIndex : 0;
+    std::uint32_t clipIndex = encodeState ? encodeState->clipIndex : 0;
     std::size_t const opCount = std::min(orderEnd, recorder.opOrder.size());
     std::size_t i = std::min(orderStart, opCount);
     while (i < opCount) {
@@ -2334,6 +2343,10 @@ private:
         continue;
       }
       assert(false && "unsupported Metal op ref kind");
+    }
+    if (encodeState) {
+      encodeState->uniformIndex = uniformIndex;
+      encodeState->clipIndex = clipIndex;
     }
   }
 

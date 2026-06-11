@@ -66,6 +66,7 @@ public:
   id<MTLBuffer> glyphVertexArenaBuffer() const { return glyphVertexArenas_[currentFrameIndex_]; }
   id<MTLBuffer> drawUniformArenaBuffer() const { return drawUniformArenas_[currentFrameIndex_]; }
   id<MTLBuffer> roundedClipArenaBuffer() const { return roundedClipArenas_[currentFrameIndex_]; }
+  std::size_t currentFrameIndex() const noexcept { return currentFrameIndex_; }
 
 private:
   CAMetalLayer* layer_{nil};
