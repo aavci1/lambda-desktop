@@ -48,24 +48,32 @@ struct MenuItem {
   std::function<bool()> isEnabled;
   bool checked = false;
 
-  static MenuItem separator() { return MenuItem{.role = MenuRole::Separator}; }
-
-  static MenuItem submenu(std::string label, std::vector<MenuItem> items) {
-    return MenuItem{
-        .role = MenuRole::Submenu,
-        .label = std::move(label),
-        .children = std::move(items),
-    };
+  static MenuItem separator() {
+    MenuItem item;
+    item.role = MenuRole::Separator;
+    return item;
   }
 
-  static MenuItem standard(MenuRole role) { return MenuItem{.role = role}; }
+  static MenuItem submenu(std::string label, std::vector<MenuItem> items) {
+    MenuItem item;
+    item.role = MenuRole::Submenu;
+    item.label = std::move(label);
+    item.children = std::move(items);
+    return item;
+  }
+
+  static MenuItem standard(MenuRole role) {
+    MenuItem item;
+    item.role = role;
+    return item;
+  }
 
   static MenuItem action(std::string label, std::string actionName, Shortcut shortcut = {}) {
-    return MenuItem{
-        .label = std::move(label),
-        .actionName = std::move(actionName),
-        .shortcut = shortcut,
-    };
+    MenuItem item;
+    item.label = std::move(label);
+    item.actionName = std::move(actionName);
+    item.shortcut = shortcut;
+    return item;
   }
 };
 
