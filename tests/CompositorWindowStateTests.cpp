@@ -606,6 +606,31 @@ TEST_CASE("interactive frame size follows committed content while toplevel confi
   CHECK_FALSE(lambda::compositor::wm::toplevelHasPendingUncommittedFrame(&surface));
 }
 
+TEST_CASE("window geometry helper uses interactive frame size during pending toplevel configure") {
+  lambda::compositor::WaylandServer::Impl::Surface surface{};
+  surface.role = lambda::compositor::SurfaceRole::XdgToplevel;
+  surface.windowX = 50;
+  surface.windowY = 70;
+  surface.width = 1280;
+  surface.height = 960;
+  surface.bufferState.scale = 2;
+  surface.frameWidth = 900;
+  surface.frameHeight = 700;
+
+  auto live = lambda::compositor::wm::windowGeometryFor(&surface);
+  CHECK(live.x == 50);
+  CHECK(live.y == 70);
+  CHECK(live.width == 900);
+  CHECK(live.height == 700);
+
+  surface.pendingResizeConfigure = true;
+  auto pending = lambda::compositor::wm::windowGeometryFor(&surface);
+  CHECK(pending.x == 50);
+  CHECK(pending.y == 70);
+  CHECK(pending.width == 640);
+  CHECK(pending.height == 480);
+}
+
 TEST_CASE("xdg toplevel title validation follows strict UTF-8") {
   auto bytes = [](std::initializer_list<unsigned char> values) {
     std::string result;

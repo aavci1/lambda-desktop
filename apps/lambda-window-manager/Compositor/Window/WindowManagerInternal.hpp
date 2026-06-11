@@ -266,7 +266,15 @@ inline float surfaceLocalX(WaylandServer::Impl::Surface const* surface, float gl
 inline float surfaceLocalY(WaylandServer::Impl::Surface const* surface, float globalY) {
   return globalY - surfaceBufferOriginY(surface);
 }
-WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surface);
+inline WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surface) {
+  FrameDisplaySize const frameSize = interactiveFrameDisplaySize(surface);
+  return {
+      .x = surface ? surface->windowX : 0,
+      .y = surface ? surface->windowY : 0,
+      .width = frameSize.width,
+      .height = frameSize.height,
+  };
+}
 OutputGeometry outputGeometryFor(WaylandServer::Impl const* server);
 OutputGeometry snapOutputGeometryFor(WaylandServer::Impl const* server);
 std::int32_t titleBarHeightFor(WaylandServer::Impl const* server);

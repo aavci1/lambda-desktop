@@ -250,8 +250,9 @@ void startGeometryAnimation(WaylandServer::Impl* server,
   if (!surface) return;
   surface->geometryAnimationStartX = surface->windowX;
   surface->geometryAnimationStartY = surface->windowY;
-  surface->geometryAnimationStartWidth = displayWidth(surface);
-  surface->geometryAnimationStartHeight = displayHeight(surface);
+  FrameDisplaySize const startSize = interactiveFrameDisplaySize(surface);
+  surface->geometryAnimationStartWidth = startSize.width;
+  surface->geometryAnimationStartHeight = startSize.height;
   if (surface->geometryAnimationStartWidth <= 0 && targetWidth > 0) {
     surface->geometryAnimationStartWidth = targetWidth;
   }
@@ -307,12 +308,11 @@ void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
   if (!isManagedToplevel(surface)) return;
   if (!surface->snapped && !surface->maximized && !surface->fullscreen) {
     WindowGeometry const fallback = fallbackFloatingGeometry(server, surface);
-    std::int32_t const currentWidth = displayWidth(surface);
-    std::int32_t const currentHeight = displayHeight(surface);
+    FrameDisplaySize const currentSize = interactiveFrameDisplaySize(surface);
     surface->restoreX = surface->windowX;
     surface->restoreY = surface->windowY;
-    surface->restoreWidth = currentWidth > 0 ? currentWidth : fallback.width;
-    surface->restoreHeight = currentHeight > 0 ? currentHeight : fallback.height;
+    surface->restoreWidth = currentSize.width > 0 ? currentSize.width : fallback.width;
+    surface->restoreHeight = currentSize.height > 0 ? currentSize.height : fallback.height;
   }
   WindowGeometry const geometry =
       snapTargetGeometry(snapOutputGeometryFor(server),
@@ -349,6 +349,7 @@ using wm::kMinWindowWidth;
 using wm::clearPreFullscreenState;
 using wm::fallbackFloatingGeometry;
 using wm::frameOutsetForSurface;
+using wm::interactiveFrameDisplaySize;
 using wm::snapOutputGeometryFor;
 using wm::startGeometryAnimation;
 using wm::topInsetForSurface;
@@ -370,12 +371,13 @@ bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
     return true;
   }
   if (restoreSnapped) {
+    wm::FrameDisplaySize const currentSize = interactiveFrameDisplaySize(surface);
     std::int32_t const targetWidth =
         std::max(kMinWindowWidth,
-                 surface->preFullscreenWidth > 0 ? surface->preFullscreenWidth : displayWidth(surface));
+                 surface->preFullscreenWidth > 0 ? surface->preFullscreenWidth : currentSize.width);
     std::int32_t const targetHeight =
         std::max(kMinWindowHeight,
-                 surface->preFullscreenHeight > 0 ? surface->preFullscreenHeight : displayHeight(surface));
+                 surface->preFullscreenHeight > 0 ? surface->preFullscreenHeight : currentSize.height);
     std::int32_t const frameOutset = frameOutsetForSurface(server, surface);
     std::int32_t const minX = std::min(frameOutset, std::max(0, server->logicalOutputWidth() - targetWidth));
     std::int32_t const maxX = std::max(minX, server->logicalOutputWidth() - targetWidth - frameOutset);
@@ -422,6 +424,7 @@ using wm::isManagedToplevel;
 using wm::clearPreFullscreenState;
 using wm::fallbackFloatingGeometry;
 using wm::frameOutsetForSurface;
+using wm::interactiveFrameDisplaySize;
 using wm::snapOutputGeometryFor;
 using wm::startGeometryAnimation;
 using wm::topInsetForSurface;
@@ -431,12 +434,11 @@ void maximizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   if (surface->maximized || surface->fullscreen) return;
   if (!surface->snapped) {
     WindowGeometry const fallback = fallbackFloatingGeometry(server, surface);
-    std::int32_t const currentWidth = displayWidth(surface);
-    std::int32_t const currentHeight = displayHeight(surface);
+    wm::FrameDisplaySize const currentSize = interactiveFrameDisplaySize(surface);
     surface->restoreX = surface->windowX;
     surface->restoreY = surface->windowY;
-    surface->restoreWidth = currentWidth > 0 ? currentWidth : fallback.width;
-    surface->restoreHeight = currentHeight > 0 ? currentHeight : fallback.height;
+    surface->restoreWidth = currentSize.width > 0 ? currentSize.width : fallback.width;
+    surface->restoreHeight = currentSize.height > 0 ? currentSize.height : fallback.height;
   }
   WindowGeometry const target = maximizedWindowGeometry(snapOutputGeometryFor(server),
                                                         topInsetForSurface(server, surface),
@@ -482,13 +484,14 @@ void fullscreenToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surfac
   surface->preFullscreenMaximized = surface->maximized;
   surface->preFullscreenX = surface->windowX;
   surface->preFullscreenY = surface->windowY;
-  surface->preFullscreenWidth = displayWidth(surface);
-  surface->preFullscreenHeight = displayHeight(surface);
+  FrameDisplaySize const currentSize = interactiveFrameDisplaySize(surface);
+  surface->preFullscreenWidth = currentSize.width;
+  surface->preFullscreenHeight = currentSize.height;
   if (!surface->snapped && !surface->maximized) {
     surface->restoreX = surface->windowX;
     surface->restoreY = surface->windowY;
-    surface->restoreWidth = displayWidth(surface);
-    surface->restoreHeight = displayHeight(surface);
+    surface->restoreWidth = currentSize.width;
+    surface->restoreHeight = currentSize.height;
   }
   std::int32_t const targetWidth = std::max(kMinWindowWidth, server->logicalOutputWidth());
   std::int32_t const targetHeight = std::max(kMinWindowHeight, server->logicalOutputHeight());
@@ -563,11 +566,12 @@ void updateDrag(WaylandServer::Impl* server) {
   std::int32_t const topInset = topInsetForSurface(server, surface);
   std::int32_t const frameOutset = frameOutsetForSurface(server, surface);
   OutputGeometry const output = snapOutputGeometryFor(server);
+  FrameDisplaySize const frameSize = interactiveFrameDisplaySize(surface);
   WindowGeometry const proposed = {
       .x = static_cast<std::int32_t>(server->pointerX_ - server->dragOffsetX_),
       .y = static_cast<std::int32_t>(server->pointerY_ - server->dragOffsetY_),
-      .width = displayWidth(surface),
-      .height = displayHeight(surface),
+      .width = frameSize.width,
+      .height = frameSize.height,
   };
   WindowGeometry const next =
       centerSnappedWindowGeometry(proposed, output, topInset, kCompositorCenterSnapThreshold, frameOutset);

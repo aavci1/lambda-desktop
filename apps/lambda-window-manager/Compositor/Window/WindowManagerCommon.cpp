@@ -38,15 +38,6 @@ bool containsPoint(float x, float y, float left, float top, float right, float b
   return x >= left && x < right && y >= top && y < bottom;
 }
 
-WindowGeometry windowGeometryFor(WaylandServer::Impl::Surface const* surface) {
-  return {
-      .x = surface ? surface->windowX : 0,
-      .y = surface ? surface->windowY : 0,
-      .width = displayWidth(surface),
-      .height = displayHeight(surface),
-  };
-}
-
 OutputGeometry outputGeometryFor(WaylandServer::Impl const* server) {
   return {
       .width = server ? server->logicalOutputWidth() : 0,
