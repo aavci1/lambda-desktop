@@ -1,5 +1,6 @@
 #include "Compositor/WaylandServer.hpp"
 
+#include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Window/WindowGeometry.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
@@ -227,6 +228,29 @@ float WaylandServer::pointerY() const noexcept {
 CursorShape WaylandServer::cursorShape() const noexcept {
   if (impl_->compositorCursorOverride_) return impl_->compositorCursorShape_;
   return impl_->cursorShape_;
+}
+
+std::optional<WaylandServer::DiagnosticPointerTarget>
+WaylandServer::diagnosticTopToplevelCloseButtonCenter() const {
+  auto* surface = wm::mostRecentToplevel(impl_.get());
+  if (!wm::isManagedToplevel(surface)) return std::nullopt;
+  if (surface->fullscreen || surface->maximized || surface->snapped || surface->minimized) return std::nullopt;
+
+  std::int32_t const width = displayWidth(surface);
+  if (width <= 0 || displayHeight(surface) <= 0) return std::nullopt;
+  std::int32_t const titleBarHeight = wm::externalTitleBarHeight(impl_.get(), surface);
+  if (titleBarHeight <= 0) return std::nullopt;
+
+  std::int32_t const frameOutset = wm::frameOutsetForSurface(impl_.get(), surface);
+  float const frameLeft = static_cast<float>(surface->windowX - frameOutset);
+  float const frameTop = static_cast<float>(surface->windowY - titleBarHeight);
+  float const frameWidth = static_cast<float>(width + frameOutset * 2);
+  ChromeControlRects const rects =
+      chromeControlRects(impl_->chromeConfig_, frameLeft, frameTop, frameWidth, static_cast<float>(titleBarHeight));
+  return DiagnosticPointerTarget{
+      .x = static_cast<double>(rects.closeButton.x + rects.closeButton.width * 0.5f),
+      .y = static_cast<double>(rects.closeButton.y + rects.closeButton.height * 0.5f),
+  };
 }
 
 bool WaylandServer::diagnosticExerciseTopToplevel(std::uint32_t step, bool resize) {

@@ -97,6 +97,11 @@ public:
   [[nodiscard]] float pointerX() const noexcept;
   [[nodiscard]] float pointerY() const noexcept;
   [[nodiscard]] CursorShape cursorShape() const noexcept;
+  struct DiagnosticPointerTarget {
+    double x = 0.0;
+    double y = 0.0;
+  };
+  [[nodiscard]] std::optional<DiagnosticPointerTarget> diagnosticTopToplevelCloseButtonCenter() const;
   bool diagnosticExerciseTopToplevel(std::uint32_t step, bool resize);
 
   struct Impl;

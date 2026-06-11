@@ -49,6 +49,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <poll.h>
+#include <linux/input-event-codes.h>
 #include <vulkan/vulkan.h>
 
 namespace lambda::compositor {
@@ -152,6 +153,120 @@ struct SyntheticPointerMotion {
                                        dy);
     if (remaining == 0) {
       std::fprintf(stderr, "lambda-window-manager: synthetic pointer motion complete emitted=%d\n", emitted);
+    }
+    return true;
+  }
+};
+
+struct SyntheticChromeInteraction {
+  enum class Stage {
+    MoveToClose,
+    PressClose,
+    MoveAway,
+    ReleaseAway,
+    Done,
+  };
+
+  bool enabled = false;
+  int intervalMs = 250;
+  int emitted = 0;
+  Stage stage = Stage::MoveToClose;
+  SteadyClock::time_point nextAt{};
+  double closeX = 0.0;
+  double closeY = 0.0;
+  double awayX = 0.0;
+  double awayY = 0.0;
+
+  static SyntheticChromeInteraction fromEnvironment(SteadyClock::time_point now) {
+    SyntheticChromeInteraction plan;
+    if (!envEnabled("LAMBDA_WINDOW_MANAGER_SYNTHETIC_CHROME_INTERACTION")) {
+      return plan;
+    }
+    plan.enabled = true;
+    plan.intervalMs = positiveEnvInt("LAMBDA_WINDOW_MANAGER_SYNTHETIC_CHROME_INTERACTION_INTERVAL_MS", 250, 5000);
+    int const warmupMs =
+        positiveEnvInt("LAMBDA_WINDOW_MANAGER_SYNTHETIC_CHROME_INTERACTION_WARMUP_MS", 1500, 30000);
+    plan.nextAt = now + std::chrono::milliseconds(warmupMs);
+    std::fprintf(stderr,
+                 "lambda-window-manager: synthetic chrome interaction enabled interval_ms=%d warmup_ms=%d\n",
+                 plan.intervalMs,
+                 warmupMs);
+    return plan;
+  }
+
+  [[nodiscard]] std::optional<int> delayMs(SteadyClock::time_point now) const {
+    if (!enabled || stage == Stage::Done) return std::nullopt;
+    return millisecondsUntilCeil(nextAt, now, intervalMs);
+  }
+
+  bool emitDue(lambda::platform::KmsDevice& device, WaylandServer& wayland, SteadyClock::time_point now) {
+    if (!enabled || stage == Stage::Done || now < nextAt) return false;
+    std::uint32_t const timeMs = monotonicMilliseconds32(now);
+    auto emitPosition = [&](double x, double y) {
+      device.emitInputEventForDiagnostics(lambda::platform::KmsInputEvent{
+          .kind = lambda::platform::KmsInputEvent::Kind::PointerPosition,
+          .x = x,
+          .y = y,
+          .timeMs = timeMs,
+      });
+    };
+    auto emitButton = [&](bool pressed) {
+      device.emitInputEventForDiagnostics(lambda::platform::KmsInputEvent{
+          .kind = lambda::platform::KmsInputEvent::Kind::PointerButton,
+          .button = BTN_LEFT,
+          .pressed = pressed,
+          .timeMs = timeMs,
+      });
+    };
+
+    switch (stage) {
+    case Stage::MoveToClose: {
+      auto target = wayland.diagnosticTopToplevelCloseButtonCenter();
+      if (!target) {
+        nextAt = now + std::chrono::milliseconds(intervalMs);
+        LAMBDA_WINDOW_MANAGER_TRACE_PACING("synthetic-chrome-interaction stage=wait-target\n");
+        return false;
+      }
+      closeX = target->x;
+      closeY = target->y;
+      awayX = std::clamp(closeX - 140.0, 1.0, std::max(1.0, static_cast<double>(wayland.logicalOutputWidth() - 1)));
+      awayY = closeY;
+      emitPosition(closeX, closeY);
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("synthetic-chrome-interaction stage=move-close x=%.1f y=%.1f\n",
+                                         closeX,
+                                         closeY);
+      stage = Stage::PressClose;
+      break;
+    }
+    case Stage::PressClose:
+      emitButton(true);
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("synthetic-chrome-interaction stage=press-close x=%.1f y=%.1f\n",
+                                         closeX,
+                                         closeY);
+      stage = Stage::MoveAway;
+      break;
+    case Stage::MoveAway:
+      emitPosition(awayX, awayY);
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("synthetic-chrome-interaction stage=move-away x=%.1f y=%.1f\n",
+                                         awayX,
+                                         awayY);
+      stage = Stage::ReleaseAway;
+      break;
+    case Stage::ReleaseAway:
+      emitButton(false);
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("synthetic-chrome-interaction stage=release-away x=%.1f y=%.1f\n",
+                                         awayX,
+                                         awayY);
+      stage = Stage::Done;
+      break;
+    case Stage::Done:
+      return false;
+    }
+    ++emitted;
+    nextAt = now + std::chrono::milliseconds(intervalMs);
+    if (stage == Stage::Done) {
+      std::fprintf(stderr, "lambda-window-manager: synthetic chrome interaction complete emitted=%d\n", emitted);
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("synthetic-chrome-interaction complete emitted=%d\n", emitted);
     }
     return true;
   }
@@ -959,6 +1074,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
     });
     SyntheticPointerMotion syntheticPointerMotion = SyntheticPointerMotion::fromEnvironment(SteadyClock::now());
+    SyntheticChromeInteraction syntheticChromeInteraction =
+        SyntheticChromeInteraction::fromEnvironment(SteadyClock::now());
 
     bool forceRender = true;
     std::optional<ScreenshotRequest> screenshotPending;
@@ -2178,6 +2295,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (std::optional<int> syntheticPointerDelay = syntheticPointerMotion.delayMs(SteadyClock::now())) {
         pollTimeoutMs = std::min(pollTimeoutMs, *syntheticPointerDelay);
       }
+      if (std::optional<int> syntheticChromeDelay = syntheticChromeInteraction.delayMs(SteadyClock::now())) {
+        pollTimeoutMs = std::min(pollTimeoutMs, *syntheticChromeDelay);
+      }
       if (snapPreviewDelayBeforePoll) {
         int const snapPreviewDelayMs = std::max(0, *snapPreviewDelayBeforePoll);
         if (snapPreviewDelayMs > 0 || snapPreviewCanRenderBeforePoll) {
@@ -2252,6 +2372,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       loopSnapshots.reset();
       queueScreenshotIfRequested();
       bool const syntheticPointerEmitted = syntheticPointerMotion.emitDue(*device, SteadyClock::now());
+      bool const syntheticChromeEmitted =
+          syntheticChromeInteraction.emitDue(*device, wayland, SteadyClock::now());
       maybeCrashHeartbeat("main-loop");
       bool const hadInputActivity = inputActivityThisLoop;
       bool const inputRenderRequired = inputRenderRequiredThisLoop;
@@ -2347,7 +2469,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded || windowCyclerFrameNeeded ||
           diagnosticExerciseChanged ||
           acquireWaitFrameCallbackSent ||
-          syntheticPointerEmitted) {
+          syntheticPointerEmitted ||
+          syntheticChromeEmitted) {
         if (!presenter->atomicPresenter() || forceRender || waylandWoke || inputRenderRequired ||
             configReloaded ||
             animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded || windowCyclerFrameNeeded ||
