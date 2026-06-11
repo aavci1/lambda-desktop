@@ -56,6 +56,7 @@ Rect imageSourceRect(Size imageSize, Rect const& dst, ImageFillMode mode) {
     assert(false && "Tile must be handled via drawImageTiled before imageSourceRect");
     return Rect::sharp(0.f, 0.f, 0.f, 0.f);
   }
+  return Rect::sharp(0.f, 0.f, 0.f, 0.f);
 }
 
 } // namespace

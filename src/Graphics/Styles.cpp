@@ -15,10 +15,16 @@ void assignGradientStops(Gradient& gradient, std::initializer_list<GradientStop>
     stop.position = std::clamp(stop.position, 0.f, 1.f);
     gradient.stops[gradient.stopCount++] = stop;
   }
-  auto const stopEnd = gradient.stops.begin() + gradient.stopCount;
-  std::sort(gradient.stops.begin(), stopEnd, [](GradientStop const& lhs, GradientStop const& rhs) {
-    return lhs.position < rhs.position;
-  });
+  std::size_t const stopCount = std::min<std::size_t>(gradient.stopCount, gradient.stops.size());
+  for (std::size_t i = 1; i < stopCount; ++i) {
+    GradientStop stop = gradient.stops[i];
+    std::size_t j = i;
+    while (j > 0 && stop.position < gradient.stops[j - 1].position) {
+      gradient.stops[j] = gradient.stops[j - 1];
+      --j;
+    }
+    gradient.stops[j] = stop;
+  }
 }
 
 template <typename Gradient>

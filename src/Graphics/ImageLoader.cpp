@@ -3,7 +3,6 @@
 #if defined(LAMBDA_PLATFORM_LINUX_WAYLAND) || defined(LAMBDA_PLATFORM_LINUX_KMS)
 #include <cairo.h>
 #include <librsvg/rsvg.h>
-#include <librsvg/rsvg-cairo.h>
 #endif
 
 #if defined(__clang__) || defined(__GNUC__)
