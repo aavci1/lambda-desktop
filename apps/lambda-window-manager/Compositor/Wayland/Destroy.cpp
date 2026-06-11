@@ -121,6 +121,9 @@ void resetLayerSurfaceRole(WaylandServer::Impl* server, WaylandServer::Impl::Lay
   if (server->commandLauncherModalSurface_ == layerSurface->surface) {
     server->commandLauncherModalSurface_ = nullptr;
   }
+  SurfaceSeatCleanupResult const seatCleanup =
+      clearUnmappedSurfaceSeatState(server, layerSurface->surface);
+  if (seatCleanup.pointerFocusChanged) updatePointerConstraintsForFocus(server);
   if (layerSurface->surface && layerSurface->surface->layerSurface == layerSurface) {
     layerSurface->surface->layerSurface = nullptr;
     if (surfaceIsLayerSurface(layerSurface->surface)) layerSurface->surface->role = SurfaceRole::None;
