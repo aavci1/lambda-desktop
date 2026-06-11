@@ -27,6 +27,7 @@ Runs the TODO-019 Linux frame-pacing verification smoke:
   - moves two decorated checker windows and asserts multi-rect partial damage stays cheap
   - compares a glass-titlebar terminal workload against a forced full-output baseline
   - forces the offscreen scanout-copy path and asserts partial damage copies fewer pixels than full-frame copies
+  - alternates partial and forced-full damage while checking captured frames for stale exposed pixels
   - drives server-side chrome hover/press transitions and asserts client surface-cache reuse
   - drives scripted resize configures and asserts the compositor sizing path stays healthy
   - captures compositor resize-storm frames and snap CSV metrics for artifact inspection
@@ -58,14 +59,15 @@ build_target() {
 }
 
 build_target "$KMS_BUILD_DIR" lambda-window-manager
-build_target "$WAYLAND_BUILD_DIR" lambda-presentation-feedback-check lambda-shell lambda-terminal lambda-editor
+build_target "$WAYLAND_BUILD_DIR" lambda-presentation-feedback-check lambda-frame-artifact-check lambda-shell lambda-terminal lambda-editor
 
 WM="$KMS_BUILD_DIR/apps/lambda-window-manager/lambda-window-manager"
 CHECKER="$WAYLAND_BUILD_DIR/tools/lambda-presentation-feedback-check"
+ARTIFACT_CHECK="$WAYLAND_BUILD_DIR/tools/lambda-frame-artifact-check"
 SHELL_APP="$WAYLAND_BUILD_DIR/apps/lambda-shell/lambda-shell"
 EDITOR_APP="$WAYLAND_BUILD_DIR/apps/lambda-editor/lambda-editor"
 
-for binary in "$WM" "$CHECKER" "$SHELL_APP" "$EDITOR_APP"; do
+for binary in "$WM" "$CHECKER" "$ARTIFACT_CHECK" "$SHELL_APP" "$EDITOR_APP"; do
   if [[ ! -x "$binary" ]]; then
     echo "Missing executable: $binary" >&2
     exit 2
@@ -273,6 +275,39 @@ summarize_snap_artifacts() {
 
   printf 'SUMMARY %s snap_artifacts pngs=%s %s %s metrics=%s trace=%s\n' \
     "$label" "$png_count" "$metrics_summary" "$trace_summary" "$metrics_file" "$trace_file"
+}
+
+summarize_frame_artifacts() {
+  local dir="$1"
+  local label="$2"
+  local background_rgb="${3:-32,48,64}"
+  local min_content_matches="${LWM_FRAME_ARTIFACT_MIN_CONTENT_MATCHES:-24}"
+  local min_exposed_samples="${LWM_FRAME_ARTIFACT_MIN_EXPOSED_SAMPLES:-12}"
+  local output
+  output="$("$ARTIFACT_CHECK" \
+    --capture-root "$dir/snap-capture" \
+    --trace-root "$dir/snap-trace" \
+    --background-rgb "$background_rgb" \
+    --min-content-matches "$min_content_matches" \
+    --min-exposed-samples "$min_exposed_samples")" || {
+    printf 'SUMMARY %s frame_artifact_check_failed\n' "$label"
+    return 1
+  }
+  printf 'SUMMARY %s frame_artifacts %s\n' "$label" "$output"
+}
+
+summarize_partial_full_damage_alternation() {
+  local dir="$1"
+  local label="$2"
+  local partial_frames
+  local forced_full_frames
+  partial_frames=$(rg -c 'scene-damage-render partial=1' "$dir/pacing.log" 2>/dev/null || echo 0)
+  forced_full_frames=$(rg -c 'scene-damage-render partial=0 .*forcedFull=1' "$dir/pacing.log" 2>/dev/null || echo 0)
+  printf 'SUMMARY %s damage_alternation partial_frames=%s forced_full_frames=%s\n' \
+    "$label" "$partial_frames" "$forced_full_frames"
+  if [[ "$partial_frames" -le 0 || "$forced_full_frames" -le 0 ]]; then
+    return 1
+  fi
 }
 
 summarize_surface_cache() {
@@ -883,6 +918,13 @@ EOF
     LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
     LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$dir/pacing.log" \
     LAMBDA_WINDOW_MANAGER_CONFIG="$config_file" \
+    LWM_SNAP_CAPTURE_FRAMES=48 \
+    LWM_SNAP_CAPTURE_ALWAYS=1 \
+    LWM_SNAP_CAPTURE_DIR="$dir/snap-capture" \
+    LWM_SNAP_TRACE=1 \
+    LWM_SNAP_TRACE_ALWAYS=1 \
+    LWM_SNAP_TRACE_FRAMES=480 \
+    LWM_SNAP_TRACE_DIR="$dir/snap-trace" \
     LWM_DIAGNOSTIC_SCRIPTED_EXERCISE=1 \
     LWM_DIAGNOSTIC_SCRIPTED_MULTI_TOPLEVELS=1 \
     "$WM" >"$dir/compositor.log" 2>&1 &
@@ -951,6 +993,8 @@ EOF
     "$label" "$display" "$presenter_line" "$checker_a_line" "$checker_b_line" "$dir"
   summarize_runtime_logs "$dir" "$label"
   summarize_multi_dirty_partial "$dir" "$label"
+  summarize_snap_artifacts "$dir" "$label"
+  summarize_frame_artifacts "$dir" "$label" "32,48,64"
   summarize_cpu_trace "$dir/cpu.log"
 }
 
@@ -1242,6 +1286,143 @@ run_scanout_copy_partial_case() {
   summarize_runtime_logs "$dir" "$label"
   summarize_multi_dirty_partial "$dir" "$label"
   summarize_scanout_copy_partial "$dir" "$label"
+  summarize_cpu_trace "$dir/cpu.log"
+}
+
+run_partial_full_artifacts_case() {
+  local label="partial-full-artifacts"
+  local dir="$LOG_DIR/$label"
+  mkdir -p "$dir"
+
+  local display_file="$XDG_RUNTIME_DIR/lambda-window-manager-display"
+  rm -f "$display_file"
+
+  local wm_pid=""
+  local checker_a_pid=""
+  local checker_b_pid=""
+  local config_file="$dir/compositor-config.toml"
+  cat >"$config_file" <<'EOF'
+background = "#203040"
+animations = false
+
+[chrome]
+focused_shadow_radius = 0
+unfocused_shadow_radius = 0
+EOF
+  cleanup() {
+    set +e
+    if [[ -n "$checker_a_pid" ]]; then
+      kill -TERM -"$checker_a_pid" 2>/dev/null || kill -TERM "$checker_a_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$checker_b_pid" ]]; then
+      kill -TERM -"$checker_b_pid" 2>/dev/null || kill -TERM "$checker_b_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$wm_pid" ]]; then
+      kill -TERM -"$wm_pid" 2>/dev/null || kill -TERM "$wm_pid" 2>/dev/null || true
+    fi
+    sleep 1
+    if [[ -n "$checker_a_pid" ]]; then
+      kill -KILL -"$checker_a_pid" 2>/dev/null || kill -KILL "$checker_a_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$checker_b_pid" ]]; then
+      kill -KILL -"$checker_b_pid" 2>/dev/null || kill -KILL "$checker_b_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$wm_pid" ]]; then
+      kill -KILL -"$wm_pid" 2>/dev/null || kill -KILL "$wm_pid" 2>/dev/null || true
+    fi
+    set -e
+  }
+  trap cleanup RETURN
+
+  setsid timeout --signal=TERM --kill-after=5s 35s env \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG="$dir/cpu.log" \
+    LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE=0 \
+    LAMBDA_KMS_PRESENT_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$dir/pacing.log" \
+    LAMBDA_WINDOW_MANAGER_CONFIG="$config_file" \
+    LAMBDA_COMPOSITOR_DISABLE_DIRECT_SCANOUT_RENDER=1 \
+    LAMBDA_COMPOSITOR_DISABLE_KMS_OVERLAYS=1 \
+    LWM_SNAP_CAPTURE_FRAMES=48 \
+    LWM_SNAP_CAPTURE_ALWAYS=1 \
+    LWM_SNAP_CAPTURE_DIR="$dir/snap-capture" \
+    LWM_SNAP_TRACE=1 \
+    LWM_SNAP_TRACE_ALWAYS=1 \
+    LWM_SNAP_TRACE_FRAMES=480 \
+    LWM_SNAP_TRACE_DIR="$dir/snap-trace" \
+    LWM_DIAGNOSTIC_SCRIPTED_EXERCISE=1 \
+    LWM_DIAGNOSTIC_SCRIPTED_MULTI_TOPLEVELS=1 \
+    LWM_DIAGNOSTIC_ALTERNATE_FULL_DAMAGE=1 \
+    "$WM" >"$dir/compositor.log" 2>&1 &
+  wm_pid=$!
+
+  local display=""
+  for _ in $(seq 1 150); do
+    if [[ -r "$display_file" ]]; then
+      display="$(cat "$display_file")"
+      break
+    fi
+    if ! kill -0 "$wm_pid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ -z "$display" ]]; then
+    echo "CASE $label display-not-ready log_dir=$dir" >&2
+    tail -n 120 "$dir/compositor.log" >&2 || true
+    return 20
+  fi
+
+  setsid timeout --signal=TERM --kill-after=2s 18s env \
+    WAYLAND_DISPLAY="$display" \
+    LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS=1 \
+    LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS=11000 \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUEST_SERVER_DECORATION=1 \
+    "$CHECKER" >"$dir/presentation-feedback-a.log" 2>&1 &
+  checker_a_pid=$!
+  sleep 0.4
+  setsid timeout --signal=TERM --kill-after=2s 18s env \
+    WAYLAND_DISPLAY="$display" \
+    LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS=1 \
+    LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS=11000 \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUEST_SERVER_DECORATION=1 \
+    "$CHECKER" >"$dir/presentation-feedback-b.log" 2>&1 &
+  checker_b_pid=$!
+
+  local checker_a_status=0
+  wait "$checker_a_pid" || checker_a_status=$?
+  checker_a_pid=""
+  local checker_b_status=0
+  wait "$checker_b_pid" || checker_b_status=$?
+  checker_b_pid=""
+  if [[ "$checker_a_status" -ne 0 || "$checker_b_status" -ne 0 ]]; then
+    echo "CASE $label checker_a_status=$checker_a_status checker_b_status=$checker_b_status" >&2
+    tail -n 80 "$dir/presentation-feedback-a.log" >&2 || true
+    tail -n 80 "$dir/presentation-feedback-b.log" >&2 || true
+    return 21
+  fi
+
+  sleep 1
+  cleanup
+  trap - RETURN
+  wait "$wm_pid" 2>/dev/null || true
+
+  local checker_a_line
+  local checker_b_line
+  checker_a_line="$(tr '\n' ' ' < "$dir/presentation-feedback-a.log")"
+  checker_b_line="$(tr '\n' ' ' < "$dir/presentation-feedback-b.log")"
+  local presenter_line
+  presenter_line="$(rg -o 'using (GBM/atomic-KMS|Vulkan display) presenter' "$dir/compositor.log" | tail -1 || true)"
+  printf 'CASE %s display=%s %s checker_a=%s checker_b=%s log_dir=%s\n' \
+    "$label" "$display" "$presenter_line" "$checker_a_line" "$checker_b_line" "$dir"
+  summarize_runtime_logs "$dir" "$label"
+  summarize_multi_dirty_partial "$dir" "$label"
+  summarize_partial_full_damage_alternation "$dir" "$label"
+  summarize_snap_artifacts "$dir" "$label"
+  summarize_frame_artifacts "$dir" "$label" "32,48,64"
   summarize_cpu_trace "$dir/cpu.log"
 }
 
@@ -1825,6 +2006,7 @@ run_selected_case snapshot-load-10-windows run_snapshot_load_case
 run_selected_case multi-dirty-partial run_multi_dirty_partial_case
 run_selected_case glass-terminal-partial run_glass_terminal_partial_case
 run_selected_case scanout-copy-partial run_scanout_copy_partial_case
+run_selected_case partial-full-artifacts run_partial_full_artifacts_case
 run_selected_case chrome-hover-press-cache run_chrome_interaction_case
 run_selected_case resize-storm run_resize_storm_case
 run_selected_case vulkan-display run_compositor_case vulkan-display vulkan-display 0 0

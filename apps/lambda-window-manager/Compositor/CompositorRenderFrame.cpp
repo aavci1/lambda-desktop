@@ -1039,7 +1039,9 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     }
   }
 
-  bool const forceFullDamage = diagnosticEnvEnabled("LWM_DIAGNOSTIC_FORCE_FULL_DAMAGE");
+  bool const alternateFullDamage = diagnosticEnvEnabled("LWM_DIAGNOSTIC_ALTERNATE_FULL_DAMAGE") &&
+                                   ctx.wayland.contentSerial() % 2ull != 0ull;
+  bool const forceFullDamage = diagnosticEnvEnabled("LWM_DIAGNOSTIC_FORCE_FULL_DAMAGE") || alternateFullDamage;
   bool const partialDamageCandidate =
       atomicPresenter &&
       !renderAheadFrame &&
@@ -1065,10 +1067,11 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
       physicalDamage.clear();
     }
   }
-  LAMBDA_WINDOW_MANAGER_TRACE_PACING("scene-damage-render partial=%d logicalRects=%zu kmsRects=%zu\n",
+  LAMBDA_WINDOW_MANAGER_TRACE_PACING("scene-damage-render partial=%d logicalRects=%zu kmsRects=%zu forcedFull=%d\n",
                             partialDamageFrame ? 1 : 0,
                             partialDamageFrame ? sceneDamage.rects.size() : 0u,
-                            physicalDamage.size());
+                            physicalDamage.size(),
+                            forceFullDamage ? 1 : 0);
   ctx.canvas.beginFrame();
   auto drawFrameContent = [&] {
     phaseStart = profileNow();

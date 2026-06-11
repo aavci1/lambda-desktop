@@ -11,4 +11,10 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND)
     PkgConfig::WAYLAND_CLIENT)
   target_compile_options(lambda-presentation-feedback-check PRIVATE -Wall -Wextra -Wpedantic)
   set_target_properties(lambda-presentation-feedback-check PROPERTIES CXX_STANDARD 23)
+
+  add_executable(lambda-frame-artifact-check
+    lambda-frame-artifact-check.cpp)
+  target_link_libraries(lambda-frame-artifact-check PRIVATE lambda::lambda)
+  target_compile_options(lambda-frame-artifact-check PRIVATE -Wall -Wextra -Wpedantic)
+  set_target_properties(lambda-frame-artifact-check PROPERTIES CXX_STANDARD 23)
 endif()
