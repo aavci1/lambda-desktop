@@ -506,6 +506,31 @@ std::uint64_t damageArea(SceneDamageResult const& damage) {
   return area;
 }
 
+std::vector<Rect> logicalDamageClipRects(SceneDamageResult const& damage) {
+  constexpr std::size_t kMaxSparseDamageClipRects = 8;
+  constexpr std::uint64_t kSparseDamageOverdrawRatio = 2;
+  std::optional<Rect> const bounds = logicalDamageBounds(damage);
+  if (!bounds) return {};
+  if (damage.fullOutput || damage.rects.size() <= 1) {
+    return {*bounds};
+  }
+  std::uint64_t const coveredArea = damageArea(damage);
+  std::uint64_t const boundsArea =
+      static_cast<std::uint64_t>(std::max(0.f, bounds->width)) *
+      static_cast<std::uint64_t>(std::max(0.f, bounds->height));
+  if (coveredArea == 0 || damage.rects.size() > kMaxSparseDamageClipRects ||
+      boundsArea <= coveredArea * kSparseDamageOverdrawRatio) {
+    return {*bounds};
+  }
+  std::vector<Rect> clips;
+  clips.reserve(damage.rects.size());
+  for (RegionRect const& rect : damage.rects) {
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    clips.push_back(logicalRect(rect));
+  }
+  return clips.empty() ? std::vector<Rect>{*bounds} : clips;
+}
+
 std::vector<platform::KmsAtomicPresenter::DamageRect>
 physicalDamageRects(SceneDamageResult const& damage,
                     platform::KmsOutput const& output,
@@ -559,6 +584,7 @@ void storeAtomicReadyFrame(
     std::vector<std::uint64_t> const& frameCallbackSurfaceIds,
     AtomicReadyFrameOptions options = {}) {
   if (!ctx.atomicReadyFrame || !ctx.atomicFrameDirty || !ctx.lastKnownContentSerial) return;
+  ctx.surfaceRenderState.sceneGraph = sceneGraphState;
   *ctx.atomicReadyFrame = AtomicReadyFrame{
       .ready = true,
       .presentToken = presentToken,
@@ -1104,14 +1130,17 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
     ctx.frameProfile.cursorMs += cursorMs;
   };
   if (partialDamageFrame) {
-    std::optional<Rect> const damageBounds = logicalDamageBounds(sceneDamage);
-    if (damageBounds) {
-      ctx.canvas.save();
-      ctx.canvas.clipRect(*damageBounds);
+    std::vector<Rect> const damageClips = logicalDamageClipRects(sceneDamage);
+    if (damageClips.empty()) {
       drawFrameContent();
-      ctx.canvas.restore();
     } else {
-      drawFrameContent();
+      for (Rect const& damageClip : damageClips) {
+        if (damageClip.width <= 0.f || damageClip.height <= 0.f) continue;
+        ctx.canvas.save();
+        ctx.canvas.clipRect(damageClip);
+        drawFrameContent();
+        ctx.canvas.restore();
+      }
     }
   } else {
     drawFrameContent();

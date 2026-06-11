@@ -25,13 +25,14 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] KMS cursor/presentation review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager` and `./build/tests/lambda_tests --source-file="*CompositorPresentationFeedbackTests.cpp" --no-skip` (6 cases / 46 assertions).
 - [x] Wayland/chrome review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager`, compositor scene/surface/chrome slice (47 cases / 300 assertions), and frame-scheduler/scene-damage/window-state source slice (41 cases / 253 assertions).
 - [x] Vulkan recorder/replay review batch build and focused tests passed on 2026-06-11: normal and `LAMBDA_VULKAN_PREPARED_GEOMETRY=1` Vulkan render-target tests (21 cases / 157 assertions each), validation-layer Vulkan render-target tests (21 cases / 157 assertions), and a prepared/recorder scene slice (6 cases / 79 assertions).
+- [x] Compositor damage review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager`, `./build/tests/lambda_tests --source-file="*CompositorSceneDamageTests.cpp" --no-skip` (10 cases / 30 assertions), `./build/tests/lambda_tests --source-file="*CompositorSurfaceUploadDamageTests.cpp" --no-skip` (3 cases / 7 assertions), and `./build/tests/lambda_tests --source-file="*CompositorPresentationFeedbackTests.cpp" --no-skip` (6 cases / 46 assertions).
 - [ ] Remaining local input gap: `ydotool` and `wtype` are installed and `/dev/input/event0` has an ACL for `aavci`, but `ydotoold` cannot start because `/dev/uinput` is still `root:root` mode `0600`; `evemu-event` is still missing. Real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad real-app visual smoke cases still require manual interaction with a running Lambda compositor session, especially move/drag/resize and cursor visual checks.
 - [ ] Remaining system-tool gap: `wayland-utils` and `evemu` are not installed; `aavci` is in `wheel`, but noninteractive `sudo` still prompts for a password, so this session cannot repair `/dev/uinput` permissions or install the remaining packages. The broad pointer/compositor doctest slice also still needs a live `WAYLAND_DISPLAY`; four `RuntimeInputTests.cpp` cases failed with `Failed to connect to Wayland display`.
 - [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
 - [x] macOS focused tests: `*Metal*,*SceneGraph*` — 20 cases, 133 assertions, all passed (2026-06-11).
 - [ ] Remaining macOS runtime gap: `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), full `ctest`, and backdrop-blur visual comparison.
-- [ ] Post-implementation review backlog (REV-*) below — 3 high, 3 medium, and 2 low items remain open.
+- [ ] Post-implementation review backlog (REV-*) below — 3 high, 1 medium, and 2 low items remain open.
 
 ## Working Environment
 
@@ -61,7 +62,7 @@ Measurement tooling that already exists — use it before and after every change
 | Metal counters | `debug::perf` — `CanvasDrawableWait`, `CanvasPresent`, `DisplayLinkToPresent` | Drawable stalls vs present cost on macOS |
 | Validation layers | `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` | Sync/lifetime regressions from any of these changes |
 
-**Suggested fix order for open REV items:** REV-M1/M2/M3 (high-severity regressions), then medium REV-V2 … REV-F2, then lows/nits. Original FP workstreams (FP-1 … FP-16) are marked complete above; remaining manual verification checkboxes under each FP section still apply where unchecked.
+**Suggested fix order for open REV items:** REV-M1/M2/M3 (high-severity regressions), then REV-M4, then lows/nits. Original FP workstreams (FP-1 … FP-16) are marked complete above; remaining manual verification checkboxes under each FP section still apply where unchecked.
 
 ---
 
@@ -436,17 +437,6 @@ What to do:
 
 ## Medium severity
 
-### REV-K3: Scene damage under-covers after rendered-but-unscheduled frame
-
-**Severity: Medium (stale pixels on glass; amplified by relaxed partial guard).**
-
-Client buffer damage is consumed at render time (`SurfaceRenderer.cpp:311-348`); scene-graph baseline advances only at schedule time (`CompositorRuntime.cpp:1417-1420`). If frame N renders (consuming damage M→N), is replaced in the mailbox before schedule, and the client commits again, frame N+1 diffs against M but `bufferDamageRects` only has post-N commits.
-
-What to do:
-
-- [ ] [Auto] Advance `surfaceRenderState.sceneGraph` when a frame is rendered, not only when scheduled; or roll back consumed damage when a prepared frame is discarded.
-- [ ] [Manual] Rapid glass-window updates with mailbox replacement — no stale regions outside damage.
-
 ### REV-M4: Backdrop segments overwrite each other's uniform slots (pre-existing)
 
 **Severity: Medium (incorrect blur transforms when segments differ).**
@@ -457,19 +447,6 @@ What to do:
 
 - [ ] [Auto] Continue `uniformIndex`/`clipIndex` across segments within one backdrop frame.
 - [ ] [Manual] Multi-segment backdrop frame with differing transforms — visual parity check.
-
-### REV-F2: Partial damage uses bounding-union clip (over-draw follow-up)
-
-**Severity: Medium (GPU over-shade when damage rects are sparse).**
-
-`logicalDamageBounds` + single `clipRect` (`CompositorRenderFrame.cpp:1106-1118`) fixes CPU N× recording but can shade the union of distant rects. Multi-rect scissor or stencil clip remains a follow-up.
-
-What to do:
-
-- [ ] [Auto] Add multi-rect clip on `Canvas` when rect count > 1 and union area ≫ sum of areas.
-- [ ] [Manual] Two distant dirty windows — `surface_ms` and GPU time should beat old per-rect loop without excess over-draw vs per-rect KMS damage.
-
----
 
 ## Low severity
 
