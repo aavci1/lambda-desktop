@@ -371,8 +371,8 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
     if (dndTarget_) {
       if (auto* device = dataDeviceForClient(this, wl_resource_get_client(dndTarget_->resource))) {
         if (!dndOffer_ || dndOffer_->selectedAction == WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE) {
-          if (dndSource_->resource) wl_data_source_send_cancelled(dndSource_->resource);
-          clearDnd(this);
+          DndClearPlan const clearPlan = dndClearPlanAfterDrop(false);
+          clearDnd(this, clearPlan.destroyOffer, clearPlan.sendLeave, clearPlan.cancelSource);
           return;
         }
         wl_data_device_send_drop(device->resource);
@@ -384,11 +384,9 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
           wl_resource_get_version(dndSource_->resource) >= WL_DATA_SOURCE_DND_DROP_PERFORMED_SINCE_VERSION) {
         wl_data_source_send_dnd_drop_performed(dndSource_->resource);
       }
-    } else if (dndSource_->resource) {
-      wl_data_source_send_cancelled(dndSource_->resource);
     }
     DndClearPlan const clearPlan = dndClearPlanAfterDrop(completedDrop);
-    clearDnd(this, clearPlan.destroyOffer, clearPlan.sendLeave);
+    clearDnd(this, clearPlan.destroyOffer, clearPlan.sendLeave, clearPlan.cancelSource);
     return;
   }
   if (handlePopupGrabPointerButton(this, button, pressed, timeMs)) return;

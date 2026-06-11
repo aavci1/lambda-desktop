@@ -598,7 +598,7 @@ void WaylandServer::Impl::destroyDataSource(DataSource* source) {
     selectionSource_ = nullptr;
     sendSelectionForFocus(this);
   }
-  if (dndSource_ == source) clearDnd(this);
+  if (dndSource_ == source) clearDnd(this, true, true, false);
   for (auto& offer : dataOffers_) {
     if (offer->source == source) offer->source = nullptr;
   }

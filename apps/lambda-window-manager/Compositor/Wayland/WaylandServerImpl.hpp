@@ -1032,7 +1032,10 @@ void updatePointerConstraintsForFocus(WaylandServer::Impl* server);
 void sendPrimarySelectionForFocus(WaylandServer::Impl* server);
 void sendSelectionForFocus(WaylandServer::Impl* server);
 WaylandServer::Impl::DataDevice* dataDeviceForClient(WaylandServer::Impl* server, wl_client* client);
-void clearDnd(WaylandServer::Impl* server, bool destroyOffer = true, bool sendLeave = true);
+void clearDnd(WaylandServer::Impl* server,
+              bool destroyOffer = true,
+              bool sendLeave = true,
+              bool cancelSource = true);
 void updateDndTarget(WaylandServer::Impl* server, WaylandServer::Impl::Surface* target, std::uint32_t timeMs);
 
 struct WaylandServer::Impl::XdgPositioner {

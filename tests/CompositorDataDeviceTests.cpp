@@ -104,11 +104,13 @@ TEST_CASE("data-device drop cleanup preserves offers after completed drops") {
   DndClearPlan const cancelled = dndClearPlanAfterDrop(false);
   CHECK(cancelled.destroyOffer);
   CHECK(cancelled.sendLeave);
+  CHECK(cancelled.cancelSource);
   CHECK_FALSE(dndSourceShouldReceiveDropPerformed(false));
 
   DndClearPlan const completed = dndClearPlanAfterDrop(true);
   CHECK_FALSE(completed.destroyOffer);
   CHECK_FALSE(completed.sendLeave);
+  CHECK_FALSE(completed.cancelSource);
   CHECK(dndSourceShouldReceiveDropPerformed(true));
 }
 

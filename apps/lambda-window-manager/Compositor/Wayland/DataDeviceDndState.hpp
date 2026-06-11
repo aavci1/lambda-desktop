@@ -79,12 +79,14 @@ inline bool dataDeviceCanUseDragIconSurface(bool iconProvided, bool surfaceHasNo
 struct DndClearPlan {
   bool destroyOffer = true;
   bool sendLeave = true;
+  bool cancelSource = true;
 };
 
 inline DndClearPlan dndClearPlanAfterDrop(bool completedDrop) {
   return {
       .destroyOffer = !completedDrop,
       .sendLeave = !completedDrop,
+      .cancelSource = !completedDrop,
   };
 }
 
