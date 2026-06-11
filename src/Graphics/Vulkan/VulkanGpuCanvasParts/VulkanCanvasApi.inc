@@ -249,10 +249,7 @@ std::shared_ptr<Image> Image::fromDmabuf(DmabufImageSpec const& spec) {
 
     VkSubresourceLayout planeLayout{};
     planeLayout.offset = plane.offset;
-    planeLayout.size = static_cast<VkDeviceSize>(plane.stride) * spec.height;
     planeLayout.rowPitch = plane.stride;
-    planeLayout.arrayPitch = planeLayout.size;
-    planeLayout.depthPitch = planeLayout.size;
 
     auto modifierInfo = vkStructure<VkImageDrmFormatModifierExplicitCreateInfoEXT>(
         VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);

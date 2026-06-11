@@ -722,6 +722,7 @@ public:
     for (auto& buffer : buffers_) {
       closeRenderFence(buffer);
       if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
+      if (buffer.renderFence) vkDestroyFence(device, buffer.renderFence, nullptr);
       if (buffer.offscreenView) vkDestroyImageView(device, buffer.offscreenView, nullptr);
       if (buffer.offscreenImage) vkDestroyImage(device, buffer.offscreenImage, nullptr);
       if (buffer.offscreenMemory) vkFreeMemory(device, buffer.offscreenMemory, nullptr);
@@ -776,9 +777,10 @@ public:
     reapDiscardedPreparedFrames();
     if (buffers_.empty()) return false;
     for (std::size_t i = 0; i < buffers_.size(); ++i) {
-      Buffer const& buffer = buffers_[i];
+      Buffer& buffer = buffers_[i];
+      updateRenderFenceReadiness(buffer);
       if (static_cast<int>(i) != displayedBuffer_ && static_cast<int>(i) != pendingBuffer_ &&
-          static_cast<int>(i) != renderBuffer_ && !buffer.prepared) {
+          static_cast<int>(i) != renderBuffer_ && !buffer.prepared && buffer.renderComplete) {
         return true;
       }
     }
@@ -1020,8 +1022,10 @@ public:
     std::size_t candidate = displayedBuffer_ >= 0 ? static_cast<std::size_t>(displayedBuffer_) : 0u;
     for (std::size_t i = 0; i < buffers_.size(); ++i) {
       candidate = (candidate + 1u) % buffers_.size();
+      updateRenderFenceReadiness(buffers_[candidate]);
       if (static_cast<int>(candidate) != displayedBuffer_ && static_cast<int>(candidate) != pendingBuffer_ &&
-          static_cast<int>(candidate) != renderBuffer_ && !buffers_[candidate].prepared) {
+          static_cast<int>(candidate) != renderBuffer_ && !buffers_[candidate].prepared &&
+          buffers_[candidate].renderComplete) {
         next = candidate;
         break;
       }
@@ -1745,10 +1749,6 @@ public:
         }
         throw std::system_error(error, std::generic_category(), "drmModeAtomicCommit");
       }
-      if (useRenderFence) {
-        closeRenderFence(buffer);
-        buffer.renderComplete = true;
-      }
       if (damageBlob != 0) {
         drmModeDestroyPropertyBlob(fd_, damageBlob);
         damageBlob = 0;
@@ -1820,6 +1820,9 @@ public:
     recordKmsTraceSince(KmsTraceBucket::HandleEvent, handleStart);
     pendingTiming_.eventDispatchEndMonotonicNsec = monotonicNanoseconds();
     if (!pendingTiming_.hardware) return std::nullopt;
+    if (pendingBuffer_ >= 0 && pendingBuffer_ < static_cast<int>(buffers_.size())) {
+      updateRenderFenceReadiness(buffers_[static_cast<std::size_t>(pendingBuffer_)]);
+    }
     displayedBuffer_ = pendingBuffer_;
     pendingBuffer_ = -1;
     activeOverlayPlaneId_ = pendingOverlayPlaneId_;
@@ -2017,6 +2020,7 @@ private:
     VkImageView offscreenView = VK_NULL_HANDLE;
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     bool commandBufferRecording = false;
+    VkFence renderFence = VK_NULL_HANDLE;
     VkSemaphore renderFinished = VK_NULL_HANDLE;
     int renderFenceFd = -1;
     bool renderComplete = true;
@@ -2115,6 +2119,10 @@ private:
 
   void resetRenderSemaphore(Buffer& buffer) {
     KmsTraceScope trace(KmsTraceBucket::ResetSemaphore);
+    updateRenderFenceReadiness(buffer);
+    if (!buffer.renderComplete) {
+      throw std::runtime_error("KMS render buffer is still in use");
+    }
     VkDevice device = lambda::VulkanContext::instance().device();
     if (buffer.renderFinished) {
       vkDestroySemaphore(device, buffer.renderFinished, nullptr);
@@ -2130,9 +2138,28 @@ private:
     }
   }
 
+  void markRenderWorkComplete(Buffer& buffer) noexcept {
+    closeRenderFence(buffer);
+    buffer.renderComplete = true;
+    if (buffer.renderSubmittedNsec != 0 && buffer.renderReadyNsec == 0) {
+      buffer.renderReadyNsec = monotonicNanoseconds();
+    }
+  }
+
   void updateRenderFenceReadiness(Buffer& buffer) {
     KmsTraceScope trace(KmsTraceBucket::UpdateReady);
     if (buffer.renderComplete) return;
+    if (buffer.renderFence) {
+      VkResult const fenceStatus =
+          vkGetFenceStatus(lambda::VulkanContext::instance().device(), buffer.renderFence);
+      if (fenceStatus == VK_SUCCESS) {
+        markRenderWorkComplete(buffer);
+        return;
+      }
+      if (fenceStatus != VK_NOT_READY) {
+        vkCheck(fenceStatus, "vkGetFenceStatus atomic KMS render fence");
+      }
+    }
     if (buffer.renderFenceFd < 0) return;
     pollfd pfd{.fd = buffer.renderFenceFd, .events = POLLIN, .revents = 0};
     int const pollResult = poll(&pfd, 1, 0);
@@ -2141,9 +2168,9 @@ private:
       throw std::system_error(errno, std::generic_category(), "poll KMS render sync fd");
     }
     if (pollResult > 0 && (pfd.revents & (POLLIN | POLLERR | POLLHUP)) != 0) {
-      closeRenderFence(buffer);
-      buffer.renderComplete = true;
-      buffer.renderReadyNsec = monotonicNanoseconds();
+      if (!buffer.renderFence) {
+        markRenderWorkComplete(buffer);
+      }
     }
   }
 
@@ -2794,6 +2821,7 @@ private:
     for (auto& buffer : buffers_) {
       closeRenderFence(buffer);
       if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
+      if (buffer.renderFence) vkDestroyFence(device, buffer.renderFence, nullptr);
       if (buffer.offscreenView) vkDestroyImageView(device, buffer.offscreenView, nullptr);
       if (buffer.offscreenImage) vkDestroyImage(device, buffer.offscreenImage, nullptr);
       if (buffer.offscreenMemory) vkFreeMemory(device, buffer.offscreenMemory, nullptr);
@@ -2857,6 +2885,7 @@ private:
         createOffscreenTarget(buffer);
       }
       allocateCommandBuffer(buffer);
+      createRenderFence(buffer);
       if (useAsyncRenderFence_) {
         buffer.renderFinished = createExportableSemaphore();
       }
@@ -2990,6 +3019,13 @@ private:
             "vkAllocateCommandBuffers atomic KMS presenter");
   }
 
+  void createRenderFence(Buffer& buffer) {
+    auto fenceInfo = vkStructure<VkFenceCreateInfo>(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    vkCheck(vkCreateFence(lambda::VulkanContext::instance().device(), &fenceInfo, nullptr, &buffer.renderFence),
+            "vkCreateFence atomic KMS render fence");
+  }
+
   static void transitionImage(VkCommandBuffer commandBuffer,
                               VkImage image,
                               VkImageLayout oldLayout,
@@ -3095,33 +3131,29 @@ private:
     submit.pCommandBufferInfos = &commandBufferInfo;
     submit.signalSemaphoreInfoCount = buffer.renderFinished ? 1u : 0u;
     submit.pSignalSemaphoreInfos = buffer.renderFinished ? &signalSemaphore : nullptr;
-    VkFence fallbackFence = VK_NULL_HANDLE;
-    if (!buffer.renderFinished) {
-      VkFenceCreateInfo fenceInfo{};
-      fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-      vkCheck(vkCreateFence(lambda::VulkanContext::instance().device(), &fenceInfo, nullptr, &fallbackFence),
-              "vkCreateFence atomic KMS render fallback");
-    }
+    if (!buffer.renderFence) createRenderFence(buffer);
+    vkCheck(vkResetFences(lambda::VulkanContext::instance().device(), 1, &buffer.renderFence),
+            "vkResetFences atomic KMS render fence");
+    buffer.renderComplete = false;
     std::uint64_t const submitStart = kmsTraceStart();
     try {
-      vkCheck(vkQueueSubmit2(lambda::VulkanContext::instance().queue(), 1, &submit, fallbackFence),
+      vkCheck(vkQueueSubmit2(lambda::VulkanContext::instance().queue(), 1, &submit, buffer.renderFence),
               "vkQueueSubmit2 atomic KMS presenter");
     } catch (...) {
-      if (fallbackFence) vkDestroyFence(lambda::VulkanContext::instance().device(), fallbackFence, nullptr);
       throw;
     }
     lambda::markVulkanRenderTargetCanvasSubmitted(canvas_.get());
     recordKmsTraceSince(KmsTraceBucket::QueueSubmit, submitStart);
-    if (fallbackFence) {
+    if (!buffer.renderFinished) {
       if (!renderFenceFallbackLogged_) {
         std::fprintf(stderr,
                      "lambda-window-manager: KMS render semaphore missing; waiting on per-frame fence\n");
         renderFenceFallbackLogged_ = true;
       }
       VkResult const waitResult =
-          vkWaitForFences(lambda::VulkanContext::instance().device(), 1, &fallbackFence, VK_TRUE, UINT64_MAX);
-      vkDestroyFence(lambda::VulkanContext::instance().device(), fallbackFence, nullptr);
+          vkWaitForFences(lambda::VulkanContext::instance().device(), 1, &buffer.renderFence, VK_TRUE, UINT64_MAX);
       vkCheck(waitResult, "vkWaitForFences atomic KMS render fallback");
+      markRenderWorkComplete(buffer);
     }
   }
 
@@ -3199,11 +3231,7 @@ private:
       externalInfo.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
       VkSubresourceLayout planeLayout{};
       planeLayout.offset = gbm_bo_get_offset(buffer.bo, 0);
-      planeLayout.size = static_cast<VkDeviceSize>(gbm_bo_get_stride_for_plane(buffer.bo, 0)) *
-                         static_cast<VkDeviceSize>(gbm_bo_get_height(buffer.bo));
       planeLayout.rowPitch = gbm_bo_get_stride_for_plane(buffer.bo, 0);
-      planeLayout.arrayPitch = planeLayout.size;
-      planeLayout.depthPitch = planeLayout.size;
       auto modifierInfo = vkStructure<VkImageDrmFormatModifierExplicitCreateInfoEXT>(
           VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
       modifierInfo.pNext = &externalInfo;
@@ -3283,6 +3311,9 @@ private:
       }
       pendingTiming_.eventDispatchEndMonotonicNsec = monotonicNanoseconds();
       if (pendingTiming_.hardware) {
+        if (pendingBuffer_ >= 0 && pendingBuffer_ < static_cast<int>(buffers_.size())) {
+          updateRenderFenceReadiness(buffers_[static_cast<std::size_t>(pendingBuffer_)]);
+        }
         displayedBuffer_ = pendingBuffer_;
         pendingBuffer_ = -1;
         activeOverlayPlaneId_ = pendingOverlayPlaneId_;
@@ -3324,6 +3355,7 @@ private:
     closeRenderFence(buffer);
     if (buffer.view) vkDestroyImageView(device, buffer.view, nullptr);
     if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
+    if (buffer.renderFence) vkDestroyFence(device, buffer.renderFence, nullptr);
     if (buffer.offscreenView) vkDestroyImageView(device, buffer.offscreenView, nullptr);
     if (buffer.offscreenImage) vkDestroyImage(device, buffer.offscreenImage, nullptr);
     if (buffer.offscreenMemory) vkFreeMemory(device, buffer.offscreenMemory, nullptr);

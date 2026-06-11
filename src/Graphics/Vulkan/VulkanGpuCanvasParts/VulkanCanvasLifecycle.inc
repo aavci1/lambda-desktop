@@ -110,6 +110,9 @@ public:
 
   void markExternalRenderTargetSubmitted() {
     retireDeferredResourcesAfterSubmit();
+    renderTargetFrameCacheValid_ = false;
+    currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
+    debug::perf::recordPresentedFrame();
   }
 
   bool requestNextFrameCapture() {
