@@ -1,4 +1,5 @@
 #include "Compositor/Wayland/CursorRequestState.hpp"
+#include "Compositor/Wayland/SelectionSerialState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include <doctest/doctest.h>
@@ -48,6 +49,55 @@ TEST_CASE("seat serial ledger validates client surface and kind") {
   CHECK_FALSE(seatSerialIsValid(records, releaseSerial, clientA, &surfaceA, pointerPressOnly));
   CHECK(seatSerialIsValid(records, keyboardEnterSerial, clientA, &surfaceA, selectionKinds));
   CHECK_FALSE(seatSerialIsValid(records, 0, clientA, &surfaceA, pointerKinds));
+}
+
+TEST_CASE("selection serial policy accepts only wlroots-aligned trigger serials") {
+  using lambda::compositor::SeatSerialKind;
+  using lambda::compositor::WaylandServer;
+  using lambda::compositor::dataDeviceStartDragAcceptsSerialKind;
+  using lambda::compositor::issueSeatSerial;
+  using lambda::compositor::kDataDeviceDragStartSerialKinds;
+  using lambda::compositor::kSelectionSetSerialKinds;
+  using lambda::compositor::seatSerialIsValid;
+  using lambda::compositor::selectionSetAcceptsSerialKind;
+
+  CHECK(dataDeviceStartDragAcceptsSerialKind(SeatSerialKind::PointerButtonPress));
+  CHECK_FALSE(dataDeviceStartDragAcceptsSerialKind(SeatSerialKind::PointerEnter));
+  CHECK_FALSE(dataDeviceStartDragAcceptsSerialKind(SeatSerialKind::PointerButtonRelease));
+  CHECK_FALSE(dataDeviceStartDragAcceptsSerialKind(SeatSerialKind::KeyboardEnter));
+  CHECK_FALSE(dataDeviceStartDragAcceptsSerialKind(SeatSerialKind::KeyboardKey));
+  CHECK_FALSE(dataDeviceStartDragAcceptsSerialKind(SeatSerialKind::DataDeviceEnter));
+
+  CHECK(selectionSetAcceptsSerialKind(SeatSerialKind::KeyboardEnter));
+  CHECK(selectionSetAcceptsSerialKind(SeatSerialKind::KeyboardKey));
+  CHECK(selectionSetAcceptsSerialKind(SeatSerialKind::PointerButtonPress));
+  CHECK_FALSE(selectionSetAcceptsSerialKind(SeatSerialKind::PointerEnter));
+  CHECK_FALSE(selectionSetAcceptsSerialKind(SeatSerialKind::PointerButtonRelease));
+  CHECK_FALSE(selectionSetAcceptsSerialKind(SeatSerialKind::KeyboardModifiers));
+  CHECK_FALSE(selectionSetAcceptsSerialKind(SeatSerialKind::DataDeviceEnter));
+
+  std::uint32_t nextSerial = 1;
+  std::deque<WaylandServer::Impl::SeatSerialRecord> records;
+  WaylandServer::Impl::Surface surface{};
+  auto* client = reinterpret_cast<wl_client*>(std::uintptr_t{1});
+
+  std::uint32_t const pointerPress =
+      issueSeatSerial(nextSerial, records, SeatSerialKind::PointerButtonPress, client, &surface);
+  std::uint32_t const pointerRelease =
+      issueSeatSerial(nextSerial, records, SeatSerialKind::PointerButtonRelease, client, &surface);
+  std::uint32_t const keyboardKey =
+      issueSeatSerial(nextSerial, records, SeatSerialKind::KeyboardKey, client, &surface);
+  std::uint32_t const dataDeviceEnter =
+      issueSeatSerial(nextSerial, records, SeatSerialKind::DataDeviceEnter, client, &surface);
+
+  CHECK(seatSerialIsValid(records, pointerPress, client, &surface, kDataDeviceDragStartSerialKinds));
+  CHECK_FALSE(seatSerialIsValid(records, pointerRelease, client, &surface, kDataDeviceDragStartSerialKinds));
+  CHECK_FALSE(seatSerialIsValid(records, keyboardKey, client, &surface, kDataDeviceDragStartSerialKinds));
+
+  CHECK(seatSerialIsValid(records, pointerPress, client, &surface, kSelectionSetSerialKinds));
+  CHECK(seatSerialIsValid(records, keyboardKey, client, &surface, kSelectionSetSerialKinds));
+  CHECK_FALSE(seatSerialIsValid(records, pointerRelease, client, &surface, kSelectionSetSerialKinds));
+  CHECK_FALSE(seatSerialIsValid(records, dataDeviceEnter, client, &surface, kSelectionSetSerialKinds));
 }
 
 TEST_CASE("seat serial ledger trims old records and clears destroyed surfaces") {

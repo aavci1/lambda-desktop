@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-06-12 (WM-COMP-24 DnD compositor-cancel cleanup verified)
+**Last updated:** 2026-06-12 (WM-COMP-24 DnD lifecycle parity verified)
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -174,7 +174,7 @@ Current implementation:
 - Core idle behavior, Lambda app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, and real-app smoke tooling exist.
 - Screenshot full-output, active-window, and region capture are implemented with compositor-owned region UI.
 - Protocol work includes layer-shell, xdg-shell, xdg-output, viewporter, cursor-shape, fractional-scale, activation, presentation-time, relative pointer, pointer constraints, primary selection, clipboard/data-device, idle inhibit, and background-effect paths. Clipboard/data-device protocol coverage is separate from the app-level shortcut and cross-application text workflow tracked in `TODO.md` TODO-002, and from Shell clipboard-history UI work.
-- The active wlroots comparison plan has verified core surface-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, remaining global resource hygiene through WM-COMP-21, WM-COMP-22 XDG configure/frame-size parity, WM-COMP-23 popup-grab/cursor/seat cleanup slices, and WM-COMP-24 DnD action-negotiation/data-offer/data-source/drag-icon/post-finish/completed-drop/post-drop-abort/compositor-cancel validation slices.
+- The active wlroots comparison plan has verified core surface-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, remaining global resource hygiene through WM-COMP-21, WM-COMP-22 XDG configure/frame-size parity, WM-COMP-23 popup-grab/cursor/seat cleanup slices, and WM-COMP-24 DnD action-negotiation/data-offer/data-source/drag-icon/drop-cleanup/cancellation/serial-policy slices.
 - Firefox dogfooding blockers addressed in the tested paths: xdg-popup lifecycle cleanup follows the wlroots-style inert-resource pattern, Firefox crash/recovery windows no longer grow on focus changes, fullscreen video can restore, and fullscreen preserves pre-fullscreen maximized/snapped/normal state.
 - Fullscreen shell-panel behavior exists for the current single-output desktop: panels leave the fullscreen area and restore afterward.
 - KMS presentation has a compositor frame queue, improved frame pacing, direct scanout/overlay paths for video, hardware-cursor motion that does not force scene redraws, and video overlay tracing for skipped-frame analysis.
@@ -184,7 +184,7 @@ Current implementation:
 Open gate:
 
 - Resolve the deferred system-titlebar/content frame-coherence issue: Settings resize on DP-1 HiDPI can still show momentary non-synced titlebar/content width even though borders stay synced and flicker is gone.
-- Finish the remaining wlroots comparison backlog in [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md): seat focus/grab workflow parity, data-device DnD lifecycle parity, layer-shell dynamic behavior, output-layout foundation, and a visual regression/real-app harness.
+- Finish the remaining wlroots comparison backlog in [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md): broader non-popup seat/grab workflow parity, layer-shell dynamic behavior, output-layout foundation, and a visual regression/real-app harness.
 - Continue resize/snap/maximize/restore validation across more apps; Firefox restore/fullscreen paths are fixed in the tested scenarios, but GTK/Qt/terminal coverage still needs a pass.
 - Complete the active Window Manager TODO items tracked in `TODO.md`: TODO-006 close animation as one whole-window snapshot path, TODO-007 minimized window state and Shell dock-preview handoff, and TODO-008 live resize frame coherence.
 - Re-test Shell panel behavior around fullscreen, window animations, launcher/dock popovers, dock context menus, and long-running browser/video sessions.

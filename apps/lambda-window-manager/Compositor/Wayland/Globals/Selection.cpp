@@ -3,6 +3,7 @@
 #include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Wayland/DataDeviceDndState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
+#include "Compositor/Wayland/SelectionSerialState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
 #include "primary-selection-unstable-v1-server-protocol.h"
@@ -12,7 +13,6 @@
 #include <wayland-server-protocol.h>
 
 #include <algorithm>
-#include <array>
 #include <memory>
 
 namespace lambda::compositor {
@@ -31,16 +31,6 @@ std::uint32_t resourceId(wl_resource* resource) {
   return resource ? wl_resource_get_id(resource) : 0u;
 }
 
-constexpr std::array<SeatSerialKind, 1> kDragStartSerialKinds{
-    SeatSerialKind::PointerButtonPress,
-};
-
-constexpr std::array<SeatSerialKind, 3> kSelectionSerialKinds{
-    SeatSerialKind::KeyboardEnter,
-    SeatSerialKind::KeyboardKey,
-    SeatSerialKind::PointerButtonPress,
-};
-
 bool validSerialForSurface(WaylandServer::Impl const* server,
                            wl_client* client,
                            WaylandServer::Impl::Surface const* surface,
@@ -52,7 +42,7 @@ bool validSerialForSurface(WaylandServer::Impl const* server,
 
 bool validSelectionSerial(WaylandServer::Impl const* server, wl_client* client, std::uint32_t serial) {
   if (!server || !server->keyboardFocus_) return false;
-  return validSerialForSurface(server, client, server->keyboardFocus_, serial, kSelectionSerialKinds);
+  return validSerialForSurface(server, client, server->keyboardFocus_, serial, kSelectionSetSerialKinds);
 }
 
 void primarySelectionManagerDestroy(wl_client*, wl_resource* resource) {
@@ -523,7 +513,7 @@ void dataDeviceStartDrag(wl_client* client,
   auto* origin = resourceData<WaylandServer::Impl::Surface>(originResource);
   auto* icon = resourceData<WaylandServer::Impl::Surface>(iconResource);
   if (!origin || wl_resource_get_client(origin->resource) != client) return;
-  if (!validSerialForSurface(server, client, origin, serial, kDragStartSerialKinds)) return;
+  if (!validSerialForSurface(server, client, origin, serial, kDataDeviceDragStartSerialKinds)) return;
   if (source && !dataSourceCanStartDrag(source->used)) {
     wl_resource_post_error(resource,
                            WL_DATA_DEVICE_ERROR_USED_SOURCE,
