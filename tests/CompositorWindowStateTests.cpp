@@ -1,6 +1,7 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 #include "Compositor/Wayland/ActivationState.hpp"
 #include "Compositor/Wayland/PointerConstraintState.hpp"
+#include "Compositor/Wayland/SeatFocusState.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Wayland/XdgSurfaceState.hpp"
 #include "Compositor/Wayland/XdgToplevelState.hpp"
@@ -9,6 +10,7 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <initializer_list>
 #include <linux/input-event-codes.h>
 #include <memory>
@@ -761,6 +763,87 @@ TEST_CASE("xdg toplevel client state resets on unmap") {
   CHECK(toplevel.title.empty());
   CHECK(toplevel.appId.empty());
   CHECK_FALSE(lambda::compositor::resetXdgToplevelClientStateForUnmap(&toplevel));
+}
+
+TEST_CASE("unmapped toplevel cleanup drops stale seat focus and serial state") {
+  using lambda::compositor::SurfaceSeatStateRefs;
+  using lambda::compositor::WaylandServer;
+
+  WaylandServer::Impl::Surface surface{};
+  WaylandServer::Impl::Surface other{};
+  auto* client = reinterpret_cast<wl_client*>(std::uintptr_t{1});
+  std::vector<WaylandServer::Impl::Surface*> focusOrder{&other, &surface};
+  std::vector<WaylandServer::Impl::Surface*> focusCycleList{&surface, &other};
+  std::size_t focusCycleIndex = 1;
+  std::uint32_t focusCycleStartedAtMs = 42;
+  bool focusCycleOverlayShown = true;
+  WaylandServer::Impl::Surface* pointerFocus = &surface;
+  WaylandServer::Impl::Surface* pointerButtonGrabSurface = &surface;
+  wl_client* pointerButtonGrabClient = client;
+  std::uint32_t pointerButtonCount = 2;
+  WaylandServer::Impl::Surface* keyboardFocus = &surface;
+  std::deque<WaylandServer::Impl::SeatSerialRecord> serials{
+      {.serial = 10, .client = client, .surface = &surface},
+      {.serial = 11, .client = client, .surface = &other},
+  };
+  std::vector<std::unique_ptr<WaylandServer::Impl::ActivationToken>> tokens;
+  auto token = std::make_unique<WaylandServer::Impl::ActivationToken>();
+  token->surface = &surface;
+  tokens.push_back(std::move(token));
+
+  auto cleanup = lambda::compositor::clearUnmappedSurfaceSeatState(SurfaceSeatStateRefs{
+      .focusOrder = &focusOrder,
+      .focusCycleList = &focusCycleList,
+      .focusCycleIndex = &focusCycleIndex,
+      .focusCycleStartedAtMs = &focusCycleStartedAtMs,
+      .focusCycleOverlayShown = &focusCycleOverlayShown,
+      .pointerFocus = &pointerFocus,
+      .pointerButtonGrabSurface = &pointerButtonGrabSurface,
+      .pointerButtonGrabClient = &pointerButtonGrabClient,
+      .pointerButtonCount = &pointerButtonCount,
+      .keyboardFocus = &keyboardFocus,
+      .seatSerials = &serials,
+      .activationTokens = &tokens,
+  }, &surface);
+
+  CHECK(cleanup.changed);
+  CHECK(cleanup.pointerFocusChanged);
+  CHECK(cleanup.keyboardFocusChanged);
+  CHECK(cleanup.pointerButtonGrabCleared);
+  CHECK(cleanup.focusOrderChanged);
+  CHECK(cleanup.focusCycleCleared);
+  CHECK(cleanup.seatSerialsCleared);
+  CHECK(cleanup.activationTokensCleared);
+  CHECK(focusOrder == std::vector<WaylandServer::Impl::Surface*>{&other});
+  CHECK(focusCycleList.empty());
+  CHECK(focusCycleIndex == 0);
+  CHECK(focusCycleStartedAtMs == 0);
+  CHECK_FALSE(focusCycleOverlayShown);
+  CHECK(pointerFocus == nullptr);
+  CHECK(pointerButtonGrabSurface == nullptr);
+  CHECK(pointerButtonGrabClient == nullptr);
+  CHECK(pointerButtonCount == 0);
+  CHECK(keyboardFocus == nullptr);
+  REQUIRE(serials.size() == 1);
+  CHECK(serials.front().surface == &other);
+  REQUIRE(tokens.size() == 1);
+  CHECK(tokens.front()->surface == nullptr);
+
+  cleanup = lambda::compositor::clearUnmappedSurfaceSeatState(SurfaceSeatStateRefs{
+      .focusOrder = &focusOrder,
+      .focusCycleList = &focusCycleList,
+      .focusCycleIndex = &focusCycleIndex,
+      .focusCycleStartedAtMs = &focusCycleStartedAtMs,
+      .focusCycleOverlayShown = &focusCycleOverlayShown,
+      .pointerFocus = &pointerFocus,
+      .pointerButtonGrabSurface = &pointerButtonGrabSurface,
+      .pointerButtonGrabClient = &pointerButtonGrabClient,
+      .pointerButtonCount = &pointerButtonCount,
+      .keyboardFocus = &keyboardFocus,
+      .seatSerials = &serials,
+      .activationTokens = &tokens,
+  }, &surface);
+  CHECK_FALSE(cleanup.changed);
 }
 
 TEST_CASE("xdg popup topmost validation detects live child popups") {

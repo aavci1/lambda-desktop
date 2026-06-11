@@ -4,6 +4,7 @@
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Wayland/Globals/PointerExtensions.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
+#include "Compositor/Wayland/SeatFocusState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Wayland/XdgSurfaceState.hpp"
@@ -760,6 +761,9 @@ void resetXdgToplevelForUnmap(WaylandServer::Impl::Surface* surface) {
       changed = true;
     }
   }
+  SurfaceSeatCleanupResult const seatCleanup = clearUnmappedSurfaceSeatState(surface->server, surface);
+  if (seatCleanup.pointerFocusChanged) updatePointerConstraintsForFocus(surface->server);
+  changed = seatCleanup.changed || changed;
   changed = resetXdgToplevelClientStateForUnmap(toplevel) || changed;
   if (changed) surface->server->notifyShellStateChanged();
 }
