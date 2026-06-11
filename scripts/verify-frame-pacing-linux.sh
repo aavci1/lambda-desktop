@@ -24,6 +24,7 @@ Runs the TODO-019 Linux frame-pacing verification smoke:
   - exercises a static SHM client surface and asserts compositor surface draw-cache reuse
   - drives server-side chrome hover/press transitions and asserts client surface-cache reuse
   - drives scripted resize configures and asserts the compositor sizing path stays healthy
+  - captures compositor resize-storm frames and snap CSV metrics for artifact inspection
   - summarizes CPU/pacing/present-detail logs and fails on fatal runtime errors
 
 Environment:
@@ -156,6 +157,64 @@ summarize_resize_storm() {
   if [[ "$resize_events" -le 0 || "$sizing_blocks" -le 0 ]]; then
     return 1
   fi
+}
+
+summarize_snap_artifacts() {
+  local dir="$1"
+  local label="$2"
+  local capture_root="$dir/snap-capture"
+  local trace_root="$dir/snap-trace"
+  local metrics_file
+  local trace_file
+  metrics_file="$(find "$capture_root" -name metrics.csv -type f -print -quit 2>/dev/null || true)"
+  trace_file="$(find "$trace_root" -name snap.csv -type f -print -quit 2>/dev/null || true)"
+  local png_count
+  png_count="$(find "$capture_root" -name 'frame-*.png' -type f 2>/dev/null | wc -l | tr -d ' ')"
+
+  if [[ -z "$metrics_file" || -z "$trace_file" || "$png_count" -le 0 ]]; then
+    printf 'SUMMARY %s snap_artifacts_missing pngs=%s metrics=%s trace=%s\n' \
+      "$label" "$png_count" "${metrics_file:-missing}" "${trace_file:-missing}"
+    return 1
+  fi
+
+  local metrics_summary
+  metrics_summary="$(awk -F, '
+    NR > 1 {
+      rows += 1
+      if ($2 == "full-output") {
+        full += 1
+        if (($8 + 0.0) > 1.0) full_alpha += 1
+        if (($10 + 0.0) > 0.0) full_pixels += $10 + 0.0
+      }
+    }
+    END {
+      printf "metrics_rows=%d full_output_rows=%d full_output_alpha_rows=%d full_output_pixels=%.0f",
+        rows, full, full_alpha, full_pixels
+      if (rows <= 0 || full <= 0 || full_alpha <= 0 || full_pixels <= 0) exit 1
+    }
+  ' "$metrics_file")" || {
+    printf 'SUMMARY %s snap_capture_invalid pngs=%s metrics=%s\n' "$label" "$png_count" "$metrics_file"
+    return 1
+  }
+
+  local trace_summary
+  trace_summary="$(awk -F, '
+    NR > 1 {
+      rows += 1
+      if ($2 == "frame") frames += 1
+      if ($2 == "surface") surfaces += 1
+    }
+    END {
+      printf "trace_rows=%d trace_frames=%d trace_surfaces=%d", rows, frames, surfaces
+      if (rows <= 0 || frames <= 0 || surfaces <= 0) exit 1
+    }
+  ' "$trace_file")" || {
+    printf 'SUMMARY %s snap_trace_invalid trace=%s\n' "$label" "$trace_file"
+    return 1
+  }
+
+  printf 'SUMMARY %s snap_artifacts pngs=%s %s %s metrics=%s trace=%s\n' \
+    "$label" "$png_count" "$metrics_summary" "$trace_summary" "$metrics_file" "$trace_file"
 }
 
 summarize_surface_cache() {
@@ -306,6 +365,13 @@ run_resize_storm_case() {
     LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
     LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$dir/pacing.log" \
     LAMBDA_RESIZE_TRACE=1 \
+    LWM_SNAP_CAPTURE_FRAMES=12 \
+    LWM_SNAP_CAPTURE_ALWAYS=1 \
+    LWM_SNAP_CAPTURE_DIR="$dir/snap-capture" \
+    LWM_SNAP_TRACE=1 \
+    LWM_SNAP_TRACE_ALWAYS=1 \
+    LWM_SNAP_TRACE_FRAMES=240 \
+    LWM_SNAP_TRACE_DIR="$dir/snap-trace" \
     LWM_DIAGNOSTIC_SCRIPTED_EXERCISE=1 \
     LWM_DIAGNOSTIC_SCRIPTED_RESIZE=1 \
     "$WM" >"$dir/compositor.log" 2>&1 &
@@ -358,6 +424,7 @@ run_resize_storm_case() {
   printf 'CASE %s display=%s %s checker=%s log_dir=%s\n' "$label" "$display" "$presenter_line" "$checker_line" "$dir"
   summarize_runtime_logs "$dir" "$label"
   summarize_resize_storm "$dir" "$label"
+  summarize_snap_artifacts "$dir" "$label"
   summarize_cpu_trace "$dir/cpu.log"
 }
 

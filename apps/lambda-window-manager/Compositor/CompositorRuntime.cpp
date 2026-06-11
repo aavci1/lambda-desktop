@@ -540,6 +540,13 @@ bool saveScreenshotRequest(ScreenshotRequest const& request,
 
 std::vector<CaptureRegion> snapCaptureRegions(WaylandServer const& wayland) {
   std::vector<CaptureRegion> regions;
+  regions.push_back(CaptureRegion{
+      .name = "full-output",
+      .x = 0,
+      .y = 0,
+      .width = wayland.logicalOutputWidth(),
+      .height = wayland.logicalOutputHeight(),
+  });
   bool dockAdded = false;
   bool topBandAdded = false;
   for (auto const& surface : wayland.committedSurfaces()) {
@@ -584,6 +591,7 @@ struct SnapFrameCapture {
   int remainingTail = 0;
   bool started = false;
   bool loggedStart = false;
+  bool always = false;
   std::filesystem::path directory;
   std::ofstream csv;
   std::unordered_map<std::string, double> previousLuma;
@@ -595,12 +603,18 @@ struct SnapFrameCapture {
     capture.enabled = true;
     capture.maxFrames = requestedFrames;
     capture.tailFrames = positiveEnvInt("LWM_SNAP_CAPTURE_TAIL_FRAMES", 8, 120);
+    capture.always = envEnabled("LWM_SNAP_CAPTURE_ALWAYS");
     capture.directory = snapCaptureRoot() / captureTimestamp();
     return capture;
   }
 
   [[nodiscard]] bool wantsFrame(WaylandServer const& wayland) {
     if (!enabled || frames >= maxFrames) return false;
+    if (always) {
+      started = true;
+      ensureOpen();
+      return csv.is_open();
+    }
     bool const active = wayland.hasActiveAnimations() ||
                         wayland.snapPreviewWakeDelayMs().has_value() ||
                         wayland.windowCyclerWakeDelayMs().has_value();
@@ -693,6 +707,7 @@ struct SnapAnimationTrace {
   int remainingTail = 0;
   bool started = false;
   bool loggedStart = false;
+  bool always = false;
   std::filesystem::path directory;
   std::ofstream csv;
 
@@ -702,12 +717,18 @@ struct SnapAnimationTrace {
     trace.enabled = true;
     trace.maxFrames = positiveEnvInt("LWM_SNAP_TRACE_FRAMES", 600, 10'000);
     trace.tailFrames = positiveEnvInt("LWM_SNAP_TRACE_TAIL_FRAMES", 12, 240);
+    trace.always = envEnabled("LWM_SNAP_TRACE_ALWAYS");
     trace.directory = snapTraceRoot() / captureTimestamp();
     return trace;
   }
 
   [[nodiscard]] bool wantsFrame(WaylandServer const& wayland) {
     if (!enabled || frames >= maxFrames) return false;
+    if (always) {
+      started = true;
+      ensureOpen();
+      return csv.is_open();
+    }
     bool const active = wayland.hasActiveAnimations() ||
                         wayland.snapPreviewWakeDelayMs().has_value() ||
                         wayland.windowCyclerWakeDelayMs().has_value();
