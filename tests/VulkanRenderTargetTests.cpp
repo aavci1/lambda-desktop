@@ -571,7 +571,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   CHECK(mutatedPixels[center + 0] < 32);
 }
 
-TEST_CASE("VulkanFrameRecorder rejects captured image texture replay") {
+TEST_CASE("VulkanFrameRecorder replays captured image texture") {
   auto& vk = VulkanContext::instance();
   vk.ensureInitialized();
 
@@ -590,7 +590,14 @@ TEST_CASE("VulkanFrameRecorder rejects captured image texture replay") {
   };
   std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(spec, textSystem);
   REQUIRE(canvas);
-  std::shared_ptr<Image> image = loadImage(imageFixturePath().string(), vk.device());
+  std::vector<std::uint8_t> rgba(16u * 16u * 4u);
+  for (std::size_t i = 0; i + 3 < rgba.size(); i += 4) {
+    rgba[i + 0] = 255;
+    rgba[i + 1] = 0;
+    rgba[i + 2] = 0;
+    rgba[i + 3] = 255;
+  }
+  std::shared_ptr<Image> image = Image::fromRgbaPixels(16, 16, rgba, canvas->gpuDevice());
   REQUIRE(image);
 
   canvas->resize(static_cast<int>(width), static_cast<int>(height));
@@ -607,10 +614,33 @@ TEST_CASE("VulkanFrameRecorder rejects captured image texture replay") {
                     1.f);
   endRecordedOpsCaptureForCanvas(canvas.get());
 
-  CHECK_FALSE(recorded.replayable);
+  CHECK(recorded.replayable);
   CHECK(recorded.ops.size() == 1);
-  CHECK_FALSE(prepareRecordedOpsForCanvas(canvas.get(), &recorded));
-  CHECK_FALSE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded));
+  CHECK(prepareRecordedOpsForCanvas(canvas.get(), &recorded));
+  bool const expectPreparedGeometry = preparedGeometryExpected(vk.physicalDevice());
+  if (expectPreparedGeometry) {
+    CHECK(recorded.preparedQuadBuffer != VK_NULL_HANDLE);
+    CHECK(recorded.preparedQuadDescriptor != VK_NULL_HANDLE);
+  } else {
+    CHECK(recorded.preparedQuadBuffer == VK_NULL_HANDLE);
+    CHECK(recorded.preparedQuadDescriptor == VK_NULL_HANDLE);
+  }
+  REQUIRE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded));
+  canvas->present();
+
+  VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
+  VulkanCopyContext copy{vk.device(), vk.queue(), vk.queueFamily()};
+  copy.copyImageToBuffer(targetImage.image, readback.buffer, width, height);
+  std::vector<std::uint8_t> pixels(width * height * 4u);
+  void* mapped = nullptr;
+  vkCheck(vkMapMemory(vk.device(), readback.memory, 0, readback.size, 0, &mapped), "vkMapMemory");
+  std::memcpy(pixels.data(), mapped, pixels.size());
+  vkUnmapMemory(vk.device(), readback.memory);
+
+  std::size_t const center = (20u * static_cast<std::size_t>(width) + 20u) * 4u;
+  CHECK(pixels[center + 2] > 200);
+  CHECK(pixels[center + 1] < 32);
+  CHECK(pixels[center + 0] < 32);
 }
 
 TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {

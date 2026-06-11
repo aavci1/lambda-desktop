@@ -1,4 +1,5 @@
 #include "presentation-time-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
 #include <fcntl.h>
@@ -48,10 +49,12 @@ struct Client {
   wl_compositor* compositor = nullptr;
   wl_shm* shm = nullptr;
   xdg_wm_base* wmBase = nullptr;
+  zxdg_decoration_manager_v1* decorationManager = nullptr;
   wp_presentation* presentation = nullptr;
   wl_surface* surface = nullptr;
   xdg_surface* xdgSurface = nullptr;
   xdg_toplevel* toplevel = nullptr;
+  zxdg_toplevel_decoration_v1* decoration = nullptr;
   struct wp_presentation_feedback* feedback = nullptr;
 
   bool hasArgb8888 = false;
@@ -71,10 +74,12 @@ struct Client {
 
   ~Client() {
     if (feedback && !feedbackDone) wl_proxy_destroy(reinterpret_cast<wl_proxy*>(feedback));
+    if (decoration) zxdg_toplevel_decoration_v1_destroy(decoration);
     if (toplevel) xdg_toplevel_destroy(toplevel);
     if (xdgSurface) xdg_surface_destroy(xdgSurface);
     if (surface) wl_surface_destroy(surface);
     if (presentation) wp_presentation_destroy(presentation);
+    if (decorationManager) zxdg_decoration_manager_v1_destroy(decorationManager);
     if (wmBase) xdg_wm_base_destroy(wmBase);
     if (shm) wl_shm_destroy(shm);
     if (compositor) wl_compositor_destroy(compositor);
@@ -175,6 +180,9 @@ void registryGlobal(void* data,
   } else if (std::strcmp(interface, xdg_wm_base_interface.name) == 0) {
     client.wmBase =
         static_cast<xdg_wm_base*>(wl_registry_bind(registry, name, &xdg_wm_base_interface, 1));
+  } else if (std::strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0) {
+    client.decorationManager = static_cast<zxdg_decoration_manager_v1*>(
+        wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, std::min(version, 1u)));
   } else if (std::strcmp(interface, wp_presentation_interface.name) == 0) {
     client.presentation = static_cast<wp_presentation*>(
         wl_registry_bind(registry, name, &wp_presentation_interface, std::min(version, 2u)));
@@ -230,6 +238,12 @@ xdg_toplevel_listener const kToplevelListener{
     .close = toplevelClose,
     .configure_bounds = toplevelConfigureBounds,
     .wm_capabilities = toplevelWmCapabilities,
+};
+
+void decorationConfigure(void*, zxdg_toplevel_decoration_v1*, std::uint32_t) {}
+
+zxdg_toplevel_decoration_v1_listener const kDecorationListener{
+    .configure = decorationConfigure,
 };
 
 void presentationClockId(void* data, wp_presentation*, std::uint32_t clockId) {
@@ -311,9 +325,47 @@ int timeoutMsFromEnv() {
   return kDefaultTimeoutMs;
 }
 
+int holdMsFromEnv() {
+  if (char const* value = std::getenv("LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS"); value && *value) {
+    char* end = nullptr;
+    long parsed = std::strtol(value, &end, 10);
+    if (end != value && parsed > 0 && parsed < 60000) return static_cast<int>(parsed);
+  }
+  return 0;
+}
+
 bool envNonZero(char const* name) {
   char const* value = std::getenv(name);
   return value && *value && std::strcmp(value, "0") != 0 && std::strcmp(value, "false") != 0;
+}
+
+bool requestServerDecoration() {
+  return envNonZero("LAMBDA_PRESENTATION_FEEDBACK_REQUEST_SERVER_DECORATION");
+}
+
+void holdMapped(Client& client, int holdMs) {
+  if (holdMs <= 0) return;
+  auto const deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(holdMs);
+  while (!client.closed) {
+    if (wl_display_dispatch_pending(client.display) < 0) {
+      fail("Wayland dispatch failed while holding mapped surface");
+    }
+    if (wl_display_flush(client.display) < 0 && errno != EAGAIN) {
+      fail(std::string("Wayland flush failed while holding mapped surface: ") + std::strerror(errno));
+    }
+    auto const now = std::chrono::steady_clock::now();
+    if (now >= deadline) return;
+    int const remainingMs =
+        static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count());
+    pollfd pfd{.fd = wl_display_get_fd(client.display), .events = POLLIN, .revents = 0};
+    int const rc = poll(&pfd, 1, std::min(remainingMs, 250));
+    if (rc < 0 && errno != EINTR) {
+      fail(std::string("poll failed while holding mapped surface: ") + std::strerror(errno));
+    }
+    if (rc > 0 && wl_display_dispatch(client.display) < 0) {
+      fail("Wayland dispatch failed while holding mapped surface");
+    }
+  }
 }
 
 } // namespace
@@ -321,6 +373,7 @@ bool envNonZero(char const* name) {
 int main() {
   Client client;
   int const timeoutMs = timeoutMsFromEnv();
+  int const holdMs = holdMsFromEnv();
   bool const requireHardwareFlags = envNonZero("LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS");
 
   client.display = wl_display_connect(nullptr);
@@ -352,6 +405,13 @@ int main() {
   xdg_toplevel_add_listener(client.toplevel, &kToplevelListener, &client);
   xdg_toplevel_set_title(client.toplevel, "Lambda Presentation Feedback Check");
   xdg_toplevel_set_app_id(client.toplevel, "lambda-presentation-feedback-check");
+  if (requestServerDecoration()) {
+    if (!client.decorationManager) fail("xdg-decoration manager not found");
+    client.decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(client.decorationManager, client.toplevel);
+    if (!client.decoration) fail("xdg toplevel decoration creation failed");
+    zxdg_toplevel_decoration_v1_add_listener(client.decoration, &kDecorationListener, &client);
+    zxdg_toplevel_decoration_v1_set_mode(client.decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+  }
   wl_surface_commit(client.surface);
   dispatchUntil(client, &Client::configured, timeoutMs, "initial xdg configure");
 
@@ -379,13 +439,16 @@ int main() {
   }
 
   std::printf("lambda-presentation-feedback-check: presented clock=CLOCK_MONOTONIC tv_sec=%llu "
-              "tv_nsec=%u refresh_nsec=%u seq=%llu flags=%s hardware_flags_required=%d\n",
+              "tv_nsec=%u refresh_nsec=%u seq=%llu flags=%s hardware_flags_required=%d hold_ms=%d\n",
               static_cast<unsigned long long>((static_cast<std::uint64_t>(client.tvSecHi) << 32u) |
                                               client.tvSecLo),
               client.tvNsec,
               client.refresh,
               static_cast<unsigned long long>(seq),
               flagsString(client.flags).c_str(),
-              requireHardwareFlags ? 1 : 0);
+              requireHardwareFlags ? 1 : 0,
+              holdMs);
+  std::fflush(stdout);
+  holdMapped(client, holdMs);
   return 0;
 }

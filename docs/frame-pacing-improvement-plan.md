@@ -9,12 +9,13 @@ Most items require a Linux machine (Wayland and/or KMS from a TTY) to verify. FP
 ## Verification Snapshot: 2026-06-11
 
 - [x] Clean normal and KMS rebuilds completed with zero warnings and zero errors.
-- [x] Focused normal tests passed: compositor/Vulkan/presentation/damage/cursor/pointer/seat slice (91 cases, 613 assertions), gradient/image/canvas/terminal slice (34 cases, 274 assertions), and reactive tests (22 cases, 126 assertions).
-- [x] Focused KMS tests passed: compositor/Vulkan/presentation/damage/cursor/pointer/seat slice (95 cases, 626 assertions), gradient/image/canvas/terminal slice (34 cases, 274 assertions), and reactive tests (22 cases, 126 assertions).
+- [x] Focused normal tests passed: Vulkan image-recorder replay test (1 case, 12 assertions), compositor/Vulkan/presentation/damage/cursor/pointer slice (88 cases, 602 assertions), and reactive tests (22 cases, 126 assertions).
+- [x] Focused KMS tests passed: Vulkan image-recorder replay test (1 case, 12 assertions), compositor/Vulkan/presentation/damage/cursor/pointer slice (89 cases, 606 assertions), and reactive tests (22 cases, 126 assertions).
 - [x] KMS compositor runtime smoke completed with normal-build `lambda-shell`, scripted `lambda-terminal`, and `lambda-editor`; logs had zero fatal/error matches.
 - [x] Runtime traces captured 20 CPU samples, 37 KMS timing windows, 10,712 pacing events, and 900 terminal `vulkan-present-detail` samples. Summary: compositor CPU avg/max 12.54%/15.60%, compositor surface avg/max 0.471/0.632 ms, present avg/max 0.395/0.582 ms, terminal atlas avg 0.004 ms, terminal `waitImage` avg 0.000 ms.
-- [x] Added `scripts/verify-frame-pacing-linux.sh` and `lambda-presentation-feedback-check`. Latest run passed both presenters: atomic-KMS reported `CLOCK_MONOTONIC`, refresh 16,666,666 ns, nonzero sequence, and `VSYNC|HW_CLOCK|HW_COMPLETION`; Vulkan-display reported `CLOCK_MONOTONIC`, refresh 16,666,666 ns, and nonzero sequence. Atomic runtime summary: 20 CPU samples, 31 KMS timing windows, 10,765 pacing events, 861 terminal `vulkan-present-detail` samples, zero fatal matches, CPU avg/max 12.11%/15.30%, terminal `waitImage` avg 0.000 ms, terminal atlas avg 0.004 ms.
+- [x] Added `scripts/verify-frame-pacing-linux.sh` and `lambda-presentation-feedback-check`. Latest run passed both presenters: atomic-KMS reported `CLOCK_MONOTONIC`, refresh 16,666,666 ns, nonzero sequence, and `VSYNC|HW_CLOCK|HW_COMPLETION`; Vulkan-display reported `CLOCK_MONOTONIC`, refresh 16,666,666 ns, and nonzero sequence. Atomic runtime summary: 20 CPU samples, 31 KMS timing windows, 10,515 pacing events, 884 terminal `vulkan-present-detail` samples, zero fatal matches, CPU avg/max 12.14%/14.90%, surface avg/max 0.358/0.534 ms, present avg/max 0.433/0.570 ms, terminal `waitImage` avg 0.000 ms, terminal atlas avg 0.004 ms.
 - [x] Added synthetic KMS raw-input pointer-motion verification to `scripts/verify-frame-pacing-linux.sh`. Latest run: 180 synthetic pointer events, 180 hardware-cursor fast-path moves, zero fallback/unavailable moves, zero runtime failures, and no pointer-triggered full redraw loops; atomic app smoke and Vulkan-display timestamp checks also passed.
+- [x] Added static decorated-SHM surface cache verification to `scripts/verify-frame-pacing-linux.sh`. Latest run: 500 surface draw-cache hits, 1 miss, zero transient-chrome blocks, 523 rendered frames, CPU avg/max 7.78%/8.40%, surface avg/max 0.012/0.013 ms, present avg/max 0.221/0.227 ms.
 - [ ] Remaining local gap: no external pointer-driving tool (`ydotool`, `wtype`, or equivalent) was available, so real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad Wayland-display-dependent tests and real-app smoke cases need an already-running external Wayland session or manual app interaction.
 - [ ] Remaining system-tool gap: `vulkan-validation-layers`, `weston`, `wayland-utils`, `ydotool`, and `evemu` are not installed and noninteractive `sudo` is unavailable in this session, so validation-layer and hardware input-driver verification still require a prepared host.
@@ -156,6 +157,7 @@ What to do:
 
 Verification on Linux (KMS TTY):
 
+- [x] Automated static decorated-SHM client check keeps the surface draw cache hot while the compositor drives window movement: 500 hits, 1 miss, zero transient-chrome cache blocks, and surface avg/max 0.012/0.013 ms.
 - [ ] Sweep the pointer across a window with static content: surface draw cache hit-rate (diagnostics) stays high; `surface_ms` in the CSV stays near the idle baseline.
 - [ ] Hover/press visuals on close buttons still update correctly (manual).
 

@@ -291,8 +291,6 @@
     target.quads.push_back(q);
     if (!captureTarget_) {
       batches_.push_back(ImageBatch{texture, first, 1});
-    } else {
-      captureTarget_->replayable = false;
     }
     DrawOp op = makeDrawOp(DrawOp::Kind::Image, texture, first, 1);
     op.premultipliedAlpha = imagePremultipliedAlpha_;

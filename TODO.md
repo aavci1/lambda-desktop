@@ -142,6 +142,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Verify the Linux code paths with clean normal/KMS builds, focused compositor/Vulkan/reactive tests, and a KMS compositor run with shell, terminal workload, editor, CPU tracing, KMS timing traces, and `vulkan-present-detail` logs.
 - [x] [Auto] Fix the compile warnings found by clean normal/KMS rebuilds.
 - [x] [Auto] Add and run the repeatable Linux verifier script, including the repo-local `wp_presentation` timestamp client for both atomic-KMS and Vulkan-display presenters.
+- [x] [Auto] Add and run the static decorated-surface cache verifier; latest run showed 500 surface draw-cache hits, 1 miss, zero transient-chrome blocks, and surface avg/max 0.012/0.013 ms.
 - [ ] [Manual] Complete the remaining hardware/visual checks from the plan: validation layers, manual cursor/hardware input-driver checks, resize/drag visual checks, and representative app smoke checks requiring interactive input.
 - [ ] [Auto + Manual] Complete macOS compile/runtime verification for the Metal portions of FP-14/FP-16, including `debug::perf`, full `ctest`, and backdrop blur visual comparison.
 - [ ] [Auto] When the remaining manual/macOS verification is done, delete the plan document and this TODO item.
