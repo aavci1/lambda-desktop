@@ -99,6 +99,10 @@ void postTextInput(LambdaMetalView* view, std::string text);
   // Match MetalCanvas in-flight limit; helps avoid main-thread stalls on nextDrawable during live resize.
   metalLayer.maximumDrawableCount = 3;
   metalLayer.allowsNextDrawableTimeout = YES;
+  if (@available(macOS 10.13, *)) {
+    // Keep CAMetalLayer presentation display-synced; Lambda's frame scheduler controls when frames are encoded.
+    metalLayer.displaySyncEnabled = YES;
+  }
 
   // `presentsWithTransaction` is toggled only around resize-driven flush (see windowDidResize). Leaving it
   // always YES can defer the first composite until a later CA transaction and cause an intermittent blank window.
@@ -940,6 +944,9 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
   metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
   metalLayer.maximumDrawableCount = 3;
   metalLayer.allowsNextDrawableTimeout = YES;
+  if (@available(macOS 10.13, *)) {
+    metalLayer.displaySyncEnabled = YES;
+  }
   metalLayer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
   metalLayer.needsDisplayOnBoundsChange = YES;
   return metalLayer;

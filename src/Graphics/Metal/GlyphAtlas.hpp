@@ -45,11 +45,10 @@ public:
   id<MTLTexture> texture() const { return texture_; }
 
   bool grow();
+  void flushUploads(id<MTLCommandBuffer> commandBuffer);
   std::uint64_t generation() const noexcept { return generation_; }
 
-  /// Tier A: grow before drawing when shelf usage is high so `grow()` rarely runs mid-frame (which would
-  /// invalidate UVs already written to the frame). Call from `Canvas::beginFrame` after clearing frame data.
-  /// For a hard guarantee under unbounded unique glyphs per frame, a copy-preserving grow (tier C) is needed.
+  /// Grow only when a previous frame ran out of atlas space; headroom growth happens after present.
   void prepareForFrameBegin();
 
   /// Tier B: grow after a presented frame when utilization is still high, giving headroom for the next frame.
@@ -62,11 +61,24 @@ public:
   std::uint32_t atlasPixelHeight() const { return atlasHeight_; }
 
 private:
+  struct PendingUpload {
+    id<MTLBuffer> buffer{nil};
+    id<MTLTexture> texture{nil};
+    std::uint32_t x{0};
+    std::uint32_t y{0};
+    std::uint32_t width{0};
+    std::uint32_t height{0};
+  };
+
   AtlasEntry allocateAndUpload(GlyphKey const& key);
 
   bool pressureHighForHeadroom() const;
+  id<MTLTexture> createTexture(std::uint32_t width, std::uint32_t height) const;
+  void queueUpload(std::uint32_t x, std::uint32_t y, std::uint32_t width, std::uint32_t height,
+                   std::vector<std::uint8_t> const& r8);
 
   id<MTLDevice> device_{nil};
+  id<MTLCommandQueue> queue_{nil};
   id<MTLTexture> texture_{nil};
   TextSystem& textSystem_;
 
@@ -78,6 +90,7 @@ private:
   std::uint32_t shelfH_ = 0;
 
   std::unordered_map<GlyphKey, AtlasEntry, GlyphKeyHash> entries_;
+  std::vector<PendingUpload> pendingUploads_;
 
   std::uint64_t generation_ = 1;
   bool pendingGrow_ = false;

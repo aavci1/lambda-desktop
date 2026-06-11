@@ -3,8 +3,8 @@
 #include "Graphics/Metal/GlyphAtlas.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <stdexcept>
-#include <vector>
 
 namespace lambda {
 
@@ -20,29 +20,72 @@ namespace {
 constexpr std::uint32_t kMaxAtlasDim = 4096;
 constexpr std::uint32_t kCellPad = 1; // 1px border inside cell around glyph bitmap
 
-void uploadR8(id<MTLTexture> tex, std::uint32_t x, std::uint32_t y, std::uint32_t w, std::uint32_t h,
-              std::vector<std::uint8_t> const& r8) {
-  if (w == 0 || h == 0) {
-    return;
-  }
-  MTLRegion region = {{x, y, 0}, {w, h, 1}};
-  [tex replaceRegion:region mipmapLevel:0 withBytes:r8.data() bytesPerRow:w];
-}
-
 } // namespace
 
 GlyphAtlas::GlyphAtlas(id<MTLDevice> device, TextSystem& textSystem)
     : device_(device), textSystem_(textSystem) {
+  queue_ = [device_ newCommandQueue];
+  texture_ = createTexture(atlasWidth_, atlasHeight_);
+  if (!texture_ || !queue_) {
+    throw std::runtime_error("GlyphAtlas: failed to create atlas resources");
+  }
+}
+
+id<MTLTexture> GlyphAtlas::createTexture(std::uint32_t width, std::uint32_t height) const {
   MTLTextureDescriptor* d = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatR8Unorm
-                                                                                 width:atlasWidth_
-                                                                                height:atlasHeight_
+                                                                                 width:width
+                                                                                height:height
                                                                              mipmapped:NO];
   d.usage = MTLTextureUsageShaderRead;
-  d.storageMode = MTLStorageModeShared;
-  texture_ = [device_ newTextureWithDescriptor:d];
-  if (!texture_) {
-    throw std::runtime_error("GlyphAtlas: failed to create atlas texture");
+  d.storageMode = MTLStorageModePrivate;
+  return [device_ newTextureWithDescriptor:d];
+}
+
+void GlyphAtlas::queueUpload(std::uint32_t x, std::uint32_t y, std::uint32_t width,
+                             std::uint32_t height, std::vector<std::uint8_t> const& r8) {
+  if (!texture_ || width == 0 || height == 0 || r8.empty()) {
+    return;
   }
+  id<MTLBuffer> buffer =
+      [device_ newBufferWithLength:static_cast<NSUInteger>(r8.size()) options:MTLResourceStorageModeShared];
+  if (!buffer) {
+    throw std::runtime_error("GlyphAtlas: failed to allocate glyph upload buffer");
+  }
+  std::memcpy([buffer contents], r8.data(), r8.size());
+  pendingUploads_.push_back(PendingUpload{
+      .buffer = buffer,
+      .texture = texture_,
+      .x = x,
+      .y = y,
+      .width = width,
+      .height = height,
+  });
+}
+
+void GlyphAtlas::flushUploads(id<MTLCommandBuffer> commandBuffer) {
+  if (!commandBuffer || pendingUploads_.empty()) {
+    return;
+  }
+  id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+  if (!blit) {
+    return;
+  }
+  for (PendingUpload const& upload : pendingUploads_) {
+    if (!upload.buffer || !upload.texture || upload.width == 0 || upload.height == 0) {
+      continue;
+    }
+    [blit copyFromBuffer:upload.buffer
+            sourceOffset:0
+       sourceBytesPerRow:upload.width
+     sourceBytesPerImage:upload.width * upload.height
+              sourceSize:MTLSizeMake(upload.width, upload.height, 1)
+               toTexture:upload.texture
+        destinationSlice:0
+        destinationLevel:0
+       destinationOrigin:MTLOriginMake(upload.x, upload.y, 0)];
+  }
+  [blit endEncoding];
+  pendingUploads_.clear();
 }
 
 bool GlyphAtlas::pressureHighForHeadroom() const {
@@ -54,7 +97,7 @@ bool GlyphAtlas::pressureHighForHeadroom() const {
 }
 
 void GlyphAtlas::prepareForFrameBegin() {
-  if (pendingGrow_ || pressureHighForHeadroom()) {
+  if (pendingGrow_) {
     (void)grow();
   }
 }
@@ -74,35 +117,56 @@ bool GlyphAtlas::grow() {
     throw std::runtime_error("GlyphAtlas: atlas exceeds maximum size");
   }
 
-  std::vector<GlyphKey> keys;
-  keys.reserve(entries_.size());
-  for (auto const& e : entries_) {
-    keys.push_back(e.first);
-  }
-  entries_.clear();
-  shelfX_ = 1;
-  shelfY_ = 1;
-  shelfH_ = 0;
-
-  atlasWidth_ = std::min(atlasWidth_ * 2, kMaxAtlasDim);
-  atlasHeight_ = std::min(atlasHeight_ * 2, kMaxAtlasDim);
-
-  MTLTextureDescriptor* d = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatR8Unorm
-                                                                                 width:atlasWidth_
-                                                                                height:atlasHeight_
-                                                                             mipmapped:NO];
-  d.usage = MTLTextureUsageShaderRead;
-  d.storageMode = MTLStorageModeShared;
-  id<MTLTexture> newTex = [device_ newTextureWithDescriptor:d];
+  std::uint32_t const oldWidth = atlasWidth_;
+  std::uint32_t const oldHeight = atlasHeight_;
+  std::uint32_t const newWidth = std::min(atlasWidth_ * 2, kMaxAtlasDim);
+  std::uint32_t const newHeight = std::min(atlasHeight_ * 2, kMaxAtlasDim);
+  id<MTLTexture> oldTexture = texture_;
+  id<MTLTexture> newTex = createTexture(newWidth, newHeight);
   if (!newTex) {
     throw std::runtime_error("GlyphAtlas: grow failed to allocate texture");
   }
+
+  id<MTLCommandBuffer> commandBuffer = [queue_ commandBuffer];
+  id<MTLBlitCommandEncoder> blit = commandBuffer ? [commandBuffer blitCommandEncoder] : nil;
+  if (!commandBuffer || !blit) {
+    throw std::runtime_error("GlyphAtlas: grow failed to create blit command buffer");
+  }
+  if (oldTexture) {
+    [blit copyFromTexture:oldTexture
+              sourceSlice:0
+              sourceLevel:0
+             sourceOrigin:MTLOriginMake(0, 0, 0)
+               sourceSize:MTLSizeMake(oldWidth, oldHeight, 1)
+                toTexture:newTex
+         destinationSlice:0
+         destinationLevel:0
+        destinationOrigin:MTLOriginMake(0, 0, 0)];
+  }
+  for (PendingUpload& upload : pendingUploads_) {
+    upload.texture = newTex;
+    if (!upload.buffer || upload.width == 0 || upload.height == 0) {
+      continue;
+    }
+    [blit copyFromBuffer:upload.buffer
+            sourceOffset:0
+       sourceBytesPerRow:upload.width
+     sourceBytesPerImage:upload.width * upload.height
+              sourceSize:MTLSizeMake(upload.width, upload.height, 1)
+               toTexture:newTex
+        destinationSlice:0
+        destinationLevel:0
+       destinationOrigin:MTLOriginMake(upload.x, upload.y, 0)];
+  }
+  [blit endEncoding];
+  [commandBuffer commit];
+  [commandBuffer waitUntilCompleted];
+
+  atlasWidth_ = newWidth;
+  atlasHeight_ = newHeight;
   texture_ = newTex;
   ++generation_;
-
-  for (GlyphKey const& k : keys) {
-    (void)getOrUpload(k);
-  }
+  pendingUploads_.clear();
   pendingGrow_ = false;
   return true;
 }
@@ -140,7 +204,7 @@ AtlasEntry GlyphAtlas::allocateAndUpload(GlyphKey const& key) {
 
   std::uint32_t const u = shelfX_ + kCellPad;
   std::uint32_t const v = shelfY_ + kCellPad;
-  uploadR8(texture_, u, v, gw, gh, bits);
+  queueUpload(u, v, gw, gh, bits);
 
   shelfX_ += cellW + 1;
 

@@ -544,6 +544,16 @@ public:
     drawable_ = nil;
     cmdBuf_ = nil;
     inFrame_ = true;
+    if (!targetMode_ && frameDrawableW_ >= 1.f && frameDrawableH_ >= 1.f &&
+        !acquireDrawableForFrame()) {
+      dispatch_semaphore_signal(frameSem_);
+      inFrame_ = false;
+      syncPresent_ = false;
+      if (requestRedraw_) {
+        requestRedraw_();
+      }
+      return;
+    }
     const CGSize ds = frameDrawableSize_;
     CGFloat cs = 1.0;
     if (!targetMode_) {
@@ -616,10 +626,6 @@ public:
     metal_.reserveDrawStateBuffers(static_cast<std::uint32_t>(frame_.opOrder.size()),
                                    static_cast<std::uint32_t>(frame_.opOrder.size()));
 
-    auto const drawableWaitStartedAt =
-        perfTimer.enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-    drawable_ = [metal_.layer() nextDrawable];
-    perfTimer.recordDrawableWaitSince(drawableWaitStartedAt);
     cmdBuf_ = [metal_.queue() commandBuffer];
     if (!drawable_ || !cmdBuf_) {
       dispatch_semaphore_signal(frameSem_);
@@ -633,6 +639,7 @@ public:
       }
       return;
     }
+    glyphAtlas_->flushUploads(cmdBuf_);
 
     bool const backdropFrame = hasBackdropBlurOps(frame_);
     id<MTLTexture> renderTargetTexture = drawable_.texture;
@@ -1505,6 +1512,10 @@ private:
   id<MTLTexture> backdropBlurTexture_{nil};
   NSUInteger backdropBlurTextureW_{0};
   NSUInteger backdropBlurTextureH_{0};
+  id<MTLBuffer> backdropUniformBuffer_{nil};
+  NSUInteger backdropUniformBufferCapacity_{0};
+  id<MTLBuffer> backdropClipBuffer_{nil};
+  NSUInteger backdropClipBufferCapacity_{0};
   id<MTLBuffer> captureBuffer_{nil};
   NSUInteger captureBytesPerRow_{0};
   std::uint32_t captureWidth_{0};
@@ -1513,6 +1524,8 @@ private:
   bool inFrame_{false};
   bool syncPresent_{false};
   std::uint32_t frameSampleCount_{1};
+  id<MTLSharedEvent> renderTargetCompletionEvent_{nil};
+  std::uint64_t renderTargetCompletionValue_{0};
 
   Color clearColor_{0.f, 0.f, 0.f, 1.f};
   int logicalW_{0};
@@ -1566,6 +1579,41 @@ private:
 
   id<MTLSharedEvent> targetSharedEvent() const {
     return (__bridge id<MTLSharedEvent>)targetSpec_.sharedEvent;
+  }
+
+  bool acquireDrawableForFrame() {
+    auto const startedAt =
+        debug::perf::enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    drawable_ = [metal_.layer() nextDrawable];
+    if (!drawable_) {
+      drawable_ = [metal_.layer() nextDrawable];
+    }
+    if (debug::perf::enabled()) {
+      auto const elapsed = std::chrono::steady_clock::now() - startedAt;
+      debug::perf::recordDuration(debug::perf::TimedMetric::CanvasDrawableWait,
+                                  std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed));
+    }
+    return drawable_ != nil;
+  }
+
+  id<MTLSharedEvent> internalRenderTargetCompletionEvent() {
+    if (@available(macOS 10.14, *)) {
+      if (!renderTargetCompletionEvent_) {
+        renderTargetCompletionEvent_ = [metal_.device() newSharedEvent];
+      }
+      return renderTargetCompletionEvent_;
+    }
+    return nil;
+  }
+
+  bool waitForSharedEvent(id<MTLSharedEvent> event, std::uint64_t value) {
+    if (!event) {
+      return false;
+    }
+    if (@available(macOS 10.14, *)) {
+      return [event waitUntilSignaledValue:value timeoutMS:UINT64_MAX] == YES;
+    }
+    return false;
   }
 
   id<MTLTexture> ensureLiveFrameMsaaTexture(id<MTLTexture> resolveTexture) {
@@ -1879,6 +1927,42 @@ private:
     return backdropBlurTexture_;
   }
 
+  bool ensureBackdropDrawStateBuffers(std::size_t stateCount,
+                                      id<MTLBuffer>* uniformBuffer,
+                                      id<MTLBuffer>* clipBuffer) {
+    NSUInteger const needed = static_cast<NSUInteger>(std::max<std::size_t>(1, stateCount));
+    if (needed > backdropUniformBufferCapacity_) {
+      NSUInteger const newCapacity =
+          backdropUniformBufferCapacity_ == 0 ? needed : std::max(needed, backdropUniformBufferCapacity_ * 2);
+      backdropUniformBuffer_ =
+          [metal_.device() newBufferWithLength:newCapacity * sizeof(MetalDrawUniforms)
+                                       options:MTLResourceStorageModeShared];
+      backdropUniformBufferCapacity_ = backdropUniformBuffer_ ? newCapacity : 0;
+    }
+    if (needed > backdropClipBufferCapacity_) {
+      NSUInteger const newCapacity =
+          backdropClipBufferCapacity_ == 0 ? needed : std::max(needed, backdropClipBufferCapacity_ * 2);
+      backdropClipBuffer_ =
+          [metal_.device() newBufferWithLength:newCapacity * sizeof(MetalRoundedClipStack)
+                                       options:MTLResourceStorageModeShared];
+      backdropClipBufferCapacity_ = backdropClipBuffer_ ? newCapacity : 0;
+    }
+    if (uniformBuffer) {
+      *uniformBuffer = backdropUniformBuffer_;
+    }
+    if (clipBuffer) {
+      *clipBuffer = backdropClipBuffer_;
+    }
+    return backdropUniformBuffer_ != nil && backdropClipBuffer_ != nil;
+  }
+
+  static NSUInteger backdropBlurDownsample(NSUInteger width, NSUInteger height, float radius) {
+    if (width < 2 || height < 2 || radius < 2.f) {
+      return 1;
+    }
+    return 2;
+  }
+
   void encodeBackdropQuad(id<MTLRenderCommandEncoder> enc, MetalBackdropBlurOp const& op,
                           id<MTLTexture> sceneTexture, float viewportW, float viewportH,
                           std::uint32_t renderSampleCount) {
@@ -1890,8 +1974,8 @@ private:
     uniforms.tint = op.tint;
     uniforms.corners = op.corners;
     uniforms.params = simd_make_float4(viewportW, viewportH,
-                                       1.f / std::max<float>(1.f, static_cast<float>([sceneTexture width])),
-                                       1.f / std::max<float>(1.f, static_cast<float>([sceneTexture height])));
+                                       1.f / std::max<float>(1.f, viewportW),
+                                       1.f / std::max<float>(1.f, viewportH));
     uniforms.blurParams = simd_make_float4(std::max(0.f, op.radius), 0.f, 0.f, 0.f);
 
     [enc setRenderPipelineState:metal_.backdropPSO(renderSampleCount)];
@@ -1956,23 +2040,40 @@ private:
     return true;
   }
 
-  bool copyBackdropSourceTexture(id<MTLTexture> sourceTexture, id<MTLTexture> sceneTexture) {
-    if (!sourceTexture || !sceneTexture) return false;
-    id<MTLBlitCommandEncoder> blit = [cmdBuf_ blitCommandEncoder];
-    if (!blit) return false;
-    MTLSize const size = MTLSizeMake(std::min<NSUInteger>(sourceTexture.width, sceneTexture.width),
-                                     std::min<NSUInteger>(sourceTexture.height, sceneTexture.height),
-                                     1);
-    [blit copyFromTexture:sourceTexture
-              sourceSlice:0
-              sourceLevel:0
-             sourceOrigin:MTLOriginMake(0, 0, 0)
-               sourceSize:size
-                toTexture:sceneTexture
-         destinationSlice:0
-         destinationLevel:0
-        destinationOrigin:MTLOriginMake(0, 0, 0)];
-    [blit endEncoding];
+  bool encodeBackdropDownsample(id<MTLTexture> source, id<MTLTexture> target) {
+    if (!source || !target || [target width] == 0 || [target height] == 0) {
+      return false;
+    }
+    MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
+    pass.colorAttachments[0].texture = target;
+    pass.colorAttachments[0].loadAction = MTLLoadActionDontCare;
+    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+    id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:pass];
+    if (!enc) {
+      return false;
+    }
+    float const viewportW = static_cast<float>([target width]);
+    float const viewportH = static_cast<float>([target height]);
+    MTLViewport vp = {0, 0, viewportW, viewportH, 0.0, 1.0};
+    [enc setViewport:vp];
+
+    MetalBackdropUniforms uniforms{};
+    uniforms.rect = simd_make_float4(0.f, 0.f, viewportW, viewportH);
+    uniforms.params = simd_make_float4(viewportW, viewportH,
+                                       1.f / std::max<float>(1.f, viewportW),
+                                       1.f / std::max<float>(1.f, viewportH));
+    uniforms.blurParams = simd_make_float4(0.f, 1.f, 0.f, 0.f);
+
+    [enc setRenderPipelineState:metal_.backdropBlurPSO()];
+    [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
+    [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:1];
+    [enc setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
+    [enc setFragmentTexture:source atIndex:0];
+    [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
+    [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount];
+    [enc endEncoding];
+    debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
     return true;
   }
 
@@ -1982,23 +2083,23 @@ private:
     if (renderSampleCount != 1) {
       return false;
     }
-    id<MTLTexture> sceneTexture = ensureBackdropSceneTexture(frameDrawablePixelsW_, frameDrawablePixelsH_);
-	    id<MTLTexture> scratchTexture = ensureBackdropScratchTexture(frameDrawablePixelsW_, frameDrawablePixelsH_);
-	    id<MTLTexture> blurredTexture = ensureBackdropBlurTexture(frameDrawablePixelsW_, frameDrawablePixelsH_);
-	    if (!sceneTexture || !scratchTexture || !blurredTexture || !renderTargetTexture) {
-	      return false;
-	    }
+    float const maxBlurRadius = maxBackdropBlurRadius(frame_, 0, frame_.opOrder.size());
+    NSUInteger const downsample =
+        backdropBlurDownsample(frameDrawablePixelsW_, frameDrawablePixelsH_, maxBlurRadius);
+    NSUInteger const blurWidth = std::max<NSUInteger>(1, (frameDrawablePixelsW_ + downsample - 1) / downsample);
+    NSUInteger const blurHeight = std::max<NSUInteger>(1, (frameDrawablePixelsH_ + downsample - 1) / downsample);
+    id<MTLTexture> sceneTexture = ensureBackdropSceneTexture(blurWidth, blurHeight);
+    id<MTLTexture> scratchTexture = ensureBackdropScratchTexture(blurWidth, blurHeight);
+    id<MTLTexture> blurredTexture = ensureBackdropBlurTexture(blurWidth, blurHeight);
+    if (!sceneTexture || !scratchTexture || !blurredTexture || !renderTargetTexture) {
+      return false;
+    }
 
-	    std::size_t const stateCount = std::max<std::size_t>(1, frame_.opOrder.size());
-	    id<MTLBuffer> finalUniformBuffer =
-	        [metal_.device() newBufferWithLength:static_cast<NSUInteger>(stateCount * sizeof(MetalDrawUniforms))
-	                                     options:MTLResourceStorageModeShared];
-	    id<MTLBuffer> finalClipBuffer =
-	        [metal_.device() newBufferWithLength:static_cast<NSUInteger>(stateCount * sizeof(MetalRoundedClipStack))
-	                                     options:MTLResourceStorageModeShared];
-	    if (!finalUniformBuffer || !finalClipBuffer) {
-	      return false;
-	    }
+    id<MTLBuffer> finalUniformBuffer = nil;
+    id<MTLBuffer> finalClipBuffer = nil;
+    if (!ensureBackdropDrawStateBuffers(frame_.opOrder.size(), &finalUniformBuffer, &finalClipBuffer)) {
+      return false;
+    }
 
     auto makeFinalPass = [&](MTLLoadAction loadAction) {
       MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
@@ -2032,9 +2133,12 @@ private:
       [finalEnc endEncoding];
       finalEnc = nil;
 
-      if (!copyBackdropSourceTexture(renderTargetTexture, sceneTexture)) return false;
+      if (!encodeBackdropDownsample(renderTargetTexture, sceneTexture)) return false;
       float const blurRadius = maxBackdropBlurRadius(frame_, blurStart, blurEnd);
-      if (!encodeBackdropBlur(sceneTexture, scratchTexture, blurredTexture, blurRadius)) {
+      if (!encodeBackdropBlur(sceneTexture,
+                              scratchTexture,
+                              blurredTexture,
+                              blurRadius / static_cast<float>(downsample))) {
         return false;
       }
 
@@ -2763,6 +2867,7 @@ public:
       inFrame_ = false;
       return;
     }
+    glyphAtlas_->flushUploads(cmdBuf_);
 
     bool const encodedBackdropFrame = hasBackdropBlurOps(frame_) && encodeFrameWithBackdropBlur(texture, texture, 1);
     if (!encodedBackdropFrame) {
@@ -2783,14 +2888,27 @@ public:
       }
     }
 
-    if (id<MTLSharedEvent> event = targetSharedEvent()) {
-      [cmdBuf_ encodeSignalEvent:event value:targetSpec_.signalValue];
+    id<MTLSharedEvent> externalEvent = targetSharedEvent();
+    id<MTLSharedEvent> signalEvent = externalEvent;
+    std::uint64_t signalValue = targetSpec_.signalValue;
+    bool waitForInternalEvent = false;
+    if (!signalEvent && !externalCommandBuffer) {
+      signalEvent = internalRenderTargetCompletionEvent();
+      if (signalEvent) {
+        signalValue = ++renderTargetCompletionValue_;
+        waitForInternalEvent = true;
+      }
+    }
+    if (signalEvent) {
+      [cmdBuf_ encodeSignalEvent:signalEvent value:signalValue];
     }
 
     lastSubmittedCmdBuf_ = cmdBuf_;
     if (!externalCommandBuffer) {
       [cmdBuf_ commit];
-      if (!targetSharedEvent()) {
+      if (waitForInternalEvent) {
+        (void)waitForSharedEvent(signalEvent, signalValue);
+      } else if (!externalEvent) {
         [cmdBuf_ waitUntilCompleted];
       }
       debug::perf::recordPresentedFrame();

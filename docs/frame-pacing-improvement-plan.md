@@ -339,6 +339,9 @@ Verification on Linux (KMS TTY):
 
 **Severity: Medium-high in aggregate (atlas-grow hitches, backdrop blur cost, end-of-frame drawable stalls).**
 
+Implementation note: the code changes are in place, but macOS compile/runtime verification is still pending
+because the current implementation pass ran on Linux.
+
 - `GlyphAtlas.mm:68-107` — `grow()` clears all entries, doubles dimensions, and synchronously re-rasterizes/re-uploads every glyph; `prepareForFrameBegin`/`afterPresent` (`:56-66`) trigger it. `uploadR8` (`:23-29`) does a synchronous `replaceRegion` per glyph.
 - `MetalCanvas.mm:1992-2000` — backdrop frames allocate `finalUniformBuffer`/`finalClipBuffer` with `newBufferWithLength` every present; `encodeBackdropBlur` (`:1944-1956`) runs 3 iterations × 2 passes at full resolution (Vulkan downsamples; Metal does not); backdrop frames disable MSAA (`:637-649`).
 - `MetalCanvas.mm:597-634` — `nextDrawable` is acquired after all CPU uploads; with `allowsNextDrawableTimeout = YES` a nil drawable abandons the fully recorded frame.
@@ -347,11 +350,11 @@ Verification on Linux (KMS TTY):
 
 What to do:
 
-- [ ] [Auto + Manual] Copy-preserving atlas grow: blit the old atlas texture into the new one and keep entries; batch new-glyph uploads through a blit encoder; grow only in `afterPresent` with a headroom threshold.
-- [ ] [Auto] Pool the two backdrop buffers grow-only on `MetalCanvas` (like the existing triple-buffered arenas), and add a downsampled blur chain mirroring Vulkan's `backdropBlurDownsample()`.
-- [ ] [Auto] Acquire the drawable right after the in-flight semaphore wait in `beginFrame` (hold it through encode) and retry `nextDrawable` once before dropping a frame.
-- [ ] [Auto] Set `metalLayer.displaySyncEnabled = YES` explicitly with a comment documenting the intent.
-- [ ] [Auto] Prefer `MTLSharedEvent` for render-target consumers instead of `waitUntilCompleted`.
+- [x] [Auto + Manual] Copy-preserving atlas grow: blit the old atlas texture into the new one and keep entries; batch new-glyph uploads through a blit encoder; grow only in `afterPresent` with a headroom threshold.
+- [x] [Auto] Pool the two backdrop buffers grow-only on `MetalCanvas` (like the existing triple-buffered arenas), and add a downsampled blur chain mirroring Vulkan's `backdropBlurDownsample()`.
+- [x] [Auto] Acquire the drawable right after the in-flight semaphore wait in `beginFrame` (hold it through encode) and retry `nextDrawable` once before dropping a frame.
+- [x] [Auto] Set `metalLayer.displaySyncEnabled = YES` explicitly with a comment documenting the intent.
+- [x] [Auto] Prefer `MTLSharedEvent` for render-target consumers instead of `waitUntilCompleted`.
 
 Verification on macOS:
 
