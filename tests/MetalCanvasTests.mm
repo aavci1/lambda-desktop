@@ -393,6 +393,44 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
 #endif
 }
 
+TEST_CASE("MetalCanvas retries glyphs after deferred atlas growth") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    CoreTextSystem textSystem;
+    HeadlessMetalTarget target{textSystem, 640, 480};
+    REQUIRE(target);
+    Canvas& canvas = target.canvas();
+
+    Font seedFont{};
+    seedFont.family = ".AppleSystemUIFont";
+    seedFont.size = 24.f;
+    seedFont.weight = 500.f;
+    auto seedLayout = textSystem.layout("Seed", seedFont, Colors::white, 160.f, {});
+
+    Font pressureFont = seedFont;
+    pressureFont.size = 240.f;
+    auto pressureLayout =
+        textSystem.layout("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", pressureFont, Colors::white, 12000.f, {});
+
+    target.begin(Colors::black);
+    canvas.drawTextLayout(*seedLayout, lambda::Point{0.f, 40.f});
+    canvas.drawTextLayout(*pressureLayout, lambda::Point{0.f, 300.f});
+    target.end();
+
+    MetalFrameRecorder recorded;
+    target.begin(Colors::black);
+    REQUIRE(beginRecordedOpsCaptureForCanvas(&canvas, &recorded));
+    canvas.drawTextLayout(*pressureLayout, lambda::Point{0.f, 300.f});
+    endRecordedOpsCaptureForCanvas(&canvas);
+    target.end();
+
+    CHECK(recorded.glyphVertexCount >= 180u);
+  }
+#endif
+}
+
 TEST_CASE("MetalCanvas replays image and path prepared buffers with shader translation") {
 #if !defined(__APPLE__)
   SUCCEED();

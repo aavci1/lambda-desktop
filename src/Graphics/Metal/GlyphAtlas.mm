@@ -22,9 +22,8 @@ constexpr std::uint32_t kCellPad = 1; // 1px border inside cell around glyph bit
 
 } // namespace
 
-GlyphAtlas::GlyphAtlas(id<MTLDevice> device, TextSystem& textSystem)
-    : device_(device), textSystem_(textSystem) {
-  queue_ = [device_ newCommandQueue];
+GlyphAtlas::GlyphAtlas(id<MTLDevice> device, TextSystem& textSystem, id<MTLCommandQueue> queue)
+    : device_(device), queue_(queue ? queue : [device_ newCommandQueue]), textSystem_(textSystem) {
   texture_ = createTexture(atlasWidth_, atlasHeight_);
   if (!texture_ || !queue_) {
     throw std::runtime_error("GlyphAtlas: failed to create atlas resources");
@@ -97,9 +96,8 @@ bool GlyphAtlas::pressureHighForHeadroom() const {
 }
 
 void GlyphAtlas::prepareForFrameBegin() {
-  if (pendingGrow_) {
-    (void)grow();
-  }
+  // Intentionally empty. `grow()` can submit a texture-copy command buffer; keeping
+  // it after present avoids frame-begin hitches while preserving queue ordering.
 }
 
 void GlyphAtlas::afterPresent() {
@@ -160,7 +158,6 @@ bool GlyphAtlas::grow() {
   }
   [blit endEncoding];
   [commandBuffer commit];
-  [commandBuffer waitUntilCompleted];
 
   atlasWidth_ = newWidth;
   atlasHeight_ = newHeight;
@@ -171,7 +168,7 @@ bool GlyphAtlas::grow() {
   return true;
 }
 
-AtlasEntry GlyphAtlas::allocateAndUpload(GlyphKey const& key) {
+std::optional<AtlasEntry> GlyphAtlas::allocateAndUpload(GlyphKey const& key) {
   float const size = static_cast<float>(key.sizeQ8) / 4.f;
   std::uint32_t gw = 0;
   std::uint32_t gh = 0;
@@ -196,7 +193,7 @@ AtlasEntry GlyphAtlas::allocateAndUpload(GlyphKey const& key) {
 
   while (!ensureSpace()) {
     if (!grow()) {
-      return AtlasEntry{};
+      return std::nullopt;
     }
   }
 
@@ -222,8 +219,11 @@ AtlasEntry const& GlyphAtlas::getOrUpload(GlyphKey const& key) {
   if (it != entries_.end()) {
     return it->second;
   }
-  AtlasEntry e = allocateAndUpload(key);
-  auto ins = entries_.emplace(key, e);
+  std::optional<AtlasEntry> e = allocateAndUpload(key);
+  if (!e) {
+    return transientEmptyEntry_;
+  }
+  auto ins = entries_.emplace(key, *e);
   return ins.first->second;
 }
 

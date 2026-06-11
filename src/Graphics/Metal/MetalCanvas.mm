@@ -473,7 +473,7 @@ public:
       , metal_(layer)
       , windowHandle_(handle)
       , requestRedraw_(std::move(requestRedraw)) {
-    glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_);
+    glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_, metal_.queue());
     glyphAtlas_->setBeforeGrowCallback([this]() {
       MetalFrameRecorder const& recorder = activeRecorder();
       return recorder.glyphVerts.empty() && recorder.glyphVertexSources.empty() &&
@@ -492,7 +492,7 @@ public:
     if (!targetTexture()) {
       throw std::runtime_error("Metal RenderTarget requires a valid MTLTexture");
     }
-    glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_);
+    glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_, metal_.queue());
     glyphAtlas_->setBeforeGrowCallback([this]() {
       MetalFrameRecorder const& recorder = activeRecorder();
       return recorder.glyphVerts.empty() && recorder.glyphVertexSources.empty() &&

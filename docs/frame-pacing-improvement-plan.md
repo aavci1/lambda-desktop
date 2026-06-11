@@ -26,13 +26,14 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] Wayland/chrome review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager`, compositor scene/surface/chrome slice (47 cases / 300 assertions), and frame-scheduler/scene-damage/window-state source slice (41 cases / 253 assertions).
 - [x] Vulkan recorder/replay review batch build and focused tests passed on 2026-06-11: normal and `LAMBDA_VULKAN_PREPARED_GEOMETRY=1` Vulkan render-target tests (21 cases / 157 assertions each), validation-layer Vulkan render-target tests (21 cases / 157 assertions), and a prepared/recorder scene slice (6 cases / 79 assertions).
 - [x] Compositor damage review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager`, `./build/tests/lambda_tests --source-file="*CompositorSceneDamageTests.cpp" --no-skip` (10 cases / 30 assertions), `./build/tests/lambda_tests --source-file="*CompositorSurfaceUploadDamageTests.cpp" --no-skip` (3 cases / 7 assertions), and `./build/tests/lambda_tests --source-file="*CompositorPresentationFeedbackTests.cpp" --no-skip` (6 cases / 46 assertions).
+- [x] Metal atlas review batch passed available Linux checks on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager` and `./build/tests/lambda_tests --source-file="*MetalCanvasTests.mm" --no-skip` (0 cases on Linux, source excluded).
 - [ ] Remaining local input gap: `ydotool` and `wtype` are installed and `/dev/input/event0` has an ACL for `aavci`, but `ydotoold` cannot start because `/dev/uinput` is still `root:root` mode `0600`; `evemu-event` is still missing. Real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad real-app visual smoke cases still require manual interaction with a running Lambda compositor session, especially move/drag/resize and cursor visual checks.
 - [ ] Remaining system-tool gap: `wayland-utils` and `evemu` are not installed; `aavci` is in `wheel`, but noninteractive `sudo` still prompts for a password, so this session cannot repair `/dev/uinput` permissions or install the remaining packages. The broad pointer/compositor doctest slice also still needs a live `WAYLAND_DISPLAY`; four `RuntimeInputTests.cpp` cases failed with `Failed to connect to Wayland display`.
 - [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
 - [x] macOS focused tests: `*Metal*,*SceneGraph*` — 20 cases, 133 assertions, all passed (2026-06-11).
-- [ ] Remaining macOS runtime gap: `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), full `ctest`, and backdrop-blur visual comparison.
-- [ ] Post-implementation review backlog (REV-*) below — 3 high, 1 medium, and 2 low items remain open.
+- [ ] Remaining macOS verification gap for the latest Metal changes: rebuild and run `MetalCanvasTests.mm` including the deferred atlas grow regression test, paste large unicode-heavy text into `lambda-editor`, collect `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), run full `ctest`, and compare backdrop-blur visuals.
+- [ ] Post-implementation review backlog (REV-*) below — 1 high, 1 medium, and 1 low item remain open.
 
 ## Working Environment
 
@@ -62,7 +63,7 @@ Measurement tooling that already exists — use it before and after every change
 | Metal counters | `debug::perf` — `CanvasDrawableWait`, `CanvasPresent`, `DisplayLinkToPresent` | Drawable stalls vs present cost on macOS |
 | Validation layers | `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` | Sync/lifetime regressions from any of these changes |
 
-**Suggested fix order for open REV items:** REV-M1/M2/M3 (high-severity regressions), then REV-M4, then lows/nits. Original FP workstreams (FP-1 … FP-16) are marked complete above; remaining manual verification checkboxes under each FP section still apply where unchecked.
+**Suggested fix order for open REV items:** REV-M3 (high-severity regression), then REV-M4, then lows/nits. Original FP workstreams (FP-1 … FP-16) are marked complete above; remaining manual verification checkboxes under each FP section still apply where unchecked.
 
 ---
 
@@ -400,28 +401,6 @@ Items found during the 2026-06-11 review of commits `50d65831..HEAD`. Each item 
 
 ## High severity
 
-### REV-M1: Metal atlas grow blit races with in-flight render-queue uploads
-
-**Severity: High (permanent garbage glyphs after grow).**
-
-`GlyphAtlas::grow()` (`GlyphAtlas.mm:111-172`) blits old→new on the atlas private queue and waits only on that command buffer. Glyph uploads are encoded on the render queue via `flushUploads()` (`MetalCanvas.mm:642`). `grow()` runs from `afterPresent()` immediately after `[cmdBuf_ commit]` (`MetalCanvas.mm:873-877`) and from `prepareForFrameBegin()` after only a 3-frame semaphore wait — cross-queue execution is unordered, so the grow blit can read the old atlas before in-flight upload blits finish. Copy-preserving grow retains `entries_`, so corrupted glyphs persist.
-
-What to do:
-
-- [ ] [Auto] Encode the grow blit on `metal_.queue()` after waiting on a `MTLSharedEvent` signaled by the last upload frame, or block the grow until the render queue is idle for atlas writes.
-- [ ] [Manual] Paste large unicode-heavy text into `lambda-editor` past atlas pressure; verify no missing/corrupt glyphs.
-
-### REV-M2: Deferred mid-frame grow caches empty `AtlasEntry` forever
-
-**Severity: High (glyph permanently missing for font/size).**
-
-When shelf is full mid-frame, `beforeGrow_` blocks grow, `grow()` sets `pendingGrow_` and returns false, and `allocateAndUpload()` returns `AtlasEntry{}` which `getOrUpload()` emplaces into `entries_` (`GlyphAtlas.mm:197-201`, `220-227`). Copy-preserving grow no longer clears entries, so the empty sentinel survives after the deferred grow at `prepareForFrameBegin()` (`GlyphAtlas.mm:99-103`). `drawTextLayout` skips `entry.width == 0` (`MetalCanvas.mm:1445`).
-
-What to do:
-
-- [ ] [Auto] Do not insert the empty entry when grow is deferred; retry allocation after grow completes, or erase the sentinel entry in `prepareForFrameBegin()` before grow.
-- [ ] [Auto] Add a unit test: force deferred grow mid-frame, then verify the glyph renders on the next frame.
-
 ### REV-M3: Metal backdrop uniform/clip buffers are CPU-rewritten while GPU still reads them
 
 **Severity: High (wrong blur transforms/clips under load).**
@@ -461,16 +440,6 @@ What to do:
 - [ ] [Auto] Consider shorter timeout or async drawable acquisition; measure `CanvasDrawableWait` p95.
 - [ ] [Manual] Exhaust drawable pool (rapid resize) — app remains interactive within bounded stall.
 
-### REV-M6: `grow()` synchronous `waitUntilCompleted` on frame-begin path
-
-**Severity: Low (pacing hitch on grow frames).**
-
-`prepareForFrameBegin()` may call `grow()` after drawable acquired (`MetalCanvas.mm:547-572`, `GlyphAtlas.mm:99-103`). Holds drawable during full GPU round-trip.
-
-What to do:
-
-- [ ] [Auto] Defer grow to `afterPresent` only, or use async handoff (pairs with REV-M1).
-
 ---
 
 # Citation errata (original FP audit → current sources)
@@ -479,7 +448,7 @@ What to do:
 | --- | --- | --- |
 | Atlas upload via `uploadTexture` + `vkQueueWaitIdle` on hot path | Fixed — uses `queueAtlasUploadIfNeeded` → `queueTextureUpload` | `VulkanGlyphAtlas.inc:127-132`, `VulkanImages.inc:151+`, `243-254` |
 | `transitionImmediate` on imported images | Fixed — uses `queueTextureTransition` | `VulkanImages.inc:31-33` |
-| Per-rect `drawFrameContent` loop on partial damage | Fixed — single bounding-union clip | `CompositorRenderFrame.cpp:1106-1118` |
+| Per-rect `drawFrameContent` loop on partial damage | Fixed — sparse multi-rect clip with bounding-union fallback | `CompositorRenderFrame.cpp:509-533`, `1130-1144` |
 | `sceneUsesBackdropSampling` blocks partial damage | Removed — uses `inflateDamageForBackdropSampling` | `CompositorSceneGraph.cpp:216-243`, `CompositorRenderFrame.cpp:1005-1010` |
 | `markFrameRendered` `vkQueueWaitIdle` fallback | Fixed — no `vkQueueWaitIdle` in `KmsOutput.cpp` | `KmsOutput.cpp:1087-1095` |
 | `canUsePreparedGeometry = false &&` | Fixed — driver-gated `recorderPreparedGeometryFastPathEnabled()` | `VulkanCanvasDrawOps.inc:830-838`, `978-988` |

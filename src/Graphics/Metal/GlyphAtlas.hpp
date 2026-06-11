@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -38,7 +39,7 @@ struct AtlasEntry {
 
 class GlyphAtlas {
 public:
-  GlyphAtlas(id<MTLDevice> device, TextSystem& textSystem);
+  GlyphAtlas(id<MTLDevice> device, TextSystem& textSystem, id<MTLCommandQueue> queue = nil);
 
   AtlasEntry const& getOrUpload(GlyphKey const& key);
 
@@ -48,7 +49,7 @@ public:
   void flushUploads(id<MTLCommandBuffer> commandBuffer);
   std::uint64_t generation() const noexcept { return generation_; }
 
-  /// Grow only when a previous frame ran out of atlas space; headroom growth happens after present.
+  /// Deferred growth is handled after present so frame begin never blocks on atlas copy work.
   void prepareForFrameBegin();
 
   /// Tier B: grow after a presented frame when utilization is still high, giving headroom for the next frame.
@@ -70,7 +71,7 @@ private:
     std::uint32_t height{0};
   };
 
-  AtlasEntry allocateAndUpload(GlyphKey const& key);
+  std::optional<AtlasEntry> allocateAndUpload(GlyphKey const& key);
 
   bool pressureHighForHeadroom() const;
   id<MTLTexture> createTexture(std::uint32_t width, std::uint32_t height) const;
@@ -91,6 +92,7 @@ private:
 
   std::unordered_map<GlyphKey, AtlasEntry, GlyphKeyHash> entries_;
   std::vector<PendingUpload> pendingUploads_;
+  AtlasEntry transientEmptyEntry_{};
 
   std::uint64_t generation_ = 1;
   bool pendingGrow_ = false;
