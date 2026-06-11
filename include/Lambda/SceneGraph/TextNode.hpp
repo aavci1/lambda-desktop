@@ -22,6 +22,7 @@ class TextNode final : public SceneNode {
 
     void render(Renderer &renderer) const override;
     bool canPrepareRenderOps() const noexcept override;
+    std::uint64_t preparedRenderOpsKey(float dpiScale) const noexcept override;
 
   private:
     std::shared_ptr<TextLayout const> layout_{};

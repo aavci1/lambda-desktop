@@ -1,5 +1,6 @@
 #include <Lambda/Core/Identity.hpp>
 #include <Lambda/UI/Cursor.hpp>
+#include <Lambda/Graphics/Canvas.hpp>
 #include <Lambda/Graphics/Image.hpp>
 #include <Lambda/Graphics/Path.hpp>
 #include <doctest/doctest.h>
@@ -16,6 +17,7 @@
 #include <Lambda/SceneGraph/SceneRenderer.hpp>
 #include <Lambda/SceneGraph/TextNode.hpp>
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -32,6 +34,50 @@ class DummyImage final : public Image {
 
   private:
     Size size_{};
+};
+
+class DpiOnlyCanvas final : public Canvas {
+  public:
+    Backend backend() const noexcept override { return Backend::Vulkan; }
+    unsigned int windowHandle() const override { return 0; }
+    void resize(int, int) override {}
+    void updateDpiScale(float scaleX, float scaleY) override { dpiScale_ = std::max(scaleX, scaleY); }
+    float dpiScale() const noexcept override { return dpiScale_; }
+    void beginFrame() override {}
+    void present() override {}
+    void save() override {}
+    void restore() override {}
+    void setTransform(Mat3 const&) override {}
+    void transform(Mat3 const&) override {}
+    void translate(Point) override {}
+    void translate(float, float) override {}
+    void scale(float, float) override {}
+    void scale(float) override {}
+    void rotate(float) override {}
+    void rotate(float, Point) override {}
+    Mat3 currentTransform() const override { return Mat3::identity(); }
+    void clipRect(Rect, CornerRadius const&, bool) override {}
+    Rect clipBounds() const override { return Rect::sharp(0.f, 0.f, 1000.f, 1000.f); }
+    bool quickReject(Rect) const override { return false; }
+    void setOpacity(float opacity) override { opacity_ = opacity; }
+    float opacity() const override { return opacity_; }
+    void setBlendMode(BlendMode mode) override { blendMode_ = mode; }
+    BlendMode blendMode() const override { return blendMode_; }
+    void drawRect(Rect const&, CornerRadius const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override {}
+    void drawLine(Point, Point, StrokeStyle const&) override {}
+    void drawPath(Path const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override {}
+    void drawCircle(Point, float, FillStyle const&, StrokeStyle const&) override {}
+    void drawTextLayout(TextLayout const&, Point) override {}
+    void drawImage(Image const&, Rect const&, Rect const&, CornerRadius const&, float) override {}
+    void drawImageTiled(Image const&, Rect const&, CornerRadius const&, float) override {}
+    void drawBackdropBlur(Rect const&, float, Color, CornerRadius const&) override {}
+    void* gpuDevice() const override { return nullptr; }
+    void clear(Color) override {}
+
+  private:
+    float dpiScale_ = 1.f;
+    float opacity_ = 1.f;
+    BlendMode blendMode_ = BlendMode::Normal;
 };
 
 class RecordingRenderer final : public Renderer {
@@ -110,6 +156,8 @@ class RecordingRenderer final : public Renderer {
 
 class PreparedCountingRenderer final : public Renderer {
   public:
+    explicit PreparedCountingRenderer(DpiOnlyCanvas* canvas = nullptr) : canvas_(canvas) {}
+
     struct PreparedMarker final : public PreparedRenderOps {
         explicit PreparedMarker(PreparedCountingRenderer &owner)
             : owner_(owner) {}
@@ -155,7 +203,10 @@ class PreparedCountingRenderer final : public Renderer {
         return std::make_unique<PreparedMarker>(*this);
     }
 
+    Canvas* canvas() noexcept override { return canvas_; }
+
   private:
+    DpiOnlyCanvas* canvas_ = nullptr;
     std::vector<Mat3> transforms_ {Mat3::identity()};
 };
 
@@ -223,6 +274,39 @@ TEST_CASE("TextNode renders its stored layout in node-local space") {
 
     REQUIRE(renderer.textTranslations.size() == 1);
     CHECK(renderer.textTranslations[0] == Point {12.f, 18.f});
+}
+
+TEST_CASE("TextNode prepared render ops are keyed by layout and dpi scale") {
+    auto layout = std::make_shared<TextLayout>();
+    layout->measuredSize = Size {80.f, 20.f};
+
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 200.f, 100.f});
+    auto text = std::make_unique<TextNode>(Rect {12.f, 18.f, 80.f, 20.f}, layout);
+    TextNode* textNode = text.get();
+    root->appendChild(std::move(text));
+
+    SceneGraph graph {std::move(root)};
+    DpiOnlyCanvas canvas;
+    PreparedCountingRenderer renderer {&canvas};
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+    int const firstPrepareCount = renderer.prepareCalls;
+    REQUIRE(firstPrepareCount > 0);
+
+    sceneRenderer.render(graph);
+    CHECK(renderer.prepareCalls == firstPrepareCount);
+
+    canvas.updateDpiScale(2.f, 2.f);
+    sceneRenderer.render(graph);
+    int const dpiPrepareCount = renderer.prepareCalls;
+    CHECK(dpiPrepareCount > firstPrepareCount);
+
+    auto nextLayout = std::make_shared<TextLayout>();
+    nextLayout->measuredSize = Size {72.f, 20.f};
+    textNode->setLayout(nextLayout);
+    sceneRenderer.render(graph);
+    CHECK(renderer.prepareCalls > dpiPrepareCount);
 }
 
 TEST_CASE("RectNode clipping scopes child traversal to the node bounds") {

@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -95,6 +96,16 @@ enum class RenderTraversalMode : std::uint8_t {
 
 float rasterCacheDpiScaleForCanvas(Canvas* canvas) noexcept {
     return canvas ? canvas->dpiScale() : 1.f;
+}
+
+std::uint64_t preparedGroupRenderOpsKey(float dpiScale) noexcept {
+    std::uint64_t hash = 14695981039346656037ull;
+    auto const* bytes = reinterpret_cast<std::uint8_t const*>(&dpiScale);
+    for (std::size_t i = 0; i < sizeof(dpiScale); ++i) {
+        hash ^= bytes[i];
+        hash *= 1099511628211ull;
+    }
+    return hash == 0 ? 1 : hash;
 }
 
 #if LAMBDA_METAL
@@ -303,6 +314,41 @@ struct SceneRenderer::Impl {
         }
     }
 
+    float preparedOpsDpiScale() const noexcept {
+        return rasterCacheDpiScaleForCanvas(renderer ? renderer->canvas() : nullptr);
+    }
+
+    std::uint64_t preparedNodeKey(SceneNode const& node) const noexcept {
+        if (node.kind() == SceneNodeKind::Group) {
+            return preparedGroupRenderOpsKey(preparedOpsDpiScale());
+        }
+        return node.preparedRenderOpsKey(preparedOpsDpiScale());
+    }
+
+    bool preparedNodeKeyChanged(SceneNode const& node) const noexcept {
+        if (!detail::SceneNodeAccess::preparedRenderOps(node)) {
+            return false;
+        }
+        std::uint64_t const key = preparedNodeKey(node);
+        return key != 0 && detail::SceneNodeAccess::preparedRenderOpsKey(node) != key;
+    }
+
+    bool refreshPreparedLeafForCurrentKey(SceneNode const& node) {
+        if (!node.canPrepareRenderOps() || !detail::SceneNodeAccess::preparedRenderOps(node)) {
+            return false;
+        }
+        std::uint64_t const key = preparedNodeKey(node);
+        if (key == 0 || detail::SceneNodeAccess::preparedRenderOpsKey(node) == key) {
+            return false;
+        }
+        debug::perf::recordPreparedPrepareCall();
+        std::unique_ptr<PreparedRenderOps>& prepared =
+            detail::SceneNodeAccess::preparedRenderOps(node);
+        prepared = renderer->prepare(node);
+        detail::SceneNodeAccess::setPreparedRenderOpsKey(node, prepared ? key : 0);
+        return true;
+    }
+
     void prepareNodeCache(SceneNode const &node) {
         if (!kEnablePreparedRenderCache) {
             return;
@@ -313,6 +359,7 @@ struct SceneRenderer::Impl {
         if (node.kind() == SceneNodeKind::RasterCache) {
             const_cast<RasterCacheNode&>(static_cast<RasterCacheNode const&>(node)).invalidateCache();
             detail::SceneNodeAccess::preparedRenderOps(node).reset();
+            detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
             if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
                 detail::SceneNodeAccess::clearDirty(node);
             }
@@ -325,13 +372,18 @@ struct SceneRenderer::Impl {
         if (node.kind() != SceneNodeKind::Group && node.canPrepareRenderOps()) {
             std::unique_ptr<PreparedRenderOps> &prepared =
                 detail::SceneNodeAccess::preparedRenderOps(node);
-            if (detail::SceneNodeAccess::ownPaintingDirty(node) || !prepared) {
+            std::uint64_t const key = preparedNodeKey(node);
+            bool const keyChanged = prepared &&
+                                    detail::SceneNodeAccess::preparedRenderOpsKey(node) != key;
+            if (detail::SceneNodeAccess::ownPaintingDirty(node) || !prepared || keyChanged) {
                 debug::perf::recordPreparedPrepareCall();
                 prepared = renderer->prepare(node);
+                detail::SceneNodeAccess::setPreparedRenderOpsKey(node, prepared ? key : 0);
                 detail::SceneNodeAccess::clearDirty(node);
             }
         } else if (node.kind() != SceneNodeKind::Group) {
             detail::SceneNodeAccess::preparedRenderOps(node).reset();
+            detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
             if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
                 detail::SceneNodeAccess::clearDirty(node);
             }
@@ -342,6 +394,7 @@ struct SceneRenderer::Impl {
                 // A previously cached group that becomes dirty is probably on an animated path.
                 // Drop the broad cache and let stable child groups continue replaying independently.
                 prepared.reset();
+                detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
                 detail::SceneNodeAccess::suppressPreparedGroupCache(node);
             }
             if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
@@ -359,6 +412,7 @@ struct SceneRenderer::Impl {
             canReplayPreparedGroup(node)) {
             debug::perf::recordPreparedPrepareCall();
             detail::SceneNodeAccess::preparedRenderOps(node) = prepareSubtree(node);
+            detail::SceneNodeAccess::setPreparedRenderOpsKey(node, preparedNodeKey(node));
         }
 
         detail::SceneNodeAccess::clearSubtreeDirty(node);
@@ -496,6 +550,13 @@ struct SceneRenderer::Impl {
             std::unique_ptr<PreparedRenderOps> &prepared =
                 detail::SceneNodeAccess::preparedRenderOps(node);
             if (prepared) {
+                if (preparedNodeKeyChanged(node)) {
+                    prepared.reset();
+                    detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
+                    detail::SceneNodeAccess::markSubtreeDirty(const_cast<SceneNode&>(node));
+                }
+            }
+            if (prepared) {
                 bool const needsState = !isZeroOffset(accumulatedTranslation) || nodeOpacity != 1.f;
                 if (needsState) {
                     renderer->save();
@@ -553,6 +614,7 @@ struct SceneRenderer::Impl {
 
             std::unique_ptr<PreparedRenderOps> &prepared =
                 detail::SceneNodeAccess::preparedRenderOps(node);
+            refreshPreparedLeafForCurrentKey(node);
             auto replayPrepared = [&]() {
                 if (!prepared) {
                     return false;
@@ -613,6 +675,7 @@ struct SceneRenderer::Impl {
             } else {
                 std::unique_ptr<PreparedRenderOps> &prepared =
                     detail::SceneNodeAccess::preparedRenderOps(node);
+                refreshPreparedLeafForCurrentKey(node);
                 if (!prepared) {
                     if (collectCounters) {
                         debug::perf::recordLiveLeafRender();

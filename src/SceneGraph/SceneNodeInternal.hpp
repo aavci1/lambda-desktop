@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <cstdint>
 
 namespace lambda::scenegraph {
 
@@ -18,6 +19,8 @@ struct SceneNodeAccess {
     static void clearSubtreeDirty(SceneNode const &node) noexcept;
     static bool preparedGroupCacheSuppressed(SceneNode const &node) noexcept;
     static void suppressPreparedGroupCache(SceneNode const &node) noexcept;
+    static std::uint64_t preparedRenderOpsKey(SceneNode const &node) noexcept;
+    static void setPreparedRenderOpsKey(SceneNode const &node, std::uint64_t key) noexcept;
     static std::unique_ptr<PreparedRenderOps>& preparedRenderOps(SceneNode const &node) noexcept;
 };
 

@@ -333,6 +333,10 @@ bool SceneNode::canPrepareRenderOps() const noexcept {
     return true;
 }
 
+std::uint64_t SceneNode::preparedRenderOpsKey(float) const noexcept {
+    return 0;
+}
+
 void SceneNode::markDirty() noexcept {
     ownPaintingDirty_ = true;
     markSubtreeDirty();
@@ -380,6 +384,14 @@ bool detail::SceneNodeAccess::preparedGroupCacheSuppressed(SceneNode const &node
 
 void detail::SceneNodeAccess::suppressPreparedGroupCache(SceneNode const &node) noexcept {
     node.preparedGroupCacheSuppressed_ = true;
+}
+
+std::uint64_t detail::SceneNodeAccess::preparedRenderOpsKey(SceneNode const &node) noexcept {
+    return node.preparedRenderOpsKey_;
+}
+
+void detail::SceneNodeAccess::setPreparedRenderOpsKey(SceneNode const &node, std::uint64_t key) noexcept {
+    node.preparedRenderOpsKey_ = key;
 }
 
 std::unique_ptr<PreparedRenderOps>& detail::SceneNodeAccess::preparedRenderOps(

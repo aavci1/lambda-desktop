@@ -112,6 +112,7 @@ class SceneNode {
     virtual Rect localBounds() const noexcept;
     virtual void render(Renderer &renderer) const;
     virtual bool canPrepareRenderOps() const noexcept;
+    virtual std::uint64_t preparedRenderOpsKey(float dpiScale) const noexcept;
 
   protected:
     SceneNode(SceneNodeKind kind, Rect bounds);
@@ -134,6 +135,7 @@ class SceneNode {
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
     mutable bool preparedGroupCacheSuppressed_ = false;
+    mutable std::uint64_t preparedRenderOpsKey_ = 0;
     mutable std::unique_ptr<PreparedRenderOps> preparedRenderOps_{};
 
     friend struct detail::SceneNodeAccess;
