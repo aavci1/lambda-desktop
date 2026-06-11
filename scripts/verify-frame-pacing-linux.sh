@@ -23,6 +23,7 @@ Runs the TODO-019 Linux frame-pacing verification smoke:
   - drives synthetic pointer motion through the KMS raw-input path with the hardware-cursor fast path enabled
   - overlaps synthetic hardware-cursor motion with the scripted terminal workload
   - exercises a static SHM client surface and asserts compositor surface draw-cache reuse
+  - holds ten decorated static SHM client windows and asserts snapshot/surface phases stay cheap
   - moves two decorated checker windows and asserts multi-rect partial damage stays cheap
   - drives server-side chrome hover/press transitions and asserts client surface-cache reuse
   - drives scripted resize configures and asserts the compositor sizing path stays healthy
@@ -33,6 +34,7 @@ Environment:
   LWM_WAYLAND_BUILD_DIR                 Wayland build dir. Default: $WAYLAND_BUILD_DIR
   LWM_KMS_BUILD_DIR                     KMS build dir. Default: $KMS_BUILD_DIR
   LWM_FRAME_PACING_LOG_DIR              Log root. Default: $LOG_ROOT
+  LWM_FRAME_PACING_CASES                Comma-separated case names, or "all". Default: all
   LAMBDA_TERMINAL_TEST_SECONDS          Terminal workload duration. Default: $TERMINAL_SECONDS
   LAMBDA_EDITOR_SMOKE_SECONDS           Editor smoke duration. Default: $EDITOR_SECONDS
   LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS Presentation checker timeout. Default: $CHECK_TIMEOUT_MS
@@ -67,6 +69,11 @@ for binary in "$WM" "$CHECKER" "$SHELL_APP" "$EDITOR_APP"; do
     exit 2
   fi
 done
+
+build_malloc_counter() {
+  local output="$1"
+  "${CC:-cc}" -shared -fPIC "$ROOT/tools/malloc-count-preload.c" -ldl -o "$output"
+}
 
 summarize_runtime_logs() {
   local dir="$1"
@@ -305,6 +312,122 @@ summarize_surface_cache() {
       if (hits_sum <= 0 || hits_sum <= misses_sum || transient_sum != 0 || frame_samples <= 0) exit 1
     }
   ' "$dir/cpu.log"
+}
+
+summarize_snapshot_load() {
+  local dir="$1"
+  local label="$2"
+  [[ -s "$dir/cpu.log" ]] || {
+    echo "SUMMARY $label snapshot_load_missing_cpu_log=1"
+    return 1
+  }
+  local min_surfaces="${LWM_SNAPSHOT_LOAD_MIN_SURFACES:-9.0}"
+  local snapshot_budget_ms="${LWM_SNAPSHOT_LOAD_SNAPSHOT_MAX_MS:-0.250}"
+  local surface_budget_ms="${LWM_SNAPSHOT_LOAD_SURFACE_MAX_MS:-1.500}"
+  awk -v label="$label" \
+      -v min_surfaces="$min_surfaces" \
+      -v snapshot_budget_ms="$snapshot_budget_ms" \
+      -v surface_budget_ms="$surface_budget_ms" '
+    function token(pattern, suffix,    raw) {
+      if (!match(line, pattern)) return 0.0
+      raw = substr(line, RSTART, RLENGTH)
+      sub(/^.*=/, "", raw)
+      if (suffix != "") sub(suffix "$", "", raw)
+      return raw + 0.0
+    }
+    function phrase(pattern, key,    raw) {
+      if (!match(line, pattern)) return 0.0
+      raw = substr(line, RSTART, RLENGTH)
+      sub("^.*" key "=", "", raw)
+      return raw + 0.0
+    }
+    /^cpu-trace:/ {
+      line = $0
+      frames = token("frames=[0-9]+", "")
+      if (frames <= 0) next
+      surfaces = token("surfaces=[0-9.]+/f", "/f")
+      snapshot = phrase("phase_avg_ms total=[0-9.]+ bg=[0-9.]+ snapshot=[0-9.]+", "snapshot")
+      surface = phrase("phase_avg_ms total=[0-9.]+ bg=[0-9.]+ snapshot=[0-9.]+ surface=[0-9.]+", "surface")
+      samples += 1
+      frames_sum += frames
+      surfaces_sum += surfaces
+      snapshot_sum += snapshot
+      surface_sum += surface
+      if (surfaces > surfaces_max) surfaces_max = surfaces
+      if (snapshot > snapshot_max) snapshot_max = snapshot
+      if (surface > surface_max) surface_max = surface
+      if (surfaces >= min_surfaces) {
+        stable_samples += 1
+        stable_snapshot_sum += snapshot
+        stable_surface_sum += surface
+        if (snapshot > stable_snapshot_max) stable_snapshot_max = snapshot
+        if (surface > stable_surface_max) stable_surface_max = surface
+      }
+    }
+    END {
+      if (samples == 0) {
+        printf "SUMMARY %s snapshot_load samples=0\n", label
+        exit 1
+      }
+      surfaces_avg = surfaces_sum / samples
+      snapshot_avg = snapshot_sum / samples
+      surface_avg = surface_sum / samples
+      stable_snapshot_avg = stable_samples > 0 ? stable_snapshot_sum / stable_samples : 0.0
+      stable_surface_avg = stable_samples > 0 ? stable_surface_sum / stable_samples : 0.0
+      printf "SUMMARY %s snapshot_load samples=%d stable_samples=%d frames=%.0f surfaces_avg=%.2f surfaces_max=%.2f min_surfaces=%.2f snapshot_avg=%.3f snapshot_max=%.3f stable_snapshot_avg=%.3f stable_snapshot_max=%.3f snapshot_budget=%.3f surface_avg=%.3f surface_max=%.3f stable_surface_avg=%.3f stable_surface_max=%.3f surface_budget=%.3f\n",
+        label, samples, stable_samples, frames_sum, surfaces_avg, surfaces_max, min_surfaces,
+        snapshot_avg, snapshot_max, stable_snapshot_avg, stable_snapshot_max, snapshot_budget_ms,
+        surface_avg, surface_max, stable_surface_avg, stable_surface_max, surface_budget_ms
+      if (stable_samples == 0 || stable_snapshot_max > snapshot_budget_ms || stable_surface_max > surface_budget_ms) exit 1
+    }
+  ' "$dir/cpu.log"
+}
+
+summarize_malloc_count() {
+  local dir="$1"
+  local label="$2"
+  local log="$dir/wm-malloc.log"
+  [[ -s "$log" ]] || {
+    echo "SUMMARY $label malloc_count_missing=1"
+    return 1
+  }
+  local max_allocs="${LWM_SNAPSHOT_LOAD_MALLOC_MAX_ALLOCS:-0}"
+  local max_allocs_per_frame="${LWM_SNAPSHOT_LOAD_MALLOC_MAX_ALLOCS_PER_FRAME:-430}"
+  awk -v label="$label" \
+      -v cpu_log="$dir/cpu.log" \
+      -v max_allocs="$max_allocs" \
+      -v max_allocs_per_frame="$max_allocs_per_frame" '
+    function value(name,    pattern, raw) {
+      pattern = name "=[0-9]+"
+      if (!match($0, pattern)) return 0
+      raw = substr($0, RSTART, RLENGTH)
+      sub(/^.*=/, "", raw)
+      return raw + 0
+    }
+    FILENAME == cpu_log && /^cpu-trace:/ {
+      frames += value("frames")
+    }
+    FILENAME != cpu_log && /lambda-malloc-count:/ {
+      samples += 1
+      total += value("total_allocs")
+      bytes += value("requested_bytes")
+      mallocs += value("malloc")
+      callocs += value("calloc")
+      reallocs += value("realloc")
+      aligned += value("aligned_alloc")
+      posix += value("posix_memalign")
+      frees += value("free")
+    }
+    END {
+      allocs_per_frame = frames > 0 ? total / frames : 0.0
+      printf "SUMMARY %s malloc_count samples=%d frames=%.0f total_allocs=%.0f allocs_per_frame=%.1f requested_bytes=%.0f malloc=%.0f calloc=%.0f realloc=%.0f aligned_alloc=%.0f posix_memalign=%.0f free=%.0f max_allocs=%.0f max_allocs_per_frame=%.1f\n",
+        label, samples, frames, total, allocs_per_frame, bytes, mallocs, callocs, reallocs, aligned, posix, frees,
+        max_allocs, max_allocs_per_frame
+      if (samples == 0 || frames <= 0 ||
+          (max_allocs > 0 && total > max_allocs) ||
+          (max_allocs_per_frame > 0 && allocs_per_frame > max_allocs_per_frame)) exit 1
+    }
+  ' "$dir/cpu.log" "$log"
 }
 
 summarize_multi_dirty_partial() {
@@ -899,6 +1022,117 @@ run_surface_cache_case() {
   summarize_cpu_trace "$dir/cpu.log"
 }
 
+run_snapshot_load_case() {
+  local label="snapshot-load-10-windows"
+  local dir="$LOG_DIR/$label"
+  mkdir -p "$dir"
+
+  local display_file="$XDG_RUNTIME_DIR/lambda-window-manager-display"
+  rm -f "$display_file"
+
+  local wm_pid=""
+  local -a checker_pids=()
+  local malloc_counter_so="$dir/malloc-count-preload.so"
+  build_malloc_counter "$malloc_counter_so"
+  cleanup() {
+    set +e
+    for pid in "${checker_pids[@]}"; do
+      if [[ -n "$pid" ]]; then
+        kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+      fi
+    done
+    if [[ -n "$wm_pid" ]]; then
+      kill -TERM -"$wm_pid" 2>/dev/null || kill -TERM "$wm_pid" 2>/dev/null || true
+    fi
+    sleep 1
+    for pid in "${checker_pids[@]}"; do
+      if [[ -n "$pid" ]]; then
+        kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+      fi
+    done
+    if [[ -n "$wm_pid" ]]; then
+      kill -KILL -"$wm_pid" 2>/dev/null || kill -KILL "$wm_pid" 2>/dev/null || true
+    fi
+    set -e
+  }
+  trap cleanup RETURN
+
+  setsid timeout --signal=TERM --kill-after=5s 40s env \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG="$dir/cpu.log" \
+    LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE=0 \
+    LAMBDA_KMS_PRESENT_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$dir/pacing.log" \
+    LD_PRELOAD="$malloc_counter_so" \
+    LAMBDA_MALLOC_COUNT_LOG="$dir/wm-malloc.log" \
+    LWM_DIAGNOSTIC_FLOOR_RENDERING=1 \
+    LWM_DIAGNOSTIC_SCRIPTED_EXERCISE=1 \
+    "$WM" >"$dir/compositor.log" 2>&1 &
+  wm_pid=$!
+
+  local display=""
+  for _ in $(seq 1 150); do
+    if [[ -r "$display_file" ]]; then
+      display="$(cat "$display_file")"
+      break
+    fi
+    if ! kill -0 "$wm_pid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ -z "$display" ]]; then
+    echo "CASE $label display-not-ready log_dir=$dir" >&2
+    tail -n 120 "$dir/compositor.log" >&2 || true
+    return 20
+  fi
+
+  for index in $(seq 1 10); do
+    setsid timeout --signal=TERM --kill-after=2s 20s env \
+      WAYLAND_DISPLAY="$display" \
+      LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
+      LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS=1 \
+      LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS=12000 \
+      LAMBDA_PRESENTATION_FEEDBACK_REQUEST_SERVER_DECORATION=1 \
+      "$CHECKER" >"$dir/presentation-feedback-$index.log" 2>&1 &
+    checker_pids+=("$!")
+    sleep 0.1
+  done
+
+  local checker_status=0
+  for index in "${!checker_pids[@]}"; do
+    local pid="${checker_pids[$index]}"
+    if ! wait "$pid"; then
+      checker_status=1
+      echo "CASE $label checker_$((index + 1))_failed" >&2
+      tail -n 80 "$dir/presentation-feedback-$((index + 1)).log" >&2 || true
+    fi
+    checker_pids[$index]=""
+  done
+  if [[ "$checker_status" -ne 0 ]]; then
+    return 21
+  fi
+
+  sleep 1
+  cleanup
+  trap - RETURN
+  wait "$wm_pid" 2>/dev/null || true
+
+  local presenter_line
+  presenter_line="$(rg -o 'using (GBM/atomic-KMS|Vulkan display) presenter' "$dir/compositor.log" | tail -1 || true)"
+  printf 'CASE %s display=%s %s checker_windows=10 log_dir=%s\n' "$label" "$display" "$presenter_line" "$dir"
+  summarize_runtime_logs "$dir" "$label"
+  if [[ "${LWM_SNAPSHOT_LOAD_REQUIRE_SURFACE_CACHE:-1}" == "0" ]]; then
+    summarize_surface_cache "$dir" "$label" || true
+  else
+    summarize_surface_cache "$dir" "$label"
+  fi
+  summarize_snapshot_load "$dir" "$label"
+  summarize_malloc_count "$dir" "$label"
+  summarize_cpu_trace "$dir/cpu.log"
+}
+
 run_compositor_case() {
   local label="$1"
   local presenter="$2"
@@ -1048,14 +1282,43 @@ run_compositor_case() {
 }
 
 echo "Frame pacing verification logs: $LOG_DIR"
-run_compositor_case atomic "" 1 1
-run_compositor_case atomic-pointer-fast-path "" 1 0 1 1500 7000 80 1 0 64 72
-run_compositor_case atomic-pointer-under-terminal-load "" 1 1 1 7000
-run_surface_cache_case
-run_multi_dirty_partial_case
-run_chrome_interaction_case
-run_resize_storm_case
-run_compositor_case vulkan-display vulkan-display 0 0
+CASE_FILTER="${LWM_FRAME_PACING_CASES:-all}"
+
+case_selected() {
+  local name="$1"
+  if [[ "$CASE_FILTER" == "all" || -z "$CASE_FILTER" ]]; then
+    return 0
+  fi
+  local item
+  local -a selected_cases=()
+  IFS=',' read -r -a selected_cases <<<"$CASE_FILTER"
+  for item in "${selected_cases[@]}"; do
+    if [[ "$item" == "$name" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+run_selected_case() {
+  local name="$1"
+  shift
+  if case_selected "$name"; then
+    "$@"
+  else
+    echo "Skipping case $name"
+  fi
+}
+
+run_selected_case atomic run_compositor_case atomic "" 1 1
+run_selected_case atomic-pointer-fast-path run_compositor_case atomic-pointer-fast-path "" 1 0 1 1500 7000 80 1 0 64 72
+run_selected_case atomic-pointer-under-terminal-load run_compositor_case atomic-pointer-under-terminal-load "" 1 1 1 7000
+run_selected_case surface-cache-static run_surface_cache_case
+run_selected_case snapshot-load-10-windows run_snapshot_load_case
+run_selected_case multi-dirty-partial run_multi_dirty_partial_case
+run_selected_case chrome-hover-press-cache run_chrome_interaction_case
+run_selected_case resize-storm run_resize_storm_case
+run_selected_case vulkan-display run_compositor_case vulkan-display vulkan-display 0 0
 
 echo "Pointer-driving tool availability:"
 for tool in ydotool wtype evemu-event; do
