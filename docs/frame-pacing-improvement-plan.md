@@ -455,7 +455,7 @@ No open REV code items remain from the 2026-06-11 review of commits `50d65831..H
 
 ## Exit criteria
 
-- [ ] All REV items above deleted as fixed and verified.
+- [x] All REV items above deleted as fixed and verified.
 - [ ] All unchecked manual verification boxes under FP-1 … FP-16 closed.
 - [ ] `vulkan-present-detail`, compositor frame CSV, and `debug::perf` counters within budget; no `vkQueueWaitIdle` on per-frame paths (teardown/rasterize exceptions documented in REV-V11/V12).
 - [x] Validation-layer run clean on Linux (resize storm, text scroll, capture paths).
