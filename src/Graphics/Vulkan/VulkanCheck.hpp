@@ -50,4 +50,11 @@ inline void vkCheck(VkResult result, char const* what) {
   }
 }
 
+template <typename T>
+[[nodiscard]] inline T vkStructure(VkStructureType structureType) noexcept {
+  T value{};
+  value.sType = structureType;
+  return value;
+}
+
 } // namespace lambda

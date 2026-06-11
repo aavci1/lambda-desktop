@@ -108,7 +108,7 @@ public:
     if (!native || !native->display || !native->surface) {
       throw std::runtime_error("Invalid Wayland Vulkan surface handle");
     }
-    VkWaylandSurfaceCreateInfoKHR info{VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR};
+    auto info = vkStructure<VkWaylandSurfaceCreateInfoKHR>(VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR);
     info.display = native->display;
     info.surface = native->surface;
     VkSurfaceKHR surface = VK_NULL_HANDLE;

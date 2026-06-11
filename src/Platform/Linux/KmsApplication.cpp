@@ -335,7 +335,7 @@ VkSurfaceKHR tryCreateDisplaySurface(VkInstance instance, VkPhysicalDevice physi
     VkDisplayPlaneCapabilitiesKHR caps{};
     VkResult capsResult = vkGetDisplayPlaneCapabilitiesKHR(physical, displayMode, plane, &caps);
     if (capsResult != VK_SUCCESS) continue;
-    VkDisplaySurfaceCreateInfoKHR info{VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_INFO_KHR};
+    auto info = vkStructure<VkDisplaySurfaceCreateInfoKHR>(VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_INFO_KHR);
     info.displayMode = displayMode;
     info.planeIndex = plane;
     info.planeStackIndex = planes[plane].currentStackIndex;
@@ -809,7 +809,7 @@ VkSurfaceKHR KmsApplication::createSurface(VkInstance instance, void* nativeHand
   }
 
   for (auto const& candidate : candidates) {
-    VkDisplayModeCreateInfoKHR modeInfo{VK_STRUCTURE_TYPE_DISPLAY_MODE_CREATE_INFO_KHR};
+    auto modeInfo = vkStructure<VkDisplayModeCreateInfoKHR>(VK_STRUCTURE_TYPE_DISPLAY_MODE_CREATE_INFO_KHR);
     modeInfo.parameters.visibleRegion = {connector->mode.hdisplay, connector->mode.vdisplay};
     modeInfo.parameters.refreshRate = refreshRateMilliHz(connector->mode);
     VkDisplayModeKHR createdMode = VK_NULL_HANDLE;

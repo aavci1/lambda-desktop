@@ -397,9 +397,9 @@ std::vector<std::uint64_t> vulkanModifiersForFormat(VkPhysicalDevice physical,
                                                     VkFormat format,
                                                     VkImageUsageFlags usage) {
   std::vector<std::uint64_t> modifiers;
-  VkDrmFormatModifierPropertiesList2EXT modifierList{
-      VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT};
-  VkFormatProperties2 formatProperties{VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2};
+  auto modifierList =
+      vkStructure<VkDrmFormatModifierPropertiesList2EXT>(VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT);
+  auto formatProperties = vkStructure<VkFormatProperties2>(VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2);
   formatProperties.pNext = &modifierList;
   vkGetPhysicalDeviceFormatProperties2(physical, format, &formatProperties);
   if (modifierList.drmFormatModifierCount == 0) return modifiers;
@@ -2762,7 +2762,7 @@ private:
   }
 
   void createCommandPool() {
-    VkCommandPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    auto poolInfo = vkStructure<VkCommandPoolCreateInfo>(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO);
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     poolInfo.queueFamilyIndex = lambda::VulkanContext::instance().queueFamily();
     vkCheck(vkCreateCommandPool(lambda::VulkanContext::instance().device(), &poolInfo, nullptr, &commandPool_),
@@ -2939,7 +2939,7 @@ private:
   void createOffscreenTarget(Buffer& buffer) {
     VkDevice device = lambda::VulkanContext::instance().device();
     VkPhysicalDevice physical = lambda::VulkanContext::instance().physicalDevice();
-    VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    auto imageInfo = vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
     imageInfo.extent = {connector_.mode.hdisplay, connector_.mode.vdisplay, 1};
@@ -2956,7 +2956,7 @@ private:
 
     VkMemoryRequirements requirements{};
     vkGetImageMemoryRequirements(device, buffer.offscreenImage, &requirements);
-    VkMemoryAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    auto allocateInfo = vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
     allocateInfo.allocationSize = requirements.size;
     allocateInfo.memoryTypeIndex =
         findVulkanMemoryType(physical, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -2965,7 +2965,7 @@ private:
     vkCheck(vkBindImageMemory(device, buffer.offscreenImage, buffer.offscreenMemory, 0),
             "vkBindImageMemory atomic KMS offscreen target");
 
-    VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    auto viewInfo = vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
     viewInfo.image = buffer.offscreenImage;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -2977,7 +2977,7 @@ private:
   }
 
   void allocateCommandBuffer(Buffer& buffer) {
-    VkCommandBufferAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    auto allocateInfo = vkStructure<VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
     allocateInfo.commandPool = commandPool_;
     allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocateInfo.commandBufferCount = 1;
@@ -2993,7 +2993,7 @@ private:
                               VkPipelineStageFlags2 dstStage,
                               VkAccessFlags2 srcAccess,
                               VkAccessFlags2 dstAccess) {
-    VkImageMemoryBarrier2 barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+    auto barrier = vkStructure<VkImageMemoryBarrier2>(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2);
     barrier.srcStageMask = srcStage;
     barrier.srcAccessMask = srcAccess;
     barrier.dstStageMask = dstStage;
@@ -3004,7 +3004,7 @@ private:
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.layerCount = 1;
-    VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    auto dependency = vkStructure<VkDependencyInfo>(VK_STRUCTURE_TYPE_DEPENDENCY_INFO);
     dependency.imageMemoryBarrierCount = 1;
     dependency.pImageMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(commandBuffer, &dependency);
@@ -3014,7 +3014,7 @@ private:
     KmsTraceScope trace(KmsTraceBucket::BeginCommand);
     if (!buffer.commandBuffer) return;
     vkCheck(vkResetCommandBuffer(buffer.commandBuffer, 0), "vkResetCommandBuffer atomic KMS presenter");
-    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    auto beginInfo = vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkCheck(vkBeginCommandBuffer(buffer.commandBuffer, &beginInfo), "vkBeginCommandBuffer atomic KMS presenter");
     buffer.commandBufferRecording = true;
@@ -3080,12 +3080,12 @@ private:
     vkCheck(vkEndCommandBuffer(buffer.commandBuffer), "vkEndCommandBuffer atomic KMS presenter");
     buffer.commandBufferRecording = false;
 
-    VkCommandBufferSubmitInfo commandBufferInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+    auto commandBufferInfo = vkStructure<VkCommandBufferSubmitInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO);
     commandBufferInfo.commandBuffer = buffer.commandBuffer;
-    VkSemaphoreSubmitInfo signalSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+    auto signalSemaphore = vkStructure<VkSemaphoreSubmitInfo>(VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO);
     signalSemaphore.semaphore = buffer.renderFinished;
     signalSemaphore.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    auto submit = vkStructure<VkSubmitInfo2>(VK_STRUCTURE_TYPE_SUBMIT_INFO_2);
     submit.commandBufferInfoCount = 1;
     submit.pCommandBufferInfos = &commandBufferInfo;
     submit.signalSemaphoreInfoCount = buffer.renderFinished ? 1u : 0u;
@@ -3121,9 +3121,9 @@ private:
 
   VkSemaphore createExportableSemaphore() {
     VkDevice device = lambda::VulkanContext::instance().device();
-    VkExportSemaphoreCreateInfo exportInfo{VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO};
+    auto exportInfo = vkStructure<VkExportSemaphoreCreateInfo>(VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO);
     exportInfo.handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
-    VkSemaphoreCreateInfo semaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    auto semaphoreInfo = vkStructure<VkSemaphoreCreateInfo>(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
     semaphoreInfo.pNext = &exportInfo;
     VkSemaphore semaphore = VK_NULL_HANDLE;
     vkCheck(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &semaphore),
@@ -3137,7 +3137,7 @@ private:
         reinterpret_cast<PFN_vkGetSemaphoreFdKHR>(vkGetDeviceProcAddr(lambda::VulkanContext::instance().device(),
                                                                        "vkGetSemaphoreFdKHR"));
     if (!getSemaphoreFd) throw std::runtime_error("vkGetSemaphoreFdKHR is unavailable");
-    VkSemaphoreGetFdInfoKHR fdInfo{VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR};
+    auto fdInfo = vkStructure<VkSemaphoreGetFdInfoKHR>(VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR);
     fdInfo.semaphore = semaphore;
     fdInfo.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
     int fd = -1;
@@ -3188,7 +3188,8 @@ private:
     VkPhysicalDevice physical = lambda::VulkanContext::instance().physicalDevice();
     try {
       std::uint64_t const modifier = gbmModifier(buffer.bo);
-      VkExternalMemoryImageCreateInfo externalInfo{VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO};
+      auto externalInfo =
+          vkStructure<VkExternalMemoryImageCreateInfo>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
       externalInfo.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
       VkSubresourceLayout planeLayout{};
       planeLayout.offset = gbm_bo_get_offset(buffer.bo, 0);
@@ -3197,14 +3198,14 @@ private:
       planeLayout.rowPitch = gbm_bo_get_stride_for_plane(buffer.bo, 0);
       planeLayout.arrayPitch = planeLayout.size;
       planeLayout.depthPitch = planeLayout.size;
-      VkImageDrmFormatModifierExplicitCreateInfoEXT modifierInfo{
-          VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT};
+      auto modifierInfo = vkStructure<VkImageDrmFormatModifierExplicitCreateInfoEXT>(
+          VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
       modifierInfo.pNext = &externalInfo;
       modifierInfo.drmFormatModifier = modifier;
       modifierInfo.drmFormatModifierPlaneCount = 1;
       modifierInfo.pPlaneLayouts = &planeLayout;
 
-      VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+      auto imageInfo = vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
       imageInfo.pNext = &modifierInfo;
       imageInfo.imageType = VK_IMAGE_TYPE_2D;
       imageInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -3221,18 +3222,18 @@ private:
       auto getMemoryFdProperties = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
           vkGetDeviceProcAddr(device, "vkGetMemoryFdPropertiesKHR"));
       if (!getMemoryFdProperties) throw std::runtime_error("vkGetMemoryFdPropertiesKHR is unavailable");
-      VkMemoryFdPropertiesKHR fdProps{VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR};
+      auto fdProps = vkStructure<VkMemoryFdPropertiesKHR>(VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR);
       vkCheck(getMemoryFdProperties(device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd, &fdProps),
               "vkGetMemoryFdPropertiesKHR atomic KMS buffer");
       VkMemoryRequirements requirements{};
       vkGetImageMemoryRequirements(device, buffer.image, &requirements);
-      VkMemoryDedicatedAllocateInfo dedicated{VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO};
+      auto dedicated = vkStructure<VkMemoryDedicatedAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO);
       dedicated.image = buffer.image;
-      VkImportMemoryFdInfoKHR importInfo{VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR};
+      auto importInfo = vkStructure<VkImportMemoryFdInfoKHR>(VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR);
       importInfo.pNext = &dedicated;
       importInfo.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
       importInfo.fd = fd;
-      VkMemoryAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+      auto allocateInfo = vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
       allocateInfo.pNext = &importInfo;
       allocateInfo.allocationSize = requirements.size;
       allocateInfo.memoryTypeIndex =
@@ -3242,7 +3243,7 @@ private:
       fd = -1;
       vkCheck(vkBindImageMemory(device, buffer.image, buffer.memory, 0), "vkBindImageMemory atomic KMS buffer");
       if (directScanoutRender_) {
-        VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        auto viewInfo = vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
         viewInfo.image = buffer.image;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = VK_FORMAT_B8G8R8A8_UNORM;

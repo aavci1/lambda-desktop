@@ -6,6 +6,7 @@
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include <Lambda/Graphics/VulkanContext.hpp>
+#include "Graphics/Vulkan/VulkanCheck.hpp"
 #include "linux-dmabuf-unstable-v1-server-protocol.h"
 
 #include <drm_fourcc.h>
@@ -97,9 +98,9 @@ std::vector<std::uint64_t> sampledDmabufModifiersForFormat(std::uint32_t drmForm
   VkFormat const vkFormat = vkFormatForDmabufFormat(drmFormat);
   if (!physical || vkFormat == VK_FORMAT_UNDEFINED) return modifiers;
 
-  VkDrmFormatModifierPropertiesList2EXT modifierList{
-      VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT};
-  VkFormatProperties2 formatProperties{VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2};
+  auto modifierList =
+      vkStructure<VkDrmFormatModifierPropertiesList2EXT>(VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT);
+  auto formatProperties = vkStructure<VkFormatProperties2>(VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2);
   formatProperties.pNext = &modifierList;
   vkGetPhysicalDeviceFormatProperties2(physical, vkFormat, &formatProperties);
   if (modifierList.drmFormatModifierCount == 0) return modifiers;
