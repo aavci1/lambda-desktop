@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WAYLAND_BUILD_DIR="${LWM_WAYLAND_BUILD_DIR:-$ROOT/build}"
+KMS_BUILD_DIR="${LWM_KMS_BUILD_DIR:-$ROOT/build-kms}"
+LOG_ROOT="${LWM_FRAME_PACING_LOG_DIR:-$ROOT/.debug-logs/frame-pacing-verify}"
+RUN_ID="$(date +%Y%m%d-%H%M%S)"
+LOG_DIR="$LOG_ROOT/$RUN_ID"
+TERMINAL_SECONDS="${LAMBDA_TERMINAL_TEST_SECONDS:-18}"
+EDITOR_SECONDS="${LAMBDA_EDITOR_SMOKE_SECONDS:-10}"
+CHECK_TIMEOUT_MS="${LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS:-8000}"
+
+usage() {
+  cat <<EOF
+Usage: scripts/verify-frame-pacing-linux.sh
+
+Runs the TODO-019 Linux frame-pacing verification smoke:
+  - builds the KMS compositor and Wayland verifier/client targets
+  - starts lambda-window-manager with CPU, KMS, and pacing traces
+  - verifies wp_presentation feedback on atomic-KMS and Vulkan-display presenters
+  - runs lambda-shell, a scripted lambda-terminal workload, and lambda-editor
+  - summarizes CPU/pacing/present-detail logs and fails on fatal runtime errors
+
+Environment:
+  LWM_WAYLAND_BUILD_DIR                 Wayland build dir. Default: $WAYLAND_BUILD_DIR
+  LWM_KMS_BUILD_DIR                     KMS build dir. Default: $KMS_BUILD_DIR
+  LWM_FRAME_PACING_LOG_DIR              Log root. Default: $LOG_ROOT
+  LAMBDA_TERMINAL_TEST_SECONDS          Terminal workload duration. Default: $TERMINAL_SECONDS
+  LAMBDA_EDITOR_SMOKE_SECONDS           Editor smoke duration. Default: $EDITOR_SECONDS
+  LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS Presentation checker timeout. Default: $CHECK_TIMEOUT_MS
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+mkdir -p "$LOG_DIR"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+build_target() {
+  local dir="$1"
+  shift
+  cmake --build "$dir" --target "$@" -j"$(nproc)"
+}
+
+build_target "$KMS_BUILD_DIR" lambda-window-manager
+build_target "$WAYLAND_BUILD_DIR" lambda-presentation-feedback-check lambda-shell lambda-terminal lambda-editor
+
+WM="$KMS_BUILD_DIR/apps/lambda-window-manager/lambda-window-manager"
+CHECKER="$WAYLAND_BUILD_DIR/tools/lambda-presentation-feedback-check"
+SHELL_APP="$WAYLAND_BUILD_DIR/apps/lambda-shell/lambda-shell"
+EDITOR_APP="$WAYLAND_BUILD_DIR/apps/lambda-editor/lambda-editor"
+
+for binary in "$WM" "$CHECKER" "$SHELL_APP" "$EDITOR_APP"; do
+  if [[ ! -x "$binary" ]]; then
+    echo "Missing executable: $binary" >&2
+    exit 2
+  fi
+done
+
+summarize_runtime_logs() {
+  local dir="$1"
+  local label="$2"
+  local fatal_count
+  fatal_count=$( (rg -n -i 'fatal|segmentation|assert|terminate called|AddressSanitizer|exception|aborted' "$dir" || true) | wc -l )
+  local cpu_lines
+  cpu_lines=$(rg -c '^cpu-trace:' "$dir/cpu.log" 2>/dev/null || echo 0)
+  local kms_lines
+  kms_lines=$(rg -c '^kms-trace:' "$dir/compositor.log" 2>/dev/null || echo 0)
+  local pacing_lines
+  pacing_lines=$(rg -c '^pacing-trace:' "$dir/compositor.log" 2>/dev/null || echo 0)
+  local terminal_present_lines
+  terminal_present_lines=$(rg -c 'vulkan-present-detail:' "$dir/lambda-terminal-render.log" 2>/dev/null || echo 0)
+  printf 'SUMMARY %s fatal_matches=%s cpu_trace_lines=%s kms_trace_lines=%s pacing_lines=%s terminal_present_lines=%s\n' \
+    "$label" "$fatal_count" "$cpu_lines" "$kms_lines" "$pacing_lines" "$terminal_present_lines"
+  if [[ "$fatal_count" -ne 0 ]]; then
+    return 1
+  fi
+}
+
+summarize_cpu_trace() {
+  local log="$1"
+  [[ -s "$log" ]] || return 0
+  awk '
+    function token(pattern, suffix,    raw) {
+      if (!match(line, pattern)) return 0.0
+      raw = substr(line, RSTART, RLENGTH)
+      sub(/^.*=/, "", raw)
+      if (suffix != "") sub(suffix "$", "", raw)
+      return raw + 0.0
+    }
+    function phrase(pattern, key,    raw) {
+      if (!match(line, pattern)) return 0.0
+      raw = substr(line, RSTART, RLENGTH)
+      sub("^.*" key "=", "", raw)
+      return raw + 0.0
+    }
+    /^cpu-trace:/ {
+      line = $0
+      n += 1
+      cpu = token("cpu=[0-9.]+%", "%")
+      fps = token("fps=[0-9.]+", "")
+      frames = token("frames=[0-9]+", "")
+      surface = phrase("phase_avg_ms total=[0-9.]+ bg=[0-9.]+ snapshot=[0-9.]+ surface=[0-9.]+", "surface")
+      present = phrase("cursor=[0-9.]+ present=[0-9.]+", "present")
+      cpu_sum += cpu
+      fps_sum += fps
+      frames_sum += frames
+      surface_sum += surface
+      present_sum += present
+      if (cpu > cpu_max) cpu_max = cpu
+      if (surface > surface_max) surface_max = surface
+      if (present > present_max) present_max = present
+    }
+    END {
+      if (n == 0) exit
+      printf "CPU samples=%d cpu_avg=%.2f cpu_max=%.2f fps_avg=%.2f frames=%.0f surface_avg=%.3f surface_max=%.3f present_avg=%.3f present_max=%.3f\n",
+        n, cpu_sum / n, cpu_max, fps_sum / n, frames_sum, surface_sum / n, surface_max, present_sum / n, present_max
+    }
+  ' "$log"
+}
+
+summarize_terminal_present() {
+  local log="$1"
+  [[ -s "$log" ]] || return 0
+  awk '
+    function val(name,    raw) {
+      if (!match($0, name "=[0-9.]+")) return 0.0
+      raw = substr($0, RSTART, RLENGTH)
+      sub(/^.*=/, "", raw)
+      return raw + 0.0
+    }
+    /vulkan-present-detail:/ {
+      n += 1
+      waitImage += val("waitImage")
+      atlas += val("atlas")
+      record += val("record")
+      queuePresent += val("queuePresent")
+      if (val("waitImage") > 0.01) waitImageOver += 1
+      if (val("atlas") > 0.01) atlasOver += 1
+      if (val("record") > recordMax) recordMax = val("record")
+    }
+    END {
+      if (n == 0) exit
+      printf "Terminal present samples=%d waitImage_avg=%.3f waitImage_over_0.01ms=%d atlas_avg=%.3f atlas_over_0.01ms=%d record_avg=%.3f record_max=%.3f queuePresent_avg=%.3f\n",
+        n, waitImage / n, waitImageOver, atlas / n, atlasOver, record / n, recordMax, queuePresent / n
+    }
+  ' "$log"
+}
+
+run_compositor_case() {
+  local label="$1"
+  local presenter="$2"
+  local require_hardware_flags="$3"
+  local run_apps="$4"
+  local dir="$LOG_DIR/$label"
+  mkdir -p "$dir"
+
+  local display_file="$XDG_RUNTIME_DIR/lambda-window-manager-display"
+  rm -f "$display_file"
+
+  local wm_pid=""
+  local shell_pid=""
+  cleanup() {
+    set +e
+    if [[ -n "$shell_pid" ]]; then
+      kill -TERM -"$shell_pid" 2>/dev/null || kill -TERM "$shell_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$wm_pid" ]]; then
+      kill -TERM -"$wm_pid" 2>/dev/null || kill -TERM "$wm_pid" 2>/dev/null || true
+    fi
+    sleep 1
+    if [[ -n "$shell_pid" ]]; then
+      kill -KILL -"$shell_pid" 2>/dev/null || kill -KILL "$shell_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$wm_pid" ]]; then
+      kill -KILL -"$wm_pid" 2>/dev/null || kill -KILL "$wm_pid" 2>/dev/null || true
+    fi
+  }
+  trap cleanup RETURN
+
+  local -a env_args=(
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE=1
+    LAMBDA_WINDOW_MANAGER_CPU_TRACE_LOG="$dir/cpu.log"
+    LAMBDA_WINDOW_MANAGER_SAMPLE_TRACE=1
+    LAMBDA_WINDOW_MANAGER_SAMPLE_USEC=1000
+    LAMBDA_KMS_PRESENT_TRACE=1
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE=1
+    LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$dir/pacing.log"
+  )
+  if [[ -n "$presenter" ]]; then
+    env_args+=(LAMBDA_WINDOW_MANAGER_PRESENT="$presenter")
+  fi
+
+  setsid timeout --signal=TERM --kill-after=5s 60s env "${env_args[@]}" "$WM" >"$dir/compositor.log" 2>&1 &
+  wm_pid=$!
+
+  local display=""
+  for _ in $(seq 1 150); do
+    if [[ -r "$display_file" ]]; then
+      display="$(cat "$display_file")"
+      break
+    fi
+    if ! kill -0 "$wm_pid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ -z "$display" ]]; then
+    echo "CASE $label display-not-ready log_dir=$dir" >&2
+    tail -n 120 "$dir/compositor.log" >&2 || true
+    return 20
+  fi
+
+  env WAYLAND_DISPLAY="$display" \
+    LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
+    LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS="$require_hardware_flags" \
+    "$CHECKER" >"$dir/presentation-feedback.log" 2>&1
+
+  if [[ "$run_apps" == "1" ]]; then
+    setsid timeout --signal=TERM --kill-after=2s 45s env WAYLAND_DISPLAY="$display" "$SHELL_APP" >"$dir/shell.log" 2>&1 &
+    shell_pid=$!
+    sleep 2
+
+    env WAYLAND_DISPLAY="$display" \
+      LWM_BUILD_DIR="$WAYLAND_BUILD_DIR" \
+      LWM_TRACE_DIR="$dir" \
+      LAMBDA_TERMINAL_TEST_SECONDS="$TERMINAL_SECONDS" \
+      LAMBDA_TERMINAL_TEST_MODE=grid \
+      LAMBDA_DEBUG_PERF=2 \
+      LAMBDA_RESIZE_TRACE=1 \
+      "$ROOT/scripts/trace-terminal-rendering.sh" >"$dir/terminal-driver.log" 2>&1
+
+    set +e
+    timeout --signal=TERM --kill-after=2s "${EDITOR_SECONDS}s" env WAYLAND_DISPLAY="$display" "$EDITOR_APP" "$ROOT/TODO.md" >"$dir/editor.log" 2>&1
+    local editor_status=$?
+    set -e
+    if [[ "$editor_status" -ne 0 && "$editor_status" -ne 124 ]]; then
+      echo "CASE $label editor_status=$editor_status" >&2
+      return "$editor_status"
+    fi
+  fi
+
+  sleep 2
+  cleanup
+  trap - RETURN
+  wait "$wm_pid" 2>/dev/null || true
+  if [[ -n "$shell_pid" ]]; then
+    wait "$shell_pid" 2>/dev/null || true
+  fi
+
+  local checker_line
+  checker_line="$(tr '\n' ' ' < "$dir/presentation-feedback.log")"
+  local presenter_line
+  presenter_line="$(rg -o 'using (GBM/atomic-KMS|Vulkan display) presenter' "$dir/compositor.log" | tail -1 || true)"
+  printf 'CASE %s display=%s %s checker=%s log_dir=%s\n' "$label" "$display" "$presenter_line" "$checker_line" "$dir"
+  summarize_runtime_logs "$dir" "$label"
+  summarize_cpu_trace "$dir/cpu.log"
+  summarize_terminal_present "$dir/lambda-terminal-render.log"
+}
+
+echo "Frame pacing verification logs: $LOG_DIR"
+run_compositor_case atomic "" 1 1
+run_compositor_case vulkan-display vulkan-display 0 0
+
+echo "Pointer-driving tool availability:"
+for tool in ydotool wtype evemu-event; do
+  if command -v "$tool" >/dev/null 2>&1; then
+    echo "  $tool: available"
+  else
+    echo "  $tool: missing"
+  fi
+done
+
+if pgrep -af 'lambda-window-manager|lambda-shell|lambda-terminal|lambda-editor|lambda-presentation-feedback-check' >/dev/null; then
+  echo "Warning: Lambda processes still running after verification:" >&2
+  pgrep -af 'lambda-window-manager|lambda-shell|lambda-terminal|lambda-editor|lambda-presentation-feedback-check' >&2 || true
+fi
+
+echo "Frame pacing verification completed."
