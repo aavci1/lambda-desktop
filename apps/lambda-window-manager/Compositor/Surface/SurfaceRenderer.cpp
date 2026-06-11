@@ -4,6 +4,7 @@
 #include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Chrome/WindowChromeRenderer.hpp"
 #include "Compositor/Surface/CommittedSurfaceSnapshotState.hpp"
+#include "Compositor/Surface/SurfaceUploadDamage.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
@@ -204,26 +205,26 @@ bool updateDamagedImageRegions(Canvas& canvas,
                                Image::PixelFormat pixelFormat,
                                std::int32_t bufferWidth,
                                std::int32_t bufferHeight,
-                               std::vector<CommittedSurfaceSnapshot::RegionRect> const& damage) {
+                               std::vector<CommittedSurfaceSnapshot::RegionRect> const& damage,
+                               std::vector<CommittedSurfaceSnapshot::RegionRect>& uploadDamage) {
   if (pixels.empty() || damage.empty() || bufferWidth <= 0 || bufferHeight <= 0 ||
       damageCoversFullBuffer(damage, bufferWidth, bufferHeight)) {
     return false;
   }
   std::size_t const fullSize = static_cast<std::size_t>(bufferWidth) * static_cast<std::size_t>(bufferHeight) * 4u;
   if (pixels.size() != fullSize) return false;
+  buildSurfaceUploadDamageRects(damage, uploadDamage, bufferWidth, bufferHeight);
+  if (uploadDamage.empty() || damageCoversFullBuffer(uploadDamage, bufferWidth, bufferHeight)) return false;
 
   auto const updateStart = diagnostics::cpuTraceNow();
   std::size_t uploadedBytes = 0;
   std::size_t const sourceStride = static_cast<std::size_t>(bufferWidth) * 4u;
   if (sourceStride > std::numeric_limits<std::uint32_t>::max()) return false;
-  for (auto const& damageRect : damage) {
-    std::int32_t const left = std::clamp(damageRect.x, 0, bufferWidth);
-    std::int32_t const top = std::clamp(damageRect.y, 0, bufferHeight);
-    std::int32_t const right = std::clamp(damageRect.x + damageRect.width, 0, bufferWidth);
-    std::int32_t const bottom = std::clamp(damageRect.y + damageRect.height, 0, bufferHeight);
-    std::int32_t const width = right - left;
-    std::int32_t const height = bottom - top;
-    if (width <= 0 || height <= 0) continue;
+  for (auto const& damageRect : uploadDamage) {
+    std::int32_t const left = damageRect.x;
+    std::int32_t const top = damageRect.y;
+    std::int32_t const width = damageRect.width;
+    std::int32_t const height = damageRect.height;
 
     std::size_t const rowBytes = static_cast<std::size_t>(width) * 4u;
     std::size_t const sourceOffset =
@@ -332,7 +333,8 @@ void updateCachedImage(WaylandServer &wayland, Canvas &canvas, CommittedSurfaceS
                                   surface.pixelFormat,
                                   bufferWidth,
                                   bufferHeight,
-                                  surface.bufferDamageRects)) {
+                                  surface.bufferDamageRects,
+                                  cached.uploadDamageRects)) {
       wayland.consumeSurfaceDamage(surface.id, surface.serial);
       return;
     }

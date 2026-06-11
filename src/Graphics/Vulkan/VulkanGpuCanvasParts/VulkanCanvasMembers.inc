@@ -92,6 +92,7 @@
   std::vector<PendingTextureTransition> pendingTextureTransitions_;
   std::vector<PendingTextureUpload> pendingTextureUploads_;
   std::vector<PendingBufferDestroy> pendingBufferDestroys_;
+  std::vector<Buffer> uploadStagingPool_;
   std::vector<PendingOwnedVulkanImageDestroy> pendingOwnedImageDestroys_;
   std::uint64_t renderTargetFrameSignature_ = 0;
   bool renderTargetFrameCacheValid_ = false;

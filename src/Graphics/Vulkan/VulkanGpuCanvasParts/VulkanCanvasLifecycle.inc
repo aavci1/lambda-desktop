@@ -178,6 +178,10 @@ public:
     destroyDeferredTextures(true);
     destroyDeferredBuffers(true);
     destroyDeferredOwnedImages(true);
+    for (Buffer& buffer : uploadStagingPool_) {
+      destroyBuffer(buffer);
+    }
+    uploadStagingPool_.clear();
     destroyBuffer(pendingScreenshotBuffer_);
     destroyBuffer(pendingFrameCaptureBuffer_);
     destroyBuffer(pathBuffer_);

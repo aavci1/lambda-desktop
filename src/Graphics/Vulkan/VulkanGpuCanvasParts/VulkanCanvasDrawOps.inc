@@ -477,8 +477,7 @@
                                      pendingTextureTransitions_.end());
     for (auto uploadIt = pendingTextureUploads_.begin(); uploadIt != pendingTextureUploads_.end();) {
       if (uploadIt->texture == texture) {
-        pendingBufferDestroys_.push_back(PendingBufferDestroy{takeBuffer(uploadIt->staging),
-                                                              kMaxFramesInFlight + 1u});
+        recycleUploadStagingBuffer(takeBuffer(uploadIt->staging));
         uploadIt = pendingTextureUploads_.erase(uploadIt);
       } else {
         ++uploadIt;
@@ -584,6 +583,7 @@ private:
     Buffer buffer;
     std::uint32_t framesRemaining = 0;
     std::uint32_t successfulSubmits = 0;
+    bool recycleUploadStaging = false;
   };
 
   struct CachedBackdropBlur {

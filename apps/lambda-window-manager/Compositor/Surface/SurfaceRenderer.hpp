@@ -40,6 +40,7 @@ struct CachedClientImage {
   std::uint64_t recordedSignature = 0;
   std::int32_t recordedX = 0;
   std::int32_t recordedY = 0;
+  std::vector<CommittedSurfaceSnapshot::RegionRect> uploadDamageRects;
 };
 
 struct SurfaceRenderState {

@@ -60,7 +60,11 @@
       }
       if (force || it->framesRemaining == 0) {
         assert(force || it->successfulSubmits >= kMaxFramesInFlight);
-        destroyBuffer(it->buffer);
+        if (!force && it->recycleUploadStaging) {
+          recycleUploadStagingBuffer(takeBuffer(it->buffer));
+        } else {
+          destroyBuffer(it->buffer);
+        }
         it = pendingBufferDestroys_.erase(it);
       } else {
         ++it;
@@ -82,6 +86,31 @@
         ++it;
       }
     }
+  }
+
+  void recycleUploadStagingBuffer(Buffer buffer) {
+    if (!buffer.buffer) {
+      return;
+    }
+    constexpr std::size_t kMaxUploadStagingPoolBuffers = 32;
+    if (uploadStagingPool_.size() >= kMaxUploadStagingPoolBuffers) {
+      destroyBuffer(buffer);
+      return;
+    }
+    uploadStagingPool_.push_back(buffer);
+  }
+
+  Buffer takeUploadStagingBuffer(VkDeviceSize size) {
+    for (auto it = uploadStagingPool_.begin(); it != uploadStagingPool_.end(); ++it) {
+      if (it->buffer && it->capacity >= size) {
+        Buffer buffer = *it;
+        uploadStagingPool_.erase(it);
+        return buffer;
+      }
+    }
+    Buffer buffer{};
+    ensureBuffer(buffer, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    return buffer;
   }
 
   void createTexture(Texture& tex,
@@ -125,7 +154,7 @@
     VkDeviceSize size = static_cast<VkDeviceSize>(tex.width) * tex.height * 4u;
     for (auto it = pendingTextureUploads_.begin(); it != pendingTextureUploads_.end();) {
       if (it->texture == &tex) {
-        pendingBufferDestroys_.push_back(PendingBufferDestroy{takeBuffer(it->staging), kMaxFramesInFlight + 1u});
+        recycleUploadStagingBuffer(takeBuffer(it->staging));
         it = pendingTextureUploads_.erase(it);
       } else {
         ++it;
@@ -135,7 +164,7 @@
     uploadJob.texture = &tex;
     uploadJob.width = static_cast<std::uint32_t>(tex.width);
     uploadJob.height = static_cast<std::uint32_t>(tex.height);
-    ensureBuffer(uploadJob.staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    uploadJob.staging = takeUploadStagingBuffer(size);
     upload(uploadJob.staging, pixels, static_cast<std::size_t>(size));
     pendingTextureUploads_.push_back(std::move(uploadJob));
   }
@@ -172,7 +201,7 @@
     if (stride < rowBytes) {
       return;
     }
-    ensureBuffer(uploadJob.staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    uploadJob.staging = takeUploadStagingBuffer(size);
     uploadRows(uploadJob.staging, pixels, rowBytes, height, stride);
     pendingTextureUploads_.push_back(std::move(uploadJob));
   }
@@ -217,7 +246,9 @@
         recordTextureUpload(cmd, *uploadJob.texture, uploadJob);
       }
       pendingBufferDestroys_.push_back(PendingBufferDestroy{takeBuffer(uploadJob.staging),
-                                                            kMaxFramesInFlight + 1u});
+                                                            kMaxFramesInFlight + 1u,
+                                                            0u,
+                                                            true});
     }
     pendingTextureUploads_.clear();
   }
