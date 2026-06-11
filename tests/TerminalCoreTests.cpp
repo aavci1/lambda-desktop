@@ -99,15 +99,15 @@ TEST_CASE("terminal copy and paste payload helpers honor selection and bracketed
 
 TEST_CASE("terminal clipboard shortcuts keep Ctrl+C and Ctrl+V available for programs") {
   using namespace lambda::keys;
-  CHECK(isTerminalCopyShortcut(C, lambda::Modifiers::Meta));
   CHECK(isTerminalCopyShortcut(C, lambda::Modifiers::Ctrl | lambda::Modifiers::Shift));
   CHECK_FALSE(isTerminalCopyShortcut(C, lambda::Modifiers::Ctrl));
+  CHECK_FALSE(isTerminalCopyShortcut(C, lambda::Modifiers::Meta));
   CHECK_FALSE(isTerminalCopyShortcut(C, lambda::Modifiers::Ctrl | lambda::Modifiers::Alt));
   CHECK_FALSE(isTerminalCopyShortcut(V, lambda::Modifiers::Ctrl | lambda::Modifiers::Shift));
 
-  CHECK(isTerminalPasteShortcut(V, lambda::Modifiers::Meta));
   CHECK(isTerminalPasteShortcut(V, lambda::Modifiers::Ctrl | lambda::Modifiers::Shift));
   CHECK_FALSE(isTerminalPasteShortcut(V, lambda::Modifiers::Ctrl));
+  CHECK_FALSE(isTerminalPasteShortcut(V, lambda::Modifiers::Meta));
   CHECK_FALSE(isTerminalPasteShortcut(V, lambda::Modifiers::Ctrl | lambda::Modifiers::Alt));
   CHECK_FALSE(isTerminalPasteShortcut(C, lambda::Modifiers::Ctrl | lambda::Modifiers::Shift));
 }

@@ -2,6 +2,7 @@
 
 #include <Lambda/UI/MenuItem.hpp>
 #include <Lambda/UI/Input.hpp>
+#include <Lambda/UI/Clipboard.hpp>
 
 #include <functional>
 #include <memory>
@@ -43,6 +44,7 @@ public:
   virtual void revalidateMenuItems(std::function<bool(std::string const&)> isEnabled) = 0;
   virtual std::string userDataDir() const = 0;
   virtual std::string cacheDir() const = 0;
+  virtual std::unique_ptr<Clipboard> createClipboard() { return nullptr; }
   virtual std::vector<std::string> availableOutputs() const { return {}; }
   virtual GpuSurfaceProvider* gpuSurfaceProvider() { return nullptr; }
 };

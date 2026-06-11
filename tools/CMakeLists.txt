@@ -17,4 +17,10 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND)
   target_link_libraries(lambda-frame-artifact-check PRIVATE lambda::lambda)
   target_compile_options(lambda-frame-artifact-check PRIVATE -Wall -Wextra -Wpedantic)
   set_target_properties(lambda-frame-artifact-check PROPERTIES CXX_STANDARD 23)
+
+  add_executable(lambda-clipboard-probe
+    lambda-clipboard-probe.cpp)
+  target_link_libraries(lambda-clipboard-probe PRIVATE lambda::lambda)
+  target_compile_options(lambda-clipboard-probe PRIVATE -Wall -Wextra -Wpedantic)
+  set_target_properties(lambda-clipboard-probe PROPERTIES CXX_STANDARD 23)
 endif()

@@ -16,6 +16,9 @@
 #include <utility>
 
 namespace lambda {
+
+std::unique_ptr<Clipboard> createWaylandClipboard();
+
 namespace {
 
 std::string envOr(std::string const& name, std::string fallback) {
@@ -85,6 +88,10 @@ public:
 
   std::string cacheDir() const override {
     return appDir(envOr("XDG_CACHE_HOME", envOr("HOME", ".") + "/.cache"), applicationName());
+  }
+
+  std::unique_ptr<Clipboard> createClipboard() override {
+    return createWaylandClipboard();
   }
 
   std::vector<std::string> availableOutputs() const override {

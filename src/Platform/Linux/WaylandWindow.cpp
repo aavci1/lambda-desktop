@@ -124,6 +124,11 @@ struct WaylandPopoverSurfaceState {
   std::uint64_t frameDoneCount = 0;
 };
 
+struct WaylandClipboardOffer {
+  wl_data_offer* offer = nullptr;
+  std::vector<std::string> mimeTypes;
+};
+
 std::atomic<unsigned int> gNextHandle{1};
 std::int64_t nowNanos() {
   using namespace std::chrono;
@@ -221,7 +226,9 @@ struct SharedWaylandConnection {
   xx_cutouts_manager_v1* cutoutsManager = nullptr;
   zwlr_layer_shell_v1* layerShell = nullptr;
   ext_background_effect_manager_v1* backgroundEffectManager = nullptr;
+  wl_data_device_manager* dataDeviceManager = nullptr;
   wl_seat* seat = nullptr;
+  wl_data_device* dataDevice = nullptr;
   wl_pointer* pointer = nullptr;
   wl_cursor_theme* cursorTheme = nullptr;
   wl_surface* cursorSurface = nullptr;
@@ -249,6 +256,11 @@ struct SharedWaylandConnection {
   std::uint64_t repeatTimerId = 0;
   bool repeatDelayPhase = false;
   EventQueue* repeatHandlerQueue = nullptr;
+  std::uint32_t lastSelectionSerial = 0;
+  wl_data_source* clipboardSource = nullptr;
+  std::string clipboardText;
+  std::vector<std::unique_ptr<WaylandClipboardOffer>> clipboardOffers;
+  WaylandClipboardOffer* selectionOffer = nullptr;
   unsigned int refs = 0;
   bool fatalError = false;
   bool shutdownRequested = false;
@@ -265,6 +277,21 @@ void sharedRegistryRemove(void* data, wl_registry*, std::uint32_t name);
 void sharedWmPing(void*, xdg_wm_base* base, std::uint32_t serial);
 void sharedSeatCapabilities(void* data, wl_seat* seat, std::uint32_t caps);
 void sharedSeatName(void*, wl_seat*, char const*);
+void clipboardOfferOffer(void* data, wl_data_offer*, char const* mimeType);
+void clipboardOfferSourceActions(void*, wl_data_offer*, std::uint32_t);
+void clipboardOfferAction(void*, wl_data_offer*, std::uint32_t);
+void clipboardSourceTarget(void*, wl_data_source*, char const*);
+void clipboardSourceSend(void* data, wl_data_source* source, char const* mimeType, int fd);
+void clipboardSourceCancelled(void* data, wl_data_source* source);
+void clipboardSourceDndDropPerformed(void*, wl_data_source*);
+void clipboardSourceDndFinished(void*, wl_data_source*);
+void clipboardSourceAction(void*, wl_data_source*, std::uint32_t);
+void clipboardDeviceDataOffer(void* data, wl_data_device*, wl_data_offer* offer);
+void clipboardDeviceEnter(void*, wl_data_device*, std::uint32_t, wl_surface*, wl_fixed_t, wl_fixed_t, wl_data_offer*);
+void clipboardDeviceLeave(void*, wl_data_device*);
+void clipboardDeviceMotion(void*, wl_data_device*, std::uint32_t, wl_fixed_t, wl_fixed_t);
+void clipboardDeviceDrop(void*, wl_data_device*);
+void clipboardDeviceSelection(void* data, wl_data_device*, wl_data_offer* offer);
 void sharedOutputGeometry(void*, wl_output*, std::int32_t, std::int32_t, std::int32_t, std::int32_t,
                           std::int32_t, char const*, char const*, std::int32_t);
 void sharedOutputMode(void*, wl_output*, std::uint32_t, std::int32_t, std::int32_t, std::int32_t);
@@ -298,6 +325,20 @@ void handleKeyboardRepeatTimer(SharedWaylandConnection* shared, TimerEvent const
 wl_registry_listener const sharedRegistryListener{sharedRegistryGlobal, sharedRegistryRemove};
 xdg_wm_base_listener const sharedWmBaseListener{sharedWmPing};
 wl_seat_listener const sharedSeatListener{sharedSeatCapabilities, sharedSeatName};
+wl_data_offer_listener const clipboardOfferListener{clipboardOfferOffer, clipboardOfferSourceActions,
+                                                    clipboardOfferAction};
+wl_data_source_listener const clipboardSourceListener{clipboardSourceTarget,
+                                                     clipboardSourceSend,
+                                                     clipboardSourceCancelled,
+                                                     clipboardSourceDndDropPerformed,
+                                                     clipboardSourceDndFinished,
+                                                     clipboardSourceAction};
+wl_data_device_listener const clipboardDeviceListener{clipboardDeviceDataOffer,
+                                                     clipboardDeviceEnter,
+                                                     clipboardDeviceLeave,
+                                                     clipboardDeviceMotion,
+                                                     clipboardDeviceDrop,
+                                                     clipboardDeviceSelection};
 wl_output_listener const sharedOutputListener{sharedOutputGeometry, sharedOutputMode, sharedOutputDone,
                                              sharedOutputScale, sharedOutputName, sharedOutputDescription};
 wl_pointer_listener const sharedPointerListener{sharedPointerEnter, sharedPointerLeave, sharedPointerMotion,
@@ -381,6 +422,114 @@ bool flushWaylandDisplay(SharedWaylandConnection* shared, char const* context) {
   }
 }
 
+bool clipboardTextMime(std::string_view mimeType) {
+  return mimeType == "text/plain;charset=utf-8" ||
+         mimeType == "text/plain" ||
+         mimeType == "UTF8_STRING" ||
+         mimeType == "STRING";
+}
+
+std::optional<std::string> bestClipboardMime(WaylandClipboardOffer const* offer) {
+  if (!offer) return std::nullopt;
+  static constexpr std::string_view preferred[] = {
+      "text/plain;charset=utf-8",
+      "text/plain",
+      "UTF8_STRING",
+      "STRING",
+  };
+  for (std::string_view mime : preferred) {
+    auto found = std::find(offer->mimeTypes.begin(), offer->mimeTypes.end(), mime);
+    if (found != offer->mimeTypes.end()) return *found;
+  }
+  for (std::string const& mime : offer->mimeTypes) {
+    if (mime.starts_with("text/plain")) return mime;
+  }
+  return std::nullopt;
+}
+
+void noteSelectionSerial(SharedWaylandConnection* shared, std::uint32_t serial) {
+  if (shared && serial != 0) {
+    shared->lastSelectionSerial = serial;
+  }
+}
+
+void destroyClipboardSource(SharedWaylandConnection* shared) {
+  if (!shared || !shared->clipboardSource) return;
+  if (canSendWaylandRequests(shared)) {
+    wl_data_source_destroy(shared->clipboardSource);
+  }
+  shared->clipboardSource = nullptr;
+}
+
+void clearClipboardOffers(SharedWaylandConnection& shared, bool destroyProxies) {
+  for (auto& offer : shared.clipboardOffers) {
+    if (offer && offer->offer && destroyProxies) {
+      wl_data_offer_destroy(offer->offer);
+    }
+  }
+  shared.clipboardOffers.clear();
+  shared.selectionOffer = nullptr;
+}
+
+bool ensureClipboardDataDevice(SharedWaylandConnection* shared) {
+  if (!canSendWaylandRequests(shared)) return false;
+  if (shared->dataDevice) return true;
+  if (!shared->dataDeviceManager || !shared->seat) return false;
+  shared->dataDevice = wl_data_device_manager_get_data_device(shared->dataDeviceManager, shared->seat);
+  if (!shared->dataDevice) return false;
+  wl_data_device_add_listener(shared->dataDevice, &clipboardDeviceListener, shared);
+  flushWaylandDisplay(shared, "clipboard data-device setup");
+  return true;
+}
+
+std::optional<std::string> readClipboardOfferText(SharedWaylandConnection* shared,
+                                                  WaylandClipboardOffer* offer,
+                                                  std::string const& mimeType) {
+  if (!canSendWaylandRequests(shared) || !offer || !offer->offer) return std::nullopt;
+  int pipeFds[2]{-1, -1};
+  if (pipe2(pipeFds, O_CLOEXEC | O_NONBLOCK) != 0) {
+    return std::nullopt;
+  }
+  wl_data_offer_accept(offer->offer, shared->lastSelectionSerial, mimeType.c_str());
+  wl_data_offer_receive(offer->offer, mimeType.c_str(), pipeFds[1]);
+  close(pipeFds[1]);
+  pipeFds[1] = -1;
+  if (!flushWaylandDisplay(shared, "clipboard receive")) {
+    close(pipeFds[0]);
+    return std::nullopt;
+  }
+
+  std::string out;
+  char buffer[4096];
+  auto const deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds{1000};
+  for (;;) {
+    ssize_t const n = read(pipeFds[0], buffer, sizeof(buffer));
+    if (n > 0) {
+      out.append(buffer, static_cast<std::size_t>(n));
+      continue;
+    }
+    if (n == 0) {
+      close(pipeFds[0]);
+      return out.empty() ? std::nullopt : std::optional<std::string>(std::move(out));
+    }
+    if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+      close(pipeFds[0]);
+      return std::nullopt;
+    }
+    auto const now = std::chrono::steady_clock::now();
+    if (now >= deadline) {
+      close(pipeFds[0]);
+      return out.empty() ? std::nullopt : std::optional<std::string>(std::move(out));
+    }
+    auto const waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
+    pollfd fd{.fd = pipeFds[0], .events = POLLIN, .revents = 0};
+    (void)poll(&fd, 1, static_cast<int>(std::min<std::int64_t>(waitMs, 50)));
+    if (shared->display) {
+      (void)wl_display_dispatch_pending(shared->display);
+    }
+  }
+}
+
 void clearDisconnectedWaylandGlobals(SharedWaylandConnection& shared) {
   shared.registry = nullptr;
   shared.compositor = nullptr;
@@ -393,7 +542,9 @@ void clearDisconnectedWaylandGlobals(SharedWaylandConnection& shared) {
   shared.cutoutsManager = nullptr;
   shared.layerShell = nullptr;
   shared.backgroundEffectManager = nullptr;
+  shared.dataDeviceManager = nullptr;
   shared.seat = nullptr;
+  shared.dataDevice = nullptr;
   shared.pointer = nullptr;
   shared.cursorSurface = nullptr;
   shared.keyboard = nullptr;
@@ -410,6 +561,10 @@ void clearDisconnectedWaylandGlobals(SharedWaylandConnection& shared) {
   shared.repeatWindow = nullptr;
   shared.repeatTimerId = 0;
   shared.repeatDelayPhase = false;
+  shared.lastSelectionSerial = 0;
+  shared.clipboardSource = nullptr;
+  shared.clipboardText.clear();
+  clearClipboardOffers(shared, false);
 }
 
 std::uint32_t layerShellLayer(LayerShellLayer layer) {
@@ -768,6 +923,12 @@ void releaseWaylandConnection() {
     if (destroyProxies) wl_pointer_destroy(gWaylandConnection.pointer);
     gWaylandConnection.pointer = nullptr;
   }
+  destroyClipboardSource(&gWaylandConnection);
+  clearClipboardOffers(gWaylandConnection, destroyProxies);
+  if (gWaylandConnection.dataDevice) {
+    if (destroyProxies) wl_data_device_release(gWaylandConnection.dataDevice);
+    gWaylandConnection.dataDevice = nullptr;
+  }
   if (gWaylandConnection.cursorSurface) {
     if (destroyProxies) wl_surface_destroy(gWaylandConnection.cursorSurface);
     gWaylandConnection.cursorSurface = nullptr;
@@ -817,6 +978,10 @@ void releaseWaylandConnection() {
     if (destroyProxies) ext_background_effect_manager_v1_destroy(gWaylandConnection.backgroundEffectManager);
     gWaylandConnection.backgroundEffectManager = nullptr;
   }
+  if (gWaylandConnection.dataDeviceManager) {
+    if (destroyProxies) wl_data_device_manager_destroy(gWaylandConnection.dataDeviceManager);
+    gWaylandConnection.dataDeviceManager = nullptr;
+  }
   if (gWaylandConnection.shm) {
     if (destroyProxies) wl_shm_destroy(gWaylandConnection.shm);
     gWaylandConnection.shm = nullptr;
@@ -834,9 +999,127 @@ void releaseWaylandConnection() {
   gWaylandConnection.shutdownRequested = false;
   gWaylandConnection.fatalErrno = 0;
   gWaylandConnection.fatalContext.clear();
+  gWaylandConnection.lastSelectionSerial = 0;
+  gWaylandConnection.clipboardText.clear();
 }
 
+class WaylandClipboard final : public Clipboard {
+public:
+  ~WaylandClipboard() override {
+    if (shared_) {
+      releaseWaylandConnection();
+      shared_ = nullptr;
+    }
+  }
+
+  std::optional<std::string> readText() const override {
+    SharedWaylandConnection* shared = ensureShared();
+    if (shared && ensureClipboardDataDevice(shared)) {
+      primeSelection(shared);
+      if (shared->clipboardSource && !shared->clipboardText.empty()) {
+        return shared->clipboardText;
+      }
+      if (shared->selectionOffer) {
+        std::optional<std::string> mime = bestClipboardMime(shared->selectionOffer);
+        if (!mime) return std::nullopt;
+        std::optional<std::string> text = readClipboardOfferText(shared, shared->selectionOffer, *mime);
+        if (text && !text->empty()) {
+          fallbackText_ = *text;
+          fallbackValid_ = true;
+          return text;
+        }
+        return std::nullopt;
+      }
+    }
+    if (fallbackValid_ && !fallbackText_.empty()) {
+      return fallbackText_;
+    }
+    return std::nullopt;
+  }
+
+  void writeText(std::string text) override {
+    fallbackText_ = text;
+    fallbackValid_ = true;
+
+    SharedWaylandConnection* shared = ensureShared();
+    if (!shared || !ensureClipboardDataDevice(shared) || shared->lastSelectionSerial == 0) {
+      return;
+    }
+
+    destroyClipboardSource(shared);
+    shared->clipboardText = std::move(text);
+    if (shared->clipboardText.empty()) {
+      wl_data_device_set_selection(shared->dataDevice, nullptr, shared->lastSelectionSerial);
+      flushWaylandDisplay(shared, "clipboard clear selection");
+      fallbackValid_ = false;
+      return;
+    }
+
+    wl_data_source* source = wl_data_device_manager_create_data_source(shared->dataDeviceManager);
+    if (!source) {
+      return;
+    }
+    wl_data_source_add_listener(source, &clipboardSourceListener, shared);
+    wl_data_source_offer(source, "text/plain;charset=utf-8");
+    wl_data_source_offer(source, "text/plain");
+    wl_data_device_set_selection(shared->dataDevice, source, shared->lastSelectionSerial);
+    shared->clipboardSource = source;
+    shared->selectionOffer = nullptr;
+    fallbackValid_ = false;
+    flushWaylandDisplay(shared, "clipboard set selection");
+  }
+
+  bool hasText() const override {
+    SharedWaylandConnection* shared = ensureShared();
+    if (shared && ensureClipboardDataDevice(shared)) {
+      primeSelection(shared);
+      if (shared->clipboardSource && !shared->clipboardText.empty()) {
+        return true;
+      }
+      if (bestClipboardMime(shared->selectionOffer)) {
+        return true;
+      }
+    }
+    return fallbackValid_ && !fallbackText_.empty();
+  }
+
+private:
+  SharedWaylandConnection* ensureShared() const {
+    if (shared_ && canSendWaylandRequests(shared_)) {
+      return shared_;
+    }
+    if (shared_) {
+      releaseWaylandConnection();
+      shared_ = nullptr;
+      primedSelection_ = false;
+    }
+    try {
+      shared_ = acquireWaylandConnection();
+    } catch (...) {
+      return nullptr;
+    }
+    return shared_;
+  }
+
+  void primeSelection(SharedWaylandConnection* shared) const {
+    if (!shared || primedSelection_ || !canSendWaylandRequests(shared)) {
+      return;
+    }
+    (void)wl_display_roundtrip(shared->display);
+    primedSelection_ = true;
+  }
+
+  mutable SharedWaylandConnection* shared_ = nullptr;
+  mutable bool primedSelection_ = false;
+  mutable std::string fallbackText_;
+  mutable bool fallbackValid_ = false;
+};
+
 } // namespace
+
+std::unique_ptr<Clipboard> createWaylandClipboard() {
+  return std::make_unique<WaylandClipboard>();
+}
 
 class WaylandWindow final : public platform::Window {
 public:
@@ -1506,7 +1789,8 @@ public:
                                                          .pressedButtons = pressedButtons_});
   }
 
-  void handleKeyboardKey(linux_platform::XkbState* xkb, std::uint32_t key, std::uint32_t state) {
+  void handleKeyboardKey(linux_platform::XkbState* xkb, std::uint32_t key, std::uint32_t state,
+                         std::uint32_t serial) {
     bool const pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
     KeyCode const keyCode = xkb ? xkb->keyCodeForEvdevKey(key) : keys::Unknown;
     if (pressed && keyCode == keys::Escape && popupMenu_) {
@@ -1517,7 +1801,8 @@ public:
                                                                           : InputEvent::Kind::KeyUp,
                                                          .handle = handle_,
                                                          .key = keyCode,
-                                                         .modifiers = currentModifiers_});
+                                                         .modifiers = currentModifiers_,
+                                                         .platformSerial = serial});
     if (pressed && linux_platform::shouldEmitTextInputForModifiers(currentModifiers_)) {
       std::string text = xkb ? xkb->utf8ForEvdevKey(key) : std::string{};
       if (!text.empty()) {
@@ -1529,7 +1814,7 @@ public:
   }
 
   void handleKeyboardKeyForSurface(wl_surface* surface, linux_platform::XkbState* xkb,
-                                   std::uint32_t key, std::uint32_t state) {
+                                   std::uint32_t key, std::uint32_t state, std::uint32_t serial) {
     if (WaylandPopoverSurfaceState* popover = popoverForSurface(surface)) {
       bool const pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
       KeyCode const keyCode = xkb ? xkb->keyCodeForEvdevKey(key) : keys::Unknown;
@@ -1542,7 +1827,7 @@ public:
       }
       return;
     }
-    handleKeyboardKey(xkb, key, state);
+    handleKeyboardKey(xkb, key, state, serial);
   }
 
   void handleKeyboardModifiers(linux_platform::XkbState* xkb, std::uint32_t depressed,
@@ -2824,7 +3109,8 @@ void handleKeyboardRepeatTimer(SharedWaylandConnection* shared, TimerEvent const
 
   shared->repeatWindow->handleKeyboardKeyForSurface(shared->repeatSurface, shared->xkb.get(),
                                                     shared->repeatKey,
-                                                    WL_KEYBOARD_KEY_STATE_PRESSED);
+                                                    WL_KEYBOARD_KEY_STATE_PRESSED,
+                                                    shared->lastSelectionSerial);
 }
 
 WaylandWindow* windowForSurface(SharedWaylandConnection* shared, wl_surface* surface) {
@@ -2850,6 +3136,89 @@ void refreshWindowsForOutput(SharedWaylandConnection* shared, wl_output* output)
   }
 }
 
+void clipboardOfferOffer(void* data, wl_data_offer*, char const* mimeType) {
+  auto* offer = static_cast<WaylandClipboardOffer*>(data);
+  if (!offer || !mimeType) return;
+  if (std::find(offer->mimeTypes.begin(), offer->mimeTypes.end(), mimeType) == offer->mimeTypes.end()) {
+    offer->mimeTypes.emplace_back(mimeType);
+  }
+}
+
+void clipboardOfferSourceActions(void*, wl_data_offer*, std::uint32_t) {}
+void clipboardOfferAction(void*, wl_data_offer*, std::uint32_t) {}
+
+void clipboardSourceTarget(void*, wl_data_source*, char const*) {}
+
+void clipboardSourceSend(void* data, wl_data_source* source, char const* mimeType, int fd) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (!shared || source != shared->clipboardSource || !mimeType || !clipboardTextMime(mimeType)) {
+    close(fd);
+    return;
+  }
+  char const* cursor = shared->clipboardText.data();
+  std::size_t remaining = shared->clipboardText.size();
+  while (remaining > 0) {
+    ssize_t const n = write(fd, cursor, remaining);
+    if (n > 0) {
+      cursor += n;
+      remaining -= static_cast<std::size_t>(n);
+      continue;
+    }
+    if (n < 0 && errno == EINTR) continue;
+    break;
+  }
+  close(fd);
+}
+
+void clipboardSourceCancelled(void* data, wl_data_source* source) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (!shared || source != shared->clipboardSource) return;
+  shared->clipboardSource = nullptr;
+  shared->clipboardText.clear();
+  if (canSendWaylandRequests(shared)) {
+    wl_data_source_destroy(source);
+  }
+}
+
+void clipboardSourceDndDropPerformed(void*, wl_data_source*) {}
+void clipboardSourceDndFinished(void*, wl_data_source*) {}
+void clipboardSourceAction(void*, wl_data_source*, std::uint32_t) {}
+
+void clipboardDeviceDataOffer(void* data, wl_data_device*, wl_data_offer* offer) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (!shared || !offer) return;
+  auto state = std::make_unique<WaylandClipboardOffer>();
+  state->offer = offer;
+  wl_data_offer_add_listener(offer, &clipboardOfferListener, state.get());
+  shared->clipboardOffers.push_back(std::move(state));
+}
+
+void clipboardDeviceEnter(void*, wl_data_device*, std::uint32_t, wl_surface*, wl_fixed_t, wl_fixed_t, wl_data_offer*) {}
+void clipboardDeviceLeave(void*, wl_data_device*) {}
+void clipboardDeviceMotion(void*, wl_data_device*, std::uint32_t, wl_fixed_t, wl_fixed_t) {}
+void clipboardDeviceDrop(void*, wl_data_device*) {}
+
+void clipboardDeviceSelection(void* data, wl_data_device*, wl_data_offer* offer) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (!shared) return;
+  shared->selectionOffer = nullptr;
+  if (!offer) {
+    clearClipboardOffers(*shared, canSendWaylandRequests(shared));
+    return;
+  }
+  for (auto it = shared->clipboardOffers.begin(); it != shared->clipboardOffers.end();) {
+    if (*it && (*it)->offer == offer) {
+      shared->selectionOffer = it->get();
+      ++it;
+      continue;
+    }
+    if (*it && (*it)->offer && canSendWaylandRequests(shared)) {
+      wl_data_offer_destroy((*it)->offer);
+    }
+    it = shared->clipboardOffers.erase(it);
+  }
+}
+
 void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
                           char const* interface, std::uint32_t version) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
@@ -2858,6 +3227,9 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
         wl_registry_bind(registry, name, &wl_compositor_interface, std::min(version, 4u)));
   } else if (std::strcmp(interface, wl_shm_interface.name) == 0) {
     shared->shm = static_cast<wl_shm*>(wl_registry_bind(registry, name, &wl_shm_interface, 1));
+  } else if (std::strcmp(interface, wl_data_device_manager_interface.name) == 0) {
+    shared->dataDeviceManager = static_cast<wl_data_device_manager*>(
+        wl_registry_bind(registry, name, &wl_data_device_manager_interface, std::min(version, 3u)));
   } else if (std::strcmp(interface, xdg_wm_base_interface.name) == 0) {
     shared->wmBase = static_cast<xdg_wm_base*>(
         wl_registry_bind(registry, name, &xdg_wm_base_interface, std::min(version, 6u)));
@@ -2922,6 +3294,7 @@ void sharedSeatCapabilities(void* data, wl_seat* seat, std::uint32_t caps) {
     shared->keyboard = wl_seat_get_keyboard(seat);
     wl_keyboard_add_listener(shared->keyboard, &sharedKeyboardListener, shared);
   }
+  ensureClipboardDataDevice(shared);
 }
 
 void sharedSeatName(void*, wl_seat*, char const*) {}
@@ -2977,6 +3350,9 @@ void sharedPointerMotion(void* data, wl_pointer*, std::uint32_t, wl_fixed_t x, w
 void sharedPointerButton(void* data, wl_pointer*, std::uint32_t serial, std::uint32_t, std::uint32_t button,
                          std::uint32_t state) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
+    noteSelectionSerial(shared, serial);
+  }
   if (shared->popupPointerFocus) {
     shared->popupPointerFocus->handlePopupPointerButton(serial, button, state);
     return;
@@ -3009,8 +3385,9 @@ void sharedKeymap(void* data, wl_keyboard*, std::uint32_t format, int fd, std::u
   else close(fd);
 }
 
-void sharedKeyboardEnter(void* data, wl_keyboard*, std::uint32_t, wl_surface* surface, wl_array*) {
+void sharedKeyboardEnter(void* data, wl_keyboard*, std::uint32_t serial, wl_surface* surface, wl_array*) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
+  noteSelectionSerial(shared, serial);
   WaylandWindow* previousFocus = shared->keyboardFocus;
   WaylandWindow* window = windowForSurface(shared, surface);
   if (!window) {
@@ -3040,14 +3417,15 @@ void sharedKeyboardLeave(void* data, wl_keyboard*, std::uint32_t, wl_surface* su
     }
   }
 }
-void sharedKeyboardKey(void* data, wl_keyboard*, std::uint32_t, std::uint32_t, std::uint32_t key,
+void sharedKeyboardKey(void* data, wl_keyboard*, std::uint32_t serial, std::uint32_t, std::uint32_t key,
                        std::uint32_t state) {
   auto* shared = static_cast<SharedWaylandConnection*>(data);
+  noteSelectionSerial(shared, serial);
   if (state == WL_KEYBOARD_KEY_STATE_RELEASED && shared->repeatKey == key) {
     stopKeyboardRepeat(shared);
   }
   if (shared->keyboardFocus) {
-    shared->keyboardFocus->handleKeyboardKeyForSurface(shared->keyboardSurface, shared->xkb.get(), key, state);
+    shared->keyboardFocus->handleKeyboardKeyForSurface(shared->keyboardSurface, shared->xkb.get(), key, state, serial);
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
       startKeyboardRepeat(shared, shared->keyboardFocus, shared->keyboardSurface, key);
     }

@@ -2,6 +2,8 @@
 
 #include <Lambda/UI/EventQueue.hpp>
 #include <Lambda/UI/Events.hpp>
+#include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/UI/Shortcut.hpp>
 #include <Lambda/UI/Window.hpp>
 #include <Lambda/Graphics/Canvas.hpp>
 #include <Lambda/Reactive/AnimationClock.hpp>
@@ -117,6 +119,18 @@ std::string appNameFromArgv(int argc, char** argv) {
   std::filesystem::path path(argv[0]);
   std::string name = path.stem().string();
   return name.empty() ? "lambda" : name;
+}
+
+Shortcut ctrlShortcut(KeyCode key, Modifiers extra = Modifiers::None) {
+  return Shortcut{key, Modifiers::Ctrl | extra};
+}
+
+CommandDescriptor editCommandDescriptor(char const* title, Shortcut shortcut) {
+  return CommandDescriptor{
+      .title = title,
+      .category = "Edit",
+      .shortcut = shortcut,
+  };
 }
 
 void loadWindowStatesFromDisk(std::filesystem::path const& path,
@@ -304,11 +318,22 @@ Application::Application(int argc, char** argv) {
   gCurrent = this;
   d = std::make_unique<Impl>();
   d->mainThreadId_ = std::this_thread::get_id();
-  d->textSystem_ = std::make_unique<FreeTypeTextSystem>([this] { return name(); });
-  d->clipboard_ = std::make_unique<MemoryClipboard>();
   d->platformApp_ = platform::createApplication();
   d->platformApp_->initialize();
   d->platformApp_->setApplicationName(appNameFromArgv(argc, argv));
+  d->textSystem_ = std::make_unique<FreeTypeTextSystem>([this] { return name(); });
+  d->clipboard_ = d->platformApp_->createClipboard();
+  if (!d->clipboard_) {
+    d->clipboard_ = std::make_unique<MemoryClipboard>();
+  }
+  d->commandDescriptors_.emplace("edit.cut", editCommandDescriptor("Cut", ctrlShortcut(keys::X)));
+  d->commandDescriptors_.emplace("edit.copy", editCommandDescriptor("Copy", ctrlShortcut(keys::C)));
+  d->commandDescriptors_.emplace("edit.paste", editCommandDescriptor("Paste", ctrlShortcut(keys::V)));
+  d->commandDescriptors_.emplace("edit.pastePlainText",
+                                 editCommandDescriptor("Paste as Plain Text",
+                                                       ctrlShortcut(keys::V, Modifiers::Shift)));
+  d->commandDescriptors_.emplace("edit.selectAll",
+                                 editCommandDescriptor("Select All", ctrlShortcut(keys::A)));
   d->platformApp_->setTerminateHandler([this] {
     saveOpenWindowStates();
     d->quit_ = true;

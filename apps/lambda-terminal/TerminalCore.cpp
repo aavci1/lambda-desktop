@@ -499,21 +499,17 @@ std::string terminalPastePayload(std::string_view clipboardText, TerminalConfig 
 }
 
 bool isTerminalPasteShortcut(KeyCode key, Modifiers modifiers) {
-  if (key != lambda::keys::V || has(modifiers, Modifiers::Alt)) {
+  if (key != lambda::keys::V || has(modifiers, Modifiers::Alt) || has(modifiers, Modifiers::Meta)) {
     return false;
   }
-  bool const metaPaste = has(modifiers, Modifiers::Meta);
-  bool const linuxPaste = has(modifiers, Modifiers::Ctrl) && has(modifiers, Modifiers::Shift);
-  return metaPaste || linuxPaste;
+  return has(modifiers, Modifiers::Ctrl) && has(modifiers, Modifiers::Shift);
 }
 
 bool isTerminalCopyShortcut(KeyCode key, Modifiers modifiers) {
-  if (key != lambda::keys::C || has(modifiers, Modifiers::Alt)) {
+  if (key != lambda::keys::C || has(modifiers, Modifiers::Alt) || has(modifiers, Modifiers::Meta)) {
     return false;
   }
-  bool const metaCopy = has(modifiers, Modifiers::Meta);
-  bool const linuxCopy = has(modifiers, Modifiers::Ctrl) && has(modifiers, Modifiers::Shift);
-  return metaCopy || linuxCopy;
+  return has(modifiers, Modifiers::Ctrl) && has(modifiers, Modifiers::Shift);
 }
 
 std::string encodeSgrMouseEvent(TerminalMouseEvent event) {

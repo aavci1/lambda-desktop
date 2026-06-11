@@ -8,7 +8,6 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 | ID | Type | Item | Severity | Priority |
 | --- | --- | --- | --- | --- |
-| TODO-002 | Bug | Flux app clipboard shortcuts and shared text clipboard need cross-app validation | High | P1 |
 | TODO-006 | Bug | Window close animation is inconsistent across window types | Medium | P2 |
 | TODO-007 | Bug | Minimized windows and dock previews are not wired across Window Manager and Shell | Medium | P2 |
 | TODO-008 | Bug | Live resize can stretch stale window content | Medium | P1 |
@@ -19,17 +18,6 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-016 | Bug | useAutoFocus cannot focus targets inside nested child components | Medium | P2 |
 | TODO-017 | Bug | Overlay rebuild test trips stack-use-after-scope under ASan | Medium | P2 |
 | TODO-019 | Performance | Work through the frame-pacing improvement plan | High | P1 |
-
-## TODO-002: Flux app clipboard shortcuts and shared text clipboard need cross-app validation
-
-- [ ] [Auto] Keep this item scoped to Flux app text editing shortcuts, Terminal-specific clipboard shortcuts, and shared plain-text copy/paste behavior; do not treat Shell clipboard history as the same feature.
-- [ ] [Auto] Treat the existing Wayland clipboard/data-device protocol path as supporting infrastructure that still needs app-level shortcut and cross-application workflow validation.
-- [ ] [Auto + Manual] Fix copy/paste as one cross-application clipboard feature instead of handling per-app bugs separately.
-- [ ] [Auto + Manual] Plain text copy and paste should work consistently anywhere text can be selected or edited across Flux apps.
-- [ ] [Auto] Regular editable text surfaces should use Ctrl+C for copy and Ctrl+V for paste.
-- [ ] [Auto] Terminal should use terminal-standard Ctrl+Shift+C for copy and Ctrl+Shift+V for paste, so Ctrl+C remains available for terminal interrupt behavior.
-- [ ] [Auto] Do not add or rely on Super+C or Super+V clipboard behavior.
-- [ ] [Auto + Manual] Verify copy and paste across multiple apps or text surfaces, including Terminal and at least two regular editable text surfaces. Editor-local Ctrl+A/C/X/V and Ctrl+Z/Shift+Ctrl+Z behavior has focused automated coverage, but the shared cross-application clipboard path still needs validation.
 
 ## TODO-006: Window close animation is inconsistent across window types
 

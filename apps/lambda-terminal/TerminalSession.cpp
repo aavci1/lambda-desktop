@@ -92,6 +92,26 @@ std::string shellName(std::string const& shellPath) {
   return slash == std::string::npos ? shellPath : shellPath.substr(slash + 1);
 }
 
+std::optional<std::string> envString(char const* name) {
+  char const* value = std::getenv(name);
+  if (!value || !*value) return std::nullopt;
+  return std::string(value);
+}
+
+bool envEnabled(char const* name) {
+  char const* value = std::getenv(name);
+  return value && *value && std::strcmp(value, "0") != 0 && std::strcmp(value, "false") != 0;
+}
+
+int envIntClamped(char const* name, int fallback, int minimum, int maximum) {
+  char const* value = std::getenv(name);
+  if (!value || !*value) return fallback;
+  char* end = nullptr;
+  long parsed = std::strtol(value, &end, 10);
+  if (end == value) return fallback;
+  return static_cast<int>(std::clamp(parsed, static_cast<long>(minimum), static_cast<long>(maximum)));
+}
+
 void appendUtf8(std::string& out, std::uint32_t codepoint) {
   if (codepoint == 0) {
     out.push_back(' ');
@@ -153,6 +173,10 @@ public:
   }
 
   ~TerminalSession() {
+    if (app_ && autotestTimerId_ != 0) {
+      app_->cancelTimer(autotestTimerId_);
+      autotestTimerId_ = 0;
+    }
     stopWakeThread();
     if (app_ && frameObserver_.isValid()) {
       app_->unobserveNextFrame(frameObserver_);
@@ -173,6 +197,34 @@ public:
 
   Reactive::Signal<std::vector<TerminalRow>> rows() const { return rows_; }
   Reactive::Signal<VTermPos> cursor() const { return cursor_; }
+
+  void installAutotestTextObserverFromEnv() {
+    if (autotestTimerId_ != 0 || !app_ || !window_) {
+      return;
+    }
+    std::optional<std::string> expected = envString("LAMBDA_TERMINAL_AUTOTEST_EXPECT_TEXT");
+    if (!expected || expected->empty()) {
+      return;
+    }
+    autotestExpectedText_ = std::move(*expected);
+    int const timeoutMs = envIntClamped("LAMBDA_TERMINAL_AUTOTEST_TIMEOUT_MS", 5000, 100, 60000);
+    autotestMaxTicks_ = std::max(1, timeoutMs / 50);
+    autotestTicks_ = 0;
+    autotestPasteClipboard_ = envEnabled("LAMBDA_TERMINAL_AUTOTEST_PASTE_CLIPBOARD");
+    autotestPasteDispatched_ = false;
+    std::weak_ptr<TerminalSession> weak = shared_from_this();
+    autotestTimerId_ = app_->scheduleRepeatingTimer(std::chrono::milliseconds{50}, window_->handle());
+    app_->eventQueue().on<TimerEvent>([weak](TimerEvent const& event) {
+      if (std::shared_ptr<TerminalSession> session = weak.lock()) {
+        session->handleAutotestTimer(event);
+      }
+    });
+    std::fprintf(stderr,
+                 "lambda-terminal-autotest: ready expect_bytes=%zu timeout_ms=%d\n",
+                 autotestExpectedText_.size(),
+                 timeoutMs);
+    std::fflush(stderr);
+  }
 
   void scheduleResizeForFrame(Rect frame) {
     TerminalGridSize const grid = terminalGridSize(frame.width,
@@ -597,6 +649,55 @@ private:
       buffer.pushLine(textForRow(row));
     }
     return terminalCopyPayload(buffer, *selection_);
+  }
+
+  std::string terminalTextForAutotest() const {
+    std::string text;
+    for (TerminalRow const& row : logicalRows()) {
+      if (!text.empty()) {
+        text.push_back('\n');
+      }
+      text.append(textForRow(row));
+    }
+    return text;
+  }
+
+  void handleAutotestTimer(TimerEvent const& event) {
+    if (autotestTimerId_ == 0 || event.timerId != autotestTimerId_) {
+      return;
+    }
+    if (autotestPasteClipboard_ && !autotestPasteDispatched_ && autotestTicks_ >= 4) {
+      autotestPasteDispatched_ = true;
+      pasteFromClipboard();
+      std::fprintf(stderr, "lambda-terminal-autotest: paste-dispatched\n");
+      std::fflush(stderr);
+    }
+    if (hasDirtyRows()) {
+      refreshDirtyRows();
+    }
+    std::string const observed = terminalTextForAutotest();
+    if (observed.find(autotestExpectedText_) != std::string::npos) {
+      std::fprintf(stderr,
+                   "lambda-terminal-autotest: observed-text bytes=%zu ticks=%d\n",
+                   autotestExpectedText_.size(),
+                   autotestTicks_);
+      std::fflush(stderr);
+      app_->cancelTimer(autotestTimerId_);
+      autotestTimerId_ = 0;
+      app_->quit();
+      return;
+    }
+    ++autotestTicks_;
+    if (autotestTicks_ >= autotestMaxTicks_) {
+      std::fprintf(stderr,
+                   "lambda-terminal-autotest: timeout expect_bytes=%zu observed_bytes=%zu\n",
+                   autotestExpectedText_.size(),
+                   observed.size());
+      std::fflush(stderr);
+      app_->cancelTimer(autotestTimerId_);
+      autotestTimerId_ = 0;
+      app_->quit();
+    }
   }
 
   static VTermScreenCallbacks const& screenCallbacks() {
@@ -1265,6 +1366,12 @@ private:
   std::thread wakeThread_;
   std::optional<TerminalSelection> selection_;
   bool selecting_ = false;
+  std::uint64_t autotestTimerId_ = 0;
+  std::string autotestExpectedText_;
+  int autotestTicks_ = 0;
+  int autotestMaxTicks_ = 0;
+  bool autotestPasteClipboard_ = false;
+  bool autotestPasteDispatched_ = false;
   std::vector<TerminalRow> historyRows_;
   std::vector<TerminalRow> screenRows_;
   mutable std::array<std::array<CachedGlyph, 128>, 2> asciiGlyphs_{};
@@ -1305,6 +1412,7 @@ struct TerminalApp {
 
 void installTerminalView(lambda::Application& app, lambda::Window& window, TerminalConfig config) {
   auto session = std::make_shared<TerminalSession>(app, window, std::move(config));
+  session->installAutotestTextObserverFromEnv();
   window.setView<TerminalApp>({.session = std::move(session)});
 }
 

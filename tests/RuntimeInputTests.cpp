@@ -756,6 +756,39 @@ TEST_CASE("controlled text input handles Ctrl+A and reports edit selection") {
   CHECK(editCount == 1);
 }
 
+TEST_CASE("controlled text input uses Ctrl clipboard shortcuts without Super fallback") {
+  RuntimeHarness harness;
+  harness.app.clipboard().writeText("");
+
+  lambda::Reactive::Signal<std::string> text{"hello world"};
+  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection{
+      lambda::detail::TextEditSelection{.caretByte = 11, .anchorByte = 6}};
+  int editCount = 0;
+  harness.setRoot(ControlledTextInputRoot{
+      .text = &text,
+      .selection = &selection,
+      .editCount = &editCount,
+  });
+
+  harness.keyDown(lambda::keys::C, lambda::Modifiers::Ctrl);
+  REQUIRE(harness.app.clipboard().readText().has_value());
+  CHECK(*harness.app.clipboard().readText() == "world");
+  CHECK(text.get() == "hello world");
+
+  harness.app.clipboard().writeText("");
+  harness.keyDown(lambda::keys::C, lambda::Modifiers::Meta);
+  CHECK_FALSE(harness.app.clipboard().readText().has_value());
+
+  harness.app.clipboard().writeText("Flux ");
+  selection.set(lambda::detail::TextEditSelection{.caretByte = 0, .anchorByte = 0});
+  harness.keyDown(lambda::keys::V, lambda::Modifiers::Ctrl);
+
+  CHECK(text.get() == "Flux hello world");
+  CHECK(selection.get().caretByte == 5);
+  CHECK(selection.get().anchorByte == 5);
+  CHECK(editCount == 1);
+}
+
 TEST_CASE("controlled text input handles registered semantic edit commands") {
   RuntimeHarness harness;
   harness.window.registerCommand("edit.deleteWordBackward", lambda::CommandDescriptor{
