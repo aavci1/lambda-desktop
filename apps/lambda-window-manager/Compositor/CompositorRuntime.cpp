@@ -103,7 +103,11 @@ struct SyntheticPointerMotion {
   int intervalMs = 8;
   double dx = 7.0;
   double dy = 3.0;
+  double startX = 0.0;
+  double startY = 0.0;
   int emitted = 0;
+  bool hasStartPosition = false;
+  bool startPositionEmitted = false;
   SteadyClock::time_point nextAt{};
 
   static SyntheticPointerMotion fromEnvironment(SteadyClock::time_point now) {
@@ -116,26 +120,50 @@ struct SyntheticPointerMotion {
     plan.intervalMs = positiveEnvInt("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_INTERVAL_MS", 8, 1000);
     plan.dx = envDouble("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DX", 7.0, -256.0, 256.0);
     plan.dy = envDouble("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DY", 3.0, -256.0, 256.0);
+    char const* rawStartX = std::getenv("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_START_X");
+    char const* rawStartY = std::getenv("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_START_Y");
+    if (rawStartX && *rawStartX && rawStartY && *rawStartY) {
+      plan.hasStartPosition = true;
+      plan.startX = envDouble("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_START_X", 0.0, 0.0, 100000.0);
+      plan.startY = envDouble("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_START_Y", 0.0, 0.0, 100000.0);
+    }
     int const warmupMs = positiveEnvInt("LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_WARMUP_MS", 1000, 30000);
     plan.nextAt = now + std::chrono::milliseconds(warmupMs);
     std::fprintf(stderr,
                  "lambda-window-manager: synthetic pointer motion enabled count=%d interval_ms=%d warmup_ms=%d "
-                 "dx=%.2f dy=%.2f\n",
+                 "dx=%.2f dy=%.2f start=%s %.1f,%.1f\n",
                  plan.remaining,
                  plan.intervalMs,
                  warmupMs,
                  plan.dx,
-                 plan.dy);
+                 plan.dy,
+                 plan.hasStartPosition ? "set" : "unset",
+                 plan.startX,
+                 plan.startY);
     return plan;
   }
 
   [[nodiscard]] std::optional<int> delayMs(SteadyClock::time_point now) const {
-    if (!enabled || remaining <= 0) return std::nullopt;
+    if (!enabled || (remaining <= 0 && (!hasStartPosition || startPositionEmitted))) return std::nullopt;
     return millisecondsUntilCeil(nextAt, now, intervalMs);
   }
 
   bool emitDue(lambda::platform::KmsDevice& device, SteadyClock::time_point now) {
-    if (!enabled || remaining <= 0 || now < nextAt) return false;
+    if (!enabled || now < nextAt) return false;
+    if (hasStartPosition && !startPositionEmitted) {
+      lambda::platform::KmsInputEvent event{
+          .kind = lambda::platform::KmsInputEvent::Kind::PointerPosition,
+          .x = startX,
+          .y = startY,
+          .timeMs = monotonicMilliseconds32(now),
+      };
+      device.emitInputEventForDiagnostics(event);
+      startPositionEmitted = true;
+      nextAt = now + std::chrono::milliseconds(intervalMs);
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("synthetic-pointer-position x=%.2f y=%.2f\n", startX, startY);
+      return true;
+    }
+    if (remaining <= 0) return false;
     lambda::platform::KmsInputEvent event{
         .kind = lambda::platform::KmsInputEvent::Kind::PointerMotion,
         .dx = dx,

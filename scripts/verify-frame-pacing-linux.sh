@@ -98,10 +98,19 @@ summarize_pointer_fast_path() {
   fallback_moves=$(rg -c 'hardware-cursor-motion-fast-path moved=0|hardware-cursor-motion-fast-path unavailable' "$dir/pacing.log" 2>/dev/null || echo 0)
   local runtime_failures
   runtime_failures=$( (rg -n -i 'input event handling failed|hardware cursor motion fast path failed' "$dir/compositor.log" || true) | wc -l )
-  printf 'SUMMARY %s synthetic_pointer_events=%s hardware_cursor_fast_path_moves=%s fallback_or_unavailable_moves=%s runtime_failures=%s\n' \
-    "$label" "$synthetic_events" "$fast_path_moves" "$fallback_moves" "$runtime_failures"
+  local input_render_loops
+  input_render_loops=$(awk '
+    /synthetic-pointer-motion emitted=/ { seen_pointer = 1 }
+    seen_pointer && /^pacing-trace:/ && / loop / && /input=1/ && /render=1/ { loops += 1 }
+    END { print loops + 0 }
+  ' "$dir/pacing.log" 2>/dev/null || echo 0)
+  local static_surface_flips
+  static_surface_flips=$(rg -c 'flip-scheduled .*surfaces=[1-9][0-9]*' "$dir/pacing.log" 2>/dev/null || echo 0)
+  printf 'SUMMARY %s synthetic_pointer_events=%s hardware_cursor_fast_path_moves=%s fallback_or_unavailable_moves=%s runtime_failures=%s input_render_loops_after_pointer=%s static_surface_flips=%s\n' \
+    "$label" "$synthetic_events" "$fast_path_moves" "$fallback_moves" "$runtime_failures" "$input_render_loops" "$static_surface_flips"
   if [[ "$synthetic_events" -le 0 || "$fast_path_moves" -lt "$synthetic_events" ||
-        "$fallback_moves" -ne 0 || "$runtime_failures" -ne 0 ]]; then
+        "$fallback_moves" -ne 0 || "$runtime_failures" -ne 0 || "$input_render_loops" -ne 0 ||
+        "$static_surface_flips" -le 0 ]]; then
     return 1
   fi
 }
@@ -658,6 +667,12 @@ run_compositor_case() {
   local run_apps="$4"
   local synthetic_pointer="${5:-0}"
   local synthetic_pointer_warmup_ms="${6:-1500}"
+  local checker_hold_ms="${7:-0}"
+  local synthetic_pointer_count="${8:-180}"
+  local synthetic_pointer_dx="${9:-5}"
+  local synthetic_pointer_dy="${10:-2}"
+  local synthetic_pointer_start_x="${11:-}"
+  local synthetic_pointer_start_y="${12:-}"
   local dir="$LOG_DIR/$label"
   mkdir -p "$dir"
 
@@ -701,12 +716,18 @@ run_compositor_case() {
     env_args+=(
       LAMBDA_COMPOSITOR_ENABLE_HARDWARE_CURSOR_MOTION_FAST_PATH=1
       LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION=1
-      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_COUNT=180
+      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_COUNT="$synthetic_pointer_count"
       LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_INTERVAL_MS=8
       LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_WARMUP_MS="$synthetic_pointer_warmup_ms"
-      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DX=5
-      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DY=2
+      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DX="$synthetic_pointer_dx"
+      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DY="$synthetic_pointer_dy"
     )
+    if [[ -n "$synthetic_pointer_start_x" && -n "$synthetic_pointer_start_y" ]]; then
+      env_args+=(
+        LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_START_X="$synthetic_pointer_start_x"
+        LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_START_Y="$synthetic_pointer_start_y"
+      )
+    fi
   fi
 
   setsid timeout --signal=TERM --kill-after=5s 60s env "${env_args[@]}" "$WM" >"$dir/compositor.log" 2>&1 &
@@ -732,6 +753,7 @@ run_compositor_case() {
   env WAYLAND_DISPLAY="$display" \
     LAMBDA_PRESENTATION_FEEDBACK_TIMEOUT_MS="$CHECK_TIMEOUT_MS" \
     LAMBDA_PRESENTATION_FEEDBACK_REQUIRE_HARDWARE_FLAGS="$require_hardware_flags" \
+    LAMBDA_PRESENTATION_FEEDBACK_HOLD_MS="$checker_hold_ms" \
     "$CHECKER" >"$dir/presentation-feedback.log" 2>&1
 
   if [[ "$run_apps" == "1" ]]; then
@@ -788,7 +810,7 @@ run_compositor_case() {
 
 echo "Frame pacing verification logs: $LOG_DIR"
 run_compositor_case atomic "" 1 1
-run_compositor_case atomic-pointer-fast-path "" 1 0 1
+run_compositor_case atomic-pointer-fast-path "" 1 0 1 1500 7000 80 1 0 64 72
 run_compositor_case atomic-pointer-under-terminal-load "" 1 1 1 7000
 run_surface_cache_case
 run_chrome_interaction_case
