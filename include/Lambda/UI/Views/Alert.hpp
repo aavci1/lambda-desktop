@@ -21,14 +21,14 @@ namespace lambda {
 
 struct AlertButton {
   /// Button label text.
-  std::string label;
+  std::string label{};
   /// Button visual treatment.
   ButtonVariant variant = ButtonVariant::Secondary;
   /// Disables activation when true.
   bool disabled = false;
   /// Called when this button is tapped or activated by keyboard.
   /// The alert is dismissed automatically before this is called.
-  std::function<void()> action;
+  std::function<void()> action{};
 
   bool operator==(AlertButton const& other) const {
     return label == other.label && variant == other.variant && disabled == other.disabled &&
@@ -40,14 +40,14 @@ struct Alert : ViewModifiers<Alert> {
   // ── Content ──────────────────────────────────────────────────────────────
 
   /// Alert headline.
-  std::string title;
+  std::string title{};
   /// Optional; empty = no message row.
-  std::string message;
+  std::string message{};
 
   /// Up to three buttons, rendered left-to-right (last = rightmost = primary).
   /// When empty, a single "OK" Secondary button is added automatically.
   /// `useAlert` keeps only the first three if more are supplied.
-  std::vector<AlertButton> buttons;
+  std::vector<AlertButton> buttons{};
 
   // ── Appearance ───────────────────────────────────────────────────────────
 

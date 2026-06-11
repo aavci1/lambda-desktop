@@ -20,12 +20,12 @@ struct AttributedRun {
     std::uint32_t end = 0;   // byte offset, exclusive
     Font font {};
     Color color = Colors::black;
-    std::optional<Color> backgroundColor;
+    std::optional<Color> backgroundColor{};
 };
 
 struct AttributedString {
-    std::string utf8;
-    std::vector<AttributedRun> runs; // sorted by start, non-overlapping
+    std::string utf8{};
+    std::vector<AttributedRun> runs{}; // sorted by start, non-overlapping
 
     static AttributedString plain(std::string_view text, Font const &font, Color const &color);
 };

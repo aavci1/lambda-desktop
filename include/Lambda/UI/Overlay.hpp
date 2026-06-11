@@ -44,20 +44,20 @@ struct OverlayConfig {
     Start,
   };
 
-  std::optional<Rect> anchor;
-  std::optional<ComponentKey> anchorTrackLeafKey;
-  std::optional<ComponentKey> anchorTrackComponentKey;
-  std::optional<float> anchorMaxHeight;
+  std::optional<Rect> anchor{};
+  std::optional<ComponentKey> anchorTrackLeafKey{};
+  std::optional<ComponentKey> anchorTrackComponentKey{};
+  std::optional<float> anchorMaxHeight{};
   EdgeInsets anchorOutsets{};
   Placement placement = Placement::Below;
   /// When set, placement is re-resolved from this preference when the anchor moves or the
   /// overlay is rebuilt. The current resolved placement remains in `placement`.
-  std::optional<Placement> autoFlipPreferredPlacement;
+  std::optional<Placement> autoFlipPreferredPlacement{};
   /// Gap included in auto-flip fit checks; usually matches the directional `offset`.
   float autoFlipGap = 0.f;
   CrossAlignment crossAlignment = CrossAlignment::Center;
   Vec2 offset{};
-  std::optional<Size> maxSize;
+  std::optional<Size> maxSize{};
   bool modal = false;
   Color backdropColor = Colors::transparent;
   /// Transparent backdrop blur radius in logical pixels. `kFloatFromTheme` resolves to the
@@ -65,8 +65,8 @@ struct OverlayConfig {
   float backdropBlurRadius = kFloatFromTheme;
   bool dismissOnOutsideTap = true;
   bool dismissOnEscape = true;
-  std::function<void()> onDismiss;
-  std::string debugName;
+  std::function<void()> onDismiss{};
+  std::string debugName{};
 };
 
 LAMBDA_DEFINE_ENVIRONMENT_KEY(ResolvedOverlayPlacementKey,
@@ -77,11 +77,11 @@ std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, b
 
 struct OverlayEntry {
   OverlayId id{};
-  std::optional<Element> content;
-  OverlayConfig config;
-  Reactive::Signal<std::optional<OverlayConfig::Placement>> resolvedPlacement;
-  Reactive::Scope scope;
-  scenegraph::SceneGraph sceneGraph;
+  std::optional<Element> content{};
+  OverlayConfig config{};
+  Reactive::Signal<std::optional<OverlayConfig::Placement>> resolvedPlacement{};
+  Reactive::Scope scope{};
+  scenegraph::SceneGraph sceneGraph{};
   Rect resolvedFrame{};
 };
 
