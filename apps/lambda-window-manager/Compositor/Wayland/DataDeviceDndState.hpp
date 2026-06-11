@@ -76,4 +76,20 @@ inline bool dataDeviceCanUseDragIconSurface(bool iconProvided, bool surfaceHasNo
   return !iconProvided || surfaceHasNoRole;
 }
 
+struct DndClearPlan {
+  bool destroyOffer = true;
+  bool sendLeave = true;
+};
+
+inline DndClearPlan dndClearPlanAfterDrop(bool completedDrop) {
+  return {
+      .destroyOffer = !completedDrop,
+      .sendLeave = !completedDrop,
+  };
+}
+
+inline bool dndSourceShouldReceiveDropPerformed(bool completedDrop) {
+  return completedDrop;
+}
+
 } // namespace lambda::compositor

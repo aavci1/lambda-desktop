@@ -97,3 +97,17 @@ TEST_CASE("data-device drag icon validation requires an unassigned surface role"
   CHECK(dataDeviceCanUseDragIconSurface(true, true));
   CHECK_FALSE(dataDeviceCanUseDragIconSurface(true, false));
 }
+
+TEST_CASE("data-device drop cleanup preserves offers after completed drops") {
+  using namespace lambda::compositor;
+
+  DndClearPlan const cancelled = dndClearPlanAfterDrop(false);
+  CHECK(cancelled.destroyOffer);
+  CHECK(cancelled.sendLeave);
+  CHECK_FALSE(dndSourceShouldReceiveDropPerformed(false));
+
+  DndClearPlan const completed = dndClearPlanAfterDrop(true);
+  CHECK_FALSE(completed.destroyOffer);
+  CHECK_FALSE(completed.sendLeave);
+  CHECK(dndSourceShouldReceiveDropPerformed(true));
+}

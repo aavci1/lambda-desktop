@@ -1,5 +1,6 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 
+#include "Compositor/Wayland/DataDeviceDndState.hpp"
 #include "Compositor/Wayland/PointerConstraintState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
@@ -377,13 +378,16 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
         wl_data_device_send_drop(device->resource);
         completedDrop = true;
       }
-      if (dndSource_->resource && wl_resource_get_version(dndSource_->resource) >= WL_DATA_SOURCE_DND_DROP_PERFORMED_SINCE_VERSION) {
+      if (dndSourceShouldReceiveDropPerformed(completedDrop) &&
+          dndSource_->resource &&
+          wl_resource_get_version(dndSource_->resource) >= WL_DATA_SOURCE_DND_DROP_PERFORMED_SINCE_VERSION) {
         wl_data_source_send_dnd_drop_performed(dndSource_->resource);
       }
     } else if (dndSource_->resource) {
       wl_data_source_send_cancelled(dndSource_->resource);
     }
-    clearDnd(this, !completedDrop);
+    DndClearPlan const clearPlan = dndClearPlanAfterDrop(completedDrop);
+    clearDnd(this, clearPlan.destroyOffer, clearPlan.sendLeave);
     return;
   }
   if (handlePopupGrabPointerButton(this, button, pressed, timeMs)) return;

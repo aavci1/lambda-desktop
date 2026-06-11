@@ -420,8 +420,8 @@ WaylandServer::Impl::DataDevice* dataDeviceForClientImpl(WaylandServer::Impl* se
   return nullptr;
 }
 
-void clearDndImpl(WaylandServer::Impl* server, bool destroyOffer = true) {
-  if (server->dndTarget_) {
+void clearDndImpl(WaylandServer::Impl* server, bool destroyOffer = true, bool sendLeave = true) {
+  if (sendLeave && server->dndTarget_) {
     if (auto* device = dataDeviceForClientImpl(server, wl_resource_get_client(server->dndTarget_->resource))) {
       wl_data_device_send_leave(device->resource);
     }
@@ -652,8 +652,8 @@ WaylandServer::Impl::DataDevice* dataDeviceForClient(WaylandServer::Impl* server
   return dataDeviceForClientImpl(server, client);
 }
 
-void clearDnd(WaylandServer::Impl* server, bool destroyOffer) {
-  clearDndImpl(server, destroyOffer);
+void clearDnd(WaylandServer::Impl* server, bool destroyOffer, bool sendLeave) {
+  clearDndImpl(server, destroyOffer, sendLeave);
 }
 
 void updateDndTarget(WaylandServer::Impl* server, WaylandServer::Impl::Surface* target, std::uint32_t timeMs) {
