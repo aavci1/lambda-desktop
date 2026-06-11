@@ -26,8 +26,10 @@
 
   VkFence createPresentFence(bool signaled, char const* label) {
     VkFence fence = VK_NULL_HANDLE;
-    VkFenceCreateInfo info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    info.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0u;
+    auto info = vkStructure<VkFenceCreateInfo>(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
+    if (signaled) {
+      info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    }
     vkCheck(vkCreateFence(device_, &info, nullptr, &fence), label);
     return fence;
   }
@@ -204,7 +206,7 @@
     std::uint32_t imageCount = std::clamp(preferredImageCount,
                                           caps.minImageCount,
                                           caps.maxImageCount ? caps.maxImageCount : preferredImageCount);
-    VkSwapchainCreateInfoKHR info{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
+    auto info = vkStructure<VkSwapchainCreateInfoKHR>(VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR);
     info.surface = surface_;
     info.minImageCount = imageCount;
     info.imageFormat = surfaceFormat_.format;
@@ -232,13 +234,13 @@
       imagePresentFences_.resize(count, VK_NULL_HANDLE);
     }
     swapchainViews_.resize(count);
-    VkSemaphoreCreateInfo sem{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    auto sem = vkStructure<VkSemaphoreCreateInfo>(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
     for (std::size_t i = 0; i < swapchainImages_.size(); ++i) {
       vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &imageRenderFinished_[i]), "vkCreateSemaphore");
       if (!imagePresentFences_.empty()) {
         imagePresentFences_[i] = createPresentFence(true, "vkCreateFence(presentFence)");
       }
-      VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+      auto view = vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
       view.image = swapchainImages_[i];
       view.viewType = VK_IMAGE_VIEW_TYPE_2D;
       view.format = surfaceFormat_.format;

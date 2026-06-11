@@ -1,15 +1,15 @@
   void createCommandObjects() {
-    VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    auto pool = vkStructure<VkCommandPoolCreateInfo>(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO);
     pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     pool.queueFamilyIndex = queueFamily_;
     vkCheck(vkCreateCommandPool(device_, &pool, nullptr, &commandPool_), "vkCreateCommandPool");
-    VkCommandBufferAllocateInfo alloc{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    auto alloc = vkStructure<VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
     alloc.commandPool = commandPool_;
     alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     alloc.commandBufferCount = static_cast<std::uint32_t>(commandBuffers_.size());
     vkCheck(vkAllocateCommandBuffers(device_, &alloc, commandBuffers_.data()), "vkAllocateCommandBuffers");
-    VkSemaphoreCreateInfo sem{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    auto sem = vkStructure<VkSemaphoreCreateInfo>(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
+    auto fence = vkStructure<VkFenceCreateInfo>(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     for (std::size_t i = 0; i < kMaxFramesInFlight; ++i) {
       vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &imageAvailable_[i]), "vkCreateSemaphore");
@@ -22,7 +22,7 @@
       return;
     }
     VkFence oldFence = frameFences_[resetFrameFenceIndex_];
-    VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    auto fence = vkStructure<VkFenceCreateInfo>(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     VkFence newFence = VK_NULL_HANDLE;
     if (vkCreateFence(device_, &fence, nullptr, &newFence) == VK_SUCCESS) {
@@ -78,7 +78,7 @@
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kDescriptorPoolStorageBufferSets},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kDescriptorPoolImageSamplerSets},
     };
-    VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    auto pool = vkStructure<VkDescriptorPoolCreateInfo>(VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO);
     pool.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
     pool.maxSets = kDescriptorPoolStorageBufferSets + kDescriptorPoolImageSamplerSets;
     pool.poolSizeCount = 2;
@@ -91,7 +91,7 @@
     b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     b.descriptorCount = 1;
     b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    VkDescriptorSetLayoutCreateInfo layout{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    auto layout = vkStructure<VkDescriptorSetLayoutCreateInfo>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO);
     layout.bindingCount = 1;
     layout.pBindings = &b;
     vkCheck(vkCreateDescriptorSetLayout(device_, &layout, nullptr, &res.textureDescriptorLayout),
@@ -104,7 +104,7 @@
     b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     b.descriptorCount = 1;
     b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    VkDescriptorSetLayoutCreateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    auto info = vkStructure<VkDescriptorSetLayoutCreateInfo>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO);
     info.bindingCount = 1;
     info.pBindings = &b;
     VkDescriptorSetLayout out = VK_NULL_HANDLE;
@@ -114,7 +114,7 @@
 
   void createSampler() {
     auto &res = resources();
-    VkSamplerCreateInfo s{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    auto s = vkStructure<VkSamplerCreateInfo>(VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO);
     s.magFilter = VK_FILTER_LINEAR;
     s.minFilter = VK_FILTER_LINEAR;
     s.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
@@ -214,7 +214,7 @@
     push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     push.offset = 0;
     push.size = sizeof(VulkanDrawPushConstants);
-    VkPipelineLayoutCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    auto info = vkStructure<VkPipelineLayoutCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
     info.setLayoutCount = static_cast<std::uint32_t>(setLayouts.size());
     info.pSetLayouts = setLayouts.data();
     if (viewportPush) {
@@ -230,8 +230,9 @@
                             unsigned char const *fragBytes, unsigned int fragLen, VertexInput input) {
     VkShaderModule vert = shaderModule(device_, vertBytes, vertLen);
     VkShaderModule frag = shaderModule(device_, fragBytes, fragLen);
-    VkPipelineShaderStageCreateInfo stages[2]{{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
-                                              {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}};
+    VkPipelineShaderStageCreateInfo stages[2]{
+        vkStructure<VkPipelineShaderStageCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO),
+        vkStructure<VkPipelineShaderStageCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO)};
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
     stages[0].module = vert;
     stages[0].pName = "main";
@@ -239,22 +240,26 @@
     stages[1].module = frag;
     stages[1].pName = "main";
 
-    VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    auto vi =
+        vkStructure<VkPipelineVertexInputStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO);
     vi.vertexBindingDescriptionCount = input.bindingCount;
     vi.pVertexBindingDescriptions = input.bindings;
     vi.vertexAttributeDescriptionCount = input.attrCount;
     vi.pVertexAttributeDescriptions = input.attrs;
-    VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    auto ia = vkStructure<VkPipelineInputAssemblyStateCreateInfo>(
+        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO);
     ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    VkPipelineViewportStateCreateInfo vp{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+    auto vp = vkStructure<VkPipelineViewportStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO);
     vp.viewportCount = 1;
     vp.scissorCount = 1;
-    VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    auto rs = vkStructure<VkPipelineRasterizationStateCreateInfo>(
+        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO);
     rs.polygonMode = VK_POLYGON_MODE_FILL;
     rs.cullMode = VK_CULL_MODE_NONE;
     rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rs.lineWidth = 1.f;
-    VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    auto ms =
+        vkStructure<VkPipelineMultisampleStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO);
     ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
     VkPipelineColorBlendAttachmentState blend{};
     blend.blendEnable = VK_TRUE;
@@ -266,15 +271,16 @@
     blend.alphaBlendOp = VK_BLEND_OP_ADD;
     blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
                            VK_COLOR_COMPONENT_A_BIT;
-    VkPipelineColorBlendStateCreateInfo cb{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+    auto cb =
+        vkStructure<VkPipelineColorBlendStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO);
     cb.attachmentCount = 1;
     cb.pAttachments = &blend;
     VkDynamicState states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-    VkPipelineDynamicStateCreateInfo dyn{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+    auto dyn = vkStructure<VkPipelineDynamicStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO);
     dyn.dynamicStateCount = 2;
     dyn.pDynamicStates = states;
-    VkGraphicsPipelineCreateInfo info{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-    VkPipelineRenderingCreateInfo rendering{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+    auto info = vkStructure<VkGraphicsPipelineCreateInfo>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO);
+    auto rendering = vkStructure<VkPipelineRenderingCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO);
     VkFormat const colorFormat = resources().renderFormat;
     rendering.colorAttachmentCount = 1;
     rendering.pColorAttachmentFormats = &colorFormat;
@@ -296,4 +302,3 @@
     vkDestroyShaderModule(device_, frag, nullptr);
     return out;
   }
-

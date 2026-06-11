@@ -224,7 +224,8 @@ std::shared_ptr<Image> Image::fromDmabuf(DmabufImageSpec const& spec) {
     acquiredCoreReference = true;
     device = core->device;
 
-    VkExternalMemoryImageCreateInfo externalInfo{VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO};
+    auto externalInfo =
+        vkStructure<VkExternalMemoryImageCreateInfo>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
     externalInfo.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
 
     VkSubresourceLayout planeLayout{};
@@ -234,14 +235,14 @@ std::shared_ptr<Image> Image::fromDmabuf(DmabufImageSpec const& spec) {
     planeLayout.arrayPitch = planeLayout.size;
     planeLayout.depthPitch = planeLayout.size;
 
-    VkImageDrmFormatModifierExplicitCreateInfoEXT modifierInfo{
-        VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT};
+    auto modifierInfo = vkStructure<VkImageDrmFormatModifierExplicitCreateInfoEXT>(
+        VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
     modifierInfo.pNext = &externalInfo;
     modifierInfo.drmFormatModifier = plane.modifier;
     modifierInfo.drmFormatModifierPlaneCount = 1;
     modifierInfo.pPlaneLayouts = &planeLayout;
 
-    VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    auto imageInfo = vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
     imageInfo.pNext = &modifierInfo;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.format = format;
@@ -260,7 +261,7 @@ std::shared_ptr<Image> Image::fromDmabuf(DmabufImageSpec const& spec) {
     if (!getMemoryFdProperties) {
       throw std::runtime_error("vkGetMemoryFdPropertiesKHR is unavailable");
     }
-    VkMemoryFdPropertiesKHR fdProps{VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR};
+    auto fdProps = vkStructure<VkMemoryFdPropertiesKHR>(VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR);
     vkCheck(getMemoryFdProperties(device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd, &fdProps),
             "vkGetMemoryFdPropertiesKHR");
 
@@ -268,14 +269,15 @@ std::shared_ptr<Image> Image::fromDmabuf(DmabufImageSpec const& spec) {
     vkGetImageMemoryRequirements(device, image, &requirements);
     std::uint32_t const memoryTypeBits = requirements.memoryTypeBits & fdProps.memoryTypeBits;
 
-    VkMemoryDedicatedAllocateInfo dedicated{VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO};
+    auto dedicated =
+        vkStructure<VkMemoryDedicatedAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO);
     dedicated.image = image;
-    VkImportMemoryFdInfoKHR importInfo{VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR};
+    auto importInfo = vkStructure<VkImportMemoryFdInfoKHR>(VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR);
     importInfo.pNext = &dedicated;
     importInfo.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
     importInfo.fd = fd;
 
-    VkMemoryAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    auto allocateInfo = vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
     allocateInfo.pNext = &importInfo;
     allocateInfo.allocationSize = requirements.size;
     allocateInfo.memoryTypeIndex = findMemoryType(core->physical, memoryTypeBits, 0);
@@ -284,7 +286,7 @@ std::shared_ptr<Image> Image::fromDmabuf(DmabufImageSpec const& spec) {
 
     vkCheck(vkBindImageMemory(device, image, memory, 0), "vkBindImageMemory dmabuf");
 
-    VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    auto viewInfo = vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
     viewInfo.image = image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;

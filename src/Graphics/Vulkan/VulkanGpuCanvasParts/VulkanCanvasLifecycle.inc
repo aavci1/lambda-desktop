@@ -1,3 +1,5 @@
+namespace {
+
 class VulkanCanvas final : public Canvas {
 public:
   VulkanCanvas(VkSurfaceKHR surface,
@@ -489,7 +491,7 @@ public:
 
     start = phaseStart();
     vkResetCommandBuffer(commandBuffer, 0);
-    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    auto begin = vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
     vkCheck(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer");
     VkClearValue clear{};
     clear.color.float32[0] = clearColor_.r;
@@ -528,15 +530,15 @@ public:
     vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
     double const recordMs = phaseMs(start);
 
-    VkSemaphoreSubmitInfo waitSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+    auto waitSemaphore = vkStructure<VkSemaphoreSubmitInfo>(VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO);
     waitSemaphore.semaphore = imageAvailable;
     waitSemaphore.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkCommandBufferSubmitInfo commandBufferInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+    auto commandBufferInfo = vkStructure<VkCommandBufferSubmitInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO);
     commandBufferInfo.commandBuffer = commandBuffer;
-    VkSemaphoreSubmitInfo signalSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+    auto signalSemaphore = vkStructure<VkSemaphoreSubmitInfo>(VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO);
     signalSemaphore.semaphore = renderFinished;
     signalSemaphore.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
-    VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    auto submit = vkStructure<VkSubmitInfo2>(VK_STRUCTURE_TYPE_SUBMIT_INFO_2);
     submit.waitSemaphoreInfoCount = 1;
     submit.pWaitSemaphoreInfos = &waitSemaphore;
     submit.commandBufferInfoCount = 1;
@@ -561,14 +563,15 @@ public:
     pollReadbacks(false);
     screenshotMs += phaseMs(start);
 
-    VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+    auto presentInfo = vkStructure<VkPresentInfoKHR>(VK_STRUCTURE_TYPE_PRESENT_INFO_KHR);
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = &renderFinished;
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &swapchain_;
     presentInfo.pImageIndices = &imageIndex;
     VkFence presentFence = VK_NULL_HANDLE;
-    VkSwapchainPresentFenceInfoKHR presentFenceInfo{VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_KHR};
+    auto presentFenceInfo =
+        vkStructure<VkSwapchainPresentFenceInfoKHR>(VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_KHR);
     double presentFenceStatusMs = 0.0;
     double presentFenceResetMs = 0.0;
     bool const usePresentFence = shared_ && shared_->swapchainMaintenance1 && !presentFenceRuntimeDisabled_ &&
@@ -595,7 +598,7 @@ public:
       presentFenceInfo.pFences = &presentFence;
     }
     VkPresentTimeGOOGLE presentTime{.presentID = nextPresentId_, .desiredPresentTime = 0};
-    VkPresentTimesInfoGOOGLE presentTimes{VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE};
+    auto presentTimes = vkStructure<VkPresentTimesInfoGOOGLE>(VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE);
     if (getPastPresentationTiming_) {
       presentTimes.swapchainCount = 1;
       presentTimes.pTimes = &presentTime;
@@ -783,7 +786,7 @@ public:
         pollReadbacks(false);
         start = phaseStart();
         vkResetCommandBuffer(commandBuffer, 0);
-        VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        auto begin = vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
         begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         vkCheck(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer");
         beginMs = phaseMs(start);
@@ -807,15 +810,15 @@ public:
       vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
       endMs = phaseMs(start);
 
-      VkSemaphoreSubmitInfo waitSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+      auto waitSemaphore = vkStructure<VkSemaphoreSubmitInfo>(VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO);
       waitSemaphore.semaphore = targetSpec_.waitSemaphore;
       waitSemaphore.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-      VkCommandBufferSubmitInfo commandBufferInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+      auto commandBufferInfo = vkStructure<VkCommandBufferSubmitInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO);
       commandBufferInfo.commandBuffer = commandBuffer;
-      VkSemaphoreSubmitInfo signalSemaphore{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+      auto signalSemaphore = vkStructure<VkSemaphoreSubmitInfo>(VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO);
       signalSemaphore.semaphore = targetSpec_.signalSemaphore;
       signalSemaphore.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
-      VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+      auto submit = vkStructure<VkSubmitInfo2>(VK_STRUCTURE_TYPE_SUBMIT_INFO_2);
       submit.waitSemaphoreInfoCount = targetSpec_.waitSemaphore ? 1u : 0u;
       submit.pWaitSemaphoreInfos = targetSpec_.waitSemaphore ? &waitSemaphore : nullptr;
       submit.commandBufferInfoCount = 1;

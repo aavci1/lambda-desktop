@@ -103,13 +103,15 @@
   bool targetMode_ = false;
 };
 
+} // namespace
+
 namespace {
 
 void evictImageTexturesFor(VulkanImage const *image) {
   if (!image)
     return;
   std::lock_guard lock(gCanvasRegistryMutex);
-  for (::lambda::VulkanCanvas *canvas : gCanvases) {
+  for (VulkanCanvas* canvas : gCanvases) {
     if (canvas)
       canvas->evictImageTexture(image);
   }
@@ -120,7 +122,7 @@ bool deferOwnedVulkanImageDestroy(PendingOwnedVulkanImageDestroy destroy) {
     return false;
   }
   std::lock_guard lock(gCanvasRegistryMutex);
-  for (::lambda::VulkanCanvas* canvas : gCanvases) {
+  for (VulkanCanvas* canvas : gCanvases) {
     if (canvas && canvas->deferOwnedImageDestroy(destroy)) {
       return true;
     }
@@ -132,7 +134,7 @@ void updateImageTexturesFor(VulkanImage const* image) {
   if (!image)
     return;
   std::lock_guard lock(gCanvasRegistryMutex);
-  for (::lambda::VulkanCanvas* canvas : gCanvases) {
+  for (VulkanCanvas* canvas : gCanvases) {
     if (canvas)
       canvas->updateImageTexture(image);
   }
@@ -148,7 +150,7 @@ void updateImageTextureRegionFor(VulkanImage const* image,
   if (!image || !pixels)
     return;
   std::lock_guard lock(gCanvasRegistryMutex);
-  for (::lambda::VulkanCanvas* canvas : gCanvases) {
+  for (VulkanCanvas* canvas : gCanvases) {
     if (canvas)
       canvas->updateImageTextureRegion(image, x, y, width, height, pixels, sourceBytesPerRow);
   }
@@ -158,7 +160,7 @@ void markImageTextureContentsChangedFor(VulkanImage const* image) {
   if (!image)
     return;
   std::lock_guard lock(gCanvasRegistryMutex);
-  for (::lambda::VulkanCanvas* canvas : gCanvases) {
+  for (VulkanCanvas* canvas : gCanvases) {
     if (canvas)
       canvas->markImageTextureContentsChanged(image);
   }

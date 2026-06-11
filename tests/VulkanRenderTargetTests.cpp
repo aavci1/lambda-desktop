@@ -17,6 +17,7 @@
 #include "Compositor/Surface/CommittedSurfacePainter.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
+#include "Graphics/Vulkan/VulkanCheck.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
 
 #include <vulkan/vulkan.h>
@@ -45,12 +46,6 @@ static std::filesystem::path imageFixturePath() {
   return std::filesystem::weakly_canonical(path);
 }
 
-void vkCheck(VkResult result, char const* label) {
-  if (result != VK_SUCCESS) {
-    throw std::runtime_error(label);
-  }
-}
-
 int preparedGeometryOverride() {
   char const* value = std::getenv("LAMBDA_VULKAN_PREPARED_GEOMETRY");
   if (!value || !*value) {
@@ -74,8 +69,9 @@ bool preparedGeometryExpected(VkPhysicalDevice physical) {
   if (overrideValue > 0) {
     return true;
   }
-  VkPhysicalDeviceDriverProperties driverProps{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
-  VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+  auto driverProps =
+      lambda::vkStructure<VkPhysicalDeviceDriverProperties>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES);
+  auto props2 = lambda::vkStructure<VkPhysicalDeviceProperties2>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2);
   props2.pNext = &driverProps;
   vkGetPhysicalDeviceProperties2(physical, &props2);
   return driverProps.driverID != VK_DRIVER_ID_MESA_RADV;
@@ -119,7 +115,7 @@ struct VulkanImageTarget {
   VulkanImageTarget(VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
                     std::uint32_t targetWidth, std::uint32_t targetHeight)
       : device(logicalDevice), physical(physicalDevice), width(targetWidth), height(targetHeight) {
-    VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    auto imageInfo = lambda::vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.format = format;
     imageInfo.extent = {width, height, 1};
@@ -136,14 +132,14 @@ struct VulkanImageTarget {
     VkMemoryRequirements requirements{};
     vkGetImageMemoryRequirements(device, image, &requirements);
 
-    VkMemoryAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    auto allocateInfo = lambda::vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
     allocateInfo.allocationSize = requirements.size;
     allocateInfo.memoryTypeIndex =
         findMemoryType(physical, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     vkCheck(vkAllocateMemory(device, &allocateInfo, nullptr, &memory), "vkAllocateMemory");
     vkCheck(vkBindImageMemory(device, image, memory, 0), "vkBindImageMemory");
 
-    VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    auto viewInfo = lambda::vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
     viewInfo.image = image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;
@@ -175,7 +171,7 @@ struct VulkanReadbackBuffer {
 
   VulkanReadbackBuffer(VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkDeviceSize byteSize)
       : device(logicalDevice), physical(physicalDevice), size(byteSize) {
-    VkBufferCreateInfo bufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    auto bufferInfo = lambda::vkStructure<VkBufferCreateInfo>(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
     bufferInfo.size = size;
     bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -184,7 +180,7 @@ struct VulkanReadbackBuffer {
     VkMemoryRequirements requirements{};
     vkGetBufferMemoryRequirements(device, buffer, &requirements);
 
-    VkMemoryAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    auto allocateInfo = lambda::vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
     allocateInfo.allocationSize = requirements.size;
     allocateInfo.memoryTypeIndex = findMemoryType(
         physical, requirements.memoryTypeBits,
@@ -212,19 +208,20 @@ struct VulkanCopyContext {
 
   VulkanCopyContext(VkDevice logicalDevice, VkQueue renderQueue, std::uint32_t queueFamily)
       : device(logicalDevice), queue(renderQueue) {
-    VkCommandPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    auto poolInfo = lambda::vkStructure<VkCommandPoolCreateInfo>(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO);
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     poolInfo.queueFamilyIndex = queueFamily;
     vkCheck(vkCreateCommandPool(device, &poolInfo, nullptr, &pool), "vkCreateCommandPool");
 
-    VkCommandBufferAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    auto allocateInfo =
+        lambda::vkStructure<VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
     allocateInfo.commandPool = pool;
     allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocateInfo.commandBufferCount = 1;
     vkCheck(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer),
             "vkAllocateCommandBuffers");
 
-    VkFenceCreateInfo fenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    auto fenceInfo = lambda::vkStructure<VkFenceCreateInfo>(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
     vkCheck(vkCreateFence(device, &fenceInfo, nullptr, &fence), "vkCreateFence");
   }
 
@@ -240,12 +237,12 @@ struct VulkanCopyContext {
   void copyImageToBuffer(VkImage image, VkBuffer buffer, std::uint32_t width, std::uint32_t height,
                          VkImageLayout* currentLayout = nullptr) {
     vkCheck(vkResetCommandBuffer(commandBuffer, 0), "vkResetCommandBuffer");
-    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    auto beginInfo = lambda::vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer");
 
     if (currentLayout && *currentLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-      VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+      auto barrier = lambda::vkStructure<VkImageMemoryBarrier>(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER);
       barrier.oldLayout = *currentLayout;
       barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
       barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -272,7 +269,7 @@ struct VulkanCopyContext {
                            buffer, 1, &copy);
     vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
-    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    auto submit = lambda::vkStructure<VkSubmitInfo>(VK_STRUCTURE_TYPE_SUBMIT_INFO);
     submit.commandBufferCount = 1;
     submit.pCommandBuffers = &commandBuffer;
     vkCheck(vkResetFences(device, 1, &fence), "vkResetFences");

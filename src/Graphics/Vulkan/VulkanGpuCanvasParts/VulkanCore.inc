@@ -65,9 +65,9 @@
 
 namespace lambda {
 
-class VulkanCanvas;
-
 namespace {
+
+class VulkanCanvas;
 
 constexpr std::size_t kMaxFramesInFlight = 3;
 constexpr int kBackdropBlurIterations = 2;
@@ -580,7 +580,7 @@ std::filesystem::path gPipelineCacheDir;
 void destroySharedVulkanResources(SharedVulkanCore &core);
 
 std::mutex gCanvasRegistryMutex;
-std::vector<::lambda::VulkanCanvas *> gCanvases;
+std::vector<VulkanCanvas*> gCanvases;
 
 bool containsExtension(std::vector<std::string> const &extensions, char const *name) {
   if (!name || !*name) {
@@ -633,7 +633,7 @@ VkInstance ensureSharedVulkanInstanceImpl() {
   std::lock_guard lock(gVulkanCoreMutex);
   if (gVulkanCore.instance)
     return gVulkanCore.instance;
-  VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
+  auto app = vkStructure<VkApplicationInfo>(VK_STRUCTURE_TYPE_APPLICATION_INFO);
   app.pApplicationName = "Lambda";
   app.apiVersion = VK_API_VERSION_1_3;
   std::vector<char const *> instanceExtensions = extensionNamePointers(gRequiredInstanceExtensions);
@@ -649,7 +649,7 @@ VkInstance ensureSharedVulkanInstanceImpl() {
       }
     }
   }
-  VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+  auto info = vkStructure<VkInstanceCreateInfo>(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO);
   info.pApplicationInfo = &app;
   info.enabledExtensionCount = static_cast<std::uint32_t>(instanceExtensions.size());
   info.ppEnabledExtensionNames = instanceExtensions.empty() ? nullptr : instanceExtensions.data();
@@ -677,8 +677,8 @@ std::filesystem::path pipelineCachePath(VkPhysicalDevice physical) {
         vkGetInstanceProcAddr(gVulkanCore.instance, "vkGetPhysicalDeviceProperties2KHR"));
   }
   if (getProps2) {
-    VkPhysicalDeviceIDProperties idProps{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
-    VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    auto idProps = vkStructure<VkPhysicalDeviceIDProperties>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES);
+    auto props2 = vkStructure<VkPhysicalDeviceProperties2>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2);
     props2.pNext = &idProps;
     getProps2(physical, &props2);
     identity = hexBytes(idProps.deviceUUID, VK_UUID_SIZE);
@@ -701,7 +701,7 @@ void createPipelineCache(SharedVulkanCore &core) {
   if (std::ifstream in(res.pipelineCacheFile, std::ios::binary); in) {
     initialData.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
   }
-  VkPipelineCacheCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+  auto info = vkStructure<VkPipelineCacheCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO);
   info.initialDataSize = initialData.size();
   info.pInitialData = initialData.empty() ? nullptr : initialData.data();
   VkResult const result = vkCreatePipelineCache(core.device, &info, nullptr, &res.pipelineCache);
@@ -757,8 +757,9 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
                                   vulkanVersionString(props.apiVersion));
         continue;
       }
-      VkPhysicalDeviceVulkan13Features vk13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
-      VkPhysicalDeviceFeatures2 features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+      auto vk13 = vkStructure<VkPhysicalDeviceVulkan13Features>(
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES);
+      auto features = vkStructure<VkPhysicalDeviceFeatures2>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2);
       features.pNext = &vk13;
       vkGetPhysicalDeviceFeatures2(d, &features);
       if (!vk13.dynamicRendering || !vk13.synchronization2) {
@@ -792,12 +793,13 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
           swapchainMaintenanceExtension = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
         }
         if (swapchainMaintenanceExtension) {
-          VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchainMaintenance{
-              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR};
-          VkPhysicalDeviceVulkan13Features maintenanceVk13{
-              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+          auto swapchainMaintenance = vkStructure<VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR>(
+              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR);
+          auto maintenanceVk13 = vkStructure<VkPhysicalDeviceVulkan13Features>(
+              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES);
           maintenanceVk13.pNext = &swapchainMaintenance;
-          VkPhysicalDeviceFeatures2 maintenanceFeatures{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+          auto maintenanceFeatures =
+              vkStructure<VkPhysicalDeviceFeatures2>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2);
           maintenanceFeatures.pNext = &maintenanceVk13;
           vkGetPhysicalDeviceFeatures2(d, &maintenanceFeatures);
           swapchainMaintenanceFeature = swapchainMaintenance.swapchainMaintenance1 == VK_TRUE;
@@ -842,28 +844,30 @@ SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface) {
           gVulkanCore.physical = d;
           gVulkanCore.queueFamily = i;
           float priority = 1.f;
-          VkDeviceQueueCreateInfo q{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
+          auto q = vkStructure<VkDeviceQueueCreateInfo>(VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO);
           q.queueFamilyIndex = i;
           q.queueCount = 1;
           q.pQueuePriorities = &priority;
-          VkPhysicalDeviceVulkan13Features enabled13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+          auto enabled13 = vkStructure<VkPhysicalDeviceVulkan13Features>(
+              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES);
           enabled13.synchronization2 = VK_TRUE;
           enabled13.dynamicRendering = VK_TRUE;
-          VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR enabledSwapchainMaintenance{
-              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR};
+          auto enabledSwapchainMaintenance = vkStructure<VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR>(
+              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR);
           if (swapchainMaintenanceFeature) {
             enabledSwapchainMaintenance.swapchainMaintenance1 = VK_TRUE;
             enabled13.pNext = &enabledSwapchainMaintenance;
           }
           std::vector<char const *> deviceExtensionNames = extensionNamePointers(deviceExtensions);
-          VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+          auto info = vkStructure<VkDeviceCreateInfo>(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO);
           info.pNext = &enabled13;
           info.queueCreateInfoCount = 1;
           info.pQueueCreateInfos = &q;
           info.enabledExtensionCount = static_cast<std::uint32_t>(deviceExtensionNames.size());
           info.ppEnabledExtensionNames = deviceExtensionNames.empty() ? nullptr : deviceExtensionNames.data();
-          VkPhysicalDeviceDriverProperties driverProps{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
-          VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+          auto driverProps =
+              vkStructure<VkPhysicalDeviceDriverProperties>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES);
+          auto props2 = vkStructure<VkPhysicalDeviceProperties2>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2);
           props2.pNext = &driverProps;
           vkGetPhysicalDeviceProperties2(gVulkanCore.physical, &props2);
           gVulkanCore.driverId = driverProps.driverID;
@@ -1009,7 +1013,7 @@ CornerRadius clampRadii(CornerRadius r, float w, float h) {
 }
 
 VkShaderModule shaderModule(VkDevice device, unsigned char const *bytes, unsigned int len) {
-  VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+  auto info = vkStructure<VkShaderModuleCreateInfo>(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO);
   info.codeSize = len;
   info.pCode = reinterpret_cast<std::uint32_t const *>(bytes);
   VkShaderModule module = VK_NULL_HANDLE;

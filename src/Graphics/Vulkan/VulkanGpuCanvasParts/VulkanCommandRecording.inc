@@ -236,7 +236,7 @@
       ensureTextureDescriptor(backdropSceneTexture_);
       return;
     }
-    VkImageBlit2 blit{VK_STRUCTURE_TYPE_IMAGE_BLIT_2};
+    auto blit = vkStructure<VkImageBlit2>(VK_STRUCTURE_TYPE_IMAGE_BLIT_2);
     blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     blit.srcSubresource.layerCount = 1;
     blit.srcOffsets[0] = {static_cast<std::int32_t>(srcRect.x), static_cast<std::int32_t>(srcRect.y), 0};
@@ -249,7 +249,7 @@
     blit.dstOffsets[1] = {static_cast<std::int32_t>(dstRect.x + dstRect.width),
                           static_cast<std::int32_t>(dstRect.y + dstRect.height),
                           1};
-    VkBlitImageInfo2 blitInfo{VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2};
+    auto blitInfo = vkStructure<VkBlitImageInfo2>(VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2);
     blitInfo.srcImage = targetImage;
     blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     blitInfo.dstImage = backdropSceneTexture_.image;
@@ -462,13 +462,13 @@
                            VkClearValue const &clear,
                            VkAttachmentLoadOp loadOp,
                            PixelRect renderArea) {
-    VkRenderingAttachmentInfo color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+    auto color = vkStructure<VkRenderingAttachmentInfo>(VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO);
     color.imageView = view;
     color.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
     color.loadOp = loadOp;
     color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     color.clearValue = clear;
-    VkRenderingInfo rendering{VK_STRUCTURE_TYPE_RENDERING_INFO};
+    auto rendering = vkStructure<VkRenderingInfo>(VK_STRUCTURE_TYPE_RENDERING_INFO);
     std::uint32_t const x0 = std::min(renderArea.x, extent.width);
     std::uint32_t const y0 = std::min(renderArea.y, extent.height);
     std::uint32_t const x1 = std::min(renderArea.x + renderArea.width, extent.width);

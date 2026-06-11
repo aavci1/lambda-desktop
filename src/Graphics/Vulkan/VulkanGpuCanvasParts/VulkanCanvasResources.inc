@@ -153,7 +153,7 @@
       return;
     destroyBuffer(buffer);
     buffer.capacity = std::max<VkDeviceSize>(size, 1024);
-    VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    auto info = vkStructure<VkBufferCreateInfo>(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
     info.size = buffer.capacity;
     info.usage = usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -225,14 +225,14 @@
 
   void ensureStorageDescriptor(VkDescriptorSet &set, VkDescriptorSetLayout layout, Buffer const &buffer) {
     if (!set) {
-      VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+      auto alloc = vkStructure<VkDescriptorSetAllocateInfo>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO);
       alloc.descriptorPool = resources().descriptorPool;
       alloc.descriptorSetCount = 1;
       alloc.pSetLayouts = &layout;
       vkCheck(vkAllocateDescriptorSets(device_, &alloc, &set), "vkAllocateDescriptorSets");
     }
     VkDescriptorBufferInfo bi{buffer.buffer, 0, buffer.capacity};
-    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    auto write = vkStructure<VkWriteDescriptorSet>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET);
     write.dstSet = set;
     write.dstBinding = 0;
     write.descriptorCount = 1;

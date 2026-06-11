@@ -122,7 +122,7 @@
     tex.width = width;
     tex.height = height;
     tex.format = format == VK_FORMAT_UNDEFINED ? VK_FORMAT_R8G8B8A8_UNORM : format;
-    VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    auto image = vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
     image.imageType = VK_IMAGE_TYPE_2D;
     image.format = tex.format;
     image.extent = {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), 1};
@@ -136,7 +136,7 @@
     allocation.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     vkCheck(vmaCreateImage(allocator_, &image, &allocation, &tex.image, &tex.allocation, nullptr),
             "vmaCreateImage");
-    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    auto view = vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
     view.image = tex.image;
     view.viewType = VK_IMAGE_VIEW_TYPE_2D;
     view.format = tex.format;
@@ -304,7 +304,7 @@
     tex.format = requestedFormat == VK_FORMAT_UNDEFINED
                      ? (surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormat_.format)
                      : requestedFormat;
-    VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    auto image = vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
     image.imageType = VK_IMAGE_TYPE_2D;
     image.format = tex.format;
     image.extent = {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), 1};
@@ -322,7 +322,7 @@
     allocation.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     vkCheck(vmaCreateImage(allocator_, &image, &allocation, &tex.image, &tex.allocation, nullptr),
             "vmaCreateImage");
-    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    auto view = vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
     view.image = tex.image;
     view.viewType = VK_IMAGE_VIEW_TYPE_2D;
     view.format = image.format;
@@ -355,14 +355,14 @@
   void ensureTextureDescriptor(Texture &tex) {
     if (tex.descriptor)
       return;
-    VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    auto alloc = vkStructure<VkDescriptorSetAllocateInfo>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO);
     alloc.descriptorPool = resources().descriptorPool;
     alloc.descriptorSetCount = 1;
     VkDescriptorSetLayout const layout = resources().textureDescriptorLayout;
     alloc.pSetLayouts = &layout;
     vkCheck(vkAllocateDescriptorSets(device_, &alloc, &tex.descriptor), "vkAllocateDescriptorSets");
     VkDescriptorImageInfo ii{resources().sampler, tex.view, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL};
-    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    auto write = vkStructure<VkWriteDescriptorSet>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET);
     write.dstSet = tex.descriptor;
     write.dstBinding = 0;
     write.descriptorCount = 1;
@@ -382,13 +382,13 @@
   }
 
   VkCommandBuffer beginImmediate() {
-    VkCommandBufferAllocateInfo alloc{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    auto alloc = vkStructure<VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
     alloc.commandPool = commandPool_;
     alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     alloc.commandBufferCount = 1;
     VkCommandBuffer cmd = VK_NULL_HANDLE;
     vkCheck(vkAllocateCommandBuffers(device_, &alloc, &cmd), "vkAllocateCommandBuffers");
-    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    auto begin = vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkCheck(vkBeginCommandBuffer(cmd, &begin), "vkBeginCommandBuffer");
     return cmd;
@@ -396,9 +396,9 @@
 
   void endImmediate(VkCommandBuffer cmd) {
     vkCheck(vkEndCommandBuffer(cmd), "vkEndCommandBuffer");
-    VkCommandBufferSubmitInfo commandBufferInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+    auto commandBufferInfo = vkStructure<VkCommandBufferSubmitInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO);
     commandBufferInfo.commandBuffer = cmd;
-    VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    auto submit = vkStructure<VkSubmitInfo2>(VK_STRUCTURE_TYPE_SUBMIT_INFO_2);
     submit.commandBufferInfoCount = 1;
     submit.pCommandBufferInfos = &commandBufferInfo;
     vkCheck(vkQueueSubmit2(queue_, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit2");
@@ -450,7 +450,7 @@
   void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
     if (oldLayout == newLayout)
       return;
-    VkImageMemoryBarrier2 barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+    auto barrier = vkStructure<VkImageMemoryBarrier2>(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2);
     barrier.srcStageMask = stageMaskForLayout(oldLayout);
     barrier.srcAccessMask = accessMaskForLayout(oldLayout, true);
     barrier.dstStageMask = stageMaskForLayout(newLayout);
@@ -463,7 +463,7 @@
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.layerCount = 1;
-    VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    auto dependency = vkStructure<VkDependencyInfo>(VK_STRUCTURE_TYPE_DEPENDENCY_INFO);
     dependency.imageMemoryBarrierCount = 1;
     dependency.pImageMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(cmd, &dependency);
