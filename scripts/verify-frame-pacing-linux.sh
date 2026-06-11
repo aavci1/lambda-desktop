@@ -21,6 +21,7 @@ Runs the TODO-019 Linux frame-pacing verification smoke:
   - verifies wp_presentation feedback on atomic-KMS and Vulkan-display presenters
   - runs lambda-shell, a scripted lambda-terminal workload, and lambda-editor
   - drives synthetic pointer motion through the KMS raw-input path with the hardware-cursor fast path enabled
+  - overlaps synthetic hardware-cursor motion with the scripted terminal workload
   - exercises a static SHM client surface and asserts compositor surface draw-cache reuse
   - drives server-side chrome hover/press transitions and asserts client surface-cache reuse
   - drives scripted resize configures and asserts the compositor sizing path stays healthy
@@ -103,6 +104,44 @@ summarize_pointer_fast_path() {
         "$fallback_moves" -ne 0 || "$runtime_failures" -ne 0 ]]; then
     return 1
   fi
+}
+
+summarize_pointer_terminal_overlap() {
+  local dir="$1"
+  local label="$2"
+  local timing
+  timing="$(awk '
+    FILENAME ~ /pacing\.log$/ && /synthetic-pointer-motion emitted=/ {
+      t = $2
+      sub(/ms$/, "", t)
+      if (pointer_first == 0 || t + 0.0 < pointer_first) pointer_first = t + 0.0
+      if (t + 0.0 > pointer_last) pointer_last = t + 0.0
+      pointer_events += 1
+    }
+    FILENAME ~ /lambda-terminal-render\.log$/ && /vulkan-present-detail:/ {
+      t = $2
+      sub(/ms$/, "", t)
+      if (terminal_first == 0 || t + 0.0 < terminal_first) terminal_first = t + 0.0
+      if (t + 0.0 > terminal_last) terminal_last = t + 0.0
+      terminal_frames += 1
+    }
+    END {
+      overlap = pointer_events > 0 && terminal_frames > 0 && pointer_first <= terminal_last && pointer_last >= terminal_first
+      overlap_ms = 0.0
+      if (overlap) {
+        start = pointer_first > terminal_first ? pointer_first : terminal_first
+        end = pointer_last < terminal_last ? pointer_last : terminal_last
+        overlap_ms = end - start
+      }
+      printf "pointer_events=%d pointer_first=%.3f pointer_last=%.3f terminal_frames=%d terminal_first=%.3f terminal_last=%.3f overlap_ms=%.3f",
+        pointer_events, pointer_first, pointer_last, terminal_frames, terminal_first, terminal_last, overlap_ms
+      if (!overlap || overlap_ms <= 0.0) exit 1
+    }
+  ' "$dir/pacing.log" "$dir/lambda-terminal-render.log")" || {
+    printf 'SUMMARY %s pointer_terminal_overlap_failed\n' "$label"
+    return 1
+  }
+  printf 'SUMMARY %s pointer_terminal_overlap %s\n' "$label" "$timing"
 }
 
 summarize_chrome_interaction() {
@@ -618,6 +657,7 @@ run_compositor_case() {
   local require_hardware_flags="$3"
   local run_apps="$4"
   local synthetic_pointer="${5:-0}"
+  local synthetic_pointer_warmup_ms="${6:-1500}"
   local dir="$LOG_DIR/$label"
   mkdir -p "$dir"
 
@@ -663,7 +703,7 @@ run_compositor_case() {
       LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION=1
       LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_COUNT=180
       LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_INTERVAL_MS=8
-      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_WARMUP_MS=1500
+      LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_WARMUP_MS="$synthetic_pointer_warmup_ms"
       LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DX=5
       LAMBDA_WINDOW_MANAGER_SYNTHETIC_POINTER_MOTION_DY=2
     )
@@ -738,6 +778,9 @@ run_compositor_case() {
   summarize_runtime_logs "$dir" "$label"
   if [[ "$synthetic_pointer" == "1" ]]; then
     summarize_pointer_fast_path "$dir" "$label"
+    if [[ "$run_apps" == "1" ]]; then
+      summarize_pointer_terminal_overlap "$dir" "$label"
+    fi
   fi
   summarize_cpu_trace "$dir/cpu.log"
   summarize_terminal_present "$dir/lambda-terminal-render.log"
@@ -746,6 +789,7 @@ run_compositor_case() {
 echo "Frame pacing verification logs: $LOG_DIR"
 run_compositor_case atomic "" 1 1
 run_compositor_case atomic-pointer-fast-path "" 1 0 1
+run_compositor_case atomic-pointer-under-terminal-load "" 1 1 1 7000
 run_surface_cache_case
 run_chrome_interaction_case
 run_resize_storm_case
