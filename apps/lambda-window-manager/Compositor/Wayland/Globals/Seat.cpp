@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/Seat.hpp"
 
+#include "Compositor/Wayland/CursorRequestState.hpp"
 #include "Compositor/Wayland/Globals/CursorShape.hpp"
 #include "Compositor/Wayland/Globals/PointerExtensions.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
@@ -13,7 +14,6 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include <algorithm>
-#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -73,17 +73,10 @@ int createKeymapFd(WaylandServer::Impl* server, std::uint32_t& size) {
   return -1;
 }
 
-constexpr std::array<SeatSerialKind, 3> kPointerCursorSerialKinds{
-    SeatSerialKind::PointerEnter,
-    SeatSerialKind::PointerButtonPress,
-    SeatSerialKind::PointerButtonRelease,
-};
-
 void pointerSetCursor(wl_client* client, wl_resource* resource, std::uint32_t serial, wl_resource* surfaceResource,
                       std::int32_t hotspotX, std::int32_t hotspotY) {
   auto* server = serverFrom(resource);
-  if (!server || !server->pointerFocus_) return;
-  if (!seatSerialIsValid(server, serial, client, server->pointerFocus_, kPointerCursorSerialKinds)) return;
+  if (!cursorRequestSerialValid(server, client, serial)) return;
   if (!surfaceResource) {
     bool const changed = server->cursorSurface_ || server->cursorShape_ != CursorShape::Arrow;
     server->cursorSurface_ = nullptr;

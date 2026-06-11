@@ -1,12 +1,12 @@
 #include "Compositor/Wayland/Globals/CursorShape.hpp"
 
+#include "Compositor/Wayland/CursorRequestState.hpp"
 #include "Compositor/Wayland/CursorShapeState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "cursor-shape-v1-server-protocol.h"
 
 #include <algorithm>
-#include <array>
 #include <memory>
 #include <wayland-server-core.h>
 
@@ -62,12 +62,6 @@ void cursorShapeDeviceDestroy(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-constexpr std::array<SeatSerialKind, 3> kPointerCursorSerialKinds{
-    SeatSerialKind::PointerEnter,
-    SeatSerialKind::PointerButtonPress,
-    SeatSerialKind::PointerButtonRelease,
-};
-
 void cursorShapeDeviceSetShape(wl_client*, wl_resource* resource, std::uint32_t serial, std::uint32_t shape) {
   auto* device = resourceData<WaylandServer::Impl::CursorShapeDevice>(resource);
   if (!device || !device->server) return;
@@ -78,10 +72,10 @@ void cursorShapeDeviceSetShape(wl_client*, wl_resource* resource, std::uint32_t 
     return;
   }
   auto* server = device->server;
-  if (!server->pointerFocus_ || !device->pointer) return;
+  if (!device->pointer) return;
   wl_client* const client = wl_resource_get_client(resource);
   if (wl_resource_get_client(device->pointer) != client) return;
-  if (!seatSerialIsValid(server, serial, client, server->pointerFocus_, kPointerCursorSerialKinds)) return;
+  if (!cursorRequestSerialValid(server, client, serial)) return;
 
   CursorShape const nextShape = compositorCursorShape(shape);
   bool const changed = server->cursorSurface_ || server->cursorShape_ != nextShape;
