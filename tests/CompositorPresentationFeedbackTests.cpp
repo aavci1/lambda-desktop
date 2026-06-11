@@ -99,6 +99,22 @@ TEST_CASE("presentation completion resolves flip data and discard fallbacks") {
   CHECK(fields.seqLo == 5);
   CHECK(fields.flags == presented.timing.flags);
 
+  PresentationCompletion softwareCompletion = completion;
+  softwareCompletion.flags = static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_VSYNC);
+  auto const software = presentation::resolvePresentationFeedbackCompletion(
+      scheduled,
+      true,
+      softwareCompletion,
+      100,
+      101,
+      60'000,
+      static_cast<std::uint32_t>(WP_PRESENTATION_FEEDBACK_KIND_HW_COMPLETION));
+  REQUIRE(software.ready);
+  CHECK(software.presented);
+  CHECK((software.timing.flags & WP_PRESENTATION_FEEDBACK_KIND_VSYNC) != 0);
+  CHECK((software.timing.flags & WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK) == 0);
+  CHECK((software.timing.flags & WP_PRESENTATION_FEEDBACK_KIND_HW_COMPLETION) == 0);
+
   auto const pending = presentation::resolvePresentationFeedbackCompletion(
       scheduled,
       false,

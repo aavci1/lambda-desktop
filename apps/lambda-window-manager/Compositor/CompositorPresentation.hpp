@@ -4,6 +4,7 @@
 
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Wayland/WaylandTypes.hpp"
+#include "presentation-time-server-protocol.h"
 
 #include <algorithm>
 #include <chrono>
@@ -142,7 +143,9 @@ struct PresentedFeedbackFields {
   if (completionValid) {
     fallbackTiming.monotonicNsec = completion.monotonicNsec;
     if (completion.sequence != 0) fallbackTiming.sequence = completion.sequence;
-    fallbackTiming.flags |= completion.flags | hardwareCompletionFlag;
+    std::uint32_t const completionFlag =
+        (completion.flags & WP_PRESENTATION_FEEDBACK_KIND_HW_CLOCK) != 0 ? hardwareCompletionFlag : 0u;
+    fallbackTiming.flags |= completion.flags | completionFlag;
   }
   return PresentationFeedbackCompletionDecision{
       .ready = true,

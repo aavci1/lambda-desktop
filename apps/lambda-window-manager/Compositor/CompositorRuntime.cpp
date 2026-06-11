@@ -1013,6 +1013,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         envEnabled("LAMBDA_COMPOSITOR_ENABLE_HARDWARE_CURSOR_MOTION_FAST_PATH");
     bool hardwareCursorMotionFastPathDisabled = false;
     bool hardwareCursorMotionFastPathFailureLogged = false;
+    constexpr int kHardwareCursorFastPathRetryMs = 50;
+    auto nextHardwareCursorFastPathRetryAt = SteadyClock::now();
     if (!hardwareCursorAvailable && appliedConfig.config.hardwareCursorEnabled) {
       std::fprintf(stderr, "lambda-window-manager: hardware cursor unavailable; using software cursor\n");
     } else if (appliedConfig.config.hardwareCursorEnabled && !hardwareCursorMotionFastPathAllowed) {
@@ -1055,6 +1057,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                              wayland.pointerX(),
                                              wayland.pointerY());
           hardwareCursorMotionFastPathDisabled = true;
+          nextHardwareCursorFastPathRetryAt =
+              SteadyClock::now() + std::chrono::milliseconds(kHardwareCursorFastPathRetryMs);
           if (!hardwareCursorMotionFastPathFailureLogged) {
             std::fprintf(stderr,
                          "lambda-window-manager: hardware cursor motion fast path failed; using frame redraw fallback\n");
@@ -1181,6 +1185,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     std::vector<std::uint64_t> lastAtomicScheduledFrameSurfaceIds;
     std::uint64_t atomicRenderAheadLeadEstimateNsec = initialRenderAheadLeadNsec(output.refreshRateMilliHz());
     std::uint64_t lastAcquireWaitFrameCallbackNsec = 0;
+    constexpr int kDeferredCursorRetryMs = 1;
+    auto nextDeferredCursorRetryAt = SteadyClock::now();
     auto lastCrashHeartbeat = SteadyClock::now();
     auto maybeCrashHeartbeat = [&](char const* reason) {
       if (!diagnostics::crashLogEnabled()) return;
@@ -1212,6 +1218,37 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (!envEnabled("LWM_DIAGNOSTIC_SCRIPTED_EXERCISE")) return kIdlePollMs;
       auto const now = SteadyClock::now();
       return millisecondsUntilCeil(nextDiagnosticExerciseAt, now, kIdlePollMs);
+    };
+    auto hardwareCursorFastPathRetryDelayMs = [&]() -> int {
+      if (!hardwareCursorMotionFastPathDisabled) return kIdlePollMs;
+      return millisecondsUntilCeil(nextHardwareCursorFastPathRetryAt, SteadyClock::now(), kIdlePollMs);
+    };
+    auto maybeReenableHardwareCursorFastPath = [&](char const* reason) {
+      if (!hardwareCursorMotionFastPathDisabled || hardwareCursorFastPathRetryDelayMs() != 0) {
+        return false;
+      }
+      hardwareCursorMotionFastPathDisabled = false;
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-cursor-motion-fast-path retry-enabled reason=%s\n",
+                                         reason ? reason : "timer");
+      return true;
+    };
+    auto deferredCursorRetryDelayMs = [&]() -> int {
+      if (!presenter->atomicPresenter() || !output.hasDeferredCursorCommit()) return kIdlePollMs;
+      if (presenter->atomicPresenter()->hasPendingPageFlip()) return kIdlePollMs;
+      auto const now = SteadyClock::now();
+      return millisecondsUntilCeil(nextDeferredCursorRetryAt, now, kIdlePollMs);
+    };
+    auto retryDeferredCursorCommit = [&]() {
+      if (!presenter->atomicPresenter() || !output.hasDeferredCursorCommit() ||
+          presenter->atomicPresenter()->hasPendingPageFlip() || deferredCursorRetryDelayMs() != 0) {
+        return false;
+      }
+      bool const accepted = output.retryDeferredCursorCommit();
+      nextDeferredCursorRetryAt = SteadyClock::now() + std::chrono::milliseconds(kDeferredCursorRetryMs);
+      LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-cursor-deferred-retry accepted=%d pending=%d\n",
+                                         accepted ? 1 : 0,
+                                         output.hasDeferredCursorCommit() ? 1 : 0);
+      return accepted;
     };
     auto runDiagnosticExercise = [&] {
       if (!envEnabled("LWM_DIAGNOSTIC_SCRIPTED_EXERCISE")) return false;
@@ -2295,6 +2332,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       pollTimeoutMs = std::min(pollTimeoutMs, acquireWaitCallbackDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, vulkanDisplayPresentationDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, diagnosticExerciseDelayMs());
+      pollTimeoutMs = std::min(pollTimeoutMs, deferredCursorRetryDelayMs());
+      pollTimeoutMs = std::min(pollTimeoutMs, hardwareCursorFastPathRetryDelayMs());
       if (std::optional<int> syntheticPointerDelay = syntheticPointerMotion.delayMs(SteadyClock::now())) {
         pollTimeoutMs = std::min(pollTimeoutMs, *syntheticPointerDelay);
       }
@@ -2334,6 +2373,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           renderReadyWoke && presenter->atomicPresenter();
       if (renderReadyUpdated) updateQueuedAtomicFrames();
       bool const pageFlipCompleted = dispatchAtomicPageFlip();
+      if (pageFlipCompleted && hardwareCursorMotionFastPathDisabled) {
+        nextHardwareCursorFastPathRetryAt = SteadyClock::now();
+      }
+      bool const hardwareCursorFastPathReenabled =
+          maybeReenableHardwareCursorFastPath(pageFlipCompleted ? "page-flip" : "timer");
       if (pageFlipCompleted && presenter->atomicPresenter() && !atomicReadyFrames.empty() &&
           !presenter->atomicPresenter()->hasPendingPageFlip() && device->isVtForeground()) {
         updateQueuedAtomicFrames();
@@ -2358,6 +2402,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                           renderReadyWoke);
       }
       bool const acquireWaitFrameCallbackSent = maybeSendAcquireWaitFrameCallback();
+      bool const deferredCursorRetried = retryDeferredCursorCommit();
       (void)maybeCompleteVulkanDisplayPresentationCallbacks();
       if (shellWoke) {
         wayland.dispatchShellIpc();
@@ -2472,6 +2517,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           animationFrameNeeded || screenshotFlashFrameNeeded || snapPreviewFrameNeeded || windowCyclerFrameNeeded ||
           diagnosticExerciseChanged ||
           acquireWaitFrameCallbackSent ||
+          deferredCursorRetried ||
+          hardwareCursorFastPathReenabled ||
           syntheticPointerEmitted ||
           syntheticChromeEmitted) {
         if (!presenter->atomicPresenter() || forceRender || waylandWoke || inputRenderRequired ||

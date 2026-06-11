@@ -230,6 +230,8 @@ public:
                                     std::int32_t hotspotX = 0,
                                     std::int32_t hotspotY = 0) const;
   [[nodiscard]] bool moveCursor(std::int32_t x, std::int32_t y) const;
+  [[nodiscard]] bool hasDeferredCursorCommit() const noexcept;
+  [[nodiscard]] bool retryDeferredCursorCommit() const noexcept;
   void hideCursor() const;
 
   [[nodiscard]] std::unique_ptr<KmsAtomicPresenter> createAtomicPresenter(TextSystem& textSystem) const;

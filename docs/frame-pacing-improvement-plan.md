@@ -22,13 +22,14 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] Perf-wrapped full Linux verifier passed on 2026-06-11 (`.debug-logs/frame-pacing-verify/20260611-102353`): atomic, pointer-fast-path, surface-cache, chrome hover/press, resize-storm, and Vulkan-display cases all passed with zero fatal matches. `perf stat` captured 26,854.53 ms task-clock, 340,670 page faults, 30,434,613,748 cycles, and 64,869,277,919 instructions for the verifier script.
 - [x] Standard external compositor smoke partially passed: Weston 15.0.1 headless with kiosk shell/fake seat ran `weston-smoke` until a controlled 8-second timeout with no Weston runtime errors. The Lambda presentation-feedback checker also connected far enough to report that Weston headless advertises `CLOCK_MONOTONIC_RAW`, so it remains unsuitable for validating Lambda's stricter `CLOCK_MONOTONIC` presentation contract.
 - [x] Validation-layer focused Vulkan render-target run passed on 2026-06-11: `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation VK_LOADER_DEBUG=layer ./build/tests/lambda_tests --source-file="*VulkanRenderTargetTests.cpp" --no-skip` loaded `VK_LAYER_KHRONOS_validation` and passed 20 cases / 146 assertions after matching the backdrop-blur pipeline format to its R16 render targets and covering same-frame image draw/destroy.
+- [x] KMS cursor/presentation review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager` and `./build/tests/lambda_tests --source-file="*CompositorPresentationFeedbackTests.cpp" --no-skip` (6 cases / 46 assertions).
 - [ ] Remaining local input gap: `ydotool` and `wtype` are installed and `/dev/input/event0` has an ACL for `aavci`, but `ydotoold` cannot start because `/dev/uinput` is still `root:root` mode `0600`; `evemu-event` is still missing. Real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad real-app visual smoke cases still require manual interaction with a running Lambda compositor session, especially move/drag/resize and cursor visual checks.
-- [ ] Remaining system-tool gap: `wayland-utils` and `evemu` are not installed; `aavci` is in `wheel`, but noninteractive `sudo` still prompts for a password, so this session cannot repair `/dev/uinput` permissions or install the remaining packages.
+- [ ] Remaining system-tool gap: `wayland-utils` and `evemu` are not installed; `aavci` is in `wheel`, but noninteractive `sudo` still prompts for a password, so this session cannot repair `/dev/uinput` permissions or install the remaining packages. The broad pointer/compositor doctest slice also still needs a live `WAYLAND_DISPLAY`; four `RuntimeInputTests.cpp` cases failed with `Failed to connect to Wayland display`.
 - [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
 - [x] macOS focused tests: `*Metal*,*SceneGraph*` — 20 cases, 133 assertions, all passed (2026-06-11).
 - [ ] Remaining macOS runtime gap: `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), full `ctest`, and backdrop-blur visual comparison.
-- [ ] Post-implementation review backlog (REV-*) below — 3 high, 8 medium, 10 low, and 3 nit items remain open.
+- [ ] Post-implementation review backlog (REV-*) below — 3 high, 6 medium, 7 low, and 2 nit items remain open.
 
 ## Working Environment
 
@@ -444,17 +445,6 @@ What to do:
 - [ ] [Auto] Apply `intersectRects(translatedRect(op.clip, dx, dy), state_.clip)` in the prepared path too.
 - [ ] [Auto] Add a clipped-replay regression test under `LAMBDA_VULKAN_PREPARED_GEOMETRY=1` or on a non-RADV CI target.
 
-### REV-K2: EBUSY-deferred cursor-only commit can strand the cursor
-
-**Severity: Medium (cursor stops short of final position on idle screen).**
-
-`commitAtomicCursor` defers on EBUSY/EAGAIN (`KmsOutput.cpp:3612-3616`) but replays only from `setAtomicPageFlipPending(false)` (`3551-3558`) — cursor-only commits have no page-flip event. On an otherwise idle screen the last move of a burst may never replay. Opt-in via `LAMBDA_COMPOSITOR_ENABLE_HARDWARE_CURSOR_MOTION_FAST_PATH=1`.
-
-What to do:
-
-- [ ] [Auto] Add a timer, vblank, or retry loop to replay `atomicCursorMoveDeferred_` without waiting for a primary-plane flip.
-- [ ] [Manual] 1000 Hz mouse on idle desktop — cursor reaches final position.
-
 ### REV-K3: Scene damage under-covers after rendered-but-unscheduled frame
 
 **Severity: Medium (stale pixels on glass; amplified by relaxed partial guard).**
@@ -499,17 +489,6 @@ What to do:
 - [ ] [Auto] Continue `uniformIndex`/`clipIndex` across segments within one backdrop frame.
 - [ ] [Manual] Multi-segment backdrop frame with differing transforms — visual parity check.
 
-### REV-F4: Cursor deferred during primary page flip instead of interleaved commit
-
-**Severity: Medium (fast path skips render but cursor may not move until flip completes).**
-
-`commitAtomicCursor` returns success while deferring when `atomicPageFlipPending_` (`KmsOutput.cpp:3576-3579`). Compositor skips full frame but on-screen cursor may lag one flip period.
-
-What to do:
-
-- [ ] [Auto] Attempt cursor-only atomic commit even during page flip pending (separate from primary-plane IN_FENCE), or document as accepted trade-off.
-- [ ] [Manual] Cursor responsiveness during active primary-plane flips under GPU load.
-
 ### REV-F2: Partial damage uses bounding-union clip (over-draw follow-up)
 
 **Severity: Medium (GPU over-shade when damage rects are sparse).**
@@ -546,27 +525,6 @@ What to do:
 
 - [ ] [Auto] Clear `preparedRenderOps_` when replay fails due to atlas generation mismatch.
 - [ ] [Auto] Scene-graph test: rebuild atlas between renders, assert prepare count increases.
-
-### REV-K4: `HW_COMPLETION` OR'd onto software-estimated flip completions
-
-**Severity: Low (wp_presentation semantics; pre-existing, preserved by refactor).**
-
-`resolvePresentationFeedbackCompletion` (`CompositorPresentation.hpp:145`, `FrameScheduler.cpp:409-416`) adds `HW_COMPLETION` even when completion lacks `HW_CLOCK`. Runtime sets hardware flags only for real flips (`CompositorRuntime.cpp:1892-1900`).
-
-What to do:
-
-- [ ] [Auto] Pass `hardwareCompletionFlag = 0` when completion flags lack `HW_CLOCK`.
-- [ ] [Auto] Extend `CompositorPresentationFeedbackTests.cpp` to assert flag semantics for software vs hardware completions.
-
-### REV-K5: Cursor hide dropped while page flip pending
-
-**Severity: Low (atomic plane may stay visible until legacy ioctl rescues).**
-
-`commitAtomicCursor(false)` while `atomicPageFlipPending_` sets `atomicCursorMoveDeferred_ = false` and returns success (`KmsOutput.cpp:3576-3579`). Disable never replays; relies on legacy `drmModeSetCursor` in `hideCursor` (`4003-4011`).
-
-What to do:
-
-- [ ] [Auto] Defer hides with `atomicCursorMoveDeferred_ = true` regardless of visible flag; replay hide on flip completion.
 
 ### REV-K6: Transient chrome double-draws all three buttons
 
@@ -610,16 +568,6 @@ What to do:
 - [ ] [Auto] Optionally defer `flushRedraw` from `frameDone` when `dispatchingWaylandEvents_` is set, matching configure behavior.
 - [ ] [Manual] Interactive resize — no visible one-frame size mismatch.
 
-### REV-F5: Hardware cursor fast path permanently disables after first failure
-
-**Severity: Low (session-long fallback to full redraws).**
-
-`hardwareCursorMotionFastPathDisabled = true` after first failed fast-path attempt (`CompositorRuntime.cpp:1057`). Transient EBUSY could permanently disable.
-
-What to do:
-
-- [ ] [Auto] Retry fast path after successful flip or on a timer instead of permanent disable.
-
 ### REV-F13: Present fences still attached on steady-state presents
 
 **Severity: Low (non-blocking status poll, not 1 s wait — reduced vs plan fear).**
@@ -634,12 +582,6 @@ What to do:
 ---
 
 ## Nits
-
-### REV-K7: Fragile errno classification in `commitAtomicCursor`
-
-`KmsOutput.cpp:3589-3591` — if `addAtomicCursorProperties` returns false without setting errno, stale `EBUSY` could false-defer. Currently unreachable given pre-checks at `3571-3572`.
-
-- [ ] [Auto] Distinguish "props not added" from "commit failed" explicitly.
 
 ### REV-W4: `renderPopover` throw through libwayland C callback
 

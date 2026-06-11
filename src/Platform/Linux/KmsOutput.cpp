@@ -609,6 +609,8 @@ public:
 
   bool ensureAtomicCursorPlane() const;
   bool commitAtomicCursor(std::int32_t x, std::int32_t y, bool visible) const noexcept;
+  bool hasDeferredCursorCommit() const noexcept;
+  bool retryDeferredCursorCommit() const noexcept;
   drmModeAtomicReq* cursorAtomicRequest() const noexcept;
   bool addAtomicCursorProperties(drmModeAtomicReq* request) const;
   void markAtomicCursorScheduled() const noexcept;
@@ -3556,8 +3558,24 @@ void KmsOutput::Impl::setAtomicPageFlipPending(bool pending) const noexcept {
   if (pending || !atomicCursorMoveDeferred_) return;
   atomicCursorMoveDeferred_ = false;
   if (!commitAtomicCursor(cursorX_, cursorY_, cursorVisible_)) {
-    atomicCursorMoveDeferred_ = cursorVisible_;
+    atomicCursorMoveDeferred_ = true;
   }
+}
+
+bool KmsOutput::Impl::hasDeferredCursorCommit() const noexcept {
+  return atomicCursorMoveDeferred_;
+}
+
+bool KmsOutput::Impl::retryDeferredCursorCommit() const noexcept {
+  if (!atomicCursorMoveDeferred_ || atomicPageFlipPending_) {
+    return false;
+  }
+  atomicCursorMoveDeferred_ = false;
+  if (commitAtomicCursor(cursorX_, cursorY_, cursorVisible_)) {
+    return true;
+  }
+  atomicCursorMoveDeferred_ = true;
+  return false;
 }
 
 drmModeAtomicReq* KmsOutput::Impl::cursorAtomicRequest() const noexcept {
@@ -3576,10 +3594,6 @@ bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool vi
 
   cursorX_ = x;
   cursorY_ = y;
-  if (atomicPageFlipPending_) {
-    atomicCursorMoveDeferred_ = visible;
-    return true;
-  }
 
   int const fd = drmFd();
   if (fd < 0) return false;
@@ -3589,9 +3603,14 @@ bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool vi
   int commitErrno = 0;
   try {
     if (visible) {
-      committed = addAtomicCursorProperties(request) &&
-                  drmModeAtomicCommit(fd, request, DRM_MODE_ATOMIC_NONBLOCK, nullptr) == 0;
-      if (!committed) commitErrno = errno;
+      bool const propsAdded = addAtomicCursorProperties(request);
+      if (!propsAdded) {
+        commitErrno = EINVAL;
+      } else {
+        errno = 0;
+        committed = drmModeAtomicCommit(fd, request, DRM_MODE_ATOMIC_NONBLOCK, nullptr) == 0;
+        if (!committed) commitErrno = errno != 0 ? errno : EINVAL;
+      }
     } else {
       CursorPlaneProperties const& props = atomicCursorPlaneProps_;
       addAtomicProperty(request, atomicCursorPlaneId_, props.fbId, 0, "cursor.FB_ID");
@@ -3604,20 +3623,21 @@ bool KmsOutput::Impl::commitAtomicCursor(std::int32_t x, std::int32_t y, bool vi
       addAtomicProperty(request, atomicCursorPlaneId_, props.crtcY, 0, "cursor.CRTC_Y");
       addAtomicProperty(request, atomicCursorPlaneId_, props.crtcW, 0, "cursor.CRTC_W");
       addAtomicProperty(request, atomicCursorPlaneId_, props.crtcH, 0, "cursor.CRTC_H");
+      errno = 0;
       committed = drmModeAtomicCommit(fd, request, DRM_MODE_ATOMIC_NONBLOCK, nullptr) == 0;
-      if (!committed) commitErrno = errno;
+      if (!committed) commitErrno = errno != 0 ? errno : EINVAL;
     }
   } catch (...) {
     committed = false;
     commitErrno = errno != 0 ? errno : EINVAL;
   }
 
-  bool const retryOnFrameCommit = commitErrno == EBUSY || commitErrno == EAGAIN;
-  if (!committed && retryOnFrameCommit) {
-    atomicCursorMoveDeferred_ = visible;
+  bool const retryDeferred = commitErrno == EBUSY || commitErrno == EAGAIN;
+  if (!committed && retryDeferred) {
+    atomicCursorMoveDeferred_ = true;
     return true;
   }
-  if (!committed && !retryOnFrameCommit && !atomicCursorFailureLogged_) {
+  if (!committed && !retryDeferred && !atomicCursorFailureLogged_) {
     std::fprintf(stderr,
                  "lambda-window-manager: KMS atomic cursor commit failed plane=%u: %s\n",
                  atomicCursorPlaneId_,
@@ -4001,6 +4021,14 @@ bool KmsOutput::moveCursor(std::int32_t x, std::int32_t y) const {
     }
   }
   return drmModeMoveCursor(impl_->drmFd(), impl_->connector_.crtcId, x, y) == 0;
+}
+
+bool KmsOutput::hasDeferredCursorCommit() const noexcept {
+  return impl_ && impl_->hasDeferredCursorCommit();
+}
+
+bool KmsOutput::retryDeferredCursorCommit() const noexcept {
+  return impl_ && impl_->retryDeferredCursorCommit();
 }
 
 void KmsOutput::hideCursor() const {
