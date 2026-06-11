@@ -138,7 +138,9 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 ## TODO-019: Work through the frame-pacing improvement plan
 
-- [ ] [Auto + Manual] Execute the prioritized workstreams in [docs/frame-pacing-improvement-plan.md](docs/frame-pacing-improvement-plan.md) (FP-1 through FP-16), produced by the 2026-06 compositor and graphics-stack frame-pacing review.
-- [ ] [Auto] Phases 1-3 and FP-10 through FP-15 require a Linux machine (Wayland and/or KMS from a TTY); FP-14's macOS half and FP-16 can be done on a Mac.
-- [ ] [Auto] Treat each FP item as a self-contained unit: implement, verify with the measurement tooling listed in the plan (`vulkan-present-detail` trace, compositor frame CSV, `debug::perf` counters, validation layers), then delete the FP section from the plan document.
-- [ ] [Auto] When all FP items are done, delete the plan document and this TODO item.
+- [x] [Auto] Implement the prioritized workstreams in [docs/frame-pacing-improvement-plan.md](docs/frame-pacing-improvement-plan.md) (FP-1 through FP-16), produced by the 2026-06 compositor and graphics-stack frame-pacing review.
+- [x] [Auto] Verify the Linux code paths with clean normal/KMS builds, focused compositor/Vulkan/reactive tests, and a KMS compositor run with shell, terminal workload, editor, CPU tracing, KMS timing traces, and `vulkan-present-detail` logs.
+- [x] [Auto] Fix the compile warnings found by clean normal/KMS rebuilds.
+- [ ] [Manual] Complete the remaining hardware/visual checks from the plan: validation layers, presentation timestamp client, pointer-motion/manual cursor checks, resize/drag visual checks, and representative app smoke checks requiring interactive input.
+- [ ] [Auto + Manual] Complete macOS compile/runtime verification for the Metal portions of FP-14/FP-16, including `debug::perf`, full `ctest`, and backdrop blur visual comparison.
+- [ ] [Auto] When the remaining manual/macOS verification is done, delete the plan document and this TODO item.

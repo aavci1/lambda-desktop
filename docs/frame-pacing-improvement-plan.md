@@ -1,10 +1,21 @@
 # Frame Pacing Improvement Plan
 
-**Status:** Active backlog for compositor and graphics-stack smoothness, frame-rate, and frame-pacing work. Tracked as TODO-019 in [TODO.md](../TODO.md).
+**Status:** Code implementation complete; retained as the verification follow-up checklist for manual, validation-layer, presentation-client, pointer-driving, and macOS checks. Tracked as TODO-019 in [TODO.md](../TODO.md).
 **Scope:** `apps/lambda-window-manager/Compositor/`, `src/Platform/Linux/` (KMS + Wayland), `src/Graphics/Vulkan/`, `src/Graphics/Metal/`, `src/Platform/Mac/`, `src/SceneGraph/`, and `src/UI/Application.*`.
 **Source:** Frame-pacing review of commit `ca4466cd` (four parallel code audits; the highest-impact claims verified directly in source). Severity reflects expected impact on smoothness and pacing, not crash risk.
 
-Most items require a Linux machine (Wayland and/or KMS from a TTY) to verify. FP-14 and FP-16 are macOS work and can be done on a Mac. Delete each FP item from this document as it is completed; delete the document and TODO-019 when all are done.
+Most items require a Linux machine (Wayland and/or KMS from a TTY) to verify. FP-14 and FP-16 are macOS work and can be done on a Mac. The implementation pass completed on Linux on 2026-06-11; keep this document until the remaining manual/macOS verification is complete, then delete the document and TODO-019.
+
+## Verification Snapshot: 2026-06-11
+
+- [x] Clean normal and KMS rebuilds completed with zero warnings and zero errors.
+- [x] Focused normal tests passed: compositor/Vulkan/presentation/damage/cursor/pointer/seat slice (91 cases, 613 assertions), gradient/image/canvas/terminal slice (34 cases, 274 assertions), and reactive tests (22 cases, 126 assertions).
+- [x] Focused KMS tests passed: compositor/Vulkan/presentation/damage/cursor/pointer/seat slice (95 cases, 626 assertions), gradient/image/canvas/terminal slice (34 cases, 274 assertions), and reactive tests (22 cases, 126 assertions).
+- [x] KMS compositor runtime smoke completed with normal-build `lambda-shell`, scripted `lambda-terminal`, and `lambda-editor`; logs had zero fatal/error matches.
+- [x] Runtime traces captured 20 CPU samples, 37 KMS timing windows, 10,712 pacing events, and 900 terminal `vulkan-present-detail` samples. Summary: compositor CPU avg/max 12.54%/15.60%, compositor surface avg/max 0.471/0.632 ms, present avg/max 0.395/0.582 ms, terminal atlas avg 0.004 ms, terminal `waitImage` avg 0.000 ms.
+- [ ] Remaining local gap: no pointer-driving tool (`ydotool`, `wtype`, or equivalent) was available, so pointer-motion performance still needs manual or tool-assisted validation.
+- [ ] Remaining environment gap: broad Wayland-display-dependent tests and real-app smoke cases need an already-running external Wayland session or manual app interaction.
+- [ ] Remaining platform gap: Metal source is not compiled on Linux; macOS compile/runtime verification is still required.
 
 ## Working Environment
 
@@ -81,7 +92,7 @@ Verification on Linux (KMS TTY):
 
 - [ ] Frame profile CSV: `surface_ms` for partial frames with multiple dirty windows should drop roughly by the old rect count.
 - [ ] Visual: drag two windows with animated content; no stale pixels outside damage, no flicker at rect seams.
-- [ ] `tests/` damage suites still pass (`computeSceneDamage` unit tests).
+- [x] `tests/` damage suites still pass (`computeSceneDamage` unit tests).
 
 ## FP-3: Remove the remaining queue-drain fallback and noisy recreate log
 
