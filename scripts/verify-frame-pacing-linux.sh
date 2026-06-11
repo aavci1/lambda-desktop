@@ -185,6 +185,38 @@ summarize_chrome_interaction() {
   fi
 }
 
+summarize_chrome_visual_artifacts() {
+  local dir="$1"
+  local label="$2"
+  local capture_root="$dir/snap-capture"
+  local metrics_file
+  metrics_file="$(find "$capture_root" -name metrics.csv -type f -print -quit 2>/dev/null || true)"
+  if [[ -z "$metrics_file" ]]; then
+    printf 'SUMMARY %s chrome_visual_metrics_missing\n' "$label"
+    return 1
+  fi
+  local min_delta="${LWM_CHROME_VISUAL_MIN_DELTA:-1.0}"
+  awk -F, -v label="$label" -v min_delta="$min_delta" '
+    $2 ~ /^close-button:/ {
+      rows += 1
+      luma = $7 + 0.0
+      delta = $9 + 0.0
+      if (rows == 1 || luma < min_luma) min_luma = luma
+      if (rows == 1 || luma > max_luma) max_luma = luma
+      abs_delta = delta < 0.0 ? -delta : delta
+      if (abs_delta > max_abs_delta) max_abs_delta = abs_delta
+      if (abs_delta >= min_delta) delta_rows += 1
+      if (($8 + 0.0) > 1.0) alpha_rows += 1
+    }
+    END {
+      range = max_luma - min_luma
+      printf "SUMMARY %s chrome_visual close_rows=%d alpha_rows=%d delta_rows=%d min_delta=%.3f max_abs_delta=%.3f luma_range=%.3f metrics=%s\n",
+        label, rows, alpha_rows, delta_rows, min_delta, max_abs_delta, range, FILENAME
+      if (rows < 3 || alpha_rows != rows || delta_rows < 1 || max_abs_delta < min_delta || range < min_delta) exit 1
+    }
+  ' "$metrics_file"
+}
+
 summarize_resize_storm() {
   local dir="$1"
   local label="$2"
@@ -1562,6 +1594,14 @@ run_chrome_interaction_case() {
     LAMBDA_KMS_PRESENT_TRACE=1 \
     LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
     LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$dir/pacing.log" \
+    LWM_SNAP_CAPTURE_FRAMES=32 \
+    LWM_SNAP_CAPTURE_ALWAYS=1 \
+    LWM_SNAP_CAPTURE_CHROME_REGIONS=1 \
+    LWM_SNAP_CAPTURE_DIR="$dir/snap-capture" \
+    LWM_SNAP_TRACE=1 \
+    LWM_SNAP_TRACE_ALWAYS=1 \
+    LWM_SNAP_TRACE_FRAMES=160 \
+    LWM_SNAP_TRACE_DIR="$dir/snap-trace" \
     LAMBDA_WINDOW_MANAGER_SYNTHETIC_CHROME_INTERACTION=1 \
     LAMBDA_WINDOW_MANAGER_SYNTHETIC_CHROME_INTERACTION_WARMUP_MS=2500 \
     LAMBDA_WINDOW_MANAGER_SYNTHETIC_CHROME_INTERACTION_INTERVAL_MS=350 \
@@ -1616,6 +1656,8 @@ run_chrome_interaction_case() {
   summarize_runtime_logs "$dir" "$label"
   summarize_chrome_interaction "$dir" "$label"
   summarize_surface_cache "$dir" "$label"
+  summarize_snap_artifacts "$dir" "$label"
+  summarize_chrome_visual_artifacts "$dir" "$label"
   summarize_cpu_trace "$dir/cpu.log"
 }
 

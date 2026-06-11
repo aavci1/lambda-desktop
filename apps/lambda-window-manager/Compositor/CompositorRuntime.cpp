@@ -5,6 +5,7 @@
 #include <Lambda/Platform/Linux/KmsOutput.hpp>
 
 #include "Compositor/Chrome/CursorRenderer.hpp"
+#include "Compositor/Chrome/ChromeMetrics.hpp"
 #include "Compositor/Chrome/WindowFrameGeometry.hpp"
 #include "Compositor/CompositorConfigWatch.hpp"
 #include "Compositor/CompositorPresentation.hpp"
@@ -566,7 +567,7 @@ bool saveScreenshotRequest(ScreenshotRequest const& request,
   return logScreenshotSaveResult(saveScreenshotPng(cropped->pixels, cropped->width, cropped->height));
 }
 
-std::vector<CaptureRegion> snapCaptureRegions(WaylandServer const& wayland) {
+std::vector<CaptureRegion> snapCaptureRegions(WaylandServer const& wayland, ChromeConfig const& chrome) {
   std::vector<CaptureRegion> regions;
   regions.push_back(CaptureRegion{
       .name = "full-output",
@@ -577,8 +578,9 @@ std::vector<CaptureRegion> snapCaptureRegions(WaylandServer const& wayland) {
   });
   bool dockAdded = false;
   bool topBandAdded = false;
+  bool const captureChromeRegions = envEnabled("LWM_SNAP_CAPTURE_CHROME_REGIONS");
   for (auto const& surface : wayland.committedSurfaces()) {
-    if (surface.pacingSizing && surface.titleBarHeight > 0) {
+    if ((surface.pacingSizing || captureChromeRegions) && surface.titleBarHeight > 0) {
       regions.push_back(CaptureRegion{
           .name = "titlebar:" + std::to_string(surface.id),
           .x = surface.x,
@@ -586,6 +588,22 @@ std::vector<CaptureRegion> snapCaptureRegions(WaylandServer const& wayland) {
           .width = surface.width,
           .height = surface.titleBarHeight,
       });
+    }
+    if (captureChromeRegions && surface.serverSideDecorated && windowExternalTitleBarHeight(surface) > 0.f) {
+      Rect const titlebar = windowTitleBarRect(surface, chrome.contentInsetWidth);
+      ChromeControlRects const controls = chromeControlRects(chrome, titlebar.x, titlebar.y, titlebar.width, titlebar.height);
+      auto addControl = [&](char const* name, Rect const& rect) {
+        regions.push_back(CaptureRegion{
+            .name = std::string(name) + ':' + std::to_string(surface.id),
+            .x = static_cast<std::int32_t>(std::floor(rect.x)),
+            .y = static_cast<std::int32_t>(std::floor(rect.y)),
+            .width = static_cast<std::int32_t>(std::ceil(rect.width)),
+            .height = static_cast<std::int32_t>(std::ceil(rect.height)),
+        });
+      };
+      addControl("close-button", controls.closeButton);
+      addControl("maximize-button", controls.maximizeButton);
+      addControl("minimize-button", controls.minimizeButton);
     }
     if (!topBandAdded && surface.windowClipTop > 0) {
       regions.push_back(CaptureRegion{
@@ -679,7 +697,8 @@ struct SnapFrameCapture {
   void recordFrame(std::vector<std::uint8_t> const& bgra,
                    std::uint32_t width,
                    std::uint32_t height,
-                   WaylandServer const& wayland) {
+                   WaylandServer const& wayland,
+                   ChromeConfig const& chrome) {
     if (!enabled || !csv || frames >= maxFrames) return;
     std::filesystem::path const path = directory / ("frame-" + std::to_string(frames) + ".png");
     auto saved = saveScreenshotPng(path, bgra, width, height);
@@ -689,7 +708,7 @@ struct SnapFrameCapture {
                    saved.path.string().c_str(),
                    saved.error.c_str());
     }
-    for (auto const& region : snapCaptureRegions(wayland)) {
+    for (auto const& region : snapCaptureRegions(wayland, chrome)) {
       auto stats = captureRegionStats(bgra,
                                       width,
                                       height,
@@ -1188,7 +1207,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         screenshotCaptureInFlight.reset();
       }
       if (snapCaptureInFlight) {
-        snapFrameCapture.recordFrame(pixels, width, height, wayland);
+        snapFrameCapture.recordFrame(pixels, width, height, wayland, appliedConfig.config.chrome);
         snapCaptureInFlight = false;
       }
       return true;
