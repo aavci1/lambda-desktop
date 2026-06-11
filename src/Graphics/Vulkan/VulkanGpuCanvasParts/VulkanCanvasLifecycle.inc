@@ -112,7 +112,7 @@ public:
   }
 
   bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width, std::uint32_t& height) {
-    flushFrameCapture();
+    pollFrameCapture(false);
     if (!capturedFrameAvailable_ || capturedFrameWidth_ == 0 || capturedFrameHeight_ == 0) {
       return false;
     }
@@ -163,6 +163,7 @@ public:
     if (device_) {
       // Intentional canvas teardown wait before destroying per-canvas GPU objects.
       vkDeviceWaitIdle(device_);
+      pollReadbacks(true);
     }
     unregisterCanvas();
     destroySwapchain();
@@ -432,6 +433,9 @@ public:
     auto start = phaseStart();
     vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
     double const frameFenceMs = phaseMs(start);
+    start = phaseStart();
+    pollReadbacks(false);
+    double screenshotMs = phaseMs(start);
     for (VkFence& imageFence : imageInFlightFences_) {
       if (imageFence == frameFence) imageFence = VK_NULL_HANDLE;
     }
@@ -551,9 +555,8 @@ public:
     retireDeferredResourcesAfterSubmit();
     deferredDestroyMs = phaseMs(start);
     start = phaseStart();
-    flushFrameCapture();
-    flushScreenshot();
-    double const screenshotMs = phaseMs(start);
+    pollReadbacks(false);
+    screenshotMs += phaseMs(start);
 
     VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     presentInfo.waitSemaphoreCount = 1;
@@ -765,6 +768,7 @@ public:
         auto start = phaseStart();
         vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
         waitFrameMs = phaseMs(start);
+        pollReadbacks(false);
         start = phaseStart();
         vkResetCommandBuffer(commandBuffer, 0);
         VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -820,9 +824,11 @@ public:
       retireDeferredResourcesAfterSubmit();
       deferredDestroyMs = phaseMs(start);
       if (!targetSpec_.signalSemaphore) {
+        // Render-target canvases without an exported signal are synchronous by contract;
+        // callers use them for offscreen rasterization and immediate readback.
         vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
       }
-      flushFrameCapture();
+      pollFrameCapture(false);
       if (canReuseCompletedFrame) {
         renderTargetFrameSignature_ = renderTargetFrameSignature();
         renderTargetFrameCacheValid_ = true;

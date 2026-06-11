@@ -473,10 +473,23 @@
     texture.layout = newLayout;
   }
 
-  void waitForReadbackFence(VkFence fence, char const* label) {
-    if (fence) {
-      vkCheck(vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX), label);
+  bool readbackFenceReady(VkFence fence, bool wait, char const* label) {
+    if (!fence) {
+      return true;
     }
+    if (wait) {
+      vkCheck(vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX), label);
+      return true;
+    }
+    VkResult const status = vkGetFenceStatus(device_, fence);
+    if (status == VK_SUCCESS) {
+      return true;
+    }
+    if (status == VK_NOT_READY) {
+      return false;
+    }
+    vkCheck(status, label);
+    return false;
   }
 
   void writeDebugScreenshotIfRequested(VkCommandBuffer commandBuffer, VkImage source, VkFence frameFence) {
@@ -528,11 +541,13 @@
     pendingFrameCaptureFence_ = frameFence;
   }
 
-  void flushFrameCapture() {
+  bool pollFrameCapture(bool wait) {
     if (!pendingFrameCaptureBuffer_.buffer || pendingFrameCaptureWidth_ == 0 || pendingFrameCaptureHeight_ == 0) {
-      return;
+      return false;
     }
-    waitForReadbackFence(pendingFrameCaptureFence_, "vkWaitForFences(frameCapture)");
+    if (!readbackFenceReady(pendingFrameCaptureFence_, wait, "vkGetFenceStatus(frameCapture)")) {
+      return false;
+    }
     void* mapped = nullptr;
     vkCheck(vmaInvalidateAllocation(allocator_,
                                     pendingFrameCaptureBuffer_.allocation,
@@ -563,12 +578,15 @@
     pendingFrameCaptureHeight_ = 0;
     pendingFrameCaptureBgra_ = true;
     pendingFrameCaptureFence_ = VK_NULL_HANDLE;
+    return true;
   }
 
-  void flushScreenshot() {
+  bool pollScreenshot(bool wait) {
     if (!pendingScreenshotBuffer_.buffer || pendingScreenshotPath_.empty())
-      return;
-    waitForReadbackFence(pendingScreenshotFence_, "vkWaitForFences(debugScreenshot)");
+      return false;
+    if (!readbackFenceReady(pendingScreenshotFence_, wait, "vkGetFenceStatus(debugScreenshot)")) {
+      return false;
+    }
     void *mapped = nullptr;
     vkCheck(vmaInvalidateAllocation(allocator_, pendingScreenshotBuffer_.allocation, 0, pendingScreenshotSize_),
             "vmaInvalidateAllocation");
@@ -588,6 +606,12 @@
     destroyBuffer(pendingScreenshotBuffer_);
     pendingScreenshotPath_.clear();
     pendingScreenshotFence_ = VK_NULL_HANDLE;
+    return true;
+  }
+
+  void pollReadbacks(bool wait) {
+    pollFrameCapture(wait);
+    pollScreenshot(wait);
   }
 
   VkCompositeAlphaFlagBitsKHR chooseCompositeAlpha(VkCompositeAlphaFlagsKHR supported) const {

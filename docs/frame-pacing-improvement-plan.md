@@ -233,9 +233,9 @@ Verification on Linux:
 
 What to do:
 
-- [ ] [Auto] Move readback completion off the present path: keep recording the copy into the frame command buffer (`captureFrameIfRequested`), but collect results on a *later* frame (or a worker thread) once the recorded fence has signaled — never between submit and present.
-- [ ] [Auto] `takeCapturedFrameForCanvas` and the screenshot API may then need a "pending" state; callers (window-manager screenshots, tests) poll or block explicitly rather than implicitly stalling every present.
-- [ ] [Auto] Document the render-target fence wait at `:814-816` as intentional for offscreen rasterization, or offer the exported-fence variant for callers that can overlap.
+- [x] [Auto] Move readback completion off the present path: keep recording the copy into the frame command buffer (`captureFrameIfRequested`), but collect results on a *later* frame (or a worker thread) once the recorded fence has signaled — never between submit and present.
+- [x] [Auto] `takeCapturedFrameForCanvas` and the screenshot API may then need a "pending" state; callers (window-manager screenshots, tests) poll or block explicitly rather than implicitly stalling every present.
+- [x] [Auto] Document the render-target fence wait at `:814-816` as intentional for offscreen rasterization, or offer the exported-fence variant for callers that can overlap.
 
 Verification on Linux:
 

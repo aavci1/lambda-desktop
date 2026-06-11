@@ -848,6 +848,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
 
     bool forceRender = true;
     std::optional<ScreenshotRequest> screenshotPending;
+    std::optional<ScreenshotRequest> screenshotCaptureInFlight;
+    bool snapCaptureInFlight = false;
+    int frameCapturePollAttempts = 0;
     SnapFrameCapture snapFrameCapture = SnapFrameCapture::fromEnvironment();
     SnapAnimationTrace snapAnimationTrace = SnapAnimationTrace::fromEnvironment();
     if (snapAnimationTrace.enabled) snapAnimationTrace.ensureOpen();
@@ -870,6 +873,44 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       screenshotFlashStartedAt = std::chrono::steady_clock::now();
       skipNextVblank = true;
       if (idleBlanked) idleBlanked = false;
+    };
+    auto processCompletedFrameCapture = [&] {
+      if (!screenshotCaptureInFlight && !snapCaptureInFlight) {
+        return false;
+      }
+      std::vector<std::uint8_t> pixels;
+      std::uint32_t width = 0;
+      std::uint32_t height = 0;
+      if (!lambda::takeCapturedFrameForCanvas(canvas, pixels, width, height)) {
+        ++frameCapturePollAttempts;
+        if (frameCapturePollAttempts > 120) {
+          std::fprintf(stderr, "lambda-window-manager: screenshot capture did not produce a frame\n");
+          screenshotCaptureInFlight.reset();
+          snapCaptureInFlight = false;
+          frameCapturePollAttempts = 0;
+          return false;
+        }
+        forceRender = true;
+        skipNextVblank = true;
+        return false;
+      }
+      frameCapturePollAttempts = 0;
+      if (screenshotCaptureInFlight) {
+        if (saveScreenshotRequest(*screenshotCaptureInFlight,
+                                  pixels,
+                                  width,
+                                  height,
+                                  wayland,
+                                  appliedConfig.config.chrome)) {
+          startScreenshotFlash();
+        }
+        screenshotCaptureInFlight.reset();
+      }
+      if (snapCaptureInFlight) {
+        snapFrameCapture.recordFrame(pixels, width, height, wayland);
+        snapCaptureInFlight = false;
+      }
+      return true;
     };
     bool wasVtForeground = device->isVtForeground();
     bool vtAcquireFramePending = false;
@@ -1768,9 +1809,11 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                      LoopInstrumentation::Clock::time_point renderStart,
                                      PresentationTiming presentationTiming,
                                      bool renderAheadFrame) {
+      processCompletedFrameCapture();
+      bool const frameCaptureInFlight = screenshotCaptureInFlight.has_value() || snapCaptureInFlight;
       bool snapTraceThisFrame = snapAnimationTrace.wantsFrame(wayland);
-      bool snapCaptureThisFrame = snapFrameCapture.wantsFrame(wayland);
-      bool const screenshotCaptureThisFrame = screenshotPending.has_value();
+      bool snapCaptureThisFrame = !frameCaptureInFlight && snapFrameCapture.wantsFrame(wayland);
+      bool const screenshotCaptureThisFrame = !frameCaptureInFlight && screenshotPending.has_value();
       bool frameCapturePending = screenshotCaptureThisFrame || snapCaptureThisFrame;
       if (frameCapturePending && !lambda::requestNextFrameCaptureForCanvas(canvas)) {
         if (screenshotCaptureThisFrame) {
@@ -1815,8 +1858,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           }
           atomicReadyFrames.clear();
         }
-	        atomicReadyFrames.push_back(std::move(atomicRenderedFrame));
-	        atomicRenderedFrame = AtomicReadyFrame{};
+        atomicReadyFrames.push_back(std::move(atomicRenderedFrame));
+        atomicRenderedFrame = AtomicReadyFrame{};
       }
       displayTimingSupportLogged = renderFrameCtx.vulkanDisplayTimingSupportLogged;
       useVulkanPresentationCompletion = renderFrameCtx.useVulkanPresentationCompletion;
@@ -1827,22 +1870,15 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                        renderAheadFrame);
       }
       if (frameCapturePending) {
-        std::vector<std::uint8_t> pixels;
-        std::uint32_t width = 0;
-        std::uint32_t height = 0;
-        if (lambda::takeCapturedFrameForCanvas(canvas, pixels, width, height)) {
-          if (screenshotPending) {
-            if (saveScreenshotRequest(*screenshotPending, pixels, width, height, wayland, appliedConfig.config.chrome)) {
-              startScreenshotFlash();
-            }
-          }
-          if (snapCaptureThisFrame) {
-            snapFrameCapture.recordFrame(pixels, width, height, wayland);
-          }
-        } else {
-          std::fprintf(stderr, "lambda-window-manager: screenshot capture did not produce a frame\n");
+        if (screenshotCaptureThisFrame) {
+          screenshotCaptureInFlight = screenshotPending;
+          screenshotPending.reset();
         }
-        screenshotPending.reset();
+        if (snapCaptureThisFrame) {
+          snapCaptureInFlight = true;
+        }
+        frameCapturePollAttempts = 0;
+        processCompletedFrameCapture();
       }
       if (screenshotFlashStartedAt && frameTime - *screenshotFlashStartedAt >= kScreenshotFlashDuration) {
         screenshotFlashStartedAt.reset();
