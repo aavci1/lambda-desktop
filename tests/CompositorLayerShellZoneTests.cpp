@@ -1,4 +1,5 @@
 #include "Compositor/Wayland/LayerShellZones.hpp"
+#include "Compositor/Wayland/LayerShellState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include <doctest/doctest.h>
@@ -61,6 +62,33 @@ TEST_CASE("layer shell configure size resolves output-relative dimensions") {
   });
   CHECK(floating.width == 0);
   CHECK(floating.height == 0);
+}
+
+TEST_CASE("layer shell keyboard interactivity normalizes by protocol version") {
+  using namespace lambda::compositor;
+
+  CHECK_FALSE(layerShellSupportsOnDemandKeyboardInteractivity(
+      ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND_SINCE_VERSION - 1));
+  CHECK(layerShellSupportsOnDemandKeyboardInteractivity(
+      ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND_SINCE_VERSION));
+
+  CHECK(normalizeLayerShellKeyboardInteractivity(1, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE) ==
+        ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+  CHECK(normalizeLayerShellKeyboardInteractivity(1, 1) ==
+        ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE);
+  CHECK(normalizeLayerShellKeyboardInteractivity(
+            ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND_SINCE_VERSION - 1,
+            ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND) ==
+        ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE);
+  CHECK(normalizeLayerShellKeyboardInteractivity(
+            ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND_SINCE_VERSION,
+            ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND) ==
+        ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND);
+
+  CHECK(validLayerShellKeyboardInteractivity(ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE));
+  CHECK(validLayerShellKeyboardInteractivity(ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE));
+  CHECK(validLayerShellKeyboardInteractivity(ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND));
+  CHECK_FALSE(validLayerShellKeyboardInteractivity(ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND + 1));
 }
 
 TEST_CASE("layer shell pending state applies only on commit") {

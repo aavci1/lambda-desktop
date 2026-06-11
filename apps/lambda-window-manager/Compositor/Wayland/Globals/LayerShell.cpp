@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/LayerShell.hpp"
 
+#include "Compositor/Wayland/LayerShellState.hpp"
 #include "Compositor/Wayland/LayerShellZones.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
@@ -63,12 +64,9 @@ void layerSurfaceSetKeyboardInteractivity(wl_client*, wl_resource* resource, std
   auto* layerSurface = resourceData<WaylandServer::Impl::LayerSurface>(resource);
   if (!layerSurface) return;
   std::uint32_t const value =
-      wl_resource_get_version(resource) < ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND_SINCE_VERSION
-          ? static_cast<std::uint32_t>(interactivity != 0
-                                           ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
-                                           : ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE)
-          : interactivity;
-  if (value > ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND) {
+      normalizeLayerShellKeyboardInteractivity(static_cast<std::uint32_t>(wl_resource_get_version(resource)),
+                                               interactivity);
+  if (!validLayerShellKeyboardInteractivity(value)) {
     wl_resource_post_error(resource,
                            ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_KEYBOARD_INTERACTIVITY,
                            "invalid layer-shell keyboard interactivity");
