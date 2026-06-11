@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/DecorationState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
+#include "Compositor/Wayland/SeatFocusState.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
@@ -62,8 +63,8 @@ bool resetXdgPopupRole(WaylandServer::Impl* server,
   if (server->grabPopup_ == popup) xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_);
   if (surface) {
     detachPointerButtonGrabSurface(server, surface);
-    if (server->pointerFocus_ == surface) server->pointerFocus_ = nullptr;
-    if (server->keyboardFocus_ == surface) server->keyboardFocus_ = nullptr;
+    SurfaceSeatCleanupResult const seatCleanup = clearUnmappedSurfaceSeatState(server, surface);
+    if (seatCleanup.pointerFocusChanged) updatePointerConstraintsForFocus(server);
     if (surface->xdgPopup == popup) surface->xdgPopup = nullptr;
     if (surfaceIsXdgPopup(surface)) surface->role = SurfaceRole::None;
   }
@@ -329,10 +330,9 @@ void WaylandServer::Impl::destroyXdgToplevel(XdgToplevel* toplevel) {
   bool const activatePrevious = keyboardFocus_ == surface && surfaceIsXdgToplevel(surface);
   if (surfaceIsXdgToplevel(surface)) {
     wm::clearFocusCycle(this);
-    removeSurfaceFromFocusOrder(this, surface);
-    if (pointerFocus_ == surface) pointerFocus_ = nullptr;
     detachPointerButtonGrabSurface(this, surface);
-    if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
+    SurfaceSeatCleanupResult const seatCleanup = clearUnmappedSurfaceSeatState(this, surface);
+    if (seatCleanup.pointerFocusChanged) updatePointerConstraintsForFocus(this);
     surface->role = SurfaceRole::None;
   }
   while (auto* decoration = decorationFor(this, toplevel)) {
