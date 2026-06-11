@@ -61,6 +61,7 @@ set(_lambda_test_sources
   ${PROJECT_SOURCE_DIR}/apps/lambda-terminal/TerminalCore.cpp
   TerminalCoreTests.cpp
   TerminalPtySmokeTests.cpp
+  TextInputScrollTests.cpp
   ThemeReactivityTests.cpp
 )
 

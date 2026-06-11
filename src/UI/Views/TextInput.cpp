@@ -10,7 +10,6 @@
 #include <Lambda/SceneGraph/RectNode.hpp>
 #include <Lambda/SceneGraph/RenderNode.hpp>
 #include <Lambda/SceneGraph/TextNode.hpp>
-#include <Lambda/UI/Views/ControlFlowDetail.hpp>
 #include <Lambda/UI/InputFieldChrome.hpp>
 #include <Lambda/UI/InputFieldLayout.hpp>
 #include <Lambda/UI/MeasureContext.hpp>
@@ -253,6 +252,17 @@ void setTextLayoutIfNeeded(scenegraph::TextNode& node,
 
 bool sameSelection(detail::TextEditSelection lhs, detail::TextEditSelection rhs) noexcept {
   return lhs.caretByte == rhs.caretByte && lhs.anchorByte == rhs.anchorByte;
+}
+
+void relayoutStoredSelfAndAncestors(scenegraph::SceneNode& node) {
+  scenegraph::SceneNode* current = &node;
+  for (int depth = 0; depth < 64 && current; ++depth) {
+    // Scroll containers need a fresh intrinsic content measurement even when their
+    // own viewport size stays unchanged.
+    current->invalidateSubtreeLayout();
+    (void)current->relayoutStoredConstraints();
+    current = current->parent();
+  }
 }
 
 Color selectionFill(Color color) noexcept {
@@ -871,11 +881,7 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
       std::string const& text = valueState.get();
       if (input.multiline && (styleChanged || text != *lastMeasuredText)) {
         *lastMeasuredText = text;
-        Size const oldSize = rawWrapper->size();
-        rawWrapper->invalidateSubtreeLayout();
-        if (rawWrapper->relayoutStoredConstraints()) {
-          detail::controlPropagateLayoutChange(*rawWrapper, oldSize);
-        }
+        relayoutStoredSelfAndAncestors(*rawWrapper);
       }
       detail::TextEditSelection currentSelection = selectionState.get();
       detail::TextEditSelection const clamped =
