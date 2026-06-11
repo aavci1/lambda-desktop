@@ -11,7 +11,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <cstdlib>
+#include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -57,6 +61,14 @@ void requestWindowClose(unsigned int handle) {
   }
 }
 
+std::optional<std::string> readWholeFile(std::string const& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) {
+    return std::nullopt;
+  }
+  return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+
 int parsePositiveInt(std::string const& text) {
   if (text.empty()) {
     return 0;
@@ -69,6 +81,15 @@ int parsePositiveInt(std::string const& text) {
     value = value * 10 + (ch - '0');
   }
   return value;
+}
+
+int envPositiveInt(char const* name, int fallback) {
+  char const* value = std::getenv(name);
+  if (!value || !*value) {
+    return fallback;
+  }
+  int parsed = parsePositiveInt(value);
+  return parsed > 0 ? parsed : fallback;
 }
 
 TextInput::Style compactInputStyle() {
@@ -1486,6 +1507,87 @@ struct LambdaEditor {
   }
 };
 
+struct EditorAutotestPasteState {
+  std::string path;
+  std::optional<std::string> payload;
+  std::uint64_t timerId = 0;
+  int attempts = 0;
+  int ticksAfterPaste = 0;
+  int exitAfterTicks = 80;
+  bool pasted = false;
+};
+
+void installEditorAutotestPaste(Application& app, Window& window) {
+  char const* pastePath = std::getenv("LAMBDA_EDITOR_AUTOTEST_PASTE_FILE");
+  if (!pastePath || !*pastePath) {
+    return;
+  }
+
+  auto state = std::make_shared<EditorAutotestPasteState>();
+  state->path = pastePath;
+  state->exitAfterTicks = std::max(1, envPositiveInt("LAMBDA_EDITOR_AUTOTEST_EXIT_AFTER_PASTE_SECONDS", 8) * 10);
+  state->timerId = app.scheduleRepeatingTimer(std::chrono::milliseconds{100}, window.handle());
+  app.eventQueue().on<TimerEvent>([state, &app, &window](TimerEvent const& event) {
+    if (event.timerId != state->timerId) {
+      return;
+    }
+
+    if (state->pasted) {
+      ++state->ticksAfterPaste;
+      window.requestRedraw();
+      if (state->ticksAfterPaste >= state->exitAfterTicks) {
+        std::fprintf(stderr, "lambda-editor-autotest: complete ticks_after_paste=%d\n",
+                     state->ticksAfterPaste);
+        app.cancelTimer(state->timerId);
+        app.quit();
+      }
+      return;
+    }
+
+    ++state->attempts;
+    if (!state->payload) {
+      state->payload = readWholeFile(state->path);
+      if (!state->payload) {
+        std::fprintf(stderr, "lambda-editor-autotest: failed to read paste file: %s\n",
+                     state->path.c_str());
+        app.cancelTimer(state->timerId);
+        std::exit(3);
+      }
+    }
+
+    if (Application::hasInstance()) {
+      Application::instance().clipboard().writeText(*state->payload);
+    }
+    if (!window.isCommandEnabled("edit.paste")) {
+      if (state->attempts > 100) {
+        std::fprintf(stderr, "lambda-editor-autotest: edit.paste was not enabled after %d attempts\n",
+                     state->attempts);
+        app.cancelTimer(state->timerId);
+        std::exit(4);
+      }
+      return;
+    }
+
+    (void)window.dispatchCommand("edit.selectAll");
+    if (!window.dispatchCommand("edit.paste")) {
+      if (state->attempts > 100) {
+        std::fprintf(stderr, "lambda-editor-autotest: edit.paste dispatch failed after %d attempts\n",
+                     state->attempts);
+        app.cancelTimer(state->timerId);
+        std::exit(5);
+      }
+      return;
+    }
+
+    state->pasted = true;
+    window.requestRedraw();
+    std::fprintf(stderr, "lambda-editor-autotest: pasted bytes=%zu attempts=%d exit_after_ticks=%d\n",
+                 state->payload->size(),
+                 state->attempts,
+                 state->exitAfterTicks);
+  });
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -1511,5 +1613,6 @@ int main(int argc, char* argv[]) {
       .initialDocument = initial.ok ? std::move(initial.document) : EditorDocument::untitled(),
       .initialStatus = initial.status,
   });
+  installEditorAutotestPaste(app, window);
   return app.exec();
 }

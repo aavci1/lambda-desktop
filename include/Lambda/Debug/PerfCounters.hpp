@@ -65,6 +65,8 @@ struct RenderCounters {
   std::uint64_t backdropMaxBlurPixels = 0;
   std::uint64_t recorderCapacityGrowths = 0;
   std::uint64_t recorderCapacityGrowthBytes = 0;
+  std::uint64_t glyphAtlasGrowths = 0;
+  std::uint64_t glyphAtlasGrowPixels = 0;
   std::uint64_t vulkanRecordNs = 0;
   std::uint64_t vulkanDrawOpsNs = 0;
   std::uint64_t vulkanStackedBlurNs = 0;
@@ -289,6 +291,11 @@ inline void printVerboseLine(IntervalCounters const& interval, double seconds) {
                  static_cast<unsigned long long>(interval.render.recorderCapacityGrowths),
                  static_cast<double>(interval.render.recorderCapacityGrowthBytes) / 1024.0);
   }
+  if (interval.render.glyphAtlasGrowths > 0) {
+    std::fprintf(stderr, " atlasGrow=%llu growMP=%.1f",
+                 static_cast<unsigned long long>(interval.render.glyphAtlasGrowths),
+                 static_cast<double>(interval.render.glyphAtlasGrowPixels) / 1'000'000.0);
+  }
 
   if (hasComponentKeyWork(interval.componentKeys)) {
     ComponentKeyCounters const& ck = interval.componentKeys;
@@ -458,6 +465,15 @@ inline void recordRecorderCapacityGrowth(std::uint64_t bytes) {
   auto& render = detail::counters().render;
   ++render.recorderCapacityGrowths;
   render.recorderCapacityGrowthBytes += bytes;
+}
+
+inline void recordGlyphAtlasGrowth(std::uint64_t oldPixels, std::uint64_t newPixels) {
+  if (!enabled()) {
+    return;
+  }
+  auto& render = detail::counters().render;
+  ++render.glyphAtlasGrowths;
+  render.glyphAtlasGrowPixels += newPixels > oldPixels ? newPixels - oldPixels : newPixels;
 }
 
 inline void recordVulkanRecordDuration(std::chrono::nanoseconds elapsed) {

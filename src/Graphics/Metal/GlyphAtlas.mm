@@ -1,5 +1,7 @@
 #import <Metal/Metal.h>
 
+#include <Lambda/Debug/PerfCounters.hpp>
+
 #include "Graphics/Metal/GlyphAtlas.hpp"
 
 #include <algorithm>
@@ -214,6 +216,8 @@ bool GlyphAtlas::grow() {
   ++generation_;
   pendingUploads_.clear();
   pendingGrow_ = false;
+  debug::perf::recordGlyphAtlasGrowth(static_cast<std::uint64_t>(oldWidth) * oldHeight,
+                                      static_cast<std::uint64_t>(newWidth) * newHeight);
   return true;
 }
 

@@ -58,7 +58,8 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] macOS compile verification after the latest Metal atlas/backdrop batches: fixed the ARC-only compile error in `MetalCanvas.mm` backdrop buffer pooling (`id<MTLBuffer>&` with no explicit ownership), then `cmake --build build -j"$(sysctl -n hw.ncpu)"` passed (2026-06-11).
 - [x] macOS focused tests: `MetalCanvasTests.mm` passed 12 cases / 92 assertions including the deferred atlas grow and glyph-padding regressions, `SceneGraphTests.cpp` passed 20 cases / 115 assertions, and the explicit deferred atlas grow regression passed with `LAMBDA_DEBUG_PERF=2` (2026-06-11).
 - [x] macOS full `ctest --test-dir build --output-on-failure -j"$(sysctl -n hw.ncpu)"` passed 2/2 tests (2026-06-11).
-- [ ] Remaining macOS runtime/visual gap for the latest Metal changes: paste large unicode-heavy text into `lambda-editor` with `LAMBDA_DEBUG_PERF=2`, inspect `CanvasDrawableWait`/atlas-grow behavior, and compare backdrop-blur visuals.
+- [x] Added repeatable macOS Metal/editor runtime helper `scripts/verify-macos-metal-editor-perf.sh`. It builds `lambda-editor`, generates a large unicode-heavy UTF-8 paste payload, drives the normal `edit.paste` command through the opt-in `LAMBDA_EDITOR_AUTOTEST_PASTE_FILE` hook, parses `LAMBDA_DEBUG_PERF=2` detail rows for `CanvasDrawableWait` and frame-budget p99, and requires `atlasGrow` perf evidence by default. Linux validation here: script syntax passed, non-Darwin guard returned the expected "macOS is required" exit, Linux build of `lambda-editor`/`lambda_tests` passed, focused Editor/TextInput/EventQueue tests passed, and a headless-Weston smoke of the editor autotest pasted and exited cleanly.
+- [ ] Remaining macOS runtime/visual gap for the latest Metal changes: run `scripts/verify-macos-metal-editor-perf.sh` on macOS and compare backdrop-blur visuals by frame-capture/manual inspection.
 - [x] Post-implementation review backlog (REV-*) fixed; remaining unchecked items are validation gaps.
 
 ## Working Environment
@@ -86,7 +87,7 @@ Measurement tooling that already exists — use it before and after every change
 | Vulkan present phases | `LAMBDA_RESIZE_TRACE=1`, `vulkan-present-detail` trace (`VulkanCanvasLifecycle.inc:633-660`) | Per-phase ms: frame fence, acquire, atlas, backdrop prep, upload, record, submit, present |
 | Compositor frame profile CSV | `SnapAnimationTrace::recordFrame` in `CompositorRuntime.cpp:760-838` (header at `747-754`) | input→render, render-ahead, snapshot/surface/present phase ms |
 | Flip interval error | `intervalErrorMs` trace at `CompositorRuntime.cpp:1883-1887` | Render-ahead lead accuracy vs real flips |
-| Metal counters | `debug::perf` — `CanvasDrawableWait`, `CanvasPresent`, `DisplayLinkToPresent` | Drawable stalls vs present cost on macOS |
+| Metal counters | `debug::perf` — `CanvasDrawableWait`, `CanvasPresent`, `DisplayLinkToPresent`, `atlasGrow` | Drawable stalls, atlas growth, and present cost on macOS |
 | Validation layers | `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` | Sync/lifetime regressions from any of these changes |
 
 **Open REV code items:** none. Original FP workstreams (FP-1 … FP-16) are marked complete above; remaining manual verification checkboxes under each FP section still apply where unchecked.
@@ -421,7 +422,7 @@ What to do:
 Verification on macOS:
 
 - [x] Full `ctest` suite passes, including `MetalCanvasTests.mm` and the deferred atlas grow regression.
-- [ ] `debug::perf` runtime check — `CanvasDrawableWait` p95 drops and no atlas-grow hitch when pasting large unicode-heavy text into `lambda-editor`.
+- [ ] `debug::perf` runtime check — run `scripts/verify-macos-metal-editor-perf.sh` on macOS; it drives a large unicode-heavy paste into `lambda-editor`, gates `CanvasDrawableWait` p95/frame-budget p99, and requires `atlasGrow` perf evidence by default.
 - [ ] Backdrop blur visuals unchanged by frame-capture/manual comparison.
 
 ---
