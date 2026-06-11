@@ -59,10 +59,9 @@ Wayland protocols implemented directly against `libwayland-server`. DRM via `lib
 
 This is a real cost — wlroots solves many edge cases we'll re-encounter — but it's the path that lets the compositor stay coherent with Lambda's design rather than adopting wlroots' opinions about scene graphs, output management, and surface state.
 
-The direct implementation must still be held against wlroots behavior. As of 2026-05-31, the verified comparison pass covers surface commit-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output runtime updates, pointer-extension cleanup, cursor-shape cleanup, and viewporter resource hygiene. Remaining spec work:
+The direct implementation must still be held against wlroots behavior. As of 2026-06-12, the verified comparison pass covers surface commit-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output runtime updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, and remaining global resource hygiene. Remaining spec work:
 
 - Resume the deferred frame-coherence issue when ready: system-titlebar and client content must render from one committed geometry model so Settings resize on DP-1 HiDPI cannot show momentary non-synced titlebar/content widths.
-- Finish remaining global resource hygiene for core, shell, and custom protocol globals: version caps, bind/object no-memory handling, and inert-resource cleanup.
 - Compare larger wlroots workflows that are not fully covered by narrow resource tests: xdg toplevel configure state, seat focus/grabs, data-device drag/drop lifecycle, dynamic layer-shell behavior, and output-layout foundations.
 - Build a repeatable visual/real-app validation harness for resize, dock/topbar, menus, fullscreen, browser/video, GTK/Qt, `foot`, and Lambda apps.
 

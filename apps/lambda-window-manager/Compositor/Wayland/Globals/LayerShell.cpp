@@ -5,7 +5,6 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
 
-#include <algorithm>
 #include <memory>
 #include <vector>
 #include <wayland-server-core.h>
@@ -155,8 +154,10 @@ void layerShellGetLayerSurface(wl_client* client, wl_resource* resource, std::ui
   layerSurface->layer = layer;
   layerSurface->pending.layer = layer;
   layerSurface->nameSpace = nameSpace ? nameSpace : "";
-  wl_resource* layerResource =
-      wl_resource_create(client, &zwlr_layer_surface_v1_interface, wl_resource_get_version(resource), id);
+  wl_resource* layerResource = wl_resource_create(client,
+                                                  &zwlr_layer_surface_v1_interface,
+                                                  layerShellResourceVersion(wl_resource_get_version(resource)),
+                                                  id);
   if (!layerResource) {
     wl_client_post_no_memory(client);
     return;
@@ -176,7 +177,12 @@ struct zwlr_layer_shell_v1_interface const layerShellImpl{
 };
 
 void bindLayerShellImpl(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &zwlr_layer_shell_v1_interface, std::min(version, 4u), id);
+  wl_resource* resource =
+      wl_resource_create(client, &zwlr_layer_shell_v1_interface, layerShellResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &layerShellImpl, data, nullptr);
 }
 

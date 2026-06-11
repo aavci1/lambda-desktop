@@ -5,7 +5,6 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "xx-cutouts-v1-server-protocol.h"
 
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <wayland-server-core.h>
@@ -86,7 +85,10 @@ void cutoutsManagerGetCutouts(wl_client* client,
   auto cutouts = std::make_unique<WaylandServer::Impl::XxCutouts>();
   cutouts->server = server;
   cutouts->toplevel = toplevel;
-  wl_resource* cutoutsResource = wl_resource_create(client, &xx_cutouts_v1_interface, 1, id);
+  wl_resource* cutoutsResource = wl_resource_create(client,
+                                                    &xx_cutouts_v1_interface,
+                                                    cutoutsResourceVersion(wl_resource_get_version(resource)),
+                                                    id);
   if (!cutoutsResource) {
     wl_client_post_no_memory(client);
     return;
@@ -115,7 +117,11 @@ struct xx_cutouts_manager_v1_interface const cutoutsManagerImpl{
 
 void bindCutoutsManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &xx_cutouts_manager_v1_interface, std::min(version, 1u), id);
+      wl_resource_create(client, &xx_cutouts_manager_v1_interface, cutoutsResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &cutoutsManagerImpl, data, nullptr);
 }
 

@@ -85,6 +85,7 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
     CompositorFrameSchedulerTests.cpp
     FreeTypeTextSystemTests.cpp
     CompositorFractionalScaleTests.cpp
+    CompositorGlobalResourceHygieneTests.cpp
     CompositorWindowGeometryTests.cpp
     CompositorWindowFrameGeometryTests.cpp
     CompositorConfigHotReloadTests.cpp

@@ -1326,6 +1326,10 @@ void bindXdgWmBase(wl_client* client, void* data, std::uint32_t version, std::ui
 void bindXdgDecorationManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
   wl_resource* resource = wl_resource_create(client, &zxdg_decoration_manager_v1_interface,
                                              std::min(version, 1u), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &xdgDecorationManagerImpl, data, nullptr);
 }
 

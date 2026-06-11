@@ -1475,12 +1475,17 @@ void traceResizeSurface(char const* event, WaylandServer::Impl::Surface const* s
 }
 
 void bindCompositor(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &wl_compositor_interface, std::min(version, 5u), id);
+  wl_resource* resource = wl_resource_create(client, &wl_compositor_interface, compositorResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &compositorImpl, data, nullptr);
 }
 
 void bindSubcompositor(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &wl_subcompositor_interface, std::min(version, 1u), id);
+  wl_resource* resource =
+      wl_resource_create(client, &wl_subcompositor_interface, subcompositorResourceVersion(version), id);
   if (!resource) {
     wl_client_post_no_memory(client);
     return;
@@ -1492,7 +1497,11 @@ wl_resource* WaylandServer::Impl::createSurface(wl_client* client, std::uint32_t
   auto surface = std::make_unique<Surface>();
   surface->server = this;
   surface->id = nextSurfaceId_++;
-  wl_resource* resource = wl_resource_create(client, &wl_surface_interface, std::min(version, 5u), id);
+  wl_resource* resource = wl_resource_create(client, &wl_surface_interface, compositorResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return nullptr;
+  }
   surface->resource = resource;
   auto* raw = surface.get();
   surfaces_.push_back(std::move(surface));
@@ -1509,7 +1518,7 @@ wl_resource* WaylandServer::Impl::createSurface(wl_client* client, std::uint32_t
   }
   diagnostics::crashLog("surface-create surface=%llu version=%u total=%zu",
                         static_cast<unsigned long long>(raw->id),
-                        std::min(version, 5u),
+                        compositorResourceVersion(version),
                         surfaces_.size());
   return resource;
 }

@@ -1,6 +1,6 @@
 # Compositor wlroots improvement plan
 
-**Last updated:** 2026-06-01
+**Last updated:** 2026-06-12
 **Status:** Active implementation plan.
 **Scope:** Compare Lambda Window Manager protocol and compositor workflows against wlroots, then implement the highest-value fixes in priority order without importing wlroots as a dependency.
 
@@ -37,7 +37,7 @@
 | P17 | WM-COMP-18 Pointer extension dependent-resource cleanup | Verified | Server-side relative-pointer and pointer-constraint objects are removed when their wl_pointer resource is destroyed, leaving protocol resources inert | Pointer-extension helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle slice |
 | P18 | WM-COMP-19 Cursor-shape dependent-resource cleanup | Verified | Cursor-shape device state is removed when the underlying wl_pointer resource is destroyed, leaving protocol resources inert | Cursor-shape helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-lifecycle slice |
 | P19 | WM-COMP-20 Viewporter resource hygiene | Verified | Viewporter resource versioning and bind no-memory handling now align with wlroots | Viewporter helper, compositor, and broader feasible suites pass | No manual gate needed for this protocol-resource slice |
-| P20 | WM-COMP-21 Remaining global resource hygiene | Planned | Compare core globals, shell globals, custom globals, bind allocation handling, object version caps, and inert-resource cleanup patterns | Targeted helper tests plus compositor suite | No manual gate expected unless behavior changes |
+| P20 | WM-COMP-21 Remaining global resource hygiene | Verified | Core, shm, layer-shell, cutouts, and xdg-decoration manager paths now have explicit version caps or no-memory bind/object guards; existing dependent-resource cleanup was audited | `CompositorGlobalResourceHygieneTests.cpp`, compositor source-file suite, and build pass | No manual gate needed for this protocol-resource slice |
 | P21 | WM-COMP-22 XDG toplevel configure-state parity | Planned | Compare remaining scheduled/pending/current toplevel state against wlroots and decide whether a larger synced-state migration is required | XDG toplevel/configure tests plus compositor suite | DP-1 Settings/system-titlebar resize if visible geometry changes |
 | P22 | WM-COMP-23 Seat focus and grab workflow parity | Verified popup-grab parity | xdg-popup grabs now follow the wlroots popup-grab model for the implemented pointer/keyboard seat paths: popup grab stack, parent grab preservation, same-client owner events, invalid grab-after-commit rejection, whole-grab outside dismissal, implicit pointer-button client grabs across popup teardown, and popup keyboard-focus isolation. Broader non-popup seat-grab parity remains planned. | Seat serial, popup, config, and compositor-focused tests pass | Firefox app/context menu actions and click-open submenus passed |
 | P23 | WM-COMP-24 Data-device and drag/drop lifecycle parity | Planned | Compare data-source, data-offer, action negotiation, drop/leave/cancel, selection, and DnD serial interactions | Data-device/DnD/selection tests plus compositor suite | Manual DnD/file-transfer validation if payload behavior changes |
@@ -47,7 +47,7 @@
 
 ## Remaining Work After 2026-06-01
 
-Default next implementation order is WM-COMP-21, WM-COMP-22, the remaining non-popup WM-COMP-23 seat/grab parity, then WM-COMP-24 through WM-COMP-27, unless the deferred WM-COMP-1 titlebar/content sync issue is explicitly resumed first.
+Default next implementation order is WM-COMP-22, the remaining non-popup WM-COMP-23 seat/grab parity, then WM-COMP-24 through WM-COMP-27, unless the deferred WM-COMP-1 titlebar/content sync issue is explicitly resumed first.
 
 Deferred P0 work:
 
@@ -57,7 +57,6 @@ Deferred P0 work:
 
 Next comparison work:
 
-- Finish protocol resource hygiene on the remaining globals that were not part of WM-COMP-12 through WM-COMP-20.
 - Compare larger behavior workflows against wlroots: xdg toplevel configure state, seat focus/grabs, data-device DnD lifecycle, dynamic layer-shell behavior, and output-layout foundations.
 - Turn repeated manual regressions into scripts or trace-driven checks where possible, while keeping target-hardware visual validation for resize, popups, fullscreen, and real-app rendering.
 
@@ -747,18 +746,27 @@ Next comparison work:
 
 **Implementation steps:**
 
-1. Planned: inventory each remaining global against wlroots or, for Lambda custom protocols, against the same local resource-lifecycle rules.
-2. Planned: add small state/version helpers where repeated resource-version logic exists.
-3. Planned: guard manager bind and object allocation failures with `wl_client_post_no_memory`.
-4. Planned: make dependent-resource destruction leave protocol resources inert instead of retaining raw pointers where applicable.
-5. Planned: add targeted helper tests and run the compositor suite plus the broader feasible suite.
+1. Done: inventoried the remaining global bind/object paths.
+2. Done: added explicit version helpers for core compositor/subcompositor, shm, layer-shell, and cutouts resource caps.
+3. Done: guarded remaining manager bind and object allocation failures with `wl_client_post_no_memory`.
+4. Done: audited dependent-resource destruction; existing shm pool/buffer, xdg/background-effect, and pointer-dependent cleanup already leave dependents inert or cleared for this remaining-global slice.
+5. Done: added targeted helper tests and ran the compositor suite subset.
+
+**Step 1 inventory:**
+
+- Core compositor: `wl_compositor` binding and `wl_surface` object creation lacked failed-allocation guards and used hardcoded version caps.
+- SHM: `wl_shm` binding, pool creation, and buffer creation lacked failed-allocation guards; pool creation also needed to close the transferred fd if the pool resource allocation fails.
+- XDG shell: xdg object creation paths already guard allocation failures; `zxdg_decoration_manager_v1` binding lacked a failed-allocation guard.
+- Layer shell: layer-surface object creation already guarded allocation failure; manager binding needed a no-memory guard and both paths now use the explicit implemented version cap.
+- Cutouts: cutouts object creation already guarded allocation failure; manager binding needed a no-memory guard and both paths now use the explicit implemented version cap.
+- Background effect: manager and surface object creation already guard allocation failures; no code change was needed in this slice.
 
 **Acceptance criteria:**
 
-- Remaining manager bind paths do not dereference failed resource allocations.
-- New object resources are created at the capped bound-manager version where the protocol permits it.
-- Destroyed dependent resources cannot leave live server objects with stale raw resource pointers.
-- All changes are covered by automated helper or protocol-state tests.
+- Done: remaining manager bind paths do not dereference failed resource allocations.
+- Done: new object resources are created at the capped bound-manager version where the protocol permits it.
+- Done: destroyed dependent resources cannot leave live server objects with stale raw resource pointers in this audited remaining-global set.
+- Done: version-cap changes are covered by automated helper tests; allocation-guard paths were build- and audit-verified because `wl_resource_create` failure injection is not available in the current harness.
 
 ## WM-COMP-22 XDG Toplevel Configure-State Parity
 
@@ -1018,3 +1026,4 @@ Next comparison work:
 | 2026-05-31 | WM-COMP-21+ | Planned | End-of-day wrap-up captured the remaining wlroots comparison workstreams: remaining global resource hygiene, xdg toplevel configure-state parity, full seat/grab workflow parity, data-device DnD lifecycle parity, dynamic layer-shell behavior, output-layout foundation, and visual regression/real-app harness work. |
 | 2026-06-01 | WM-COMP-23 | Verified slice | Audited the Firefox xdg-popup menu path against wlroots-style seat/grab behavior and fixed popup input routing: popup-first hit testing now honors the grab client, same-client owner-event routing works during popup grabs, implicit pointer-button delivery survives transient popup surface teardown, and popup clicks avoid toplevel raise/keyboard focus changes. Firefox menu actions and click-open submenus passed manual validation. Build passed for `lambda-window-manager` and `lambda_tests`; `./build/tests/lambda_tests --test-case="*popup*"`, `./build/tests/lambda_tests --test-case="*config*"`, `./build/tests/lambda_tests --test-case="*seat serial*"`, `./build/tests/lambda_tests --test-case="*Compositor*" --source-file-exclude="*VulkanRenderTargetTests.cpp"`, and `git diff --check` passed. The unfiltered `*Compositor*` subset still requires a physical Vulkan device for three render-target tests in this environment. |
 | 2026-06-01 | WM-COMP-23 | Verified popup-grab parity | Completed the remaining xdg-popup grab parity against wlroots for the implemented pointer/keyboard seat paths: server popup grabs now carry a grab client, seat resource, and popup stack; parent popup grabs remain active under child grabs; popup grabs are rejected after popup commit/map and when already grabbed; outside clicks end the whole active popup grab; popup null-buffer unmap releases its grab; keyboard focus is pinned to the active grabbed popup while the grab is active. Build passed for `lambda-window-manager` and `lambda_tests`; `./build/tests/lambda_tests --test-case="*popup*"`, `./build/tests/lambda_tests --test-case="*seat serial*"`, and `git diff --check` passed. |
+| 2026-06-12 | WM-COMP-21 | Verified | Completed the remaining global resource-hygiene pass: core compositor/subcompositor, shm, layer-shell, cutouts, and xdg-decoration manager bind/object paths now guard failed resource allocation, close transferred shm pool fds on pool-resource failure, and use explicit implemented version caps where applicable. The audit found background-effect and xdg object allocation paths already guarded, and existing dependent-resource cleanup already clears the relevant stale pointers. Build passed for `lambda_tests` and `lambda-window-manager`; `./build/tests/lambda_tests --source-file='*CompositorGlobalResourceHygieneTests.cpp' --no-skip`, `./build/tests/lambda_tests --source-file='*Compositor*Tests.cpp' --no-skip`, `./build/tests/lambda_tests --source-file-exclude='*RuntimeInputTests.cpp' --no-skip`, and `git diff --check` passed. The unfiltered suite was blocked by `RuntimeInputTests.cpp` requiring a Wayland display in this shell. |

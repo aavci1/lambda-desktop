@@ -8,7 +8,6 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
-#include <algorithm>
 #include <memory>
 
 namespace lambda::compositor {
@@ -33,6 +32,13 @@ struct wl_buffer_interface const bufferImpl{bufferDestroy};
 
 void shmCreatePool(wl_client* client, wl_resource* resource, std::uint32_t id, int fd, std::int32_t size) {
   auto* server = serverFrom(resource);
+  wl_resource* poolResource = wl_resource_create(client, &wl_shm_pool_interface, 1, id);
+  if (!poolResource) {
+    if (fd >= 0) close(fd);
+    wl_client_post_no_memory(client);
+    return;
+  }
+
   auto pool = std::make_unique<WaylandServer::Impl::ShmPool>();
   pool->server = server;
   pool->fd = fd;
@@ -41,7 +47,6 @@ void shmCreatePool(wl_client* client, wl_resource* resource, std::uint32_t id, i
     pool->data = mmap(nullptr, static_cast<std::size_t>(size), PROT_READ, MAP_SHARED, fd, 0);
     if (pool->data == MAP_FAILED) pool->data = nullptr;
   }
-  wl_resource* poolResource = wl_resource_create(client, &wl_shm_pool_interface, 1, id);
   pool->resource = poolResource;
   auto* raw = pool.get();
   server->shmPools_.push_back(std::move(pool));
@@ -61,6 +66,14 @@ struct wl_shm_interface const shmImpl{
 void shmPoolCreateBuffer(wl_client* client, wl_resource* resource, std::uint32_t id, std::int32_t offset,
                          std::int32_t width, std::int32_t height, std::int32_t stride, std::uint32_t format) {
   auto* pool = resourceData<WaylandServer::Impl::ShmPool>(resource);
+  if (!pool) return;
+
+  wl_resource* bufferResource = wl_resource_create(client, &wl_buffer_interface, 1, id);
+  if (!bufferResource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+
   auto buffer = std::make_unique<WaylandServer::Impl::ShmBuffer>();
   buffer->server = pool->server;
   buffer->pool = pool;
@@ -75,7 +88,6 @@ void shmPoolCreateBuffer(wl_client* client, wl_resource* resource, std::uint32_t
   buffer->height = height;
   buffer->stride = stride;
   buffer->format = format;
-  wl_resource* bufferResource = wl_resource_create(client, &wl_buffer_interface, 1, id);
   buffer->resource = bufferResource;
   auto* raw = buffer.get();
   pool->server->shmBuffers_.push_back(std::move(buffer));
@@ -107,7 +119,11 @@ void shmPoolDestroy(wl_client*, wl_resource* resource) {
 } // namespace
 
 void bindShm(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &wl_shm_interface, std::min(version, 1u), id);
+  wl_resource* resource = wl_resource_create(client, &wl_shm_interface, shmResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   wl_resource_set_implementation(resource, &shmImpl, data, nullptr);
   wl_shm_send_format(resource, WL_SHM_FORMAT_ARGB8888);
   wl_shm_send_format(resource, WL_SHM_FORMAT_XRGB8888);
