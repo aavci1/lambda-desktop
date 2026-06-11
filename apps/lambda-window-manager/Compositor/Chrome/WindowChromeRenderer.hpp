@@ -13,6 +13,7 @@ void drawWindowChrome(Canvas& canvas,
                       CommittedSurfaceSnapshot const& surface,
                       ChromeConfig const& chrome);
 void drawWindowChromeControls(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome);
+void drawWindowChromeActiveControls(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome);
 void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome);
 void drawWindowFrameBorder(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome);
 void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview, ChromeConfig const& chrome);

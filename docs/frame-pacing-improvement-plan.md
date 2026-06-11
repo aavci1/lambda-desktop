@@ -23,13 +23,14 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 - [x] Standard external compositor smoke partially passed: Weston 15.0.1 headless with kiosk shell/fake seat ran `weston-smoke` until a controlled 8-second timeout with no Weston runtime errors. The Lambda presentation-feedback checker also connected far enough to report that Weston headless advertises `CLOCK_MONOTONIC_RAW`, so it remains unsuitable for validating Lambda's stricter `CLOCK_MONOTONIC` presentation contract.
 - [x] Validation-layer focused Vulkan render-target run passed on 2026-06-11: `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation VK_LOADER_DEBUG=layer ./build/tests/lambda_tests --source-file="*VulkanRenderTargetTests.cpp" --no-skip` loaded `VK_LAYER_KHRONOS_validation` and passed 20 cases / 146 assertions after matching the backdrop-blur pipeline format to its R16 render targets and covering same-frame image draw/destroy.
 - [x] KMS cursor/presentation review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager` and `./build/tests/lambda_tests --source-file="*CompositorPresentationFeedbackTests.cpp" --no-skip` (6 cases / 46 assertions).
+- [x] Wayland/chrome review batch build and focused tests passed on 2026-06-11: `cmake --build build -j"$(nproc)" --target lambda_tests lambda-window-manager`, compositor scene/surface/chrome slice (47 cases / 300 assertions), and frame-scheduler/scene-damage/window-state source slice (41 cases / 253 assertions).
 - [ ] Remaining local input gap: `ydotool` and `wtype` are installed and `/dev/input/event0` has an ACL for `aavci`, but `ydotoold` cannot start because `/dev/uinput` is still `root:root` mode `0600`; `evemu-event` is still missing. Real hardware input-driver and manual cursor visual validation still require a prepared host.
 - [ ] Remaining environment gap: broad real-app visual smoke cases still require manual interaction with a running Lambda compositor session, especially move/drag/resize and cursor visual checks.
 - [ ] Remaining system-tool gap: `wayland-utils` and `evemu` are not installed; `aavci` is in `wheel`, but noninteractive `sudo` still prompts for a password, so this session cannot repair `/dev/uinput` permissions or install the remaining packages. The broad pointer/compositor doctest slice also still needs a live `WAYLAND_DISPLAY`; four `RuntimeInputTests.cpp` cases failed with `Failed to connect to Wayland display`.
 - [x] macOS compile verification: `lambda_tests` built cleanly including `MetalCanvasTests.mm` (2026-06-11).
 - [x] macOS focused tests: `*Metal*,*SceneGraph*` — 20 cases, 133 assertions, all passed (2026-06-11).
 - [ ] Remaining macOS runtime gap: `debug::perf` counters (`CanvasDrawableWait`, atlas-grow hitch), full `ctest`, and backdrop-blur visual comparison.
-- [ ] Post-implementation review backlog (REV-*) below — 3 high, 6 medium, 7 low, and 2 nit items remain open.
+- [ ] Post-implementation review backlog (REV-*) below — 3 high, 4 medium, 5 low, and 1 nit item remain open.
 
 ## Working Environment
 
@@ -456,28 +457,6 @@ What to do:
 - [ ] [Auto] Advance `surfaceRenderState.sceneGraph` when a frame is rendered, not only when scheduled; or roll back consumed damage when a prepared frame is discarded.
 - [ ] [Manual] Rapid glass-window updates with mailbox replacement — no stale regions outside damage.
 
-### REV-W1: FIFO path drops `wl_surface_frame` throttling for occluded windows
-
-**Severity: Medium (event-loop stall or spin when occluded).**
-
-Non-MAILBOX `requestAnimationFrame` posts `FrameEvent` immediately (`WaylandWindow.cpp:1324-1325`) without `wl_surface_frame`. Occluded surfaces no longer pause cheaply; FIFO present may block the shared event loop. `usesMailboxPresentMode()` is false until first swapchain exists.
-
-What to do:
-
-- [ ] [Auto] Keep `wl_frame` gating when surface is occluded/minimized even under FIFO; or detect occlusion and skip present.
-- [ ] [Manual] Hide a FIFO-paced window behind another — CPU/event-loop should stay responsive.
-
-### REV-W2: Popover coalescing can stall on idle compositor without frame callbacks
-
-**Severity: Medium (frozen popover after pointer event).**
-
-`requestPopoverFrame` commits without buffer damage (`WaylandWindow.cpp:1665-1673`). Some compositors only deliver `wl_surface_frame` when they repaint; hardware-cursor-only motion may not trigger it. Event-driven paints now wait ≥1 compositor frame vs synchronous before.
-
-What to do:
-
-- [ ] [Auto] Render first paint after an event immediately; pace only subsequent updates. Or attach minimal damage / add fallback timeout.
-- [ ] [Manual] Open popover menu on idle KMS desktop; hover/click updates remain responsive.
-
 ### REV-M4: Backdrop segments overwrite each other's uniform slots (pre-existing)
 
 **Severity: Medium (incorrect blur transforms when segments differ).**
@@ -526,16 +505,6 @@ What to do:
 - [ ] [Auto] Clear `preparedRenderOps_` when replay fails due to atlas generation mismatch.
 - [ ] [Auto] Scene-graph test: rebuild atlas between renders, assert prepare count increases.
 
-### REV-K6: Transient chrome double-draws all three buttons
-
-**Severity: Low (cosmetic — darker/thicker glyphs, ghost under translucent hover).**
-
-Cached base layer already contains non-hover controls (`stableChromeSnapshot`); `drawTransientChromeControls` redraws all three (`SurfaceRenderer.cpp:553`, `572` → `WindowChromeRenderer.cpp:230-232`).
-
-What to do:
-
-- [ ] [Auto] Draw only hovered/pressed button(s), or erase base glyph rect before hover overlay.
-
 ### REV-M5: Drawable retry can block main thread up to ~2 s
 
 **Severity: Low (stall at `beginFrame` when drawable pool exhausted).**
@@ -557,17 +526,6 @@ What to do:
 
 - [ ] [Auto] Defer grow to `afterPresent` only, or use async handoff (pairs with REV-M1).
 
-### REV-W3: `frameDone` `flushRedraw()` bypasses dispatch deferral during resize
-
-**Severity: Low (one stale-size frame possible; self-correcting).**
-
-Configure path defers redraw while `dispatchingWaylandEvents_` (`WaylandWindow.cpp:2077`); `frameDone` renders inline (`1908-1927`).
-
-What to do:
-
-- [ ] [Auto] Optionally defer `flushRedraw` from `frameDone` when `dispatchingWaylandEvents_` is set, matching configure behavior.
-- [ ] [Manual] Interactive resize — no visible one-frame size mismatch.
-
 ### REV-F13: Present fences still attached on steady-state presents
 
 **Severity: Low (non-blocking status poll, not 1 s wait — reduced vs plan fear).**
@@ -582,12 +540,6 @@ What to do:
 ---
 
 ## Nits
-
-### REV-W4: `renderPopover` throw through libwayland C callback
-
-`popoverFrameDone` (`WaylandWindow.cpp:1905`) calls `renderPopover` which rethrows (`1643-1658`). Undefined behavior if exception crosses C callback boundary.
-
-- [ ] [Auto] Catch and log at callback boundary (`popoverFrameDone`, `popoverXdgSurfaceConfigure`).
 
 ### REV-V12: `rasterize()` temporary canvas calls `vkDeviceWaitIdle` mid-session
 

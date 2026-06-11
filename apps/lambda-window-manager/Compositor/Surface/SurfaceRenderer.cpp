@@ -148,7 +148,7 @@ void drawTransientChromeControls(Canvas& canvas,
                                  CommittedSurfaceSnapshot const& surface,
                                  ChromeConfig const& chrome) {
   if (!hasTransientChromeState(surface)) return;
-  drawWindowChromeControls(canvas, surface, chrome);
+  drawWindowChromeActiveControls(canvas, surface, chrome);
 }
 
 std::span<std::uint8_t const> surfacePixelBytes(CommittedSurfaceSnapshot const &surface) {

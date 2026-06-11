@@ -160,7 +160,8 @@ void drawControls(Canvas& canvas,
                   float frameLeft,
                   float frameWidth,
                   float titleTop,
-                  float titleBarHeight) {
+                  float titleBarHeight,
+                  bool activeOnly = false) {
   float const windowX = frameLeft;
   float const windowWidth = frameWidth;
   ChromeControlsMetrics const metrics = chromeControlsMetrics(chrome, titleBarHeight);
@@ -192,6 +193,7 @@ void drawControls(Canvas& canvas,
 
   auto drawButton = [&](Rect const& rect, bool hovered, bool pressed, ControlKind kind) {
     bool const active = hovered || pressed;
+    if (activeOnly && !active) return;
     if (active) {
       Color const background = kind == ControlKind::Close ? chrome.closeHoverBackground : chrome.minimizeHoverBackground;
       canvas.drawRect(rect,
@@ -316,6 +318,24 @@ void drawWindowChromeControls(Canvas& canvas, CommittedSurfaceSnapshot const& su
   Rect const titleRect = windowTitleBarRect(surface, chrome.contentInsetWidth);
   if (titleRect.height <= 0.f) return;
   drawControls(canvas, surface, chrome, titleRect.x, titleRect.width, titleRect.y, titleRect.height);
+}
+
+void drawWindowChromeActiveControls(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {
+  if (!surface.serverSideDecorated) return;
+  if (windowUsesCutoutChrome(surface)) {
+    drawControls(canvas,
+                 surface,
+                 chrome,
+                 static_cast<float>(surface.x),
+                 static_cast<float>(surface.width),
+                 static_cast<float>(surface.y),
+                 static_cast<float>(chrome.titleBarHeight),
+                 true);
+    return;
+  }
+  Rect const titleRect = windowTitleBarRect(surface, chrome.contentInsetWidth);
+  if (titleRect.height <= 0.f) return;
+  drawControls(canvas, surface, chrome, titleRect.x, titleRect.width, titleRect.y, titleRect.height, true);
 }
 
 void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome) {

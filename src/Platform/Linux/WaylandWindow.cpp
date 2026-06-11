@@ -1314,20 +1314,10 @@ public:
       return;
     }
     framePending_ = true;
-    if (!vulkanCanvasUsesMailboxPresentMode(canvas_)) {
-      if (detail::resizeTraceEnabled()) {
-        LAMBDA_RESIZE_TRACE("wayland-window", "request-frame-fifo window=%u size=%dx%d\n",
-                     handle_, static_cast<int>(std::lround(size_.width)),
-                     static_cast<int>(std::lround(size_.height)));
-      }
-      auto& queue = Application::instance().eventQueue();
-      queue.post(FrameEvent{nowNanos(), handle_});
-      wakeEventLoop();
-      return;
-    }
     if (detail::resizeTraceEnabled()) {
-      LAMBDA_RESIZE_TRACE("wayland-window", "request-frame window=%u size=%dx%d\n",
-                   handle_, static_cast<int>(std::lround(size_.width)),
+      LAMBDA_RESIZE_TRACE("wayland-window", "request-frame window=%u mode=%s size=%dx%d\n",
+                   handle_, vulkanCanvasUsesMailboxPresentMode(canvas_) ? "mailbox" : "fifo",
+                   static_cast<int>(std::lround(size_.width)),
                    static_cast<int>(std::lround(size_.height)));
     }
     frameCallback_ = wl_surface_frame(surface_);
@@ -1652,9 +1642,14 @@ private:
       state.host->render(*state.canvas);
       state.canvas->present();
       state.rendering = false;
+    } catch (std::exception const& e) {
+      state.rendering = false;
+      std::fprintf(stderr, "Lambda Wayland popover render error: %s\n", e.what());
+      return;
     } catch (...) {
       state.rendering = false;
-      throw;
+      std::fprintf(stderr, "Lambda Wayland popover render error: unknown exception\n");
+      return;
     }
     flushWaylandDisplay(shared_, "popover render");
     if (state.redrawRequested && state.committed) {
@@ -1669,6 +1664,7 @@ private:
     }
     state.frameCallback = wl_surface_frame(state.surface);
     wl_callback_add_listener(state.frameCallback, &popoverFrameCallbackListener_, &state);
+    wl_surface_damage_buffer(state.surface, 0, 0, 1, 1);
     wl_surface_commit(state.surface);
     flushWaylandDisplay(shared_, "popover frame request");
   }
@@ -1678,6 +1674,11 @@ private:
       return;
     }
     state.redrawRequested = true;
+    if (state.committed && !state.rendering && !state.frameCallback && state.surface &&
+        canSendWaylandRequests(shared_)) {
+      renderPopover(state);
+      return;
+    }
     requestPopoverFrame(state);
   }
 
@@ -1865,9 +1866,7 @@ private:
       state->host->mount(Size{static_cast<float>(state->width), static_cast<float>(state->height)});
       state->owner->renderPopover(*state);
       state->committed = true;
-      if (state->redrawRequested) {
-        state->owner->requestPopoverFrame(*state);
-      }
+      if (state->redrawRequested) state->owner->requestPopoverFrame(*state);
       if (!state->grabbed && state->popup && state->shared && state->shared->seat &&
           state->grabSerial != 0) {
         xdg_popup_grab(state->popup, state->shared->seat, state->grabSerial);
@@ -1922,7 +1921,11 @@ private:
     auto& queue = Application::instance().eventQueue();
     queue.post(FrameEvent{nowNanos(), self->handle_});
     queue.dispatch();
-    Application::instance().flushRedraw();
+    if (self->dispatchingWaylandEvents_) {
+      self->frameDoneFlushPending_ = true;
+    } else {
+      Application::instance().flushRedraw();
+    }
     self->wakeEventLoop();
   }
 
@@ -2532,17 +2535,19 @@ private:
   }
 
   void flushDeferredRedraw() {
-    if (!resizeRedrawPending_ && !pendingResizeEvent_) return;
+    if (!resizeRedrawPending_ && !pendingResizeEvent_ && !frameDoneFlushPending_) return;
     auto const start = std::chrono::steady_clock::now();
     bool const shouldFlushRedraw = resizeRedrawPending_ || pendingResizeEvent_;
     bool const resizeEventPending = pendingResizeEvent_;
+    bool const frameDoneFlushPending = frameDoneFlushPending_;
     resizeRedrawPending_ = false;
+    frameDoneFlushPending_ = false;
     if (pendingResizeEvent_) {
       pendingResizeEvent_ = false;
       Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, handle_, pendingResizeSize_});
     }
     Application::instance().eventQueue().dispatch();
-    bool const renderedImmediately = shouldFlushRedraw && (!framePending_ || resizeEventPending);
+    bool const renderedImmediately = frameDoneFlushPending || (shouldFlushRedraw && (!framePending_ || resizeEventPending));
     if (renderedImmediately) {
       Application::instance().flushRedraw();
     }
@@ -2648,6 +2653,7 @@ private:
   Modifiers currentModifiers_ = Modifiers::None;
   bool resizeRedrawPending_ = false;
   bool pendingResizeEvent_ = false;
+  bool frameDoneFlushPending_ = false;
   Size pendingResizeSize_{};
   bool dispatchingWaylandEvents_ = false;
   bool framePending_ = false;
