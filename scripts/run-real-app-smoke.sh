@@ -52,6 +52,32 @@ Environment:
 EOF
 }
 
+required_wayland_globals() {
+  cat <<'EOF'
+wl_compositor
+wl_subcompositor
+wl_shm
+wl_output
+wl_seat
+wl_data_device_manager
+xdg_wm_base
+zxdg_decoration_manager_v1
+zxdg_output_manager_v1
+wp_viewporter
+wp_fractional_scale_manager_v1
+wp_cursor_shape_manager_v1
+zwp_idle_inhibit_manager_v1
+zwlr_layer_shell_v1
+wp_presentation
+zwp_relative_pointer_manager_v1
+zwp_pointer_constraints_v1
+zwp_primary_selection_device_manager_v1
+xdg_activation_v1
+xx_cutouts_manager_v1
+xx_background_effect_manager_v1
+EOF
+}
+
 case_catalog() {
   cat <<'EOF'
 lambda-settings|required|Lambda Settings app with system titlebar glass.
@@ -506,6 +532,60 @@ echo "  Live resize should look continuous: exposed areas fill immediately and e
 echo "  Scroll representative Lambda apps, especially Editor, and confirm text keeps rendering beyond the initial window height."
 echo
 echo "Logs written to: $LOG_DIR"
+
+capture_wayland_registry() {
+  if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+    echo "Skipping Wayland registry check: WAYLAND_DISPLAY is not set."
+    return 0
+  fi
+  if ! available_command wayland-info; then
+    echo "Skipping Wayland registry check: wayland-info is not installed."
+    if [[ "$START_COMPOSITOR" -eq 1 ]]; then
+      echo "wayland-info is required for --start-compositor protocol registry validation." >&2
+      return 1
+    fi
+    return 0
+  fi
+
+  local registry_log="$LOG_DIR/wayland-info.log"
+  local summary_log="$LOG_DIR/wayland-registry-summary.log"
+  if ! timeout --signal=TERM --kill-after=2s 8s wayland-info >"$registry_log" 2>&1; then
+    echo "Wayland registry check failed; see $registry_log" >&2
+    return 1
+  fi
+
+  local missing=()
+  local global
+  while IFS= read -r global; do
+    [[ -z "$global" ]] && continue
+    if ! grep -F -- "interface: '$global'" "$registry_log" >/dev/null &&
+       ! grep -F -- "interface: \"$global\"" "$registry_log" >/dev/null &&
+       ! grep -F -- "$global" "$registry_log" >/dev/null; then
+      missing+=("$global")
+    fi
+  done < <(required_wayland_globals)
+
+  {
+    printf 'WAYLAND_DISPLAY=%s\n' "$WAYLAND_DISPLAY"
+    printf 'registry_log=%s\n' "$registry_log"
+    printf 'required_count=%s\n' "$(required_wayland_globals | wc -l)"
+    printf 'missing_count=%s\n' "${#missing[@]}"
+    if [[ "${#missing[@]}" -gt 0 ]]; then
+      printf 'missing=%s\n' "${missing[*]}"
+    fi
+  } >"$summary_log"
+  printf 'Wayland registry summary: required=%s missing=%s log=%s\n' \
+    "$(required_wayland_globals | wc -l)" "${#missing[@]}" "$registry_log"
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    echo "Missing required Wayland globals: ${missing[*]}" >&2
+    return 1
+  fi
+}
+
+if ! capture_wayland_registry; then
+  failed=1
+fi
+
 fatal_count=0
 if [[ -d "$LOG_DIR" ]]; then
   fatal_count=$( (rg -n -i 'fatal|segmentation|assert|AddressSanitizer|VK_ERROR|present failed|surface lost|render error|protocol error|terminate called|exception|aborted' "$LOG_DIR" || true) | wc -l )

@@ -61,6 +61,13 @@ for runner_capability in \
   "LAMBDA_WINDOW_MANAGER_CPU_TRACE=1" \
   "LAMBDA_WINDOW_MANAGER_PACING_TRACE=1" \
   "LAMBDA_KMS_PRESENT_TRACE=1" \
+  "wayland-info" \
+  "required_wayland_globals" \
+  "wl_compositor" \
+  "xdg_wm_base" \
+  "zwlr_layer_shell_v1" \
+  "wp_cursor_shape_manager_v1" \
+  "Wayland registry summary:" \
   "Trace summary:" \
   "fatal/protocol/runtime log matches"; do
   require_in_file "$runner_capability" "$SMOKE"

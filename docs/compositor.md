@@ -63,7 +63,7 @@ The direct implementation must still be held against wlroots behavior. As of 202
 
 - Resume the deferred frame-coherence issue when ready: system-titlebar and client content must render from one committed geometry model so Settings resize on DP-1 HiDPI cannot show momentary non-synced titlebar/content widths.
 - Compare larger wlroots workflows that are not fully covered by narrow resource tests: remaining seat focus/grabs.
-- Continue the repeatable visual/real-app validation harness for resize, dock/topbar, menus, fullscreen, browser/video, GTK/Qt, `foot`, and Lambda apps; the current runner can launch the matrix and optionally own a traced compositor session, while target-hardware visual acceptance remains open.
+- Continue the repeatable visual/real-app validation harness for resize, dock/topbar, menus, fullscreen, browser/video, GTK/Qt, `foot`, and Lambda apps; the current runner can launch the matrix, optionally own a traced compositor session, and capture/validate the Wayland protocol registry, while target-hardware visual acceptance remains open.
 
 The ordered implementation plan and validation gates live in [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md). The daily-driver gate lives in [roadmap.md](roadmap.md).
 
