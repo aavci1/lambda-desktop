@@ -24,7 +24,7 @@ Options:
   --no-build       Do not build Lambda app targets first.
   --include-shell  Also launch lambda-shell. Normally the shell is already running.
   --case NAME      Run one case: lambda-settings, lambda-files, lambda-editor,
-                   lambda-terminal, shell, terminal, browser, gtk, qt.
+                   lambda-terminal, shell, terminal, browser, gtk, qt, mpv.
   --seconds N      Seconds to leave each app open. Default: $SECONDS_PER_APP.
   --probe-only     Print detected apps and do not launch anything.
   --list           List candidate cases and exit.
@@ -48,6 +48,7 @@ terminal|required|Mature Wayland terminal, preferably foot.
 browser|required|Pure Wayland browser, preferably Firefox with MOZ_ENABLE_WAYLAND=1.
 gtk|required|GTK app with text input and menus/popovers.
 qt|optional|Qt Wayland app with menus/popovers, if installed.
+mpv|required|mpv Wayland video/player surface.
 EOF
 }
 
@@ -273,6 +274,16 @@ if case_selected "qt"; then
   else
     add_missing "qt" "optional" "kate/dolphin/qterminal" \
       "No Qt Wayland app found. This can be documented as unavailable on this machine."
+  fi
+fi
+
+if case_selected "mpv"; then
+  if available_command mpv; then
+    add_case "mpv" "required" "mpv" "mpv --no-config --idle=yes --force-window=yes" \
+      "mpv should open a Wayland window, keep video/player chrome stable, and close without compositor errors."
+  else
+    add_missing "mpv" "required" "mpv" \
+      "Install mpv, or document the intentional exclusion for video/player validation."
   fi
 fi
 

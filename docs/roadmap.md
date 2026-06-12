@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-06-12 (WM-COMP-26 output-layout foundation verified)
+**Last updated:** 2026-06-12 (WM-COMP-27 real-app matrix verified)
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -171,7 +171,7 @@ Editor:
 Current implementation:
 
 - `lambda-window-manager` owns a selected KMS output, runs a Wayland server, renders through Vulkan/Canvas, and hosts Lambda plus normal Wayland apps.
-- Core idle behavior, Lambda app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, and real-app smoke tooling exist.
+- Core idle behavior, Lambda app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, real-app smoke tooling, and the WM-COMP-27 real-app validation matrix exist.
 - Screenshot full-output, active-window, and region capture are implemented with compositor-owned region UI.
 - Protocol work includes layer-shell, xdg-shell, xdg-output, viewporter, cursor-shape, fractional-scale, activation, presentation-time, relative pointer, pointer constraints, primary selection, clipboard/data-device, idle inhibit, and background-effect paths. Clipboard/data-device protocol coverage is separate from the app-level shortcut and cross-application text workflow tracked in `TODO.md` TODO-002, and from Shell clipboard-history UI work.
 - The active wlroots comparison plan has verified core surface-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, remaining global resource hygiene through WM-COMP-21, WM-COMP-22 XDG configure/frame-size parity, WM-COMP-23 popup-grab/cursor/seat cleanup slices, WM-COMP-24 DnD lifecycle parity, WM-COMP-25 layer-shell dynamic behavior helper/state validation, and WM-COMP-26 output-layout foundation.
