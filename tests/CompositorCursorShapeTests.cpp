@@ -25,4 +25,13 @@ TEST_CASE("cursor shape devices are matched by dependent wl_pointer") {
   CHECK_FALSE(cursorShapeDeviceUsesPointer(&device, pointerB));
 }
 
+TEST_CASE("cursor shape device lifetime follows pointer resources, not surfaces") {
+  WaylandServer::Impl::CursorShapeDevice device{};
+  WaylandServer::Impl::Surface surface{};
+
+  CHECK_FALSE(cursorShapeDeviceShouldClearForSurfaceDestroy(nullptr, &surface));
+  CHECK_FALSE(cursorShapeDeviceShouldClearForSurfaceDestroy(&device, nullptr));
+  CHECK_FALSE(cursorShapeDeviceShouldClearForSurfaceDestroy(&device, &surface));
+}
+
 } // namespace lambda::compositor

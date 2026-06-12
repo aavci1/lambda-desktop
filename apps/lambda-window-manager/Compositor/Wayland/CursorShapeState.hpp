@@ -18,4 +18,10 @@ inline constexpr std::uint32_t kCursorShapeVersion = 1;
   return device && device->pointer == pointerResource;
 }
 
+[[nodiscard]] inline bool cursorShapeDeviceShouldClearForSurfaceDestroy(
+    WaylandServer::Impl::CursorShapeDevice const*,
+    WaylandServer::Impl::Surface const*) {
+  return false;
+}
+
 } // namespace lambda::compositor

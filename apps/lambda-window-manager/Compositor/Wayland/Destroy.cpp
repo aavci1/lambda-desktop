@@ -219,11 +219,6 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
     }
   }
   if (dndOrigin_ == surface || dndTarget_ == surface) clearDnd(this);
-  for (auto& device : cursorShapeDevices_) {
-    if (device->pointer && wl_resource_get_client(device->pointer) == wl_resource_get_client(surface->resource)) {
-      device->pointer = nullptr;
-    }
-  }
   if (surface->viewport) resetViewportRole(this, surface->viewport);
   if (surface->fractionalScale) resetFractionalScaleRole(this, surface->fractionalScale);
   if (surface->layerSurface) resetLayerSurfaceRole(this, surface->layerSurface);
