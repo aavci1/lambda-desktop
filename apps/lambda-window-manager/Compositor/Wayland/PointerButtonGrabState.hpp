@@ -37,6 +37,14 @@ struct PointerButtonGrabTransition {
   return pointerFocus;
 }
 
+[[nodiscard]] inline WaylandServer::Impl::Surface* pointerButtonGrabMotionFocusSurface(
+    PointerButtonGrabRefs refs,
+    WaylandServer::Impl::Surface* hitSurface) {
+  (void)pointerButtonGrabClearStale(refs);
+  if (refs.buttonCount && *refs.buttonCount > 0 && refs.grabSurface) return *refs.grabSurface;
+  return hitSurface;
+}
+
 [[nodiscard]] inline wl_client* pointerButtonGrabDeliveryClient(PointerButtonGrabRefs refs,
                                                                 wl_client* fallbackClient) {
   (void)pointerButtonGrabClearStale(refs);

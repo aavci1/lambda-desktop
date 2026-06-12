@@ -208,6 +208,7 @@ TEST_CASE("pointer button grab helper preserves implicit grab until final releas
   using lambda::compositor::WaylandServer;
   using lambda::compositor::pointerButtonGrabDeliveryClient;
   using lambda::compositor::pointerButtonGrabDeliverySurface;
+  using lambda::compositor::pointerButtonGrabMotionFocusSurface;
   using lambda::compositor::pointerButtonGrabUpdateForButton;
 
   WaylandServer::Impl::Surface focused{};
@@ -239,6 +240,7 @@ TEST_CASE("pointer button grab helper preserves implicit grab until final releas
 
   CHECK(pointerButtonGrabDeliverySurface(refs, &otherFocus) == &focused);
   CHECK(pointerButtonGrabDeliveryClient(refs, otherClient) == focusedClient);
+  CHECK(pointerButtonGrabMotionFocusSurface(refs, &otherFocus) == &focused);
 
   transition = pointerButtonGrabUpdateForButton(refs, &focused, focusedClient, true);
   CHECK(transition.previousSurface == &focused);
@@ -264,6 +266,7 @@ TEST_CASE("pointer button grab helper preserves implicit grab until final releas
   CHECK(grabSurface == nullptr);
   CHECK(grabClient == nullptr);
   CHECK(buttonCount == 0);
+  CHECK(pointerButtonGrabMotionFocusSurface(refs, &otherFocus) == &otherFocus);
 }
 
 TEST_CASE("pointer button grab helper clears stale grabbed surfaces") {
@@ -272,6 +275,7 @@ TEST_CASE("pointer button grab helper clears stale grabbed surfaces") {
   using lambda::compositor::pointerButtonGrabClearStale;
   using lambda::compositor::pointerButtonGrabDeliveryClient;
   using lambda::compositor::pointerButtonGrabDeliverySurface;
+  using lambda::compositor::pointerButtonGrabMotionFocusSurface;
 
   WaylandServer::Impl::Surface focused{};
   WaylandServer::Impl::Surface* grabSurface = nullptr;
@@ -294,6 +298,12 @@ TEST_CASE("pointer button grab helper clears stale grabbed surfaces") {
   buttonCount = 1;
   CHECK(pointerButtonGrabDeliverySurface(refs, &focused) == &focused);
   CHECK(pointerButtonGrabDeliveryClient(refs, focusedClient) == focusedClient);
+  CHECK(grabClient == nullptr);
+  CHECK(buttonCount == 0);
+
+  grabClient = staleClient;
+  buttonCount = 1;
+  CHECK(pointerButtonGrabMotionFocusSurface(refs, &focused) == &focused);
   CHECK(grabClient == nullptr);
   CHECK(buttonCount == 0);
 }

@@ -166,6 +166,17 @@ WaylandServer::Impl::Surface* pointerButtonDeliverySurface(WaylandServer::Impl* 
   }, server->pointerFocus_);
 }
 
+WaylandServer::Impl::Surface* pointerButtonMotionFocusSurface(WaylandServer::Impl* server,
+                                                              WaylandServer::Impl::Surface* hitSurface) {
+  if (!server) return hitSurface;
+  clearStalePointerButtonGrab(server);
+  return pointerButtonGrabMotionFocusSurface({
+      .grabSurface = &server->pointerButtonGrabSurface_,
+      .grabClient = &server->pointerButtonGrabClient_,
+      .buttonCount = &server->pointerButtonCount_,
+  }, hitSurface);
+}
+
 wl_client* pointerButtonDeliveryClient(WaylandServer::Impl* server,
                                        WaylandServer::Impl::Surface const* deliverySurface) {
   if (!server) return nullptr;
@@ -310,7 +321,8 @@ void WaylandServer::Impl::handlePointerMotion(double dx, double dy, std::uint32_
     updateCompositorCursorForPointer(this);
     return;
   }
-  sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+  Surface* hitSurface = surfaceAt(this, pointerX_, pointerY_);
+  sendPointerFocus(this, pointerButtonMotionFocusSurface(this, hitSurface), timeMs);
   updateCompositorCursorForPointer(this);
   notePointerVisualStateChanged(this, previousVisualState);
   sendRelativePointerMotion(this, dx, dy, timeMs);
@@ -348,7 +360,8 @@ void WaylandServer::Impl::handlePointerPosition(double x, double y, std::uint32_
     updateCompositorCursorForPointer(this);
     return;
   }
-  sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+  Surface* hitSurface = surfaceAt(this, pointerX_, pointerY_);
+  sendPointerFocus(this, pointerButtonMotionFocusSurface(this, hitSurface), timeMs);
   updateCompositorCursorForPointer(this);
   notePointerVisualStateChanged(this, previousVisualState);
 }
@@ -357,6 +370,7 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
   Surface* target = surfaceAt(this, pointerX_, pointerY_);
   Surface* deliverySurface = pointerButtonDeliverySurface(this);
   wl_client* deliveryClient = pointerButtonDeliveryClient(this, deliverySurface);
+  bool const implicitButtonGrabActiveBeforeButton = !pressed && pointerButtonCount_ > 0 && pointerButtonGrabSurface_;
   popupTrace("lambda-window-manager: pointer button input button=%u state=%s pointer=%.1f,%.1f "
              "target=%llu focus=%llu delivery=%llu button_grab=%llu client=%p count=%u grab_popup=%llu "
              "popup_grabs=%u\n",
@@ -592,6 +606,10 @@ void WaylandServer::Impl::handlePointerButton(std::uint32_t button, bool pressed
     updateCompositorCursorForPointer(this);
   }
   sendPointerButtonToFocus(this, button, pressed, timeMs);
+  if (implicitButtonGrabActiveBeforeButton && pointerButtonCount_ == 0) {
+    sendPointerFocus(this, surfaceAt(this, pointerX_, pointerY_), timeMs);
+    updateCompositorCursorForPointer(this);
+  }
 }
 void WaylandServer::Impl::handlePointerAxis(double dx, double dy, std::uint32_t timeMs) {
   if (!pointerFocus_) return;
