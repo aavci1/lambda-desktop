@@ -220,21 +220,19 @@ bool applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface) {
   std::int32_t oldX = surface->windowX;
   std::int32_t oldY = surface->windowY;
 
-  if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) != 0) {
-    surface->windowX = layerSurface->marginLeft;
-  } else if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT) != 0) {
-    surface->windowX = layerSurface->server->logicalOutputWidth() - width - layerSurface->marginRight;
-  } else {
-    surface->windowX = (layerSurface->server->logicalOutputWidth() - width) / 2;
-  }
-
-  if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) != 0) {
-    surface->windowY = layerSurface->marginTop;
-  } else if ((layerSurface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM) != 0) {
-    surface->windowY = layerSurface->server->logicalOutputHeight() - height - layerSurface->marginBottom;
-  } else {
-    surface->windowY = (layerSurface->server->logicalOutputHeight() - height) / 2;
-  }
+  LayerShellPlacement const placement = resolveLayerShellPlacement({
+      .anchor = layerSurface->anchor,
+      .marginTop = layerSurface->marginTop,
+      .marginRight = layerSurface->marginRight,
+      .marginBottom = layerSurface->marginBottom,
+      .marginLeft = layerSurface->marginLeft,
+      .surfaceWidth = width,
+      .surfaceHeight = height,
+      .outputWidth = layerSurface->server->logicalOutputWidth(),
+      .outputHeight = layerSurface->server->logicalOutputHeight(),
+  });
+  surface->windowX = placement.x;
+  surface->windowY = placement.y;
   return surface->windowX != oldX || surface->windowY != oldY;
 }
 

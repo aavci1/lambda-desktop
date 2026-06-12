@@ -40,9 +40,28 @@ struct LayerShellConfigureSize {
   std::uint32_t height = 0;
 };
 
+struct LayerShellPlacementInput {
+  std::uint32_t anchor = 0;
+  std::int32_t marginTop = 0;
+  std::int32_t marginRight = 0;
+  std::int32_t marginBottom = 0;
+  std::int32_t marginLeft = 0;
+  std::int32_t surfaceWidth = 0;
+  std::int32_t surfaceHeight = 0;
+  std::int32_t outputWidth = 1;
+  std::int32_t outputHeight = 1;
+};
+
+struct LayerShellPlacement {
+  std::int32_t x = 0;
+  std::int32_t y = 0;
+};
+
 [[nodiscard]] LayerShellReservedZones aggregateLayerShellReservedZones(
     std::span<LayerShellReservedZoneInput const> layers);
 
 [[nodiscard]] LayerShellConfigureSize resolveLayerShellConfigureSize(LayerShellConfigureSizeInput const& input);
+
+[[nodiscard]] LayerShellPlacement resolveLayerShellPlacement(LayerShellPlacementInput const& input);
 
 } // namespace lambda::compositor

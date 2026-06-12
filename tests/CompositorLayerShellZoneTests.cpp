@@ -87,6 +87,56 @@ TEST_CASE("layer shell configure size resolves output-relative dimensions") {
   CHECK(floating.height == 0);
 }
 
+TEST_CASE("layer shell placement resolves anchors and margins") {
+  using namespace lambda::compositor;
+
+  auto const topLeft = resolveLayerShellPlacement({
+      .anchor = kLayerShellAnchorTop | kLayerShellAnchorLeft,
+      .marginTop = 12,
+      .marginLeft = 20,
+      .surfaceWidth = 160,
+      .surfaceHeight = 48,
+      .outputWidth = 1280,
+      .outputHeight = 720,
+  });
+  CHECK(topLeft.x == 20);
+  CHECK(topLeft.y == 12);
+
+  auto const bottomRight = resolveLayerShellPlacement({
+      .anchor = kLayerShellAnchorBottom | kLayerShellAnchorRight,
+      .marginRight = 30,
+      .marginBottom = 40,
+      .surfaceWidth = 200,
+      .surfaceHeight = 60,
+      .outputWidth = 1280,
+      .outputHeight = 720,
+  });
+  CHECK(bottomRight.x == 1050);
+  CHECK(bottomRight.y == 620);
+
+  auto const centered = resolveLayerShellPlacement({
+      .surfaceWidth = 320,
+      .surfaceHeight = 90,
+      .outputWidth = 1280,
+      .outputHeight = 720,
+  });
+  CHECK(centered.x == 480);
+  CHECK(centered.y == 315);
+
+  auto const stretchedFromTopLeft = resolveLayerShellPlacement({
+      .anchor = kLayerShellAnchorTop | kLayerShellAnchorBottom |
+                kLayerShellAnchorLeft | kLayerShellAnchorRight,
+      .marginTop = 6,
+      .marginLeft = 8,
+      .surfaceWidth = 1264,
+      .surfaceHeight = 708,
+      .outputWidth = 1280,
+      .outputHeight = 720,
+  });
+  CHECK(stretchedFromTopLeft.x == 8);
+  CHECK(stretchedFromTopLeft.y == 6);
+}
+
 TEST_CASE("layer shell keyboard interactivity normalizes by protocol version") {
   using namespace lambda::compositor;
 
