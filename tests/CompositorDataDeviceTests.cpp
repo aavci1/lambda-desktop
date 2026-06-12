@@ -1,6 +1,11 @@
 #include "Compositor/Wayland/DataDeviceDndState.hpp"
+#include "Compositor/Wayland/SelectionDeviceSeatState.hpp"
 
 #include <doctest/doctest.h>
+
+#include <memory>
+#include <span>
+#include <vector>
 
 TEST_CASE("data-device DnD action masks validate protocol bits") {
   using namespace lambda::compositor;
@@ -121,4 +126,55 @@ TEST_CASE("data-device offer destruction cancels only unfinished completed drops
   CHECK_FALSE(dataOfferShouldCancelSourceOnDestroy(false, true, false));
   CHECK_FALSE(dataOfferShouldCancelSourceOnDestroy(true, false, false));
   CHECK_FALSE(dataOfferShouldCancelSourceOnDestroy(true, true, true));
+}
+
+TEST_CASE("selection devices clear destroyed seat resource references") {
+  using namespace lambda::compositor;
+  using WaylandServer = lambda::compositor::WaylandServer;
+
+  auto* seat = reinterpret_cast<wl_resource*>(std::uintptr_t{1});
+  auto* otherSeat = reinterpret_cast<wl_resource*>(std::uintptr_t{2});
+
+  std::vector<std::unique_ptr<WaylandServer::Impl::DataDevice>> dataDevices;
+  dataDevices.push_back(std::make_unique<WaylandServer::Impl::DataDevice>());
+  dataDevices.push_back(std::make_unique<WaylandServer::Impl::DataDevice>());
+  dataDevices[0]->seat = seat;
+  dataDevices[1]->seat = otherSeat;
+
+  std::vector<std::unique_ptr<WaylandServer::Impl::PrimarySelectionDevice>> primarySelectionDevices;
+  primarySelectionDevices.push_back(std::make_unique<WaylandServer::Impl::PrimarySelectionDevice>());
+  primarySelectionDevices.push_back(std::make_unique<WaylandServer::Impl::PrimarySelectionDevice>());
+  primarySelectionDevices[0]->seat = seat;
+  primarySelectionDevices[1]->seat = otherSeat;
+
+  CHECK(dataDeviceReferencesSeatResource(dataDevices[0].get(), seat));
+  CHECK(primarySelectionDeviceReferencesSeatResource(primarySelectionDevices[0].get(), seat));
+
+  auto clearSeat = [&](wl_resource* seatResource) {
+    return clearSelectionDeviceSeatResources(
+        std::span<std::unique_ptr<WaylandServer::Impl::DataDevice>>(dataDevices.data(), dataDevices.size()),
+        std::span<std::unique_ptr<WaylandServer::Impl::PrimarySelectionDevice>>(
+            primarySelectionDevices.data(),
+            primarySelectionDevices.size()),
+        seatResource);
+  };
+
+  SelectionDeviceSeatCleanup nullCleanup = clearSeat(nullptr);
+  CHECK_FALSE(nullCleanup.changed());
+  CHECK(dataDevices[0]->seat == seat);
+  CHECK(primarySelectionDevices[0]->seat == seat);
+
+  SelectionDeviceSeatCleanup otherCleanup = clearSeat(otherSeat);
+  CHECK(otherCleanup.dataDevicesCleared == 1);
+  CHECK(otherCleanup.primarySelectionDevicesCleared == 1);
+  CHECK(dataDevices[0]->seat == seat);
+  CHECK(dataDevices[1]->seat == nullptr);
+  CHECK(primarySelectionDevices[0]->seat == seat);
+  CHECK(primarySelectionDevices[1]->seat == nullptr);
+
+  SelectionDeviceSeatCleanup cleanup = clearSeat(seat);
+  CHECK(cleanup.dataDevicesCleared == 1);
+  CHECK(cleanup.primarySelectionDevicesCleared == 1);
+  CHECK(dataDevices[0]->seat == nullptr);
+  CHECK(primarySelectionDevices[0]->seat == nullptr);
 }

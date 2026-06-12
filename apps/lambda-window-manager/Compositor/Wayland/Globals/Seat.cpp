@@ -4,6 +4,7 @@
 #include "Compositor/Wayland/Globals/CursorShape.hpp"
 #include "Compositor/Wayland/Globals/PointerExtensions.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
+#include "Compositor/Wayland/SelectionDeviceSeatState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
 #include "Compositor/Window/WindowManagerInternal.hpp"
@@ -25,6 +26,7 @@ namespace {
 void seatDestroyResource(wl_resource* resource) {
   if (auto* server = serverFrom(resource)) {
     removeResource(server->seatResources_, resource);
+    clearSelectionDeviceSeatResources(server, resource);
     xdgPopupGrabClearForSeatResource(server->popupGrab_, server->grabPopup_, resource);
   }
 }
