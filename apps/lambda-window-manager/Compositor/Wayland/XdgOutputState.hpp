@@ -34,4 +34,17 @@ enum class XdgOutputDoneKind : std::uint8_t {
   return currentWidth != nextWidth || currentHeight != nextHeight;
 }
 
+[[nodiscard]] inline bool xdgOutputLogicalGeometryChanged(std::int32_t currentX,
+                                                          std::int32_t currentY,
+                                                          std::int32_t currentWidth,
+                                                          std::int32_t currentHeight,
+                                                          std::int32_t nextX,
+                                                          std::int32_t nextY,
+                                                          std::int32_t nextWidth,
+                                                          std::int32_t nextHeight) {
+  return currentX != nextX ||
+         currentY != nextY ||
+         xdgOutputLogicalSizeChanged(currentWidth, currentHeight, nextWidth, nextHeight);
+}
+
 } // namespace lambda::compositor

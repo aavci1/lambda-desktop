@@ -746,6 +746,8 @@ struct WaylandServer::Impl::XdgOutput {
   WaylandServer::Impl* server = nullptr;
   wl_resource* resource = nullptr;
   wl_resource* outputResource = nullptr;
+  std::int32_t lastLogicalX = 0;
+  std::int32_t lastLogicalY = 0;
   std::int32_t lastLogicalWidth = 0;
   std::int32_t lastLogicalHeight = 0;
 };

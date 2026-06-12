@@ -27,4 +27,12 @@ TEST_CASE("xdg output logical-size updates are emitted only when size changes") 
   CHECK(xdgOutputLogicalSizeChanged(1920, 1080, 1920, 1440));
 }
 
+TEST_CASE("xdg output logical-geometry updates include layout position") {
+  CHECK_FALSE(xdgOutputLogicalGeometryChanged(0, 0, 1920, 1080, 0, 0, 1920, 1080));
+  CHECK(xdgOutputLogicalGeometryChanged(0, 0, 1920, 1080, 1920, 0, 1920, 1080));
+  CHECK(xdgOutputLogicalGeometryChanged(0, 0, 1920, 1080, 0, 1080, 1920, 1080));
+  CHECK(xdgOutputLogicalGeometryChanged(0, 0, 1920, 1080, 0, 0, 2560, 1080));
+  CHECK(xdgOutputLogicalGeometryChanged(0, 0, 1920, 1080, 0, 0, 1920, 1440));
+}
+
 } // namespace lambda::compositor

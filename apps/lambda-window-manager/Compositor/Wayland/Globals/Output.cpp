@@ -38,7 +38,10 @@ void bindOutput(wl_client* client, void* data, std::uint32_t version, std::uint3
   static struct wl_output_interface const outputImpl{outputRelease};
   wl_resource_set_implementation(resource, &outputImpl, server, outputResourceDestroyed);
   server->outputResources_.push_back(resource);
-  wl_output_send_geometry(resource, 0, 0, output.physicalWidthMm, output.physicalHeightMm,
+  OutputLayoutBox const layout = selectedOutputLayoutBox(output.width,
+                                                         output.height,
+                                                         server->preferredScale());
+  wl_output_send_geometry(resource, layout.x, layout.y, output.physicalWidthMm, output.physicalHeightMm,
                           WL_OUTPUT_SUBPIXEL_UNKNOWN, "Lambda", output.name.c_str(),
                           WL_OUTPUT_TRANSFORM_NORMAL);
   wl_output_send_mode(resource, WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED,

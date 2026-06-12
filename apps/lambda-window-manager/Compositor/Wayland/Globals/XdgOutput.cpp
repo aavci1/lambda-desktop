@@ -1,5 +1,6 @@
 #include "Compositor/Wayland/Globals/XdgOutput.hpp"
 
+#include "Compositor/Wayland/OutputState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/XdgOutputState.hpp"
@@ -47,20 +48,27 @@ bool sendXdgOutputLogicalDetails(WaylandServer::Impl& server,
                                  bool force,
                                  bool includeWlOutputDone) {
   if (!xdgOutput || !xdgOutput->resource) return false;
-  std::int32_t const logicalWidth = server.logicalOutputWidth();
-  std::int32_t const logicalHeight = server.logicalOutputHeight();
+  OutputLayoutBox const layout = selectedOutputLayoutBox(server.output_.width,
+                                                         server.output_.height,
+                                                         server.preferredScale());
   if (!force &&
-      !xdgOutputLogicalSizeChanged(xdgOutput->lastLogicalWidth,
-                                   xdgOutput->lastLogicalHeight,
-                                   logicalWidth,
-                                   logicalHeight)) {
+      !xdgOutputLogicalGeometryChanged(xdgOutput->lastLogicalX,
+                                       xdgOutput->lastLogicalY,
+                                       xdgOutput->lastLogicalWidth,
+                                       xdgOutput->lastLogicalHeight,
+                                       layout.x,
+                                       layout.y,
+                                       layout.width,
+                                       layout.height)) {
     return false;
   }
 
-  xdgOutput->lastLogicalWidth = logicalWidth;
-  xdgOutput->lastLogicalHeight = logicalHeight;
-  zxdg_output_v1_send_logical_position(xdgOutput->resource, 0, 0);
-  zxdg_output_v1_send_logical_size(xdgOutput->resource, logicalWidth, logicalHeight);
+  xdgOutput->lastLogicalX = layout.x;
+  xdgOutput->lastLogicalY = layout.y;
+  xdgOutput->lastLogicalWidth = layout.width;
+  xdgOutput->lastLogicalHeight = layout.height;
+  zxdg_output_v1_send_logical_position(xdgOutput->resource, layout.x, layout.y);
+  zxdg_output_v1_send_logical_size(xdgOutput->resource, layout.width, layout.height);
   sendXdgOutputDone(xdgOutput, includeWlOutputDone);
   return true;
 }

@@ -121,11 +121,6 @@ void initializeKeyboard(WaylandServer::Impl* server) {
   }
 }
 
-std::int32_t scaledLogicalSize(std::int32_t physicalSize, float scale) {
-  return std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(physicalSize) /
-                                                           std::max(0.5f, scale))));
-}
-
 } // namespace
 
 WaylandServer::Impl::Impl(WaylandOutputInfo output) : output_(std::move(output)) {
@@ -236,11 +231,11 @@ float WaylandServer::Impl::preferredScale() const noexcept {
 }
 
 std::int32_t WaylandServer::Impl::logicalOutputWidth() const noexcept {
-  return scaledLogicalSize(output_.width, preferredScale_);
+  return selectedOutputLayoutBox(output_.width, output_.height, preferredScale_).width;
 }
 
 std::int32_t WaylandServer::Impl::logicalOutputHeight() const noexcept {
-  return scaledLogicalSize(output_.height, preferredScale_);
+  return selectedOutputLayoutBox(output_.width, output_.height, preferredScale_).height;
 }
 
 std::size_t WaylandServer::Impl::toplevelCount() const noexcept {
