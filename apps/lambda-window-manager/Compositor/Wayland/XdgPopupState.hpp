@@ -3,9 +3,37 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <span>
 
 namespace lambda::compositor {
+
+struct XdgPopupReparentInput {
+  std::int32_t oldParentX = 0;
+  std::int32_t oldParentY = 0;
+  std::int32_t newParentX = 0;
+  std::int32_t newParentY = 0;
+  std::int32_t popupWindowX = 0;
+  std::int32_t popupWindowY = 0;
+};
+
+struct XdgPopupReparentGeometry {
+  std::int32_t popupWindowX = 0;
+  std::int32_t popupWindowY = 0;
+  std::int32_t configuredX = 0;
+  std::int32_t configuredY = 0;
+};
+
+[[nodiscard]] inline XdgPopupReparentGeometry xdgPopupReparentGeometry(
+    XdgPopupReparentInput const& input) {
+  XdgPopupReparentGeometry geometry{
+      .popupWindowX = input.popupWindowX + input.newParentX - input.oldParentX,
+      .popupWindowY = input.popupWindowY + input.newParentY - input.oldParentY,
+  };
+  geometry.configuredX = geometry.popupWindowX - input.newParentX;
+  geometry.configuredY = geometry.popupWindowY - input.newParentY;
+  return geometry;
+}
 
 [[nodiscard]] inline bool xdgPopupParentHasValidRole(WaylandServer::Impl::XdgSurface const* parent) {
   if (!parent) return true;

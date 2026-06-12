@@ -4,6 +4,7 @@
 #include "Compositor/Wayland/LayerShellZones.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
+#include "Compositor/Wayland/XdgPopupState.hpp"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
 
 #include <memory>
@@ -91,13 +92,19 @@ void layerSurfaceGetPopup(wl_client*, wl_resource* resource, wl_resource* popupR
     return;
   }
 
-  std::int32_t const oldParentX = oldParent ? oldParent->windowX : 0;
-  std::int32_t const oldParentY = oldParent ? oldParent->windowY : 0;
-  popupSurface->windowX += newParent->windowX - oldParentX;
-  popupSurface->windowY += newParent->windowY - oldParentY;
+  XdgPopupReparentGeometry const geometry = xdgPopupReparentGeometry({
+      .oldParentX = oldParent ? oldParent->windowX : 0,
+      .oldParentY = oldParent ? oldParent->windowY : 0,
+      .newParentX = newParent->windowX,
+      .newParentY = newParent->windowY,
+      .popupWindowX = popupSurface->windowX,
+      .popupWindowY = popupSurface->windowY,
+  });
+  popupSurface->windowX = geometry.popupWindowX;
+  popupSurface->windowY = geometry.popupWindowY;
   popup->parentSurface = newParent;
-  popup->configuredX = popupSurface->windowX - newParent->windowX;
-  popup->configuredY = popupSurface->windowY - newParent->windowY;
+  popup->configuredX = geometry.configuredX;
+  popup->configuredY = geometry.configuredY;
 }
 
 void layerSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t serial) {

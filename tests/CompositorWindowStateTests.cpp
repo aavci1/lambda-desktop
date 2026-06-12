@@ -397,6 +397,32 @@ TEST_CASE("xdg popup parent validation accepts only constructed xdg roles") {
   CHECK(lambda::compositor::xdgPopupParentHasValidRole(&parent));
 }
 
+TEST_CASE("xdg popup layer-surface reparenting preserves relative coordinates") {
+  auto const moved = lambda::compositor::xdgPopupReparentGeometry({
+      .oldParentX = 100,
+      .oldParentY = 50,
+      .newParentX = 300,
+      .newParentY = 90,
+      .popupWindowX = 128,
+      .popupWindowY = 74,
+  });
+  CHECK(moved.popupWindowX == 328);
+  CHECK(moved.popupWindowY == 114);
+  CHECK(moved.configuredX == 28);
+  CHECK(moved.configuredY == 24);
+
+  auto const parentless = lambda::compositor::xdgPopupReparentGeometry({
+      .newParentX = 300,
+      .newParentY = 90,
+      .popupWindowX = 20,
+      .popupWindowY = 30,
+  });
+  CHECK(parentless.popupWindowX == 320);
+  CHECK(parentless.popupWindowY == 120);
+  CHECK(parentless.configuredX == 20);
+  CHECK(parentless.configuredY == 30);
+}
+
 TEST_CASE("xdg surface role object validation follows constructed xdg roles") {
   CHECK_FALSE(lambda::compositor::xdgSurfaceHasConstructedRoleObject(nullptr));
 
