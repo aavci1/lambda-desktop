@@ -32,4 +32,12 @@ inline bool layerShellFrameCallbacksHiddenForFullscreen(std::string_view nameSpa
   return layerShellNamespaceHidesForFullscreen(nameSpace) && hideProgress >= 0.999f;
 }
 
+inline bool layerShellClaimsCommandLauncherModal(std::string_view nameSpace,
+                                                 bool mapped,
+                                                 std::uint32_t keyboardInteractivity) {
+  return mapped &&
+         nameSpace == "lambda.command-launcher" &&
+         keyboardInteractivity == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE;
+}
+
 } // namespace lambda::compositor

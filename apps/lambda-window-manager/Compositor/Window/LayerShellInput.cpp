@@ -1,5 +1,6 @@
 #include "Compositor/Window/WindowManagerInternal.hpp"
 
+#include "Compositor/Wayland/LayerShellState.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
 
@@ -13,9 +14,11 @@ using wm::setKeyboardFocus;
 bool WaylandServer::Impl::claimCommandLauncherModal(std::uint32_t timeMs) {
   for (auto const& layerSurface : layerSurfaces_) {
     if (!layerSurface || !layerSurface->surface) continue;
-    if (!layerSurface->mapped) continue;
-    if (layerSurface->nameSpace != "lambda.command-launcher") continue;
-    if (layerSurface->keyboardInteractivity != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE) continue;
+    if (!layerShellClaimsCommandLauncherModal(layerSurface->nameSpace,
+                                              layerSurface->mapped,
+                                              layerSurface->keyboardInteractivity)) {
+      continue;
+    }
     commandLauncherModalSurface_ = layerSurface->surface;
     raiseSurface(this, layerSurface->surface);
     setKeyboardFocus(this, layerSurface->surface);

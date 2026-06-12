@@ -177,6 +177,26 @@ TEST_CASE("layer shell fullscreen hide policy is limited to dock panels") {
   CHECK_FALSE(layerShellFrameCallbacksHiddenForFullscreen("lambda.command-launcher", 1.0f));
 }
 
+TEST_CASE("layer shell command launcher modal focus policy requires mapped exclusive layer") {
+  using namespace lambda::compositor;
+
+  CHECK(layerShellClaimsCommandLauncherModal("lambda.command-launcher",
+                                             true,
+                                             ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE));
+  CHECK_FALSE(layerShellClaimsCommandLauncherModal("lambda.command-launcher",
+                                                   false,
+                                                   ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE));
+  CHECK_FALSE(layerShellClaimsCommandLauncherModal("lambda.command-launcher",
+                                                   true,
+                                                   ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND));
+  CHECK_FALSE(layerShellClaimsCommandLauncherModal("lambda.command-launcher",
+                                                   true,
+                                                   ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE));
+  CHECK_FALSE(layerShellClaimsCommandLauncherModal("lambda.dock",
+                                                   true,
+                                                   ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE));
+}
+
 TEST_CASE("layer shell pending state applies only on commit") {
   using namespace lambda::compositor;
 
