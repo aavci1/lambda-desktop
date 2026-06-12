@@ -40,4 +40,10 @@ inline bool layerShellClaimsCommandLauncherModal(std::string_view nameSpace,
          keyboardInteractivity == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE;
 }
 
+inline bool layerShellShouldReconfigureForOutputGeometry(bool initialized,
+                                                         bool hasSurface,
+                                                         bool hasResource) {
+  return initialized && hasSurface && hasResource;
+}
+
 } // namespace lambda::compositor

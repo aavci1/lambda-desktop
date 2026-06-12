@@ -197,6 +197,15 @@ TEST_CASE("layer shell command launcher modal focus policy requires mapped exclu
                                                    ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE));
 }
 
+TEST_CASE("layer shell output geometry reconfigure waits for initialized resources") {
+  using namespace lambda::compositor;
+
+  CHECK(layerShellShouldReconfigureForOutputGeometry(true, true, true));
+  CHECK_FALSE(layerShellShouldReconfigureForOutputGeometry(false, true, true));
+  CHECK_FALSE(layerShellShouldReconfigureForOutputGeometry(true, false, true));
+  CHECK_FALSE(layerShellShouldReconfigureForOutputGeometry(true, true, false));
+}
+
 TEST_CASE("layer shell pending state applies only on commit") {
   using namespace lambda::compositor;
 

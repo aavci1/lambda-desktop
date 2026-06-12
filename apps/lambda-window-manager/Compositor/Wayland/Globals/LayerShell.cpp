@@ -277,7 +277,12 @@ bool reconfigureLayerSurfacesForOutputGeometry(WaylandServer::Impl* server) {
 
   bool touched = false;
   for (auto const& layerSurface : server->layerSurfaces_) {
-    if (!layerSurface || !layerSurface->surface || !layerSurface->resource) continue;
+    if (!layerSurface) continue;
+    if (!layerShellShouldReconfigureForOutputGeometry(layerSurface->initialized,
+                                                      layerSurface->surface != nullptr,
+                                                      layerSurface->resource != nullptr)) {
+      continue;
+    }
     touched = true;
     applyLayerGeometry(layerSurface.get());
     sendLayerConfigure(layerSurface.get());
