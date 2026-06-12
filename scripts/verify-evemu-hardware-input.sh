@@ -120,6 +120,7 @@ setsid timeout --signal=TERM --kill-after=5s 25s env \
   LAMBDA_WINDOW_MANAGER_PACING_TRACE=1 \
   LAMBDA_WINDOW_MANAGER_PACING_TRACE_LOG="$LOG_DIR/pacing.log" \
   LAMBDA_COMPOSITOR_ENABLE_HARDWARE_CURSOR_MOTION_FAST_PATH=1 \
+  LAMBDA_DEBUG_KMS=1 \
   "$WM" >"$LOG_DIR/compositor.log" 2>&1 &
 wm_pid=$!
 
@@ -187,6 +188,7 @@ printf 'SUMMARY evemu-hardware-input device=%s name="%s" evemu_commands=%s point
 
 minimum_moves=$((EVENT_COUNT / 2))
 if [[ "$fatal_count" -ne 0 || "$checker_status" -ne 0 || "$evemu_commands" -ne "$EVENT_COUNT" ||
+      "$pointer_devices" -lt 1 || "$raw_pointer" -lt "$minimum_moves" ||
       "$fast_path" -lt "$minimum_moves" ||
       "$fallback" -ne 0 || "$presentation" -lt 1 ]]; then
   echo "Hardware evdev input verification failed." >&2
