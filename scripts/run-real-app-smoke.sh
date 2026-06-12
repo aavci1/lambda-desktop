@@ -61,6 +61,7 @@ wl_output
 wl_seat
 wl_data_device_manager
 xdg_wm_base
+zwp_linux_dmabuf_v1
 zxdg_decoration_manager_v1
 zxdg_output_manager_v1
 wp_viewporter
@@ -74,7 +75,7 @@ zwp_pointer_constraints_v1
 zwp_primary_selection_device_manager_v1
 xdg_activation_v1
 xx_cutouts_manager_v1
-xx_background_effect_manager_v1
+ext_background_effect_manager_v1
 EOF
 }
 
