@@ -59,7 +59,7 @@ Wayland protocols implemented directly against `libwayland-server`. DRM via `lib
 
 This is a real cost — wlroots solves many edge cases we'll re-encounter — but it's the path that lets the compositor stay coherent with Lambda's design rather than adopting wlroots' opinions about scene graphs, output management, and surface state.
 
-The direct implementation must still be held against wlroots behavior. As of 2026-06-12, the verified comparison pass covers surface commit-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output runtime updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, remaining global resource hygiene, XDG configure/frame-size parity, DnD lifecycle parity, WM-COMP-23 popup/cursor/seat-cleanup/pointer-button-grab/keyboard-focus slices, layer-shell dynamic behavior helper/state slices, and output-layout foundation including output-enter, layer-placement, and window-geometry helpers. Remaining spec work:
+The direct implementation must still be held against wlroots behavior. As of 2026-06-12, the verified comparison pass covers surface commit-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output runtime updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, remaining global resource hygiene, XDG configure/frame-size parity, DnD lifecycle parity, WM-COMP-23 popup/cursor/seat-cleanup/pointer-button-grab/keyboard-focus/seat-resource slices, layer-shell dynamic behavior helper/state slices, and output-layout foundation including output-enter, layer-placement, and window-geometry helpers. Remaining spec work:
 
 - Resume the deferred frame-coherence issue when ready: system-titlebar and client content must render from one committed geometry model so Settings resize on DP-1 HiDPI cannot show momentary non-synced titlebar/content widths.
 - Compare larger wlroots workflows that are not fully covered by narrow resource tests: remaining seat focus/grabs.
@@ -825,7 +825,7 @@ Updated each time a Lambda change lands in service of compositor work:
 
 Tracked as work proceeds. Removed when answered.
 
-- **Touch input:** `wl_seat` is advertised with pointer and keyboard only; bind version is capped at 3 so `get_touch` is not exposed. Touch is not implemented and not advertised via `WL_SEAT_CAPABILITY_TOUCH`.
+- **Touch input:** `wl_seat` advertises pointer and keyboard only. Touch dispatch is not implemented and `WL_SEAT_CAPABILITY_TOUCH` is not advertised; clients that still request `wl_touch` receive an inert resource they can release cleanly.
 - Phase 2: Does Wayland event dispatch share the main thread with rendering, or get its own thread? Current implementation shares the thread; revisit only if profiling or responsiveness issues show this is inadequate.
 - Phase 3: Subsurface hit testing walks the subsurface tree in `WindowManager.cpp::surfaceAt` (deepest subsurface wins). Coordinate translation matches snapshot placement (`parent origin + subsurface position`).
 - Phase 4: `wp_presentation_time` now sends `sync_output`. The default GBM/atomic-KMS path reports DRM page-flip completion timestamps; the legacy Vulkan-display path uses DRM vblank timing and can delay feedback on optional `VK_GOOGLE_display_timing` records.

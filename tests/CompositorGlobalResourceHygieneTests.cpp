@@ -1,6 +1,7 @@
 #include "Compositor/Wayland/Globals/Core.hpp"
 #include "Compositor/Wayland/Globals/Cutouts.hpp"
 #include "Compositor/Wayland/Globals/LayerShell.hpp"
+#include "Compositor/Wayland/Globals/Seat.hpp"
 #include "Compositor/Wayland/Globals/Shm.hpp"
 
 #include <doctest/doctest.h>
@@ -31,6 +32,13 @@ TEST_CASE("remaining globals cap resources at implemented protocol versions") {
   CHECK(kCutoutsVersion == 1);
   CHECK(cutoutsResourceVersion(1) == 1);
   CHECK(cutoutsResourceVersion(2) == 1);
+
+  CHECK(kSeatVersion == 7);
+  CHECK(seatResourceVersion(1) == 1);
+  CHECK(seatResourceVersion(7) == 7);
+  CHECK(seatResourceVersion(8) == 7);
+  CHECK_FALSE(seatCapabilitiesAdvertiseTouch(kSeatCapabilities));
+  CHECK(seatCapabilitiesAdvertiseTouch(kSeatCapabilities | WL_SEAT_CAPABILITY_TOUCH));
 }
 
 } // namespace lambda::compositor

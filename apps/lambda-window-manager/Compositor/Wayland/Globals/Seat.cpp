@@ -46,6 +46,10 @@ void keyboardDestroyResource(wl_resource* resource) {
   if (auto* server = serverFrom(resource)) removeResource(server->keyboardResources_, resource);
 }
 
+void touchDestroyResource(wl_resource* resource) {
+  if (auto* server = serverFrom(resource)) removeResource(server->touchResources_, resource);
+}
+
 int createKeymapFd(WaylandServer::Impl* server, std::uint32_t& size) {
   size = 0;
   if (!server || !server->xkbKeymap_) return -1;
@@ -115,10 +119,19 @@ struct wl_keyboard_interface const keyboardImpl{
     .release = keyboardRelease,
 };
 
+void touchRelease(wl_client*, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+struct wl_touch_interface const touchImpl{
+    .release = touchRelease,
+};
+
 void seatGetPointer(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* server = serverFrom(resource);
+  auto const version = seatResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
   wl_resource* pointer = wl_resource_create(client, &wl_pointer_interface,
-                                            std::min(wl_resource_get_version(resource), 7), id);
+                                            version, id);
   if (!pointer) {
     wl_client_post_no_memory(client);
     return;
@@ -129,8 +142,9 @@ void seatGetPointer(wl_client* client, wl_resource* resource, std::uint32_t id) 
 
 void seatGetKeyboard(wl_client* client, wl_resource* resource, std::uint32_t id) {
   auto* server = serverFrom(resource);
+  auto const version = seatResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
   wl_resource* keyboard = wl_resource_create(client, &wl_keyboard_interface,
-                                             std::min(wl_resource_get_version(resource), 7), id);
+                                             version, id);
   if (!keyboard) {
     wl_client_post_no_memory(client);
     return;
@@ -168,6 +182,19 @@ void seatGetKeyboard(wl_client* client, wl_resource* resource, std::uint32_t id)
   }
 }
 
+void seatGetTouch(wl_client* client, wl_resource* resource, std::uint32_t id) {
+  auto* server = serverFrom(resource);
+  auto const version = seatResourceVersion(static_cast<std::uint32_t>(wl_resource_get_version(resource)));
+  wl_resource* touch = wl_resource_create(client, &wl_touch_interface,
+                                          version, id);
+  if (!touch) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  server->touchResources_.push_back(touch);
+  wl_resource_set_implementation(touch, &touchImpl, server, touchDestroyResource);
+}
+
 void seatRelease(wl_client*, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
@@ -175,7 +202,7 @@ void seatRelease(wl_client*, wl_resource* resource) {
 struct wl_seat_interface const seatImpl{
     .get_pointer = seatGetPointer,
     .get_keyboard = seatGetKeyboard,
-    .get_touch = [](wl_client*, wl_resource*, std::uint32_t) {},
+    .get_touch = seatGetTouch,
     .release = seatRelease,
 };
 
@@ -200,11 +227,15 @@ void sendKeyboardConfiguration(WaylandServer::Impl* server) {
 }
 
 void bindSeat(wl_client* client, void* data, std::uint32_t version, std::uint32_t id) {
-  wl_resource* resource = wl_resource_create(client, &wl_seat_interface, std::min(version, 7u), id);
+  wl_resource* resource = wl_resource_create(client, &wl_seat_interface, seatResourceVersion(version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
   auto* server = static_cast<WaylandServer::Impl*>(data);
   server->seatResources_.push_back(resource);
   wl_resource_set_implementation(resource, &seatImpl, server, seatDestroyResource);
-  wl_seat_send_capabilities(resource, WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_KEYBOARD);
+  wl_seat_send_capabilities(resource, kSeatCapabilities);
   if (version >= 2) wl_seat_send_name(resource, "seat0");
 }
 

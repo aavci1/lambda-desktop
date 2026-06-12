@@ -303,6 +303,7 @@ struct WaylandServer::Impl {
   std::vector<std::unique_ptr<XdgOutput>> xdgOutputs_;
   std::vector<wl_resource*> pointerResources_;
   std::vector<wl_resource*> keyboardResources_;
+  std::vector<wl_resource*> touchResources_;
   Surface* pointerFocus_ = nullptr;
   Surface* pointerButtonGrabSurface_ = nullptr;
   wl_client* pointerButtonGrabClient_ = nullptr;
