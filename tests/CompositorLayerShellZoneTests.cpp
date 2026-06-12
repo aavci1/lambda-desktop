@@ -137,6 +137,35 @@ TEST_CASE("layer shell placement resolves anchors and margins") {
   CHECK(stretchedFromTopLeft.y == 6);
 }
 
+TEST_CASE("layer shell placement applies logical output origin") {
+  using namespace lambda::compositor;
+
+  auto const bottomRight = resolveLayerShellPlacement({
+      .anchor = kLayerShellAnchorBottom | kLayerShellAnchorRight,
+      .marginRight = 30,
+      .marginBottom = 40,
+      .surfaceWidth = 200,
+      .surfaceHeight = 60,
+      .outputX = 1920,
+      .outputY = 100,
+      .outputWidth = 1280,
+      .outputHeight = 720,
+  });
+  CHECK(bottomRight.x == 2970);
+  CHECK(bottomRight.y == 720);
+
+  auto const centered = resolveLayerShellPlacement({
+      .surfaceWidth = 320,
+      .surfaceHeight = 90,
+      .outputX = -640,
+      .outputY = 80,
+      .outputWidth = 1280,
+      .outputHeight = 720,
+  });
+  CHECK(centered.x == -160);
+  CHECK(centered.y == 395);
+}
+
 TEST_CASE("layer shell keyboard interactivity normalizes by protocol version") {
   using namespace lambda::compositor;
 

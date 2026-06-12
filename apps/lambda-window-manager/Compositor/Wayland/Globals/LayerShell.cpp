@@ -2,6 +2,7 @@
 
 #include "Compositor/Wayland/LayerShellState.hpp"
 #include "Compositor/Wayland/LayerShellZones.hpp"
+#include "Compositor/Wayland/OutputState.hpp"
 #include "Compositor/Wayland/ResourceTemplates.hpp"
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "Compositor/Wayland/XdgPopupState.hpp"
@@ -227,6 +228,9 @@ bool applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface) {
   std::int32_t oldX = surface->windowX;
   std::int32_t oldY = surface->windowY;
 
+  OutputLayoutBox const layout = selectedOutputLayoutBox(layerSurface->server->output_.width,
+                                                         layerSurface->server->output_.height,
+                                                         layerSurface->server->preferredScale());
   LayerShellPlacement const placement = resolveLayerShellPlacement({
       .anchor = layerSurface->anchor,
       .marginTop = layerSurface->marginTop,
@@ -235,8 +239,10 @@ bool applyLayerGeometry(WaylandServer::Impl::LayerSurface* layerSurface) {
       .marginLeft = layerSurface->marginLeft,
       .surfaceWidth = width,
       .surfaceHeight = height,
-      .outputWidth = layerSurface->server->logicalOutputWidth(),
-      .outputHeight = layerSurface->server->logicalOutputHeight(),
+      .outputX = layout.x,
+      .outputY = layout.y,
+      .outputWidth = layout.width,
+      .outputHeight = layout.height,
   });
   surface->windowX = placement.x;
   surface->windowY = placement.y;

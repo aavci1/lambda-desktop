@@ -56,19 +56,19 @@ LayerShellPlacement resolveLayerShellPlacement(LayerShellPlacementInput const& i
   LayerShellPlacement placement;
 
   if (hasAnchor(input.anchor, kLayerShellAnchorLeft)) {
-    placement.x = input.marginLeft;
+    placement.x = input.outputX + input.marginLeft;
   } else if (hasAnchor(input.anchor, kLayerShellAnchorRight)) {
-    placement.x = input.outputWidth - input.surfaceWidth - input.marginRight;
+    placement.x = input.outputX + input.outputWidth - input.surfaceWidth - input.marginRight;
   } else {
-    placement.x = (input.outputWidth - input.surfaceWidth) / 2;
+    placement.x = input.outputX + (input.outputWidth - input.surfaceWidth) / 2;
   }
 
   if (hasAnchor(input.anchor, kLayerShellAnchorTop)) {
-    placement.y = input.marginTop;
+    placement.y = input.outputY + input.marginTop;
   } else if (hasAnchor(input.anchor, kLayerShellAnchorBottom)) {
-    placement.y = input.outputHeight - input.surfaceHeight - input.marginBottom;
+    placement.y = input.outputY + input.outputHeight - input.surfaceHeight - input.marginBottom;
   } else {
-    placement.y = (input.outputHeight - input.surfaceHeight) / 2;
+    placement.y = input.outputY + (input.outputHeight - input.surfaceHeight) / 2;
   }
 
   return placement;

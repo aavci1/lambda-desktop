@@ -48,6 +48,8 @@ struct LayerShellPlacementInput {
   std::int32_t marginLeft = 0;
   std::int32_t surfaceWidth = 0;
   std::int32_t surfaceHeight = 0;
+  std::int32_t outputX = 0;
+  std::int32_t outputY = 0;
   std::int32_t outputWidth = 1;
   std::int32_t outputHeight = 1;
 };
