@@ -80,6 +80,8 @@ done
 for runner_capability in \
   "--start-compositor" \
   "comma-separated" \
+  "valid_case_name" \
+  "Unknown case:" \
   "SELECTED_CASES" \
   "LAMBDA_WINDOW_MANAGER_CPU_TRACE=1" \
   "LAMBDA_WINDOW_MANAGER_PACING_TRACE=1" \

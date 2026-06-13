@@ -101,6 +101,17 @@ print_catalog() {
   done
 }
 
+valid_case_name() {
+  local candidate="$1"
+  local name required description
+  while IFS='|' read -r name required description; do
+    if [[ "$name" == "$candidate" ]]; then
+      return 0
+    fi
+  done < <(case_catalog)
+  return 1
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-build)
@@ -141,6 +152,11 @@ while [[ $# -gt 0 ]]; do
       for selected_part in "${selected_parts[@]}"; do
         if [[ -z "$selected_part" ]]; then
           echo "--case contains an empty case name" >&2
+          exit 2
+        fi
+        if ! valid_case_name "$selected_part"; then
+          echo "Unknown case: $selected_part" >&2
+          echo "Use --list to see valid case names." >&2
           exit 2
         fi
         SELECTED_CASES+=("$selected_part")
