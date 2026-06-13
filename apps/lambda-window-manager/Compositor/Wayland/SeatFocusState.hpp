@@ -22,6 +22,7 @@ struct SurfaceSeatStateRefs {
   wl_client** pointerButtonGrabClient = nullptr;
   std::uint32_t* pointerButtonCount = nullptr;
   WaylandServer::Impl::Surface** keyboardFocus = nullptr;
+  WaylandServer::Impl::Surface** commandLauncherModalSurface = nullptr;
   std::deque<WaylandServer::Impl::SeatSerialRecord>* seatSerials = nullptr;
   std::vector<std::unique_ptr<WaylandServer::Impl::ActivationToken>>* activationTokens = nullptr;
 };
@@ -30,6 +31,7 @@ struct SurfaceSeatCleanupResult {
   bool changed = false;
   bool pointerFocusChanged = false;
   bool keyboardFocusChanged = false;
+  bool commandLauncherModalCleared = false;
   bool pointerButtonGrabCleared = false;
   bool focusOrderChanged = false;
   bool focusCycleCleared = false;
@@ -94,6 +96,7 @@ inline SurfaceSeatStateRefs surfaceSeatStateRefs(WaylandServer::Impl* server) {
       .pointerButtonGrabClient = &server->pointerButtonGrabClient_,
       .pointerButtonCount = &server->pointerButtonCount_,
       .keyboardFocus = &server->keyboardFocus_,
+      .commandLauncherModalSurface = &server->commandLauncherModalSurface_,
       .seatSerials = &server->seatSerials_,
       .activationTokens = &server->activationTokens_,
   };
@@ -136,6 +139,11 @@ inline SurfaceSeatCleanupResult clearUnmappedSurfaceSeatState(SurfaceSeatStateRe
     result.keyboardFocusChanged = true;
   }
 
+  if (state.commandLauncherModalSurface && *state.commandLauncherModalSurface == surface) {
+    *state.commandLauncherModalSurface = nullptr;
+    result.commandLauncherModalCleared = true;
+  }
+
   if (state.seatSerials) {
     std::size_t const before = state.seatSerials->size();
     std::erase_if(*state.seatSerials, [surface](WaylandServer::Impl::SeatSerialRecord const& record) {
@@ -155,6 +163,7 @@ inline SurfaceSeatCleanupResult clearUnmappedSurfaceSeatState(SurfaceSeatStateRe
 
   result.changed = result.pointerFocusChanged ||
                    result.keyboardFocusChanged ||
+                   result.commandLauncherModalCleared ||
                    result.pointerButtonGrabCleared ||
                    result.focusOrderChanged ||
                    result.focusCycleCleared ||

@@ -1105,6 +1105,8 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
       if (geometryChanged) ++surface->server->contentSerial_;
     }
     if (hasNullBufferAttach && resetLayerSurfaceForUnmap(surface->layerSurface)) {
+      SurfaceSeatCleanupResult const seatCleanup = clearUnmappedSurfaceSeatState(surface->server, surface);
+      if (seatCleanup.pointerFocusChanged) updatePointerConstraintsForFocus(surface->server);
       refreshShellReservedZones(surface->server);
     }
     if (!surface->layerSurface->initialized && !hasBufferAttach) {

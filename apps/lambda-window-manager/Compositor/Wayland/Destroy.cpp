@@ -137,9 +137,6 @@ void resetFractionalScaleRole(WaylandServer::Impl* server, WaylandServer::Impl::
 void resetLayerSurfaceRole(WaylandServer::Impl* server, WaylandServer::Impl::LayerSurface* layerSurface) {
   if (!server || !layerSurface) return;
   refreshShellReservedZones(server);
-  if (server->commandLauncherModalSurface_ == layerSurface->surface) {
-    server->commandLauncherModalSurface_ = nullptr;
-  }
   SurfaceSeatCleanupResult const seatCleanup =
       clearUnmappedSurfaceSeatState(server, layerSurface->surface);
   if (seatCleanup.pointerFocusChanged) updatePointerConstraintsForFocus(server);

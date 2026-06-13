@@ -808,6 +808,7 @@ TEST_CASE("unmapped toplevel cleanup drops stale seat focus and serial state") {
   wl_client* pointerButtonGrabClient = client;
   std::uint32_t pointerButtonCount = 2;
   WaylandServer::Impl::Surface* keyboardFocus = &surface;
+  WaylandServer::Impl::Surface* commandLauncherModalSurface = &surface;
   std::deque<WaylandServer::Impl::SeatSerialRecord> serials{
       {.serial = 10, .client = client, .surface = &surface},
       {.serial = 11, .client = client, .surface = &other},
@@ -828,6 +829,7 @@ TEST_CASE("unmapped toplevel cleanup drops stale seat focus and serial state") {
       .pointerButtonGrabClient = &pointerButtonGrabClient,
       .pointerButtonCount = &pointerButtonCount,
       .keyboardFocus = &keyboardFocus,
+      .commandLauncherModalSurface = &commandLauncherModalSurface,
       .seatSerials = &serials,
       .activationTokens = &tokens,
   }, &surface);
@@ -835,6 +837,7 @@ TEST_CASE("unmapped toplevel cleanup drops stale seat focus and serial state") {
   CHECK(cleanup.changed);
   CHECK(cleanup.pointerFocusChanged);
   CHECK(cleanup.keyboardFocusChanged);
+  CHECK(cleanup.commandLauncherModalCleared);
   CHECK(cleanup.pointerButtonGrabCleared);
   CHECK(cleanup.focusOrderChanged);
   CHECK(cleanup.focusCycleCleared);
@@ -850,6 +853,7 @@ TEST_CASE("unmapped toplevel cleanup drops stale seat focus and serial state") {
   CHECK(pointerButtonGrabClient == nullptr);
   CHECK(pointerButtonCount == 0);
   CHECK(keyboardFocus == nullptr);
+  CHECK(commandLauncherModalSurface == nullptr);
   REQUIRE(serials.size() == 1);
   CHECK(serials.front().surface == &other);
   REQUIRE(tokens.size() == 1);
@@ -866,6 +870,7 @@ TEST_CASE("unmapped toplevel cleanup drops stale seat focus and serial state") {
       .pointerButtonGrabClient = &pointerButtonGrabClient,
       .pointerButtonCount = &pointerButtonCount,
       .keyboardFocus = &keyboardFocus,
+      .commandLauncherModalSurface = &commandLauncherModalSurface,
       .seatSerials = &serials,
       .activationTokens = &tokens,
   }, &surface);
