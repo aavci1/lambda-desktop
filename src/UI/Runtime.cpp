@@ -1005,22 +1005,18 @@ void Runtime::handleInput(InputEvent const& event) {
     updateCursorForPoint(d->input, d->window, point);
     break;
   case InputEvent::Kind::Scroll: {
-    PointerHitSnapshot const hit = pointerHitSnapshot(d->window, point);
-    RuntimeTargetSnapshot const* scrollTarget = nullptr;
-    for (auto it = hit.hoverChain.rbegin(); it != hit.hoverChain.rend(); ++it) {
-      if (it->onScroll) {
-        scrollTarget = &*it;
-        break;
-      }
-    }
-    if (scrollTarget) {
+    if (auto hit = hitWindow(d->window, point, [](scenegraph::Interaction const& interaction) {
+          return static_cast<bool>(interactionData(interaction).onScroll);
+        })) {
       Vec2 delta = event.scrollDelta;
       if (!event.preciseScrollDelta) {
         constexpr float kLineHeight = 40.f;
         delta.x *= kLineHeight;
         delta.y *= kLineHeight;
       }
-      scrollTarget->onScroll(delta);
+      if (hit->interaction && hit->interaction->onScroll) {
+        hit->interaction->onScroll(delta);
+      }
     }
     break;
   }
