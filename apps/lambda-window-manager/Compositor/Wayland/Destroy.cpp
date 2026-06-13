@@ -179,10 +179,9 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   bool const hadToplevel = surfaceIsXdgToplevel(surface);
   bool const activatePrevious = keyboardFocus_ == surface && hadToplevel;
   wm::clearFocusCycle(this);
-  removeSurfaceFromFocusOrder(this, surface);
-  if (pointerFocus_ == surface) pointerFocus_ = nullptr;
   detachPointerButtonGrabSurface(this, surface);
-  if (keyboardFocus_ == surface) keyboardFocus_ = nullptr;
+  SurfaceSeatCleanupResult const seatCleanup = clearUnmappedSurfaceSeatState(this, surface);
+  if (seatCleanup.pointerFocusChanged) updatePointerConstraintsForFocus(this);
   if (dragSurface_ == surface) {
     dragSurface_ = nullptr;
     dragSnapTarget_.reset();
@@ -203,9 +202,6 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   if (lastTitleClickSurface_ == surface) lastTitleClickSurface_ = nullptr;
   if (cursorSurface_ == surface) cursorSurface_ = nullptr;
   if (lastActivationSurface_ == surface) lastActivationSurface_ = nullptr;
-  for (auto& token : activationTokens_) {
-    if (token->surface == surface) token->surface = nullptr;
-  }
   if (dndIcon_ == surface) dndIcon_ = nullptr;
 
   resetXdgPopupsParentedBySurface(this, surface, true);
@@ -294,7 +290,6 @@ void WaylandServer::Impl::destroySurface(Surface* surface) {
   if (surface->bufferState.buffer && surface->dmabufBuffer) {
     releaseOrDeferBufferRelease(this, surface->bufferState.buffer);
   }
-  clearSeatSerialsForSurface(this, surface);
   eraseResource(surfaces_, surface);
   if (activatePrevious) activateMostRecentToplevel(this, 0);
   if (hadToplevel) notifyShellStateChanged();
