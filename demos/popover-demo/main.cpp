@@ -40,6 +40,7 @@ struct PopoverDemoRoot {
         auto autotestText = useState<std::string>("Autotest step 0");
         auto autotestStep = useState<int>(0);
         auto autotestTimer = useState<std::uint64_t>(0);
+        auto autotestDismissed = useState<bool>(false);
 
         if (envEnabled("LAMBDA_POPOVER_DEMO_AUTOTEST") && Application::hasInstance()) {
             auto alive = std::make_shared<bool>(true);
@@ -48,8 +49,8 @@ struct PopoverDemoRoot {
                  autotestText,
                  autotestStep,
                  autotestTimer,
-                 showPopover = showPopover,
-                 hidePopover = hidePopover](TimerEvent const &event) mutable {
+                 autotestDismissed,
+                 showPopover = showPopover](TimerEvent const &event) mutable {
                     if (!*alive || event.timerId == 0 || event.timerId != autotestTimer.peek()) {
                         return;
                     }
@@ -84,6 +85,10 @@ struct PopoverDemoRoot {
                             .backdropColor = Colors::transparent,
                             .dismissOnEscape = true,
                             .dismissOnOutsideTap = false,
+                            .onDismiss = [autotestDismissed] {
+                                std::fprintf(stderr, "[popover-demo-autotest] dismissed\n");
+                                autotestDismissed.set(true);
+                            },
                             .useTapAnchor = false,
                             .anchorRectOverride = Rect {360.f, 120.f, 80.f, 32.f},
                             .debugName = "popover-autotest",
@@ -93,12 +98,20 @@ struct PopoverDemoRoot {
                                            " - committed popover redraw";
                         std::fprintf(stderr, "[popover-demo-autotest] update step=%d\n", step);
                         autotestText.set(std::move(next));
-                    } else {
+                    } else if (step == 9) {
+                        std::fprintf(stderr, "[popover-demo-autotest] await-escape step=%d\n", step);
+                    } else if (autotestDismissed.peek()) {
                         std::fprintf(stderr, "[popover-demo-autotest] complete step=%d\n", step);
-                        hidePopover();
                         Application::instance().cancelTimer(event.timerId);
                         autotestTimer.set(0);
                         Application::instance().quit();
+                    } else if (step >= 50) {
+                        std::fprintf(stderr, "[popover-demo-autotest] timeout waiting for dismiss step=%d\n", step);
+                        Application::instance().cancelTimer(event.timerId);
+                        autotestTimer.set(0);
+                        Application::instance().quit();
+                    } else {
+                        std::fprintf(stderr, "[popover-demo-autotest] wait-dismiss step=%d\n", step);
                     }
                     autotestStep.set(step + 1);
                 });

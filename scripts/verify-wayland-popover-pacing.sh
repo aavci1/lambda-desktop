@@ -19,6 +19,8 @@ Runs a focused Linux Wayland popover pacing check under headless Weston GL:
   - runs popover-demo in timer-driven autotest mode
   - asserts initial popover paint is immediate
   - asserts committed popover updates render only from Wayland frame callbacks
+  - sends Escape through wtype when the compositor supports virtual keyboard
+  - otherwise uses a guarded Linux Wayland backend hook to assert native popover dismissal
 
 Environment:
   LWM_WAYLAND_BUILD_DIR                         Wayland build dir. Default: $BUILD_DIR
@@ -45,8 +47,13 @@ cmake --build "$BUILD_DIR" --target popover-demo -j"$(nproc)"
 
 SOCKET="lambda-weston-popover-$$"
 WESTON_PID=""
+APP_PID=""
 cleanup() {
   set +e
+  if [[ -n "$APP_PID" ]]; then
+    kill -TERM "$APP_PID" 2>/dev/null || true
+    wait "$APP_PID" 2>/dev/null || true
+  fi
   if [[ -n "$WESTON_PID" ]]; then
     kill -TERM "$WESTON_PID" 2>/dev/null || true
     sleep 1
@@ -87,15 +94,68 @@ if [[ ! -S "$XDG_RUNTIME_DIR/$SOCKET" ]]; then
   exit 20
 fi
 
+ESCAPE_DRIVER="backend"
+if command -v wayland-info >/dev/null 2>&1; then
+  WAYLAND_DISPLAY="$SOCKET" wayland-info >"$LOG_DIR/wayland-info.log" 2>&1 || true
+  if rg -q 'zwp_virtual_keyboard_manager_v1' "$LOG_DIR/wayland-info.log"; then
+    command -v wtype >/dev/null 2>&1 || {
+      echo "wtype is required when the compositor advertises virtual keyboard support." >&2
+      exit 2
+    }
+    ESCAPE_DRIVER="wtype"
+  fi
+fi
+
+BACKEND_AUTOTEST_ESCAPE=0
+if [[ "$ESCAPE_DRIVER" == "backend" ]]; then
+  BACKEND_AUTOTEST_ESCAPE=1
+fi
+
 set +e
 WAYLAND_DISPLAY="$SOCKET" \
   LAMBDA_WAYLAND_POPOVER_TRACE=1 \
+  LAMBDA_WAYLAND_POPOVER_AUTOTEST_ESCAPE="$BACKEND_AUTOTEST_ESCAPE" \
   LAMBDA_POPOVER_DEMO_AUTOTEST=1 \
   LAMBDA_DEBUG_PERF=2 \
   LAMBDA_VULKAN_FORCE_FIFO_PRESENT_MODE="$FORCE_FIFO" \
   timeout --signal=TERM --kill-after=2s "${TIMEOUT_SECONDS}s" \
-  "$BUILD_DIR/demos/popover-demo" >"$LOG_DIR/popover-demo.log" 2>&1
+  "$BUILD_DIR/demos/popover-demo" >"$LOG_DIR/popover-demo.log" 2>&1 &
+APP_PID=$!
+set -e
+
+escape_sent=0
+if [[ "$ESCAPE_DRIVER" == "wtype" ]]; then
+  for _ in $(seq 1 120); do
+    if grep -q '\[popover-demo-autotest\] await-escape' "$LOG_DIR/popover-demo.log" 2>/dev/null; then
+      set +e
+      WAYLAND_DISPLAY="$SOCKET" wtype -k Escape >"$LOG_DIR/wtype.log" 2>&1
+      wtype_status=$?
+      set -e
+      if [[ "$wtype_status" -ne 0 ]]; then
+        echo "SUMMARY wayland-popover-pacing wtype_status=$wtype_status log_dir=$LOG_DIR"
+        cat "$LOG_DIR/wtype.log" >&2 || true
+        exit 1
+      fi
+      escape_sent=1
+      break
+    fi
+    if ! kill -0 "$APP_PID" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+
+  if [[ "$escape_sent" -ne 1 ]]; then
+    echo "SUMMARY wayland-popover-pacing escape_sent=0 log_dir=$LOG_DIR"
+    tail -n 160 "$LOG_DIR/popover-demo.log" >&2 || true
+    exit 1
+  fi
+fi
+
+set +e
+wait "$APP_PID"
 app_status=$?
+APP_PID=""
 set -e
 
 if [[ "$app_status" -ne 0 ]]; then
@@ -113,7 +173,7 @@ if [[ "$fatal_count" -ne 0 ]]; then
   exit 1
 fi
 
-awk -v label="wayland-popover-pacing" '
+awk -v label="wayland-popover-pacing" -v escape_driver="$ESCAPE_DRIVER" '
   /wayland-popover-detail:/ && /event=render/ && /reason=initial-configure/ && /committed_before=0/ {
     initial_render += 1
   }
@@ -138,16 +198,28 @@ awk -v label="wayland-popover-pacing" '
   /\[popover-demo-autotest\] update/ {
     autotest_update += 1
   }
+  /\[popover-demo-autotest\] await-escape/ {
+    autotest_await_escape += 1
+  }
+  /\[popover-demo-autotest\] dismissed/ {
+    autotest_dismissed += 1
+  }
+  /\[wayland-popover-autotest\] backend-escape/ {
+    backend_escape += 1
+  }
   /\[popover-demo-autotest\] complete/ {
     autotest_complete += 1
   }
   END {
-    printf "SUMMARY %s initial_render=%d committed_redraw=%d frame_request=%d frame_done=%d paced_render=%d immediate_committed_render=%d autotest_show=%d autotest_update=%d autotest_complete=%d\n",
-      label, initial_render, committed_redraw, frame_request, frame_done, paced_render,
-      immediate_committed_render, autotest_show, autotest_update, autotest_complete
+    printf "SUMMARY %s escape_driver=%s initial_render=%d committed_redraw=%d frame_request=%d frame_done=%d paced_render=%d immediate_committed_render=%d autotest_show=%d autotest_update=%d autotest_await_escape=%d autotest_dismissed=%d backend_escape=%d autotest_complete=%d\n",
+      label, escape_driver, initial_render, committed_redraw, frame_request, frame_done, paced_render,
+      immediate_committed_render, autotest_show, autotest_update, autotest_await_escape,
+      autotest_dismissed, backend_escape, autotest_complete
     if (initial_render < 1 || committed_redraw < 2 || frame_request < 2 || frame_done < 1 ||
         paced_render < 1 || immediate_committed_render != 0 ||
-        autotest_show != 1 || autotest_update < 4 || autotest_complete != 1) {
+        autotest_show != 1 || autotest_update < 4 || autotest_await_escape != 1 ||
+        autotest_dismissed != 1 || autotest_complete != 1 ||
+        (escape_driver == "backend" && backend_escape != 1)) {
       exit 1
     }
   }

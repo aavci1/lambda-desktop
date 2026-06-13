@@ -124,6 +124,7 @@ struct WaylandPopoverSurfaceState {
   std::uint64_t redrawRequestCount = 0;
   std::uint64_t frameRequestCount = 0;
   std::uint64_t frameDoneCount = 0;
+  bool autotestEscapeDispatched = false;
 };
 
 struct WaylandClipboardOffer {
@@ -141,6 +142,14 @@ bool waylandPopoverTraceEnabled() {
   static int cached = -1;
   if (cached < 0) {
     cached = debug::envTruthy(std::getenv("LAMBDA_WAYLAND_POPOVER_TRACE")) ? 1 : 0;
+  }
+  return cached != 0;
+}
+
+bool waylandPopoverAutotestEscapeEnabled() {
+  static int cached = -1;
+  if (cached < 0) {
+    cached = debug::envTruthy(std::getenv("LAMBDA_WAYLAND_POPOVER_AUTOTEST_ESCAPE")) ? 1 : 0;
   }
   return cached != 0;
 }
@@ -2038,6 +2047,7 @@ private:
     if (state.redrawRequested && state.committed) {
       requestPopoverFrame(state);
     }
+    maybeDispatchPopoverAutotestEscape(state);
   }
 
   void requestPopoverFrame(WaylandPopoverSurfaceState& state) {
@@ -2062,6 +2072,21 @@ private:
     ++state.redrawRequestCount;
     tracePopover(state, "redraw-request");
     if (state.committed) requestPopoverFrame(state);
+  }
+
+  void maybeDispatchPopoverAutotestEscape(WaylandPopoverSurfaceState& state) {
+    if (!waylandPopoverAutotestEscapeEnabled() || state.autotestEscapeDispatched ||
+        state.popover.debugName != "popover-autotest" || state.frameDoneCount < 8 || state.closing ||
+        state.closeAfterEvent) {
+      return;
+    }
+    state.autotestEscapeDispatched = true;
+    std::fprintf(stderr,
+                 "[wayland-popover-autotest] backend-escape id=%" PRIu64
+                 " frameDones=%" PRIu64 "\n",
+                 state.id.value,
+                 state.frameDoneCount);
+    dispatchPopoverKey(state, keys::Escape, true);
   }
 
   void dispatchPopoverPointerMove(WaylandPopoverSurfaceState& state, Point point) {
