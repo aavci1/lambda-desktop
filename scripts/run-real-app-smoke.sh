@@ -337,8 +337,14 @@ if case_selected "gtk"; then
   elif available_command nautilus; then
     add_case "gtk" "required" "nautilus" "nautilus" \
       "Nautilus should open on Wayland; validate headerbar, menus/popovers, clipboard, and resize/snap."
+  elif available_command meld; then
+    add_case "gtk" "required" "meld" "GDK_BACKEND=wayland meld" \
+      "Meld should open on Wayland; validate text input, headerbar menus/popovers, clipboard, and resize/snap."
+  elif available_command pavucontrol; then
+    add_case "gtk" "required" "pavucontrol" "GDK_BACKEND=wayland pavucontrol" \
+      "pavucontrol should open on Wayland; validate GTK controls, popovers/menus where present, and resize/snap."
   else
-    add_missing "gtk" "required" "gnome-text-editor/gedit/nautilus" \
+    add_missing "gtk" "required" "gnome-text-editor/gedit/nautilus/meld/pavucontrol" \
       "Install a GTK Wayland app, or document the intentional exclusion."
   fi
 fi
