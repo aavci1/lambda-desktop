@@ -17,7 +17,8 @@
     PathCacheKey const cacheKey{
         .pathHash = path.contentHash(),
         .styleHash = hashFill(fill) ^ (hashStroke(stroke) + 0x9e3779b97f4a7c15ULL) ^
-                     (hashTransform(state_.transform, state_.opacity) << 1u),
+                     (hashTransform(state_.transform, state_.opacity) << 1u) ^
+                     (currentRoundedClipHash() << 2u),
         .viewportW = width_,
         .viewportH = height_,
     };
@@ -46,11 +47,15 @@
     auto append = [&](TessellatedPath &&tess, FillStyle const *gradientSource = nullptr) {
       if (gradientSource) {
         for (PathVertex const &vertex : tess.vertices) {
-          target.pathVerts.push_back(makeVulkanPathVertex(vertex, gradientSource, bounds, state_.opacity));
+          VulkanPathVertex out = makeVulkanPathVertex(vertex, gradientSource, bounds, state_.opacity);
+          applyCurrentRoundedClip(out);
+          target.pathVerts.push_back(out);
         }
       } else {
         for (PathVertex const &vertex : tess.vertices) {
-          target.pathVerts.push_back(makeVulkanPathVertex(vertex, nullptr, bounds, 1.f));
+          VulkanPathVertex out = makeVulkanPathVertex(vertex, nullptr, bounds, 1.f);
+          applyCurrentRoundedClip(out);
+          target.pathVerts.push_back(out);
         }
       }
     };

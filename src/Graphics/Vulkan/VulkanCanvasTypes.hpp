@@ -4,6 +4,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
@@ -13,6 +14,9 @@ using VmaAllocation = VmaAllocation_T *;
 namespace lambda {
 
 class Image;
+
+inline constexpr std::size_t kVulkanRoundedClipMaskCapacity = 4;
+inline constexpr std::size_t kVulkanRoundedClipEntryCount = kVulkanRoundedClipMaskCapacity * 2;
 
 struct Texture {
   VkImage image = VK_NULL_HANDLE;
@@ -41,8 +45,8 @@ struct RectInstance {
   float gradient[4]{};
   float stroke[4]{};
   float params[4]{};
-  float clipRect[4]{};
-  float clipRadii[4]{};
+  float clipHeader[4]{};
+  float clipEntries[kVulkanRoundedClipEntryCount][4]{};
 };
 
 struct QuadInstance {
@@ -52,6 +56,8 @@ struct QuadInstance {
   float uv[4]{};
   float color[4]{};
   float radii[4]{};
+  float clipHeader[4]{};
+  float clipEntries[kVulkanRoundedClipEntryCount][4]{};
 };
 
 struct CalloutInstance {
@@ -64,8 +70,8 @@ struct CalloutInstance {
   float tint[4]{};
   float stroke[4]{};
   float params[4]{};
-  float clipRect[4]{};
-  float clipRadii[4]{};
+  float clipHeader[4]{};
+  float clipEntries[kVulkanRoundedClipEntryCount][4]{};
 };
 
 struct DrawOp {
@@ -105,6 +111,8 @@ struct VulkanPathVertex {
   float stops[4]{};
   float gradient[4]{};
   float params[4]{};
+  float clipHeader[4]{};
+  float clipEntries[kVulkanRoundedClipEntryCount][4]{};
 };
 
 } // namespace lambda

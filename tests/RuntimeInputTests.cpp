@@ -11,6 +11,7 @@
 #include <Lambda/Reactive/Signal.hpp>
 #include <Lambda/UI/InteractionData.hpp>
 #include <Lambda/SceneGraph/RectNode.hpp>
+#include <Lambda/SceneGraph/SceneInteraction.hpp>
 #include <Lambda/UI/Hooks.hpp>
 #include <Lambda/UI/Overlay.hpp>
 #include <Lambda/UI/Views/HStack.hpp>
@@ -86,6 +87,14 @@ struct RuntimeHarness {
     dispatchPointer(lambda::InputEvent::Kind::PointerMove, point);
   }
 
+  void pointerEnter(lambda::Point point) {
+    dispatchPointer(lambda::InputEvent::Kind::PointerEnter, point, lambda::Modifiers::None, 0u);
+  }
+
+  void pointerLeave(lambda::Point point = {}) {
+    dispatchPointer(lambda::InputEvent::Kind::PointerLeave, point, lambda::Modifiers::None, 0u);
+  }
+
   void pointerDown(lambda::Point point, lambda::Modifiers modifiers = lambda::Modifiers::None) {
     dispatchPointer(lambda::InputEvent::Kind::PointerDown, point, modifiers);
   }
@@ -118,6 +127,14 @@ struct RuntimeHarness {
     runtime.handleWindowEvent(event);
   }
 
+  void resize(lambda::Size size) {
+    lambda::WindowEvent event{};
+    event.kind = lambda::WindowEvent::Kind::Resize;
+    event.handle = window.handle();
+    event.size = size;
+    runtime.handleWindowEvent(event);
+  }
+
   void scroll(lambda::Point point, lambda::Vec2 delta, bool precise = true) {
     lambda::InputEvent event{};
     event.kind = lambda::InputEvent::Kind::Scroll;
@@ -130,15 +147,16 @@ struct RuntimeHarness {
 
 private:
   void dispatchPointer(lambda::InputEvent::Kind kind, lambda::Point point,
-                       lambda::Modifiers modifiers = lambda::Modifiers::None) {
+                       lambda::Modifiers modifiers = lambda::Modifiers::None,
+                       std::uint8_t pressedButtons = 1u) {
     lambda::InputEvent event{};
     event.kind = kind;
     event.handle = window.handle();
     event.position = {point.x, point.y};
-    event.button = lambda::MouseButton::Left;
+    event.button = pressedButtons == 0u ? lambda::MouseButton::None : lambda::MouseButton::Left;
     event.modifiers = modifiers;
     event.pressedButtons =
-        kind == lambda::InputEvent::Kind::PointerUp ? 0u : static_cast<std::uint8_t>(1u);
+        kind == lambda::InputEvent::Kind::PointerUp ? 0u : pressedButtons;
     runtime.handleInput(event);
   }
 };
@@ -148,6 +166,9 @@ struct ProbeView {
   lambda::Reactive::Signal<bool>* press = nullptr;
   lambda::Reactive::Signal<bool>* focus = nullptr;
   lambda::Reactive::Signal<bool>* keyboardFocus = nullptr;
+  int* pointerEnterCount = nullptr;
+  int* pointerExitCount = nullptr;
+  lambda::Cursor cursor = lambda::Cursor::Inherit;
 
   lambda::Element body() const {
     if (hover) {
@@ -162,10 +183,24 @@ struct ProbeView {
     if (keyboardFocus) {
       *keyboardFocus = lambda::useKeyboardFocus();
     }
-    return lambda::Element{lambda::Rectangle{}}
+    auto element = lambda::Element{lambda::Rectangle{}}
         .size(20.f, 20.f)
         .focusable(true)
         .onTap([] {});
+    if (pointerEnterCount) {
+      element = std::move(element).onPointerEnter([pointerEnterCount = pointerEnterCount] {
+        ++*pointerEnterCount;
+      });
+    }
+    if (pointerExitCount) {
+      element = std::move(element).onPointerExit([pointerExitCount = pointerExitCount] {
+        ++*pointerExitCount;
+      });
+    }
+    if (cursor != lambda::Cursor::Inherit) {
+      element = std::move(element).cursor(cursor);
+    }
+    return element;
   }
 };
 
@@ -174,9 +209,12 @@ struct SingleProbeRoot {
   lambda::Reactive::Signal<bool>* press = nullptr;
   lambda::Reactive::Signal<bool>* focus = nullptr;
   lambda::Reactive::Signal<bool>* keyboardFocus = nullptr;
+  int* pointerEnterCount = nullptr;
+  int* pointerExitCount = nullptr;
+  lambda::Cursor cursor = lambda::Cursor::Inherit;
 
   lambda::Element body() const {
-    return ProbeView{hover, press, focus, keyboardFocus};
+    return ProbeView{hover, press, focus, keyboardFocus, pointerEnterCount, pointerExitCount, cursor};
   }
 };
 
@@ -577,6 +615,50 @@ TEST_CASE("pointer move into element flips hover signal") {
   CHECK_FALSE(hover.get());
 }
 
+TEST_CASE("pointer move performs one scene hit traversal") {
+  RuntimeHarness harness;
+  lambda::Reactive::Signal<bool> hover;
+  harness.setRoot(SingleProbeRoot{
+      .hover = &hover,
+      .cursor = lambda::Cursor::Hand,
+  });
+
+  lambda::scenegraph::detail::resetHitTestTraversalCountForTesting();
+
+  harness.pointerMove({10.f, 10.f});
+
+  CHECK(lambda::scenegraph::detail::hitTestTraversalCountForTesting() == 1);
+  CHECK(hover.get());
+}
+
+TEST_CASE("pointer leave clears hover without blurring keyboard focus") {
+  RuntimeHarness harness;
+  lambda::Reactive::Signal<bool> hover;
+  lambda::Reactive::Signal<bool> focus;
+  lambda::Reactive::Signal<bool> keyboardFocus;
+  int pointerExitCount = 0;
+  harness.setRoot(SingleProbeRoot{
+      .hover = &hover,
+      .focus = &focus,
+      .keyboardFocus = &keyboardFocus,
+      .pointerExitCount = &pointerExitCount,
+      .cursor = lambda::Cursor::Hand,
+  });
+
+  REQUIRE(focus.get());
+  REQUIRE(keyboardFocus.get());
+
+  harness.pointerMove({10.f, 10.f});
+  REQUIRE(hover.get());
+
+  harness.pointerLeave();
+
+  CHECK_FALSE(hover.get());
+  CHECK(pointerExitCount == 1);
+  CHECK(focus.get());
+  CHECK(keyboardFocus.get());
+}
+
 TEST_CASE("pointer down and up flip press signal") {
   RuntimeHarness harness;
   lambda::Reactive::Signal<bool> press;
@@ -728,6 +810,23 @@ TEST_CASE("text input participates in keyboard focus traversal") {
 
   CHECK(first.get() == "A");
   CHECK(second.get() == "B");
+}
+
+TEST_CASE("resize preserves focused text input target") {
+  RuntimeHarness harness;
+  lambda::Reactive::Signal<std::string> first{""};
+  lambda::Reactive::Signal<std::string> second{""};
+  harness.setRoot(TextInputFocusRoot{.first = &first, .second = &second});
+
+  harness.keyDown(lambda::keys::Tab);
+  REQUIRE(harness.runtime.focusTargetKey().has_value());
+  harness.textInput("A");
+
+  harness.resize({320.f, 180.f});
+  harness.textInput("B");
+
+  CHECK(first.get() == "AB");
+  CHECK(second.get().empty());
 }
 
 TEST_CASE("controlled text input handles Ctrl+A and reports edit selection") {

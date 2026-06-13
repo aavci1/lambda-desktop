@@ -65,6 +65,7 @@ set(_lambda_test_sources
   TerminalPtySmokeTests.cpp
   TextInputScrollTests.cpp
   ThemeReactivityTests.cpp
+  WaylandScrollAccumulatorTests.cpp
 )
 
 if(LAMBDA_PLATFORM_MACOS)

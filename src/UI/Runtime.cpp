@@ -66,6 +66,7 @@ struct RuntimeInputState {
   Point pressPoint{};
   bool pressCancelled = false;
   Cursor currentCursor = Cursor::Arrow;
+  FocusInputKind focusKind = FocusInputKind::Pointer;
 };
 
 struct RuntimeFocusRequestEvent {
@@ -238,6 +239,12 @@ struct HitTarget {
   InteractionData const* interaction = nullptr;
   Point localPoint{};
   OverlayId overlay{};
+};
+
+struct PointerHitSnapshot {
+  std::optional<HitTarget> hit;
+  std::vector<RuntimeTargetSnapshot> hoverChain;
+  Cursor cursor = Cursor::Arrow;
 };
 
 using InteractionFilter = Reactive::SmallFn<bool(scenegraph::Interaction const&)>;
@@ -430,6 +437,21 @@ std::vector<RuntimeTargetSnapshot> hoverChainForHit(HitTarget const& hit) {
   return chain;
 }
 
+PointerHitSnapshot pointerHitSnapshot(Window& window, Point point) {
+  PointerHitSnapshot snapshot{};
+  snapshot.hit = hitWindow(window, point);
+  if (snapshot.hit) {
+    snapshot.hoverChain = hoverChainForHit(*snapshot.hit);
+    for (auto it = snapshot.hoverChain.rbegin(); it != snapshot.hoverChain.rend(); ++it) {
+      if (it->cursor != Cursor::Inherit) {
+        snapshot.cursor = it->cursor;
+        break;
+      }
+    }
+  }
+  return snapshot;
+}
+
 std::optional<Point> localPointForTarget(RuntimeTargetSnapshot const& target,
                                          Window& window, Point windowPoint) {
   if (!target.node) {
@@ -498,29 +520,24 @@ void setFocusActive(RuntimeTargetSnapshot const& target, bool active,
   writeSignal(target.keyboardFocusSignal, active && kind == FocusInputKind::Keyboard);
 }
 
-void updateCursorForPoint(RuntimeInputState& input, Window& window, Point point) {
+void updateCursorForHit(RuntimeInputState& input, Window& window, PointerHitSnapshot const& hit) {
   if (input.pressTarget && input.pressTarget->cursor != Cursor::Inherit) {
     applyCursor(input, window, input.pressTarget->cursor);
     return;
   }
 
-  auto hit = hitWindow(window, point, [](scenegraph::Interaction const& interaction) {
-    return interactionData(interaction).cursor.evaluate() != Cursor::Inherit;
-  });
-  applyCursor(input, window, hit && hit->interaction ? hit->interaction->cursor.evaluate() : Cursor::Arrow);
+  applyCursor(input, window, hit.cursor);
 }
 
-void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) {
-  std::optional<HitTarget> hit = hitWindow(window, point);
-  input.hoverAnchor = hit ? std::optional<Rect>{windowRectForHit(*hit, point)}
+void updateHoverForHit(RuntimeInputState& input, Point point, PointerHitSnapshot const& hit) {
+  input.hoverAnchor = hit.hit ? std::optional<Rect>{windowRectForHit(*hit.hit, point)}
                           : std::nullopt;
-  if (hit && hit->interaction && !hit->interaction->stableTargetKey_.empty()) {
-    input.hoverTargetKey = hit->interaction->stableTargetKey_;
+  if (hit.hit && hit.hit->interaction && !hit.hit->interaction->stableTargetKey_.empty()) {
+    input.hoverTargetKey = hit.hit->interaction->stableTargetKey_;
   } else {
     input.hoverTargetKey.reset();
   }
-  std::vector<RuntimeTargetSnapshot> nextChain = hit ? hoverChainForHit(*hit)
-                                                     : std::vector<RuntimeTargetSnapshot>{};
+  std::vector<RuntimeTargetSnapshot> nextChain = hit.hoverChain;
   if (input.hoverChain.size() == nextChain.size()) {
     bool same = true;
     for (std::size_t i = 0; i < nextChain.size(); ++i) {
@@ -556,9 +573,20 @@ void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) 
   input.hoverChain = std::move(nextChain);
 }
 
+void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) {
+  PointerHitSnapshot const hit = pointerHitSnapshot(window, point);
+  updateHoverForHit(input, point, hit);
+}
+
+void updateCursorForPoint(RuntimeInputState& input, Window& window, Point point) {
+  PointerHitSnapshot const hit = pointerHitSnapshot(window, point);
+  updateCursorForHit(input, window, hit);
+}
+
 void setFocus(RuntimeInputState& input, std::optional<HitTarget> hit, bool notify = true,
               FocusInputKind kind = FocusInputKind::Pointer) {
   if (input.focusTarget && hit && sameTarget(*input.focusTarget, *hit)) {
+    input.focusKind = kind;
     setFocusActive(*input.focusTarget, true, kind);
     return;
   }
@@ -572,6 +600,7 @@ void setFocus(RuntimeInputState& input, std::optional<HitTarget> hit, bool notif
   }
   input.focusTarget = hit ? std::optional<RuntimeTargetSnapshot>{snapshot(*hit)}
                          : std::nullopt;
+  input.focusKind = kind;
   Reactive::SmallFn<void()> focus;
   if (notify && input.focusTarget) {
     focus = input.focusTarget->onFocus;
@@ -643,13 +672,38 @@ void focusSingleTargetOnWindowFocus(RuntimeInputState& input, Window& window) {
   }
 }
 
+std::optional<HitTarget> focusableTargetForExactKey(Window& window, ComponentKey const& key) {
+  if (key.empty()) {
+    return std::nullopt;
+  }
+  std::vector<HitTarget> targets = focusableTargets(window);
+  for (HitTarget const& target : targets) {
+    if (target.interaction && target.interaction->stableTargetKey_ == key) {
+      return target;
+    }
+  }
+  return std::nullopt;
+}
+
 ComponentKey focusedActionKey(RuntimeInputState const& input) {
   return input.focusTarget ? input.focusTarget->stableTargetKey : ComponentKey{};
 }
 
-void resetTransientTargets(RuntimeInputState& input, Window& window) {
+void clearPointerTransientTargets(RuntimeInputState& input,
+                                  Window& window,
+                                  bool notifyHoverExit,
+                                  bool clearTapState) {
   for (RuntimeTargetSnapshot const& target : input.hoverChain) {
     setHoverActive(target, false);
+  }
+  if (notifyHoverExit) {
+    for (auto it = input.hoverChain.rbegin(); it != input.hoverChain.rend(); ++it) {
+      RuntimeTargetSnapshot const& target = *it;
+      Reactive::SmallFn<void()> exit = target.onPointerExit;
+      if (exit) {
+        exit();
+      }
+    }
   }
   if (input.pressTarget) {
     setPressActive(*input.pressTarget, false);
@@ -658,12 +712,18 @@ void resetTransientTargets(RuntimeInputState& input, Window& window) {
   input.pressTarget.reset();
   input.hoverAnchor.reset();
   input.hoverTargetKey.reset();
-  input.lastTapAnchor.reset();
-  input.lastTapSerial = 0;
-  input.lastTapTargetKey.reset();
-  setFocus(input, std::nullopt, false);
+  if (clearTapState) {
+    input.lastTapAnchor.reset();
+    input.lastTapSerial = 0;
+    input.lastTapTargetKey.reset();
+  }
   input.pressCancelled = false;
   applyCursor(input, window, Cursor::Arrow);
+}
+
+void resetTransientTargets(RuntimeInputState& input, Window& window) {
+  clearPointerTransientTargets(input, window, false, true);
+  setFocus(input, std::nullopt, false);
 }
 
 } // namespace
@@ -824,6 +884,15 @@ void Runtime::handleInput(InputEvent const& event) {
   }
 
   switch (event.kind) {
+  case InputEvent::Kind::PointerEnter: {
+    PointerHitSnapshot const hit = pointerHitSnapshot(d->window, point);
+    updateHoverForHit(d->input, point, hit);
+    updateCursorForHit(d->input, d->window, hit);
+    break;
+  }
+  case InputEvent::Kind::PointerLeave:
+    clearPointerTransientTargets(d->input, d->window, true, false);
+    break;
   case InputEvent::Kind::PointerDown:
     if (d->input.pressTarget) {
       setPressActive(*d->input.pressTarget, false);
@@ -873,7 +942,8 @@ void Runtime::handleInput(InputEvent const& event) {
     updateHoverForPoint(d->input, d->window, point);
     updateCursorForPoint(d->input, d->window, point);
     break;
-  case InputEvent::Kind::PointerMove:
+  case InputEvent::Kind::PointerMove: {
+    PointerHitSnapshot const hit = pointerHitSnapshot(d->window, point);
     if (d->input.pressTarget) {
       float const dx = point.x - d->input.pressPoint.x;
       float const dy = point.y - d->input.pressPoint.y;
@@ -886,14 +956,15 @@ void Runtime::handleInput(InputEvent const& event) {
                                 .value_or(point);
         d->input.pressTarget->onPointerMove(local);
       }
-    } else if (auto hit = hitWindow(d->window, point)) {
-      if (hit->interaction && hit->interaction->onPointerMove) {
-        hit->interaction->onPointerMove(hit->localPoint);
+    } else if (hit.hit) {
+      if (hit.hit->interaction && hit.hit->interaction->onPointerMove) {
+        hit.hit->interaction->onPointerMove(hit.hit->localPoint);
       }
     }
-    updateHoverForPoint(d->input, d->window, point);
-    updateCursorForPoint(d->input, d->window, point);
+    updateHoverForHit(d->input, point, hit);
+    updateCursorForHit(d->input, d->window, hit);
     break;
+  }
   case InputEvent::Kind::PointerUp:
     if (d->input.pressTarget) {
       RuntimeTargetSnapshot released = *d->input.pressTarget;
@@ -933,21 +1004,26 @@ void Runtime::handleInput(InputEvent const& event) {
     updateHoverForPoint(d->input, d->window, point);
     updateCursorForPoint(d->input, d->window, point);
     break;
-  case InputEvent::Kind::Scroll:
-    if (auto hit = hitWindow(d->window, point, [](scenegraph::Interaction const& interaction) {
-          return static_cast<bool>(interactionData(interaction).onScroll);
-        })) {
+  case InputEvent::Kind::Scroll: {
+    PointerHitSnapshot const hit = pointerHitSnapshot(d->window, point);
+    RuntimeTargetSnapshot const* scrollTarget = nullptr;
+    for (auto it = hit.hoverChain.rbegin(); it != hit.hoverChain.rend(); ++it) {
+      if (it->onScroll) {
+        scrollTarget = &*it;
+        break;
+      }
+    }
+    if (scrollTarget) {
       Vec2 delta = event.scrollDelta;
       if (!event.preciseScrollDelta) {
         constexpr float kLineHeight = 40.f;
         delta.x *= kLineHeight;
         delta.y *= kLineHeight;
       }
-      if (hit->interaction && hit->interaction->onScroll) {
-        hit->interaction->onScroll(delta);
-      }
+      scrollTarget->onScroll(delta);
     }
     break;
+  }
   case InputEvent::Kind::KeyDown:
   case InputEvent::Kind::KeyUp:
   case InputEvent::Kind::TextInput:
@@ -967,12 +1043,36 @@ void Runtime::handleWindowEvent(WindowEvent const& event) {
       bool const traceResize = detail::resizeTraceEnabled();
       auto const resizeStart = traceResize ? std::chrono::steady_clock::now()
                                            : std::chrono::steady_clock::time_point{};
-      resetTransientTargets(d->input, d->window);
+      std::optional<RuntimeTargetSnapshot> previousFocus = d->input.focusTarget;
+      ComponentKey const previousFocusKey =
+          previousFocus ? previousFocus->stableTargetKey : ComponentKey{};
+      FocusInputKind const previousFocusKind = d->input.focusKind;
+      clearPointerTransientTargets(d->input, d->window, false, true);
+      d->input.focusTarget.reset();
       Runtime* previous = current_;
       current_ = this;
       d->root->resize(event.size, d->window.sceneGraph());
       current_ = previous;
       d->window.overlayManager().rebuild(event.size, *this);
+      if (!previousFocusKey.empty()) {
+        if (auto restored = focusableTargetForExactKey(d->window, previousFocusKey)) {
+          d->input.focusTarget = snapshot(*restored);
+          d->input.focusKind = previousFocusKind;
+          setFocusActive(*d->input.focusTarget, true, previousFocusKind);
+        } else if (previousFocus) {
+          setFocusActive(*previousFocus, false);
+          Reactive::SmallFn<void()> blur = previousFocus->onBlur;
+          if (blur) {
+            blur();
+          }
+        }
+      } else if (previousFocus) {
+        setFocusActive(*previousFocus, false);
+        Reactive::SmallFn<void()> blur = previousFocus->onBlur;
+        if (blur) {
+          blur();
+        }
+      }
       d->window.requestRedraw();
       if (traceResize) {
         auto const elapsed = std::chrono::duration_cast<std::chrono::microseconds>(

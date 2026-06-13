@@ -7,6 +7,9 @@ layout(location = 1) in vec4 vColor;
 layout(location = 2) in vec2 vLocal;
 layout(location = 3) in vec2 vSize;
 layout(location = 4) in vec4 vRadii;
+layout(location = 5) in vec2 vWorld;
+layout(location = 6) flat in vec4 vClipHeader;
+layout(location = 7) flat in vec4 vClipEntries[8];
 layout(location = 0) out vec4 outColor;
 
 float roundedRectSDF(vec2 p, vec2 halfSize, vec4 radii) {
@@ -27,8 +30,27 @@ float roundedAlpha(vec2 p, vec2 size, vec4 radii) {
   return 1.0 - smoothstep(-aa, aa, d);
 }
 
+float roundedClipCoverage(vec2 world) {
+  int count = clamp(int(vClipHeader.x + 0.5), 0, 4);
+  float coverage = 1.0;
+  for (int i = 0; i < count; ++i) {
+    vec4 clipRect = vClipEntries[i * 2];
+    vec4 clipRadii = vClipEntries[i * 2 + 1];
+    if (clipRect.z <= 0.0 || clipRect.w <= 0.0 ||
+        max(max(clipRadii.x, clipRadii.y), max(clipRadii.z, clipRadii.w)) <= 0.0) {
+      continue;
+    }
+    vec2 halfSize = clipRect.zw * 0.5;
+    vec2 local = world - clipRect.xy - halfSize;
+    float d = roundedRectSDF(local, halfSize, clipRadii);
+    float aa = max(0.75 * length(vec2(dFdx(d), dFdy(d))), 0.0001);
+    coverage *= 1.0 - smoothstep(-aa, aa, d);
+  }
+  return coverage;
+}
+
 void main() {
-  float mask = roundedAlpha(vLocal, vSize, vRadii);
+  float mask = roundedAlpha(vLocal, vSize, vRadii) * roundedClipCoverage(vWorld);
   if (mask <= 0.0) {
     discard;
   }

@@ -41,6 +41,8 @@ struct WindowEvent {
 
 struct InputEvent {
   enum class Kind : std::uint8_t {
+    PointerEnter,
+    PointerLeave,
     PointerMove,
     PointerDown,
     PointerUp,

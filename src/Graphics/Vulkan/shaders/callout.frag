@@ -15,8 +15,8 @@ struct CalloutInstance {
   vec4 tint;
   vec4 stroke;
   vec4 params;
-  vec4 clipRect;
-  vec4 clipRadii;
+  vec4 clipHeader;
+  vec4 clipEntries[8];
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer Callouts {
@@ -53,15 +53,22 @@ float antialiasWidth(float d) {
 }
 
 float roundedClipCoverage(CalloutInstance c, vec2 world) {
-  if (c.clipRect.z <= 0.0 || c.clipRect.w <= 0.0 ||
-      max(max(c.clipRadii.x, c.clipRadii.y), max(c.clipRadii.z, c.clipRadii.w)) <= 0.0) {
-    return 1.0;
+  int count = clamp(int(c.clipHeader.x + 0.5), 0, 4);
+  float coverage = 1.0;
+  for (int i = 0; i < count; ++i) {
+    vec4 clipRect = c.clipEntries[i * 2];
+    vec4 clipRadii = c.clipEntries[i * 2 + 1];
+    if (clipRect.z <= 0.0 || clipRect.w <= 0.0 ||
+        max(max(clipRadii.x, clipRadii.y), max(clipRadii.z, clipRadii.w)) <= 0.0) {
+      continue;
+    }
+    vec2 halfSize = clipRect.zw * 0.5;
+    vec2 local = world - clipRect.xy - halfSize;
+    float d = roundedRectSDF(local, halfSize, clipRadii);
+    float aa = antialiasWidth(d);
+    coverage *= 1.0 - smoothstep(-aa, aa, d);
   }
-  vec2 halfSize = c.clipRect.zw * 0.5;
-  vec2 local = world - c.clipRect.xy - halfSize;
-  float d = roundedRectSDF(local, halfSize, c.clipRadii);
-  float aa = antialiasWidth(d);
-  return 1.0 - smoothstep(-aa, aa, d);
+  return coverage;
 }
 
 float arrowSDF(CalloutInstance c, vec2 p) {

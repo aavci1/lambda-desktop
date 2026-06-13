@@ -10,6 +10,9 @@ layout(location = 1) out vec4 vColor;
 layout(location = 2) out vec2 vLocal;
 layout(location = 3) out vec2 vSize;
 layout(location = 4) out vec4 vRadii;
+layout(location = 5) out vec2 vWorld;
+layout(location = 6) flat out vec4 vClipHeader;
+layout(location = 7) flat out vec4 vClipEntries[8];
 
 struct QuadInstance {
   vec4 rect;
@@ -18,6 +21,8 @@ struct QuadInstance {
   vec4 uv;
   vec4 color;
   vec4 radii;
+  vec4 clipHeader;
+  vec4 clipEntries[8];
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer Quads {
@@ -40,7 +45,8 @@ void main() {
   float pad = step(0.0001, maxRadius);
   vec2 local = unit * (size + vec2(pad * 2.0)) - vec2(pad);
   vec2 axisUnit = local / size;
-  vec2 pos = q.axisX.xy + axisUnit.x * q.axisX.zw + axisUnit.y * q.axisY.xy + pc.translation;
+  vec2 world = q.axisX.xy + axisUnit.x * q.axisX.zw + axisUnit.y * q.axisY.xy;
+  vec2 pos = world + pc.translation;
   vec2 ndc = vec2(pos.x / pc.viewport.x * 2.0 - 1.0,
                   pos.y / pc.viewport.y * 2.0 - 1.0);
   gl_Position = vec4(ndc, 0.0, 1.0);
@@ -49,4 +55,9 @@ void main() {
   vLocal = local;
   vSize = size;
   vRadii = q.radii;
+  vWorld = world;
+  vClipHeader = q.clipHeader;
+  for (int i = 0; i < 8; ++i) {
+    vClipEntries[i] = q.clipEntries[i];
+  }
 }

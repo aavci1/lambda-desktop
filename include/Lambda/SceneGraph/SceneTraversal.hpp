@@ -94,9 +94,7 @@ template<typename AcceptTarget>
 std::optional<std::pair<SceneNode const*, Point>> hitTestNode(SceneNode const& node, Point point,
                                                               AcceptTarget&& acceptTarget) {
   Rect const localBounds = node.localBounds();
-  if (!localBounds.contains(point)) {
-    return std::nullopt;
-  }
+  bool const insideOwnBounds = localBounds.contains(point);
 
   if (node.kind() == SceneNodeKind::Rect) {
     RectNode const& rectNode = static_cast<RectNode const&>(node);
@@ -115,7 +113,7 @@ std::optional<std::pair<SceneNode const*, Point>> hitTestNode(SceneNode const& n
     }
   }
 
-  if (acceptTarget(node)) {
+  if (insideOwnBounds && acceptTarget(node)) {
     return std::pair<SceneNode const*, Point>{&node, point};
   }
   return std::nullopt;

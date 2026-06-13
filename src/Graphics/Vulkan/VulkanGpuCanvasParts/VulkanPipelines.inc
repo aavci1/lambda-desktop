@@ -194,7 +194,7 @@
     binding[0].binding = 0;
     binding[0].stride = sizeof(VulkanPathVertex);
     binding[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    std::array<VkVertexInputAttributeDescription, 11> attrs{};
+    std::array<VkVertexInputAttributeDescription, 20> attrs{};
     attrs[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VulkanPathVertex, x)};
     attrs[1] = {1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, color)};
     attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VulkanPathVertex, viewport)};
@@ -206,6 +206,14 @@
     attrs[8] = {8, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, stops)};
     attrs[9] = {9, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, gradient)};
     attrs[10] = {10, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, params)};
+    attrs[11] = {11, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(VulkanPathVertex, clipHeader)};
+    for (std::uint32_t i = 0; i < kVulkanRoundedClipEntryCount; ++i) {
+      attrs[12 + i] = {12 + i,
+                       0,
+                       VK_FORMAT_R32G32B32A32_SFLOAT,
+                       static_cast<std::uint32_t>(offsetof(VulkanPathVertex, clipEntries) +
+                                                  i * sizeof(float) * 4u)};
+    }
     res.pathPipeline = createPipeline(res.pathPipelineLayout, lambda_path_vert_spv, lambda_path_vert_spv_len,
                                       lambda_path_frag_spv, lambda_path_frag_spv_len,
                                       {binding.data(), 1, attrs.data(), static_cast<std::uint32_t>(attrs.size())});

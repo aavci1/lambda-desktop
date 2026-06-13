@@ -379,11 +379,21 @@ void detail::SceneNodeAccess::clearSubtreeDirty(SceneNode const &node) noexcept 
 }
 
 bool detail::SceneNodeAccess::preparedGroupCacheSuppressed(SceneNode const &node) noexcept {
-    return node.preparedGroupCacheSuppressed_;
+    return node.preparedGroupCacheCooldown_ > 0;
 }
 
 void detail::SceneNodeAccess::suppressPreparedGroupCache(SceneNode const &node) noexcept {
-    node.preparedGroupCacheSuppressed_ = true;
+    node.preparedGroupCacheCooldown_ = 2;
+}
+
+std::uint8_t detail::SceneNodeAccess::preparedGroupCacheCooldown(SceneNode const &node) noexcept {
+    return node.preparedGroupCacheCooldown_;
+}
+
+void detail::SceneNodeAccess::decrementPreparedGroupCacheCooldown(SceneNode const &node) noexcept {
+    if (node.preparedGroupCacheCooldown_ > 0) {
+        --node.preparedGroupCacheCooldown_;
+    }
 }
 
 std::uint64_t detail::SceneNodeAccess::preparedRenderOpsKey(SceneNode const &node) noexcept {

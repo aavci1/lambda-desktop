@@ -18,6 +18,7 @@
 #include <Lambda/SceneGraph/TextNode.hpp>
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -34,6 +35,25 @@ class DummyImage final : public Image {
 
   private:
     Size size_{};
+};
+
+class CountingInteraction final : public Interaction {
+  public:
+    CountingInteraction(ComponentKey key, int* probes)
+        : key_(std::move(key))
+        , probes_(probes) {}
+
+    ComponentKey const& stableTargetKey() const noexcept override {
+        ++*probes_;
+        return key_;
+    }
+
+    bool focusable() const override { return false; }
+    bool isEmpty() const noexcept override { return false; }
+
+  private:
+    ComponentKey key_;
+    int* probes_ = nullptr;
 };
 
 class DpiOnlyCanvas final : public Canvas {
@@ -110,6 +130,8 @@ class RecordingRenderer final : public Renderer {
     std::vector<ClipDraw> clipDraws;
     std::vector<PathDraw> pathDraws;
     std::vector<ImageDraw> imageDraws;
+    mutable std::vector<Rect> quickRejects;
+    std::function<bool(Rect)> quickRejectHandler;
     int saveCalls = 0;
     int restoreCalls = 0;
 
@@ -131,7 +153,10 @@ class RecordingRenderer final : public Renderer {
     void clipRect(Rect rect, CornerRadius const &cornerRadius, bool) override {
         clipDraws.push_back({rect, cornerRadius, transforms_.back().apply(Point {})});
     }
-    bool quickReject(Rect) const override { return false; }
+    bool quickReject(Rect rect) const override {
+        quickRejects.push_back(rect);
+        return quickRejectHandler ? quickRejectHandler(rect) : false;
+    }
     void setOpacity(float opacity) override { opacities_.back() = opacity; }
     void setBlendMode(BlendMode) override {}
 
@@ -417,6 +442,55 @@ TEST_CASE("Scenegraph hit testing honors node transforms") {
     CHECK_FALSE(hitTestInteraction(graph, Point {110.f, 40.f}).has_value());
 }
 
+TEST_CASE("Scenegraph hit testing reaches overflowing children outside non-clipping parents") {
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 160.f, 100.f});
+    auto parent = std::make_unique<SceneNode>(Rect {20.f, 20.f, 40.f, 40.f});
+    auto parentInteraction = std::make_unique<InteractionData>();
+    parentInteraction->stableTargetKey_ = ComponentKey {LocalId::fromString("parent")};
+    parentInteraction->onTap = [](MouseButton) {};
+    parent->setInteraction(std::move(parentInteraction));
+
+    auto child = std::make_unique<RectNode>(Rect {50.f, 0.f, 20.f, 20.f}, FillStyle::solid(Colors::blue));
+    auto childInteraction = std::make_unique<InteractionData>();
+    childInteraction->stableTargetKey_ = ComponentKey {LocalId::fromString("overflow-child")};
+    childInteraction->onTap = [](MouseButton) {};
+    child->setInteraction(std::move(childInteraction));
+    parent->appendChild(std::move(child));
+    root->appendChild(std::move(parent));
+
+    SceneGraph graph {std::move(root)};
+
+    auto parentHit = hitTestInteraction(graph, Point {30.f, 30.f});
+    REQUIRE(parentHit.has_value());
+    CHECK(parentHit->interaction->stableTargetKey() == ComponentKey {LocalId::fromString("parent")});
+
+    auto childHit = hitTestInteraction(graph, Point {75.f, 25.f});
+    REQUIRE(childHit.has_value());
+    CHECK(childHit->interaction->stableTargetKey() == ComponentKey {LocalId::fromString("overflow-child")});
+}
+
+TEST_CASE("Scenegraph hit testing does not reach overflowing children through clipping parents") {
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 160.f, 100.f});
+    auto parent = std::make_unique<RectNode>(
+        Rect {20.f, 20.f, 40.f, 40.f},
+        FillStyle::none(),
+        StrokeStyle::none(),
+        CornerRadius {8.f});
+    parent->setClipsContents(true);
+
+    auto child = std::make_unique<RectNode>(Rect {50.f, 0.f, 20.f, 20.f}, FillStyle::solid(Colors::blue));
+    auto interaction = std::make_unique<InteractionData>();
+    interaction->stableTargetKey_ = ComponentKey {LocalId::fromString("clipped-overflow-child")};
+    interaction->onTap = [](MouseButton) {};
+    child->setInteraction(std::move(interaction));
+    parent->appendChild(std::move(child));
+    root->appendChild(std::move(parent));
+
+    SceneGraph graph {std::move(root)};
+
+    CHECK_FALSE(hitTestInteraction(graph, Point {75.f, 25.f}).has_value());
+}
+
 TEST_CASE("Scenegraph hit testing respects clipped rounded rect subtrees") {
     auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 160.f, 160.f});
     auto container = std::make_unique<RectNode>(Rect {20.f, 20.f, 100.f, 100.f}, FillStyle::none(),
@@ -435,6 +509,35 @@ TEST_CASE("Scenegraph hit testing respects clipped rounded rect subtrees") {
     auto hit = hitTestInteraction(graph, Point {70.f, 70.f});
     REQUIRE(hit.has_value());
     CHECK(hit->interaction->stableTargetKey() == ComponentKey {LocalId::fromString("clipped")});
+}
+
+TEST_CASE("SceneRenderer quick reject uses overflowing group visual bounds") {
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 120.f, 60.f});
+    auto group = std::make_unique<SceneNode>(Rect {0.f, 0.f, 20.f, 20.f});
+    group->appendChild(std::make_unique<RectNode>(
+        Rect {80.f, 0.f, 20.f, 20.f},
+        FillStyle::solid(Colors::blue)));
+    root->appendChild(std::move(group));
+
+    SceneGraph graph {std::move(root)};
+    RecordingRenderer renderer;
+    auto sawSubtreeBounds = std::make_shared<bool>(false);
+    renderer.quickRejectHandler = [sawSubtreeBounds](Rect rect) {
+        if (rect == Rect::sharp(0.f, 0.f, 100.f, 20.f)) {
+            *sawSubtreeBounds = true;
+        }
+        return !*sawSubtreeBounds &&
+               rect.x == 0.f && rect.y == 0.f && rect.width == 20.f && rect.height == 20.f;
+    };
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+
+    REQUIRE(renderer.rectDraws.size() == 1);
+    CHECK(renderer.rectDraws[0].translation == Point {80.f, 0.f});
+    CHECK(std::any_of(renderer.quickRejects.begin(), renderer.quickRejects.end(), [](Rect rect) {
+        return rect == Rect::sharp(0.f, 0.f, 100.f, 20.f);
+    }));
 }
 
 TEST_CASE("Scenegraph interaction lookup collects focusable keys") {
@@ -459,6 +562,32 @@ TEST_CASE("Scenegraph interaction lookup collects focusable keys") {
     std::vector<ComponentKey> const focusable = collectFocusableKeys(graph);
     REQUIRE(focusable.size() == 1);
     CHECK(focusable[0] == ComponentKey {LocalId::fromString("panel"), LocalId::fromString("button")});
+}
+
+TEST_CASE("Scenegraph interaction lookup stops after the first matching key") {
+    ComponentKey const targetKey {LocalId::fromString("target")};
+    ComponentKey const decoyKey {LocalId::fromString("decoy")};
+    int targetProbes = 0;
+    int decoyProbes = 0;
+
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 200.f, 120.f});
+    auto decoy = std::make_unique<RectNode>(Rect {60.f, 10.f, 40.f, 40.f}, FillStyle::none());
+    decoy->setInteraction(std::make_unique<CountingInteraction>(decoyKey, &decoyProbes));
+    root->appendChild(std::move(decoy));
+
+    auto target = std::make_unique<RectNode>(Rect {10.f, 10.f, 40.f, 40.f}, FillStyle::none());
+    target->setInteraction(std::make_unique<CountingInteraction>(targetKey, &targetProbes));
+    root->appendChild(std::move(target));
+
+    SceneGraph graph {std::move(root)};
+
+    auto const [node, interaction] = findInteractionByKey(graph, targetKey);
+
+    REQUIRE(node != nullptr);
+    REQUIRE(interaction != nullptr);
+    CHECK(interaction->stableTargetKey() == targetKey);
+    CHECK(targetProbes == 2);
+    CHECK(decoyProbes == 0);
 }
 
 TEST_CASE("SceneGraph stores geometry keyed by component key") {

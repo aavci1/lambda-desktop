@@ -38,11 +38,11 @@
         radii = cornerRadiiAfterAxisAlignedClip(r, effective, radii);
       }
       CornerRadius const adjusted = clampRadii(radii, effective.width, effective.height);
-      if (!adjusted.isZero() && effective.width > 0.f && effective.height > 0.f) {
-        state_.roundedClip = RoundedClipState{
+      if (!adjusted.isZero() && effective.width > 0.f && effective.height > 0.f &&
+          state_.roundedClipCount < kVulkanRoundedClipMaskCapacity) {
+        state_.roundedClips[state_.roundedClipCount++] = RoundedClipState{
             .rect = effective,
             .radii = adjusted,
-            .active = true,
         };
       }
     }
@@ -84,16 +84,7 @@
       inst.params[2] = stroke.width;
     }
     inst.params[3] = opacity;
-    if (state_.roundedClip.active) {
-      inst.clipRect[0] = state_.roundedClip.rect.x;
-      inst.clipRect[1] = state_.roundedClip.rect.y;
-      inst.clipRect[2] = state_.roundedClip.rect.width;
-      inst.clipRect[3] = state_.roundedClip.rect.height;
-      inst.clipRadii[0] = state_.roundedClip.radii.topLeft;
-      inst.clipRadii[1] = state_.roundedClip.radii.topRight;
-      inst.clipRadii[2] = state_.roundedClip.radii.bottomRight;
-      inst.clipRadii[3] = state_.roundedClip.radii.bottomLeft;
-    }
+    applyCurrentRoundedClip(inst);
     RecordingTarget target = recordingTarget();
     std::uint32_t first = static_cast<std::uint32_t>(target.rects.size());
     target.rects.push_back(inst);
@@ -227,6 +218,7 @@
         q.uv[2] = slot->u1;
         q.uv[3] = slot->v1;
         putColor(q.color, placed.run.color, state_.opacity);
+        applyCurrentRoundedClip(q);
         target.quads.push_back(q);
       }
     }
@@ -286,6 +278,7 @@
     q.radii[1] = cr.topRight;
     q.radii[2] = cr.bottomRight;
     q.radii[3] = cr.bottomLeft;
+    applyCurrentRoundedClip(q);
     RecordingTarget target = recordingTarget();
     std::uint32_t first = static_cast<std::uint32_t>(target.quads.size());
     target.quads.push_back(q);
@@ -602,13 +595,13 @@ private:
   struct RoundedClipState {
     Rect rect{};
     CornerRadius radii{};
-    bool active = false;
   };
 
   struct DrawState {
     Mat3 transform = Mat3::identity();
     Rect clip{};
-    RoundedClipState roundedClip{};
+    std::array<RoundedClipState, kVulkanRoundedClipMaskCapacity> roundedClips{};
+    std::uint32_t roundedClipCount = 0;
     float opacity = 1.f;
     BlendMode blendMode = BlendMode::Normal;
   };
@@ -656,6 +649,7 @@ private:
     q.radii[1] = cr.topRight;
     q.radii[2] = cr.bottomRight;
     q.radii[3] = cr.bottomLeft;
+    applyCurrentRoundedClip(q);
     target.quads.push_back(q);
   }
 
@@ -684,7 +678,6 @@ private:
   }
 
   void appendSignedDrawOp(RecordingTarget& target, DrawOp op) const {
-    op.geometrySignature = drawOpGeometrySignature(op, target.rects, target.quads, target.pathVerts);
     appendDrawOp(target.ops, op);
   }
 
@@ -744,6 +737,84 @@ private:
       return state_.clip;
     }
     return intersectRects(translatedRect(opClip, dx, dy), state_.clip);
+  }
+
+  static std::uint32_t roundedClipCount(float const (&header)[4]) {
+    return std::min<std::uint32_t>(
+        kVulkanRoundedClipMaskCapacity,
+        static_cast<std::uint32_t>(std::max(0.f, header[0]) + 0.5f));
+  }
+
+  template <typename Instance>
+  static void writeRoundedClip(Instance &inst, std::uint32_t index, RoundedClipState const &clip) {
+    inst.clipEntries[index * 2u][0] = clip.rect.x;
+    inst.clipEntries[index * 2u][1] = clip.rect.y;
+    inst.clipEntries[index * 2u][2] = clip.rect.width;
+    inst.clipEntries[index * 2u][3] = clip.rect.height;
+    inst.clipEntries[index * 2u + 1u][0] = clip.radii.topLeft;
+    inst.clipEntries[index * 2u + 1u][1] = clip.radii.topRight;
+    inst.clipEntries[index * 2u + 1u][2] = clip.radii.bottomRight;
+    inst.clipEntries[index * 2u + 1u][3] = clip.radii.bottomLeft;
+  }
+
+  template <typename Instance>
+  static void translateRoundedClipStack(Instance &inst, float dx, float dy) {
+    std::uint32_t const count = roundedClipCount(inst.clipHeader);
+    for (std::uint32_t i = 0; i < count; ++i) {
+      inst.clipEntries[i * 2u][0] += dx;
+      inst.clipEntries[i * 2u][1] += dy;
+    }
+  }
+
+  template <typename Instance>
+  void applyCurrentRoundedClip(Instance &inst) const {
+    if (state_.roundedClipCount == 0) {
+      return;
+    }
+    std::array<float, 4> oldHeader{};
+    std::copy(std::begin(inst.clipHeader), std::end(inst.clipHeader), oldHeader.begin());
+    std::array<std::array<float, 4>, kVulkanRoundedClipEntryCount> oldEntries{};
+    for (std::size_t i = 0; i < kVulkanRoundedClipEntryCount; ++i) {
+      std::copy(std::begin(inst.clipEntries[i]), std::end(inst.clipEntries[i]), oldEntries[i].begin());
+    }
+    std::uint32_t const oldCount = std::min<std::uint32_t>(
+        kVulkanRoundedClipMaskCapacity,
+        static_cast<std::uint32_t>(std::max(0.f, oldHeader[0]) + 0.5f));
+
+    inst.clipHeader[0] = 0.f;
+    for (auto &entry : inst.clipEntries) {
+      entry[0] = 0.f;
+      entry[1] = 0.f;
+      entry[2] = 0.f;
+      entry[3] = 0.f;
+    }
+
+    std::uint32_t writeCount = 0;
+    for (std::uint32_t i = 0; i < state_.roundedClipCount && writeCount < kVulkanRoundedClipMaskCapacity; ++i) {
+      writeRoundedClip(inst, writeCount++, state_.roundedClips[i]);
+    }
+    for (std::uint32_t i = 0; i < oldCount && writeCount < kVulkanRoundedClipMaskCapacity; ++i) {
+      inst.clipEntries[writeCount * 2u][0] = oldEntries[i * 2u][0];
+      inst.clipEntries[writeCount * 2u][1] = oldEntries[i * 2u][1];
+      inst.clipEntries[writeCount * 2u][2] = oldEntries[i * 2u][2];
+      inst.clipEntries[writeCount * 2u][3] = oldEntries[i * 2u][3];
+      inst.clipEntries[writeCount * 2u + 1u][0] = oldEntries[i * 2u + 1u][0];
+      inst.clipEntries[writeCount * 2u + 1u][1] = oldEntries[i * 2u + 1u][1];
+      inst.clipEntries[writeCount * 2u + 1u][2] = oldEntries[i * 2u + 1u][2];
+      inst.clipEntries[writeCount * 2u + 1u][3] = oldEntries[i * 2u + 1u][3];
+      ++writeCount;
+    }
+    inst.clipHeader[0] = static_cast<float>(writeCount);
+  }
+
+  std::uint64_t currentRoundedClipHash() const {
+    std::uint64_t h = 14695981039346656037ULL;
+    hashValue(h, state_.roundedClipCount);
+    for (std::uint32_t i = 0; i < state_.roundedClipCount; ++i) {
+      hashValue(h, state_.roundedClips[i].rect);
+      hashValue(h, state_.roundedClips[i].radii);
+    }
+    return h;
   }
 
   static std::uint64_t nonZeroSignature(std::uint64_t value) {
@@ -940,34 +1011,7 @@ private:
     inst.axisX[1] += dy;
     inst.stroke[3] *= opacityScale;
     inst.params[3] *= opacityScale;
-  }
-
-  void applyCurrentRoundedClip(RectInstance &inst) const {
-    if (!state_.roundedClip.active) {
-      return;
-    }
-    inst.clipRect[0] = state_.roundedClip.rect.x;
-    inst.clipRect[1] = state_.roundedClip.rect.y;
-    inst.clipRect[2] = state_.roundedClip.rect.width;
-    inst.clipRect[3] = state_.roundedClip.rect.height;
-    inst.clipRadii[0] = state_.roundedClip.radii.topLeft;
-    inst.clipRadii[1] = state_.roundedClip.radii.topRight;
-    inst.clipRadii[2] = state_.roundedClip.radii.bottomRight;
-    inst.clipRadii[3] = state_.roundedClip.radii.bottomLeft;
-  }
-
-  void applyCurrentRoundedClip(CalloutInstance &inst) const {
-    if (!state_.roundedClip.active) {
-      return;
-    }
-    inst.clipRect[0] = state_.roundedClip.rect.x;
-    inst.clipRect[1] = state_.roundedClip.rect.y;
-    inst.clipRect[2] = state_.roundedClip.rect.width;
-    inst.clipRect[3] = state_.roundedClip.rect.height;
-    inst.clipRadii[0] = state_.roundedClip.radii.topLeft;
-    inst.clipRadii[1] = state_.roundedClip.radii.topRight;
-    inst.clipRadii[2] = state_.roundedClip.radii.bottomRight;
-    inst.clipRadii[3] = state_.roundedClip.radii.bottomLeft;
+    translateRoundedClipStack(inst, dx, dy);
   }
 
   bool resolveRecordedImageTexture(DrawOp &op) {
@@ -987,6 +1031,7 @@ private:
     inst.axisX[0] += dx;
     inst.axisX[1] += dy;
     inst.color[3] *= opacityScale;
+    translateRoundedClipStack(inst, dx, dy);
   }
 
   static void translatePathVertex(VulkanPathVertex &vertex, float dx, float dy, float opacityScale) {
@@ -994,6 +1039,7 @@ private:
     vertex.y += dy;
     vertex.color[3] *= opacityScale;
     vertex.params[3] *= opacityScale;
+    translateRoundedClipStack(vertex, dx, dy);
   }
 
   bool appendRecordedOps(VulkanFrameRecorder const &recorded, bool localReplay) {
@@ -1011,7 +1057,7 @@ private:
         // content. Keep that driver on the CPU-copy path while allowing unaffected drivers to bind replay buffers.
         recorderPreparedGeometryFastPathEnabled() &&
         (!localReplay || std::abs(opacityScale - 1.f) <= eps) &&
-        (!localReplay || !state_.roundedClip.active) &&
+        (!localReplay || state_.roundedClipCount == 0) &&
         !hasTranslatedBackdropBlur &&
         (recorded.rects.empty() ||
          (recorded.preparedRectBuffer && recorded.preparedRectDescriptor)) &&
@@ -1075,6 +1121,7 @@ private:
     for (QuadInstance inst : recorded.quads) {
       if (localReplay) {
         translateQuadInstance(inst, dx, dy, opacityScale);
+        applyCurrentRoundedClip(inst);
       }
       quads_.push_back(inst);
     }
@@ -1083,6 +1130,7 @@ private:
     for (VulkanPathVertex vertex : recorded.pathVerts) {
       if (localReplay) {
         translatePathVertex(vertex, dx, dy, opacityScale);
+        applyCurrentRoundedClip(vertex);
       }
       pathVerts_.push_back(vertex);
     }

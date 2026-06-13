@@ -7,8 +7,28 @@
 #include "Debug/PerfCounters.hpp"
 
 #include <cstddef>
+#include <cstdint>
 
 namespace lambda::scenegraph {
+
+namespace {
+
+std::uint64_t gHitTestTraversalCountForTesting = 0;
+
+SceneNode const* findInteractionNodeByKey(SceneNode const& node, ComponentKey const& key) {
+    for (auto it = node.children().rbegin(); it != node.children().rend(); ++it) {
+        if (SceneNode const* match = findInteractionNodeByKey(**it, key)) {
+            return match;
+        }
+    }
+    if (Interaction const* interaction = node.interaction();
+        interaction && interaction->stableTargetKey() == key) {
+        return &node;
+    }
+    return nullptr;
+}
+
+} // namespace
 
 std::pair<SceneNode const*, Interaction const*> findInteractionByKey(SceneGraph const& graph,
                                                                      ComponentKey const& key) {
@@ -16,15 +36,7 @@ std::pair<SceneNode const*, Interaction const*> findInteractionByKey(SceneGraph 
         return {nullptr, nullptr};
     }
 
-    SceneNode const* match = nullptr;
-    walkSceneGraph(graph.root(), [&](SceneNode const& node) {
-        if (!match) {
-            if (Interaction const* interaction = node.interaction();
-                interaction && interaction->stableTargetKey() == key) {
-                match = &node;
-            }
-        }
-    });
+    SceneNode const* match = findInteractionNodeByKey(graph.root(), key);
     return match ? std::pair<SceneNode const*, Interaction const*>{match, match->interaction()}
                  : std::pair<SceneNode const*, Interaction const*>{nullptr, nullptr};
 }
@@ -36,6 +48,7 @@ std::optional<InteractionHitResult> hitTestInteraction(SceneGraph const& graph, 
 std::optional<InteractionHitResult> hitTestInteraction(
     SceneGraph const& graph, Point rootPoint,
     Reactive::SmallFn<bool(Interaction const&)> const& acceptTarget) {
+    ++gHitTestTraversalCountForTesting;
     if (auto hit = hitTestNode(graph.root(), rootPoint, [&](SceneNode const& node) {
             if (Interaction const* interaction = node.interaction()) {
                 return acceptTarget(*interaction);
@@ -61,5 +74,17 @@ std::vector<ComponentKey> collectFocusableKeys(SceneGraph const& graph) {
     });
     return out;
 }
+
+namespace detail {
+
+void resetHitTestTraversalCountForTesting() noexcept {
+    gHitTestTraversalCountForTesting = 0;
+}
+
+std::uint64_t hitTestTraversalCountForTesting() noexcept {
+    return gHitTestTraversalCountForTesting;
+}
+
+} // namespace detail
 
 } // namespace lambda::scenegraph

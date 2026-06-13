@@ -79,7 +79,7 @@ bool subtreeContainsRasterCache(SceneNode const& node) {
 }
 
 bool canReplayPreparedGroup(SceneNode const& node) {
-    Rect const bounds = node.localBounds();
+    Rect const bounds = detail::subtreeLocalVisualBounds(node);
     return node.kind() == SceneNodeKind::Group &&
            node.layoutFlow() == LayoutFlow::None &&
            !node.children().empty() &&
@@ -365,6 +365,17 @@ struct SceneRenderer::Impl {
             return;
         }
         if (!detail::SceneNodeAccess::subtreeDirty(node)) {
+            if (node.kind() == SceneNodeKind::Group &&
+                detail::SceneNodeAccess::preparedGroupCacheCooldown(node) > 0) {
+                detail::SceneNodeAccess::decrementPreparedGroupCacheCooldown(node);
+                if (!detail::SceneNodeAccess::preparedGroupCacheSuppressed(node) &&
+                    !detail::SceneNodeAccess::preparedRenderOps(node) &&
+                    canReplayPreparedGroup(node)) {
+                    debug::perf::recordPreparedPrepareCall();
+                    detail::SceneNodeAccess::preparedRenderOps(node) = prepareSubtree(node);
+                    detail::SceneNodeAccess::setPreparedRenderOpsKey(node, preparedNodeKey(node));
+                }
+            }
             return;
         }
         if (node.kind() == SceneNodeKind::RasterCache) {
@@ -551,8 +562,9 @@ struct SceneRenderer::Impl {
         if (node.kind() == SceneNodeKind::Group && usePreparedCache &&
             kEnablePreparedRenderCache && !detail::SceneNodeAccess::subtreeDirty(node) &&
             canReplayPreparedGroup(node)) {
-            if (localBounds.width > 0.f && localBounds.height > 0.f &&
-                renderer->quickReject(offsetRect(localBounds, accumulatedTranslation))) {
+            Rect const visualBounds = detail::subtreeLocalVisualBounds(node);
+            if (visualBounds.width > 0.f && visualBounds.height > 0.f &&
+                renderer->quickReject(offsetRect(visualBounds, accumulatedTranslation))) {
                 if (collectCounters) {
                     debug::perf::recordSceneQuickReject();
                 }
@@ -597,8 +609,9 @@ struct SceneRenderer::Impl {
         if (node.kind() == SceneNodeKind::Group &&
             !clipsContents &&
             isIdentityTransform(node.transform())) {
-            if (localBounds.width > 0.f && localBounds.height > 0.f &&
-                renderer->quickReject(offsetRect(localBounds, accumulatedTranslation))) {
+            Rect const visualBounds = detail::subtreeLocalVisualBounds(node);
+            if (visualBounds.width > 0.f && visualBounds.height > 0.f &&
+                renderer->quickReject(offsetRect(visualBounds, accumulatedTranslation))) {
                 if (collectCounters) {
                     debug::perf::recordSceneQuickReject();
                 }
@@ -672,8 +685,10 @@ struct SceneRenderer::Impl {
 
         renderer->setOpacity(nodeOpacity);
 
-        if (localBounds.width > 0.f && localBounds.height > 0.f &&
-            renderer->quickReject(localBounds)) {
+        Rect const rejectLocalBounds =
+            node.kind() == SceneNodeKind::Group ? detail::subtreeLocalVisualBounds(node) : localBounds;
+        if (rejectLocalBounds.width > 0.f && rejectLocalBounds.height > 0.f &&
+            renderer->quickReject(rejectLocalBounds)) {
             if (collectCounters) {
                 debug::perf::recordSceneQuickReject();
             }

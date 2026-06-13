@@ -18,8 +18,8 @@ struct RectInstance {
   vec4 gradient;
   vec4 stroke;
   vec4 params;
-  vec4 clipRect;
-  vec4 clipRadii;
+  vec4 clipHeader;
+  vec4 clipEntries[8];
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer Rects {
@@ -44,14 +44,21 @@ float distanceCoverage(float d) {
 }
 
 float roundedClipCoverage(RectInstance r, vec2 world) {
-  if (r.clipRect.z <= 0.0 || r.clipRect.w <= 0.0 ||
-      max(max(r.clipRadii.x, r.clipRadii.y), max(r.clipRadii.z, r.clipRadii.w)) <= 0.0) {
-    return 1.0;
+  int count = clamp(int(r.clipHeader.x + 0.5), 0, 4);
+  float coverage = 1.0;
+  for (int i = 0; i < count; ++i) {
+    vec4 clipRect = r.clipEntries[i * 2];
+    vec4 clipRadii = r.clipEntries[i * 2 + 1];
+    if (clipRect.z <= 0.0 || clipRect.w <= 0.0 ||
+        max(max(clipRadii.x, clipRadii.y), max(clipRadii.z, clipRadii.w)) <= 0.0) {
+      continue;
+    }
+    vec2 halfSize = clipRect.zw * 0.5;
+    vec2 local = world - clipRect.xy - halfSize;
+    float d = roundedRectSDF(local, halfSize, clipRadii);
+    coverage *= distanceCoverage(d);
   }
-  vec2 halfSize = r.clipRect.zw * 0.5;
-  vec2 local = world - r.clipRect.xy - halfSize;
-  float d = roundedRectSDF(local, halfSize, r.clipRadii);
-  return distanceCoverage(d);
+  return coverage;
 }
 
 vec4 sampleStops(RectInstance r, float t) {

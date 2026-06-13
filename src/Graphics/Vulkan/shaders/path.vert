@@ -16,6 +16,8 @@ layout(location = 7) in vec4 inFill3;
 layout(location = 8) in vec4 inStops;
 layout(location = 9) in vec4 inGradient;
 layout(location = 10) in vec4 inParams;
+layout(location = 11) in vec4 inClipHeader;
+layout(location = 12) in vec4 inClipEntries[8];
 
 layout(location = 0) out vec4 vColor;
 layout(location = 1) out vec2 vLocal;
@@ -26,6 +28,9 @@ layout(location = 5) out vec4 vFill3;
 layout(location = 6) out vec4 vStops;
 layout(location = 7) out vec4 vGradient;
 layout(location = 8) out vec4 vParams;
+layout(location = 9) out vec2 vWorld;
+layout(location = 10) flat out vec4 vClipHeader;
+layout(location = 11) flat out vec4 vClipEntries[8];
 
 void main() {
   vec2 pos = inPos + pc.translation;
@@ -40,4 +45,9 @@ void main() {
   vStops = inStops;
   vGradient = inGradient;
   vParams = inParams;
+  vWorld = inPos;
+  vClipHeader = inClipHeader;
+  for (int i = 0; i < 8; ++i) {
+    vClipEntries[i] = inClipEntries[i];
+  }
 }

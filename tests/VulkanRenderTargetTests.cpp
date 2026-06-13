@@ -380,6 +380,23 @@ static std::size_t countBrightPixels(std::vector<std::uint8_t> const& pixels, st
   return count;
 }
 
+static std::size_t countDarkPixels(std::vector<std::uint8_t> const& pixels, std::uint32_t width,
+                                   std::uint32_t x0, std::uint32_t y0,
+                                   std::uint32_t x1, std::uint32_t y1,
+                                   std::uint8_t threshold) {
+  std::size_t count = 0;
+  for (std::uint32_t y = y0; y < y1; ++y) {
+    for (std::uint32_t x = x0; x < x1; ++x) {
+      if (capturedChannel(pixels, width, x, y, 0) <= threshold &&
+          capturedChannel(pixels, width, x, y, 1) <= threshold &&
+          capturedChannel(pixels, width, x, y, 2) <= threshold) {
+        ++count;
+      }
+    }
+  }
+  return count;
+}
+
 static int colorDelta(std::vector<std::uint8_t> const& pixels, std::uint32_t width,
                       std::uint32_t ax, std::uint32_t ay, std::uint32_t bx, std::uint32_t by) {
   int delta = 0;
@@ -1409,6 +1426,163 @@ TEST_CASE("Vulkan RenderTarget applies rounded clip masks to child content") {
   CHECK(capturedChannel(pixels, target.pixelW, 120, 60, 2) >= 180);
   CHECK(capturedChannel(pixels, target.pixelW, 120, 60, 1) <= 80);
   CHECK(capturedChannel(pixels, target.pixelW, 120, 60, 0) <= 80);
+}
+
+TEST_CASE("Vulkan RenderTarget preserves nested rounded clip masks") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 240, 120, 1.f};
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 240.f, 120.f});
+  root->appendChild(std::make_unique<RectNode>(
+      lambda::Rect{0.f, 0.f, 240.f, 120.f}, FillStyle::solid(Colors::white)));
+
+  auto outerFirst = std::make_unique<RectNode>(
+      lambda::Rect{20.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius{36.f, 36.f, 36.f, 36.f});
+  outerFirst->setClipsContents(true);
+  auto innerFirst = std::make_unique<RectNode>(
+      lambda::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius{4.f, 4.f, 4.f, 4.f});
+  innerFirst->setClipsContents(true);
+  innerFirst->appendChild(std::make_unique<RectNode>(
+      lambda::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::solid(Colors::red)));
+  outerFirst->appendChild(std::move(innerFirst));
+  root->appendChild(std::move(outerFirst));
+
+  auto innerFirstRestrictive = std::make_unique<RectNode>(
+      lambda::Rect{130.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius{4.f, 4.f, 4.f, 4.f});
+  innerFirstRestrictive->setClipsContents(true);
+  auto innerSecond = std::make_unique<RectNode>(
+      lambda::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius{36.f, 36.f, 36.f, 36.f});
+  innerSecond->setClipsContents(true);
+  innerSecond->appendChild(std::make_unique<RectNode>(
+      lambda::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::solid(Colors::red)));
+  innerFirstRestrictive->appendChild(std::move(innerSecond));
+  root->appendChild(std::move(innerFirstRestrictive));
+
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::white);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+  REQUIRE(!pixels.empty());
+
+  CHECK(capturedChannel(pixels, target.pixelW, 25, 25, 0) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 25, 25, 1) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 25, 25, 2) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 60, 60, 2) >= 220);
+
+  CHECK(capturedChannel(pixels, target.pixelW, 135, 25, 0) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 135, 25, 1) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 135, 25, 2) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 170, 60, 2) >= 220);
+}
+
+TEST_CASE("Vulkan RenderTarget masks image quads with rounded clips") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 140, 120, 1.f};
+  std::vector<std::uint8_t> rgba(80u * 80u * 4u);
+  for (std::size_t i = 0; i + 3 < rgba.size(); i += 4) {
+    rgba[i + 0] = 255;
+    rgba[i + 1] = 0;
+    rgba[i + 2] = 0;
+    rgba[i + 3] = 255;
+  }
+  std::shared_ptr<Image> image = Image::fromRgbaPixels(80, 80, rgba, vk.device());
+  REQUIRE(image);
+
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 140.f, 120.f});
+  root->appendChild(std::make_unique<RectNode>(
+      lambda::Rect{0.f, 0.f, 140.f, 120.f}, FillStyle::solid(Colors::white)));
+  auto clip = std::make_unique<RectNode>(
+      lambda::Rect{20.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius{36.f, 36.f, 36.f, 36.f});
+  clip->setClipsContents(true);
+  clip->appendChild(std::make_unique<ImageNode>(
+      lambda::Rect{0.f, 0.f, 80.f, 80.f}, image, ImageFillMode::Stretch));
+  root->appendChild(std::move(clip));
+
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::white);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+  REQUIRE(!pixels.empty());
+
+  CHECK(capturedChannel(pixels, target.pixelW, 25, 25, 0) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 25, 25, 1) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 25, 25, 2) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 60, 60, 2) >= 220);
+  CHECK(capturedChannel(pixels, target.pixelW, 60, 60, 1) <= 80);
+  CHECK(capturedChannel(pixels, target.pixelW, 60, 60, 0) <= 80);
+}
+
+TEST_CASE("Vulkan RenderTarget masks path rendering with rounded clips") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 140, 120, 1.f};
+  Path path;
+  path.rect(lambda::Rect{0.f, 0.f, 80.f, 80.f}, CornerRadius{});
+
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 140.f, 120.f});
+  root->appendChild(std::make_unique<RectNode>(
+      lambda::Rect{0.f, 0.f, 140.f, 120.f}, FillStyle::solid(Colors::white)));
+  auto clip = std::make_unique<RectNode>(
+      lambda::Rect{20.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius{36.f, 36.f, 36.f, 36.f});
+  clip->setClipsContents(true);
+  clip->appendChild(std::make_unique<PathNode>(
+      lambda::Rect{0.f, 0.f, 80.f, 80.f}, path, FillStyle::solid(Colors::red)));
+  root->appendChild(std::move(clip));
+
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::white);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+  REQUIRE(!pixels.empty());
+
+  CHECK(capturedChannel(pixels, target.pixelW, 25, 25, 0) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 25, 25, 1) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 25, 25, 2) >= 240);
+  CHECK(capturedChannel(pixels, target.pixelW, 60, 60, 2) >= 220);
+  CHECK(capturedChannel(pixels, target.pixelW, 60, 60, 1) <= 80);
+  CHECK(capturedChannel(pixels, target.pixelW, 60, 60, 0) <= 80);
+}
+
+TEST_CASE("Vulkan RenderTarget masks glyph quads with rounded clips") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 180, 120, 1.f};
+  Font font{};
+  font.family = "sans";
+  font.size = 88.f;
+  font.weight = 700.f;
+  auto layout = textSystem.layout("MMMM", font, Colors::black, 220.f, {});
+
+  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 180.f, 120.f});
+  root->appendChild(std::make_unique<RectNode>(
+      lambda::Rect{0.f, 0.f, 180.f, 120.f}, FillStyle::solid(Colors::white)));
+  auto clip = std::make_unique<RectNode>(
+      lambda::Rect{20.f, 20.f, 120.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius{38.f, 38.f, 38.f, 38.f});
+  clip->setClipsContents(true);
+  clip->appendChild(std::make_unique<TextNode>(
+      lambda::Rect{-12.f, -8.f, 220.f, 100.f}, layout));
+  root->appendChild(std::move(clip));
+
+  SceneGraph graph{std::move(root)};
+  target.render(textSystem, graph, Colors::white);
+  std::vector<std::uint8_t> pixels = target.readPixels();
+  REQUIRE(!pixels.empty());
+
+  CHECK(countDarkPixels(pixels, target.pixelW, 20, 20, 34, 34, 80) == 0);
+  CHECK(countDarkPixels(pixels, target.pixelW, 46, 44, 128, 90, 120) > 20);
 }
 
 TEST_CASE("Vulkan RenderTarget shades linear gradient rect fills") {

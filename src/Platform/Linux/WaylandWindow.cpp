@@ -4,6 +4,7 @@
 #include "Platform/Linux/GpuSurfaceProvider.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
+#include "Platform/Linux/WaylandScrollAccumulator.hpp"
 
 #include <Lambda/Debug/DebugFlags.hpp>
 #include <Lambda/Graphics/TextLayoutOptions.hpp>
@@ -111,6 +112,7 @@ struct WaylandPopoverSurfaceState {
   int width = 1;
   int height = 1;
   Point pointerPos{};
+  WaylandScrollAccumulator pendingScroll;
   int dispatchDepth = 0;
   bool committed = false;
   bool grabbed = false;
@@ -1672,6 +1674,7 @@ public:
   }
 
   void handlePopupPointerEnter(std::uint32_t, wl_fixed_t x, wl_fixed_t y) {
+    flushPendingPopupScroll();
     wl_surface* surface = shared_ ? shared_->popupPointerSurface : nullptr;
     if (popupMenu_ && popupMenu_->surface == surface) {
       updatePopupHover(popupMenuRowForY(*popupMenu_, y));
@@ -1685,6 +1688,7 @@ public:
   }
 
   void handlePopupPointerLeave() {
+    flushPendingPopupScroll();
     wl_surface* surface = shared_ ? shared_->popupPointerSurface : nullptr;
     if (popupMenu_ && popupMenu_->surface == surface) {
       popupMenu_->pressedRow = -1;
@@ -1694,6 +1698,7 @@ public:
   }
 
   void handlePopupPointerMotion(wl_fixed_t x, wl_fixed_t y) {
+    flushPendingPopupScroll();
     wl_surface* surface = shared_ ? shared_->popupPointerSurface : nullptr;
     if (popupMenu_ && popupMenu_->surface == surface) {
       updatePopupHover(popupMenuRowForY(*popupMenu_, y));
@@ -1706,6 +1711,7 @@ public:
   }
 
   void handlePopupPointerButton(std::uint32_t, std::uint32_t button, std::uint32_t state) {
+    flushPendingPopupScroll();
     wl_surface* surface = shared_ ? shared_->popupPointerSurface : nullptr;
     if (WaylandPopoverSurfaceState* popover = popoverForSurface(surface)) {
       dispatchPopoverPointerButton(*popover, button, state);
@@ -1732,26 +1738,51 @@ public:
     if (!popover || !popover->host) {
       return;
     }
-    float dx = 0.f;
-    float dy = 0.f;
     float const v = static_cast<float>(wl_fixed_to_double(value));
-    if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) dx = v;
-    else dy = v;
-    dispatchPopoverScroll(*popover, Vec2{dx, dy});
+    popover->pendingScroll.addAxis(axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL, v);
+  }
+
+  void handlePopupPointerFrame() {
+    flushPendingPopupScroll();
+  }
+
+  void flushPendingPopupScroll() {
+    wl_surface* surface = shared_ ? shared_->popupPointerSurface : nullptr;
+    WaylandPopoverSurfaceState* popover = popoverForSurface(surface);
+    if (!popover) {
+      return;
+    }
+    std::optional<Vec2> delta = popover->pendingScroll.take();
+    if (!delta) {
+      return;
+    }
+    dispatchPopoverScroll(*popover, *delta);
   }
 
   void handlePointerEnter(std::uint32_t serial, wl_fixed_t x, wl_fixed_t y) {
+    flushPendingPointerScroll();
     pointerEnterSerial_ = serial;
     pointerPos_ = logicalPointFromFixed(x, y, dpiScaleX_, dpiScaleY_);
     applyCursor(currentCursor_);
+    Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::PointerEnter,
+                                                         .handle = handle_,
+                                                         .position = pointerPos_,
+                                                         .pressedButtons = pressedButtons_,
+                                                         .platformSerial = serial});
   }
 
   void handlePointerLeave() {
+    flushPendingPointerScroll();
     pressedButtons_ = 0;
     lastPointerButtonSerial_ = 0;
+    Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::PointerLeave,
+                                                         .handle = handle_,
+                                                         .position = pointerPos_,
+                                                         .pressedButtons = pressedButtons_});
   }
 
   void handlePointerMotion(wl_fixed_t x, wl_fixed_t y) {
+    flushPendingPointerScroll();
     pointerPos_ = logicalPointFromFixed(x, y, dpiScaleX_, dpiScaleY_);
     Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::PointerMove,
                                                          .handle = handle_,
@@ -1760,6 +1791,7 @@ public:
   }
 
   void handlePointerButton(std::uint32_t serial, std::uint32_t button, std::uint32_t state) {
+    flushPendingPointerScroll();
     std::uint8_t const bit = button == BTN_LEFT ? 1u : button == BTN_RIGHT ? 2u : button == BTN_MIDDLE ? 4u : 0u;
     if (state == WL_POINTER_BUTTON_STATE_PRESSED) pressedButtons_ |= bit;
     else pressedButtons_ &= static_cast<std::uint8_t>(~bit);
@@ -1777,14 +1809,23 @@ public:
   }
 
   void handlePointerAxis(std::uint32_t axis, wl_fixed_t value) {
-    float dx = 0.f, dy = 0.f;
     float const v = static_cast<float>(wl_fixed_to_double(value));
-    if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) dx = v;
-    else dy = v;
+    pendingScroll_.addAxis(axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL, v);
+  }
+
+  void handlePointerFrame() {
+    flushPendingPointerScroll();
+  }
+
+  void flushPendingPointerScroll() {
+    std::optional<Vec2> delta = pendingScroll_.take();
+    if (!delta) {
+      return;
+    }
     Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::Scroll,
                                                          .handle = handle_,
                                                          .position = pointerPos_,
-                                                         .scrollDelta = {dx, dy},
+                                                         .scrollDelta = *delta,
                                                          .preciseScrollDelta = true,
                                                          .pressedButtons = pressedButtons_});
   }
@@ -3024,6 +3065,7 @@ private:
   std::uint32_t lastPointerButtonSerial_ = 0;
   Cursor currentCursor_ = Cursor::Arrow;
   std::uint8_t pressedButtons_ = 0;
+  WaylandScrollAccumulator pendingScroll_;
   Modifiers currentModifiers_ = Modifiers::None;
   bool resizeRedrawPending_ = false;
   bool pendingResizeEvent_ = false;
@@ -3367,7 +3409,14 @@ void sharedPointerAxis(void* data, wl_pointer*, std::uint32_t, std::uint32_t axi
   }
   if (shared->pointerFocus) shared->pointerFocus->handlePointerAxis(axis, value);
 }
-void sharedPointerFrame(void*, wl_pointer*) {}
+void sharedPointerFrame(void* data, wl_pointer*) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (shared->popupPointerFocus) {
+    shared->popupPointerFocus->handlePopupPointerFrame();
+    return;
+  }
+  if (shared->pointerFocus) shared->pointerFocus->handlePointerFrame();
+}
 void sharedPointerAxisSource(void*, wl_pointer*, std::uint32_t) {}
 void sharedPointerAxisStop(void*, wl_pointer*, std::uint32_t, std::uint32_t) {}
 void sharedPointerAxisDiscrete(void*, wl_pointer*, std::uint32_t, std::int32_t) {}

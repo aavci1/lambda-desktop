@@ -610,7 +610,10 @@ void postInputFromView(LambdaMetalView* view, InputEvent::Kind kind, NSEvent* e,
     NSPoint pt = [view convertPoint:[e locationInWindow] fromView:nil];
     ie.position = Vec2{static_cast<float>(pt.x), static_cast<float>(pt.y)};
   }
-  ie.button = (kind == InputEvent::Kind::PointerMove || kind == InputEvent::Kind::Scroll)
+  ie.button = (kind == InputEvent::Kind::PointerEnter ||
+               kind == InputEvent::Kind::PointerLeave ||
+               kind == InputEvent::Kind::PointerMove ||
+               kind == InputEvent::Kind::Scroll)
                   ? MouseButton::None
                   : buttonFromNSEvent(e);
   ie.key = 0;
@@ -645,6 +648,12 @@ void postInputFromView(LambdaMetalView* view, InputEvent::Kind kind, NSEvent* e,
     } else {
       char const* kn = "?";
       switch (kind) {
+      case InputEvent::Kind::PointerEnter:
+        kn = "PointerEnter";
+        break;
+      case InputEvent::Kind::PointerLeave:
+        kn = "PointerLeave";
+        break;
       case InputEvent::Kind::PointerDown:
         kn = "PointerDown";
         break;
@@ -1268,6 +1277,14 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)mouseMoved:(NSEvent*)event {
   lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerMove, event);
+}
+
+- (void)mouseEntered:(NSEvent*)event {
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerEnter, event);
+}
+
+- (void)mouseExited:(NSEvent*)event {
+  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerLeave, event);
 }
 
 - (void)mouseDragged:(NSEvent*)event {

@@ -134,7 +134,7 @@ class SceneNode {
     RelayoutFn relayout_{};
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
-    mutable bool preparedGroupCacheSuppressed_ = false;
+    mutable std::uint8_t preparedGroupCacheCooldown_ = 0;
     mutable std::uint64_t preparedRenderOpsKey_ = 0;
     mutable std::unique_ptr<PreparedRenderOps> preparedRenderOps_{};
 

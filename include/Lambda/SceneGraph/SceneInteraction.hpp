@@ -8,6 +8,7 @@
 #include <Lambda/Reactive/SmallFn.hpp>
 
 #include <optional>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -25,5 +26,10 @@ std::optional<InteractionHitResult> hitTestInteraction(
     Reactive::SmallFn<bool(Interaction const&)> const& acceptTarget);
 
 std::vector<ComponentKey> collectFocusableKeys(SceneGraph const& graph);
+
+namespace detail {
+void resetHitTestTraversalCountForTesting() noexcept;
+std::uint64_t hitTestTraversalCountForTesting() noexcept;
+}
 
 } // namespace lambda::scenegraph
