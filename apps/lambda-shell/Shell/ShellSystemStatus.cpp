@@ -1,5 +1,6 @@
 #include "Shell/ShellSystemStatus.hpp"
 
+#include <Lambda/System/BlueZ.hpp>
 #include <Lambda/System/NetworkManager.hpp>
 #include <Lambda/System/UPower.hpp>
 
@@ -118,6 +119,14 @@ void populateNetworkStatus(std::filesystem::path const& sysRoot, SystemStatus& s
 }
 
 std::string readBluetoothStatus(std::filesystem::path const& sysRoot) {
+  if (sysRoot == "/sys") {
+    try {
+      auto client = lambda::system::BlueZClient::connectSystem();
+      return lambda::system::formatBluetoothStatus(client.readSnapshot());
+    } catch (...) {
+    }
+  }
+
   bool foundBluetooth = false;
   for (auto const& rfkillPath : childDirectories(sysRoot / "class" / "rfkill")) {
     if (lowerAscii(readText(rfkillPath / "type").value_or("")) != "bluetooth") continue;

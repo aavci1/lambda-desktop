@@ -24,6 +24,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-025 | Feature | Complete SVC-7 StatusNotifierWatcher and tray host | N/A | P0.5 |
 | TODO-026 | Feature | Complete SVC-11 UPower power-status integration | N/A | P0.5 |
 | TODO-027 | Feature | Complete SVC-9 NetworkManager connectivity integration | N/A | P0.5 |
+| TODO-028 | Feature | Complete SVC-10 BlueZ Bluetooth integration | N/A | P0.5 |
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -154,12 +155,14 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add notification-service D-Bus helpers for empty `a{sv}` hints dictionaries and explicit skipping of currently ignored dictionaries.
 - [x] [Auto] Add `Properties.GetAll`, `a{sv}` reply reading, and unique-name lookup for StatusNotifierWatcher initialization and path-only item registration.
 - [x] [Auto] Add NetworkManager D-Bus value shapes: object-path arrays, byte arrays, byte scalars, and fixture coverage through the first NetworkManager client.
+- [x] [Auto] Add BlueZ ObjectManager D-Bus shape support for managed-object dictionaries (`a{oa{sa{sv}}}`) and fixture coverage through the first BlueZ client.
 - [ ] [Auto] Add async method calls and pending-call cancellation.
 - [ ] [Auto] Add broader generic type support needed by remaining portals and services: arbitrary arrays beyond the service-specific shapes already in tree, arbitrary dictionaries, richer nested variants, and request option maps.
 - [ ] [Auto] Add object introspection and first-class `PropertiesChanged` helpers.
 - [x] [Auto] Add deterministic fixture tests for the first UPower client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first NetworkManager client that consumes `lambda::dbus`.
-- [ ] [Auto] Add deterministic fixture tests for the remaining first service clients that consume `lambda::dbus` (BlueZ, udisks2).
+- [x] [Auto] Add deterministic fixture tests for the first BlueZ client that consumes `lambda::dbus`.
+- [ ] [Auto] Add deterministic fixture tests for the remaining first service clients that consume `lambda::dbus` (udisks2).
 - [ ] [Auto + Manual] Wire D-Bus fd pumping into the compositor/service runtime paths that will host SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
 
 ## TODO-021: Complete SVC-2 libseat seat/session integration
@@ -246,3 +249,14 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Implement Wi-Fi connect/disconnect flows, including a secrets path for password-protected networks.
 - [ ] [Auto + Manual] Build the Settings network page for saved networks, VPNs, and detailed adapter/IP state.
 - [ ] [Manual] Validate against the real system bus: Ethernet, Wi-Fi connect/disconnect, Wi-Fi enable/disable, captive/limited connectivity, and no-NetworkManager fallback all report truthfully in the Shell docklet.
+
+## TODO-028: Complete SVC-10 BlueZ Bluetooth integration
+
+- [x] [Auto] Add a basic `lambda::system::BlueZClient` on top of `lambda::dbus` for ObjectManager `GetManagedObjects`, adapter `Address`/`Alias`/`Powered`/`Discovering`, device `Address`/`Alias`/`Name`/`Adapter`/`Paired`/`Connected`, and an adapter `Powered` setter.
+- [x] [Auto] Add deterministic fake-bus coverage for adapter/device enumeration, connected-device status formatting, off/on/unavailable mapping, adapter power writes, and unsupported ObjectManager property skipping.
+- [x] [Auto] Make Shell Bluetooth status prefer BlueZ on the real `/sys` path and preserve the existing rfkill/sysfs fallback when BlueZ is unavailable or tests use a fixture sysroot.
+- [ ] [Auto + Manual] Wire BlueZ ObjectManager, adapter, and device signals into Shell so Bluetooth status updates without waiting for the polling timer.
+- [ ] [Auto] Enumerate adapters and devices with richer state: discoverable/discovering, trusted/blocked, paired/unpaired, battery where exposed, icon/class/category, and connection errors.
+- [ ] [Auto + Manual] Implement adapter power toggle, discovery, pairing-agent, pair/unpair, trust/untrust, connect/disconnect, and forget-device flows.
+- [ ] [Auto + Manual] Build the Settings Bluetooth page for pairing, device management, and adapter details.
+- [ ] [Manual] Validate against the real system bus: adapter power on/off, device pair/connect/disconnect, no-adapter fallback, and Bluetooth controller removal all report truthfully in the Shell docklet.

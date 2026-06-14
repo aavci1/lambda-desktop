@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <optional>
 #include <type_traits>
 #include <utility>
 #include <unistd.h>
@@ -208,6 +209,42 @@ void appendNamespacedVariantDictionary(sd_bus_message* message, NamespacedVarian
   throwIfFailed(sd_bus_message_close_container(message), "close D-Bus namespaced variant dictionary");
 }
 
+void appendManagedObjectDictionary(sd_bus_message* message, ManagedObjectDictionary const& value) {
+  throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, "{oa{sa{sv}}}"),
+                "open D-Bus managed object dictionary");
+  for (auto const& [path, interfaces] : value.values) {
+    throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_DICT_ENTRY, "oa{sa{sv}}"),
+                  "open D-Bus managed object entry");
+    throwIfFailed(sd_bus_message_append_basic(message, 'o', path.c_str()),
+                  "append D-Bus managed object path");
+    throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, "{sa{sv}}"),
+                  "open D-Bus managed object interfaces");
+    for (auto const& [interface, properties] : interfaces) {
+      throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_DICT_ENTRY, "sa{sv}"),
+                    "open D-Bus managed object interface entry");
+      throwIfFailed(sd_bus_message_append_basic(message, 's', interface.c_str()),
+                    "append D-Bus managed object interface");
+      throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, "{sv}"),
+                    "open D-Bus managed object properties");
+      for (auto const& [key, propertyValue] : properties) {
+        throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_DICT_ENTRY, "sv"),
+                      "open D-Bus managed object property entry");
+        throwIfFailed(sd_bus_message_append_basic(message, 's', key.c_str()),
+                      "append D-Bus managed object property key");
+        appendVariant(message, propertyValue);
+        throwIfFailed(sd_bus_message_close_container(message),
+                      "close D-Bus managed object property entry");
+      }
+      throwIfFailed(sd_bus_message_close_container(message), "close D-Bus managed object properties");
+      throwIfFailed(sd_bus_message_close_container(message),
+                    "close D-Bus managed object interface entry");
+    }
+    throwIfFailed(sd_bus_message_close_container(message), "close D-Bus managed object interfaces");
+    throwIfFailed(sd_bus_message_close_container(message), "close D-Bus managed object entry");
+  }
+  throwIfFailed(sd_bus_message_close_container(message), "close D-Bus managed object dictionary");
+}
+
 void appendReplyValue(sd_bus_message* message, ReplyValue const& value) {
   std::visit(
       [message](auto const& v) {
@@ -220,6 +257,8 @@ void appendReplyValue(sd_bus_message* message, ReplyValue const& value) {
           appendVariantDictionary(message, v);
         } else if constexpr (std::is_same_v<T, NamespacedVariantDictionary>) {
           appendNamespacedVariantDictionary(message, v);
+        } else if constexpr (std::is_same_v<T, ManagedObjectDictionary>) {
+          appendManagedObjectDictionary(message, v);
         }
       },
       value);
@@ -366,6 +405,31 @@ BasicValue readVariantFrom(sd_bus_message* message, std::string_view expectedSig
   return value;
 }
 
+std::optional<BasicValue> readOptionalVariantFrom(sd_bus_message* message) {
+  char type = 0;
+  char const* contents = nullptr;
+  throwIfFailed(sd_bus_message_peek_type(message, &type, &contents), "peek D-Bus variant");
+  if (type != SD_BUS_TYPE_VARIANT || !contents) {
+    throw Error(-EINVAL, "read D-Bus variant", "message item is not a variant");
+  }
+
+  std::string_view signature(contents);
+  bool const supported = signature == "b" || signature == "y" || signature == "i" ||
+                         signature == "u" || signature == "x" || signature == "t" ||
+                         signature == "d" || signature == "s" || signature == "o" ||
+                         signature == "as" || signature == "ay" || signature == "(ddd)";
+  if (!supported) {
+    throwIfFailed(sd_bus_message_skip(message, "v"), "skip unsupported D-Bus variant");
+    return std::nullopt;
+  }
+
+  throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_VARIANT, contents),
+                "enter D-Bus variant");
+  BasicValue value = readValueFromSignature(message, signature);
+  throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus variant");
+  return value;
+}
+
 NamespacedVariantDictionary readNamespacedVariantDictionaryFrom(sd_bus_message* message) {
   NamespacedVariantDictionary dictionary;
   throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_ARRAY, "{sa{sv}}"),
@@ -390,6 +454,50 @@ NamespacedVariantDictionary readNamespacedVariantDictionaryFrom(sd_bus_message* 
     throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus namespace dictionary entry");
   }
   throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus namespaced variant dictionary");
+  return dictionary;
+}
+
+ManagedObjectDictionary readManagedObjectDictionaryFrom(sd_bus_message* message) {
+  ManagedObjectDictionary dictionary;
+  throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_ARRAY, "{oa{sa{sv}}}"),
+                "enter D-Bus managed object dictionary");
+  while (sd_bus_message_at_end(message, 0) == 0) {
+    throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_DICT_ENTRY, "oa{sa{sv}}"),
+                  "enter D-Bus managed object entry");
+    char const* path = nullptr;
+    throwIfFailed(sd_bus_message_read_basic(message, 'o', &path), "read D-Bus managed object path");
+    auto& interfaces = dictionary.values[path ? path : ""];
+    throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_ARRAY, "{sa{sv}}"),
+                  "enter D-Bus managed object interfaces");
+    while (sd_bus_message_at_end(message, 0) == 0) {
+      throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_DICT_ENTRY, "sa{sv}"),
+                    "enter D-Bus managed object interface entry");
+      char const* interface = nullptr;
+      throwIfFailed(sd_bus_message_read_basic(message, 's', &interface),
+                    "read D-Bus managed object interface");
+      auto& properties = interfaces[interface ? interface : ""];
+      throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_ARRAY, "{sv}"),
+                    "enter D-Bus managed object properties");
+      while (sd_bus_message_at_end(message, 0) == 0) {
+        throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_DICT_ENTRY, "sv"),
+                      "enter D-Bus managed object property entry");
+        char const* key = nullptr;
+        throwIfFailed(sd_bus_message_read_basic(message, 's', &key),
+                      "read D-Bus managed object property key");
+        if (auto value = readOptionalVariantFrom(message)) {
+          properties[key ? key : ""] = std::move(*value);
+        }
+        throwIfFailed(sd_bus_message_exit_container(message),
+                      "exit D-Bus managed object property entry");
+      }
+      throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus managed object properties");
+      throwIfFailed(sd_bus_message_exit_container(message),
+                    "exit D-Bus managed object interface entry");
+    }
+    throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus managed object interfaces");
+    throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus managed object entry");
+  }
+  throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus managed object dictionary");
   return dictionary;
 }
 
@@ -908,6 +1016,19 @@ NamespacedVariantDictionary Message::readNamespacedVariantDictionary() {
 #else
   throw Error(-ENOTSUP,
               "read D-Bus namespaced variant dictionary",
+              "D-Bus support is not available in this build");
+#endif
+}
+
+ManagedObjectDictionary Message::readManagedObjectDictionary() {
+#if LAMBDA_HAS_DBUS
+  if (!native_) {
+    throw Error(-EINVAL, "read D-Bus managed object dictionary", "message is empty");
+  }
+  return readManagedObjectDictionaryFrom(static_cast<sd_bus_message*>(native_));
+#else
+  throw Error(-ENOTSUP,
+              "read D-Bus managed object dictionary",
               "D-Bus support is not available in this build");
 #endif
 }

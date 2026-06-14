@@ -113,7 +113,15 @@ struct NamespacedVariantDictionary {
   std::map<std::string, std::map<std::string, BasicValue>> values;
 };
 
-using ReplyValue = std::variant<BasicValue, VariantValue, VariantDictionary, NamespacedVariantDictionary>;
+struct ManagedObjectDictionary {
+  std::map<std::string, std::map<std::string, std::map<std::string, BasicValue>>> values;
+};
+
+using ReplyValue = std::variant<BasicValue,
+                                VariantValue,
+                                VariantDictionary,
+                                NamespacedVariantDictionary,
+                                ManagedObjectDictionary>;
 
 [[nodiscard]] std::string signatureFor(BasicValue const& value);
 
@@ -169,6 +177,7 @@ public:
   [[nodiscard]] BasicValue readVariant(std::string_view signature);
   [[nodiscard]] VariantDictionary readVariantDictionary();
   [[nodiscard]] NamespacedVariantDictionary readNamespacedVariantDictionary();
+  [[nodiscard]] ManagedObjectDictionary readManagedObjectDictionary();
   void skip(std::string_view signature);
 
 private:

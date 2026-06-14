@@ -23,7 +23,8 @@ Graphics and text dependencies:
 sudo pacman -S --needed \
   wayland wayland-protocols libxkbcommon \
   vulkan-headers vulkan-icd-loader vulkan-tools glslang \
-  mesa libdrm libinput libseat systemd-libs xdg-desktop-portal libnotify networkmanager upower \
+  mesa libdrm libinput libseat systemd-libs xdg-desktop-portal libnotify \
+  networkmanager bluez bluez-utils upower \
   freetype2 fontconfig harfbuzz zlib
 ```
 
@@ -153,6 +154,18 @@ gdbus call --system \
   --dest org.freedesktop.NetworkManager \
   --object-path /org/freedesktop/NetworkManager \
   --method org.freedesktop.NetworkManager.GetDevices
+```
+
+## Bluetooth Status
+
+Shell Bluetooth status prefers BlueZ when reading the live system and falls back to `/sys/class/rfkill` plus `/sys/class/bluetooth` when BlueZ is unavailable. For development, confirm the system service is visible with:
+
+```sh
+bluetoothctl show
+gdbus call --system \
+  --dest org.bluez \
+  --object-path / \
+  --method org.freedesktop.DBus.ObjectManager.GetManagedObjects
 ```
 
 ## Power Status

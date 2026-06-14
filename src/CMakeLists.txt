@@ -1,5 +1,6 @@
 set(LAMBDA_CORE_SOURCES
   Core/Identity.cpp
+  System/BlueZ.cpp
   System/DBus.cpp
   System/Logind.cpp
   System/NetworkManager.cpp
