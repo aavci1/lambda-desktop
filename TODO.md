@@ -61,12 +61,12 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 ## TODO-009: Files opens supported images in Firefox instead of Preview
 
 - [ ] [Manual] Clicking a supported image in Files currently opens it in Firefox, likely because app/MIME association falls through to the browser.
-- [ ] [Auto + Manual] Supported image files should open in `lambda-preview` without requiring Preview to be installed into the host system.
-- [ ] [Auto] Prefer solving this through Flux's local app registry/open-with path: give the local development `lambda-preview` app entry the MIME types Preview can actually open, then have Files choose it for those types.
-- [ ] [Auto] Preview-supported MIME types should include the formats handled by the current image loader and Files MIME detector, including `image/png`, `image/jpeg`, `image/gif`, `image/webp`, and `image/svg+xml`; add other formats only if `lambda::loadImage` can actually decode them.
-- [ ] [Auto] Keep system `mimeapps.list` support for installed apps, but local Flux app associations should work in a build-tree/development run without writing desktop files to the user's system.
-- [ ] [Auto] Add or update tests around local `lambda-preview` registration and Files default open-with resolution so supported images choose Preview instead of Firefox/browser fallback.
-- [ ] [Manual] Verify manually by running from the development build and opening PNG, JPEG, and SVG files from Files.
+- [x] [Auto] Supported image files resolve to `lambda-preview` without requiring Preview to be installed into the host system.
+- [x] [Auto] Solve this through Flux's local app registry/open-with path: the local development `lambda-preview` app entry advertises the MIME types Preview can open, and Files chooses it for those types.
+- [x] [Auto] Preview-supported MIME types include the formats handled by the current image loader and Files MIME detector: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, and `image/svg+xml`; add other formats only if `lambda::loadImage` can actually decode them.
+- [x] [Auto] Keep system `mimeapps.list` support for installed apps, while making local Flux app associations work in a build-tree/development run without writing desktop files to the user's system.
+- [x] [Auto] Added tests around local `lambda-preview` registration and Files default open-with resolution so supported images choose Preview instead of Firefox/browser fallback.
+- [ ] [Manual] Verify manually by running from the development build and opening PNG, JPEG, GIF, WebP, and SVG files from Files.
 
 ## TODO-014: Tooltips are not showing
 

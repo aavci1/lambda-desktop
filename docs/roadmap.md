@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-06-14 (started SVC-1 D-Bus capability with exported-object introspection and `PropertiesChanged` helpers, SVC-2 libseat KMS device access, SVC-3 logind client basics with active-session discovery and Shell launcher power actions, SVC-4 portal Settings backend basics, SVC-6 notification service basics, SVC-7 StatusNotifierWatcher basics, SVC-9 NetworkManager status/toggle basics with Shell manager/device/AP event refresh, SVC-10 BlueZ status/toggle basics with Shell property/ObjectManager event refresh, SVC-11 UPower basics with Shell display-device/manager event refresh, SVC-12 MPRIS basics with Shell docklet/control integration and event refresh, and SVC-14 UDisks2 basics with Files mounted-volume sidebar/event refresh; integrated daily-driver gap analysis: new System Services workstream SVC-*, compositor protocol/power gates WM-11…WM-21, missing-app specs, reprioritized gate)
+**Last updated:** 2026-06-14 (started SVC-1 D-Bus capability with exported-object introspection and `PropertiesChanged` helpers, SVC-2 libseat KMS device access, SVC-3 logind client basics with active-session discovery and Shell launcher power actions, SVC-4 portal Settings backend basics, SVC-6 notification service basics, SVC-7 StatusNotifierWatcher basics, SVC-9 NetworkManager status/toggle basics with Shell manager/device/AP event refresh, SVC-10 BlueZ status/toggle basics with Shell property/ObjectManager event refresh, SVC-11 UPower basics with Shell display-device/manager event refresh, SVC-12 MPRIS basics with Shell docklet/control integration and event refresh, SVC-14 UDisks2 basics with Files mounted-volume sidebar/event refresh, and Files local Preview defaults for supported image MIME types; integrated daily-driver gap analysis: new System Services workstream SVC-*, compositor protocol/power gates WM-11…WM-21, missing-app specs, reprioritized gate)
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -338,7 +338,7 @@ Current implementation:
 
 - `lambda-files` opens as an integrated-titlebar Lambda app with glass background.
 - Live UI supports sidebar places, breadcrumbs, back/forward/up, grid/list view, hidden-file toggle, multi-select/range/select-all/clear, activation, create folder/file, copy/cut/paste, duplicate, trash-first delete, reveal, default open, context menus, and periodic refresh.
-- Preferences persist for hidden files and view mode; clipboard uses internal copy/cut state plus `text/uri-list`; default open uses the shared app registry + MIME/default-app data; icon theme lookup with fallback.
+- Preferences persist for hidden files and view mode; clipboard uses internal copy/cut state plus `text/uri-list`; default open uses the shared app registry + MIME/default-app data and prefers local `lambda-preview` for supported image MIME types in development builds; icon theme lookup with fallback.
 - Model layer has path normalization, navigation history, breadcrumbs, stable sort, search/filtering, refresh diffs, selection preservation, rename validation, copy/move/duplicate, trash metadata, restore helpers, conflict decisions, progress/failure/cancel state, safe undo helpers, MIME/default-app fixtures, icon lookup, and preference load/save.
 
 Open gate:
@@ -346,7 +346,7 @@ Open gate:
 - Add direct text path entry; rename UI; Trash view/restore UI (or explicitly defer restore while keeping delete trash-first); undo UI; operation progress/cancel UX + partial-failure reporting; conflict prompts (keep both/replace/skip/cancel); current-folder search UI; visible sort controls; explicit open-with chooser UI; native watcher integration; Lambda-level file drag source/target before advertising DnD.
 - **New (gap analysis):** removable-media support via SVC-14 — show mounted/removable volumes in places, mount on open, and unmount/eject safely; auto-mount on insert is optional and policy-gated.
 
-Validation: as previously specified (model, operations, trash, selection, preferences, open-with fixtures, MIME parsing, URI-list clipboard, icon fallback, grid layout). Add: removable-volume enumerate/mount/unmount against SVC-14 fixtures; manual USB insert/open/eject.
+Validation: as previously specified (model, operations, trash, selection, preferences, open-with fixtures including local Preview image defaults, MIME parsing, URI-list clipboard, icon fallback, grid layout). Add: removable-volume enumerate/mount/unmount against SVC-14 fixtures; manual USB insert/open/eject.
 
 Deferred:
 
@@ -397,7 +397,7 @@ Editor current implementation, open gate, tabs/recovery, printing/page-setup, sp
 
 Detailed below in rough daily-driver priority. Each is a Lambda app built on the v5 UI runtime, integrated with the shared app registry, MIME/open-with, icon/thumbnail, and (where relevant) portal/print services.
 
-- **IMG-* — Image viewer (replace the `lambda-preview` stub).** Current `lambda-preview` is ~232 lines: open-by-typed-path with basic zoom. Build a real viewer:
+- **IMG-* — Image viewer (replace the `lambda-preview` stub).** Current `lambda-preview` is ~232 lines: open-by-typed-path with basic zoom, and Files now resolves supported image MIME types to local Preview in development builds. Build a real viewer:
   - Open from Files/open-with and CLI argument; **folder navigation** (next/previous within the directory, in the Files sort order).
   - Formats: stb_image (PNG/JPG/GIF/BMP/etc.) plus SVG via the framework `flux::Svg`; later libheif/libavif/libraw for HEIC/AVIF/RAW.
   - View: fit / fill / 100% / free zoom + pan; **honor EXIF orientation**; rotate/flip; fullscreen and a simple slideshow.

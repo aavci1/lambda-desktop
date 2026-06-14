@@ -930,6 +930,70 @@ image/png=org.example.ImageViewer.desktop;
   CHECK(missingPlan.error == "No application is registered for this file type.");
 }
 
+TEST_CASE("FilesStore prefers local Preview for supported image files") {
+  std::vector<lambda_shell::AppRegistryEntry> apps{
+      {.appId = "lambda-preview",
+       .name = "Preview",
+       .icon = "image-viewer",
+       .command = "/tmp/apps/lambda-preview",
+       .local = true,
+       .mimeTypes = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}},
+      {.appId = "firefox",
+       .name = "Firefox",
+       .icon = "firefox",
+       .command = "firefox %u",
+       .mimeTypes = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}},
+      {.appId = "org.example.TextEditor",
+       .name = "Text Editor",
+       .icon = "text-editor",
+       .command = "text-editor %f",
+       .mimeTypes = {"text/plain"}},
+  };
+  auto mimeApps = lambda_files::parseMimeAppsList(R"(
+[Default Applications]
+image/png=firefox.desktop;
+image/jpeg=firefox.desktop;
+image/gif=firefox.desktop;
+image/webp=firefox.desktop;
+image/svg+xml=firefox.desktop;
+text/plain=org.example.TextEditor.desktop;
+)");
+
+  for (auto const& path : {"/tmp/photo.png",
+                           "/tmp/photo.jpg",
+                           "/tmp/animation.gif",
+                           "/tmp/photo.webp",
+                           "/tmp/vector.svg"}) {
+    auto choice = lambda_files::defaultOpenWithChoice(path, false, apps, mimeApps);
+    REQUIRE(choice);
+    CHECK(choice->app.appId == "lambda-preview");
+    CHECK(choice->isDefault);
+    CHECK(lambda_files::openCommandForChoice(*choice, path) ==
+          std::vector<std::string>{"/tmp/apps/lambda-preview", path});
+  }
+
+  auto choices = lambda_files::openWithChoices("/tmp/photo.png", false, apps, mimeApps);
+  REQUIRE(choices.size() >= 2);
+  CHECK(choices[0].app.appId == "lambda-preview");
+  CHECK(choices[0].isDefault);
+  CHECK(choices[1].app.appId == "firefox");
+  CHECK_FALSE(choices[1].isDefault);
+
+  lambda_files::FileEntry imageEntry{
+      .name = "photo.png",
+      .path = "/tmp/photo.png",
+      .isDirectory = false,
+  };
+  auto imagePlan = lambda_files::openEntryPlan(imageEntry, apps, mimeApps);
+  REQUIRE(imagePlan.ok);
+  CHECK(imagePlan.command == std::vector<std::string>{"/tmp/apps/lambda-preview", "/tmp/photo.png"});
+
+  auto textChoice = lambda_files::defaultOpenWithChoice("/tmp/readme.txt", false, apps, mimeApps);
+  REQUIRE(textChoice);
+  CHECK(textChoice->app.appId == "org.example.TextEditor");
+  CHECK(textChoice->isDefault);
+}
+
 TEST_CASE("FilesStore launches file open commands without blocking the caller") {
   std::vector<lambda_shell::AppRegistryEntry> apps{
       {.appId = "org.example.SlowViewer",

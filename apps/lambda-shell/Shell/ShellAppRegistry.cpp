@@ -726,6 +726,9 @@ std::vector<AppRegistryEntry> discoverLocalLambdaApps(std::vector<std::filesyste
       {"lambda-settings", "preferences-system"},
       {"lambda-terminal", "utilities-terminal"},
   };
+  static std::map<std::string, std::vector<std::string>> const localMimeTypes{
+      {"lambda-preview", {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}},
+  };
   std::set<std::string> seen;
   for (auto const& name : appNames) {
     if (!seen.insert(name).second) continue;
@@ -739,6 +742,9 @@ std::vector<AppRegistryEntry> discoverLocalLambdaApps(std::vector<std::filesyste
       app.icon = icon == themedIcons.end() ? name : icon->second;
       app.command = executable->string();
       app.local = true;
+      if (auto mimeTypes = localMimeTypes.find(name); mimeTypes != localMimeTypes.end()) {
+        app.mimeTypes = mimeTypes->second;
+      }
       apps.push_back(std::move(app));
       break;
     }

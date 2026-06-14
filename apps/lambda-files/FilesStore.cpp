@@ -543,6 +543,22 @@ bool appSupportsMime(lambda_shell::AppRegistryEntry const& app, std::string cons
   return std::find(app.mimeTypes.begin(), app.mimeTypes.end(), mimeType) != app.mimeTypes.end();
 }
 
+bool mimeSupportedByLocalPreview(std::string const& mimeType) {
+  static std::vector<std::string> const supported{
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+      "image/svg+xml",
+  };
+  return std::find(supported.begin(), supported.end(), mimeType) != supported.end();
+}
+
+char const* preferredLocalAppForMime(std::string const& mimeType) {
+  if (mimeSupportedByLocalPreview(mimeType)) return "lambda-preview";
+  return nullptr;
+}
+
 std::string iconNameForMime(std::string const& mimeType) {
   if (mimeType == "inode/directory") return "folder";
   if (mimeType == "application/pdf") return "application-pdf";
@@ -1707,17 +1723,28 @@ std::vector<OpenWithChoice> openWithChoices(std::filesystem::path const& path,
   std::set<std::string> added;
 
   auto addApp = [&](lambda_shell::AppRegistryEntry const& app, bool isDefault) {
-    if (!appSupportsMime(app, mime) || added.contains(app.appId)) return;
+    if (!appSupportsMime(app, mime) || added.contains(app.appId)) return false;
     added.insert(app.appId);
     choices.push_back({.app = app, .isDefault = isDefault});
+    return true;
   };
+
+  bool hasPreferredLocalDefault = false;
+  if (char const* preferredLocalApp = preferredLocalAppForMime(mime)) {
+    auto found = std::find_if(apps.begin(), apps.end(), [&](auto const& app) {
+      return app.local && appIdMatchesDesktopId(app, preferredLocalApp);
+    });
+    if (found != apps.end()) {
+      hasPreferredLocalDefault = addApp(*found, true);
+    }
+  }
 
   if (auto defaults = mimeApps.defaults.find(mime); defaults != mimeApps.defaults.end()) {
     for (auto const& id : defaults->second) {
       auto found = std::find_if(apps.begin(), apps.end(), [&](auto const& app) {
         return appIdMatchesDesktopId(app, id);
       });
-      if (found != apps.end()) addApp(*found, true);
+      if (found != apps.end()) addApp(*found, !hasPreferredLocalDefault);
     }
   }
   if (auto associations = mimeApps.associations.find(mime); associations != mimeApps.associations.end()) {
@@ -1749,6 +1776,9 @@ std::optional<OpenWithChoice> defaultOpenWithChoice(std::filesystem::path const&
 }
 
 std::vector<std::string> openCommandForChoice(OpenWithChoice const& choice, std::filesystem::path const& path) {
+  if (choice.app.local && !choice.app.command.empty()) {
+    return {choice.app.command, path.string()};
+  }
   return lambda_shell::parseDesktopExec(choice.app.command, path);
 }
 

@@ -130,35 +130,48 @@ TEST_CASE("Shell app registry prefers local lambda app executables") {
   auto root = tempRoot("lambda-shell-local-apps-test");
   auto appsDir = root / "apps";
   std::filesystem::create_directories(appsDir / "lambda-files");
+  std::filesystem::create_directories(appsDir / "lambda-preview");
   std::filesystem::create_directories(appsDir / "lambda-terminal");
   std::filesystem::create_directories(appsDir / "lambda-settings");
   {
     std::ofstream(appsDir / "lambda-files" / "lambda-files") << "#!/bin/sh\n";
+    std::ofstream(appsDir / "lambda-preview" / "lambda-preview") << "#!/bin/sh\n";
     std::ofstream(appsDir / "lambda-terminal" / "lambda-terminal") << "#!/bin/sh\n";
     std::ofstream(appsDir / "lambda-settings" / "lambda-settings") << "#!/bin/sh\n";
   }
   makeExecutable(appsDir / "lambda-files" / "lambda-files");
+  makeExecutable(appsDir / "lambda-preview" / "lambda-preview");
   makeExecutable(appsDir / "lambda-terminal" / "lambda-terminal");
 
-  auto local = lambda_shell::discoverLocalLambdaApps({appsDir}, {"lambda-files", "lambda-terminal", "lambda-settings"});
-  REQUIRE(local.size() == 2);
+  auto local = lambda_shell::discoverLocalLambdaApps(
+      {appsDir},
+      {"lambda-files", "lambda-preview", "lambda-terminal", "lambda-settings"});
+  REQUIRE(local.size() == 3);
   CHECK(local[0].appId == "lambda-files");
   CHECK(local[0].name == "Files");
   CHECK(local[0].icon == "system-file-manager");
   CHECK(local[0].command == (appsDir / "lambda-files" / "lambda-files").string());
   CHECK(local[0].local);
-  CHECK(local[1].appId == "lambda-terminal");
-  CHECK(local[1].icon == "utilities-terminal");
+  CHECK(local[1].appId == "lambda-preview");
+  CHECK(local[1].icon == "image-viewer");
+  CHECK(local[1].mimeTypes == std::vector<std::string>{"image/png",
+                                                       "image/jpeg",
+                                                       "image/gif",
+                                                       "image/webp",
+                                                       "image/svg+xml"});
+  CHECK(local[2].appId == "lambda-terminal");
+  CHECK(local[2].icon == "utilities-terminal");
 
   std::vector<lambda_shell::AppRegistryEntry> installed{
       {.appId = "files", .name = "Installed Files", .command = "nautilus"},
       {.appId = "org.example.Editor", .name = "Editor", .command = "editor"},
   };
   auto merged = lambda_shell::mergeAppRegistryEntries(installed, local);
-  CHECK(merged.size() == 3);
+  CHECK(merged.size() == 4);
   CHECK(merged[0].appId == "lambda-files");
-  CHECK(merged[1].appId == "lambda-terminal");
-  CHECK(merged[2].appId == "org.example.Editor");
+  CHECK(merged[1].appId == "lambda-preview");
+  CHECK(merged[2].appId == "lambda-terminal");
+  CHECK(merged[3].appId == "org.example.Editor");
 
   std::filesystem::remove_all(root);
 }
