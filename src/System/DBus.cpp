@@ -327,6 +327,22 @@ NamespacedVariantDictionary readNamespacedVariantDictionaryFrom(sd_bus_message* 
   return dictionary;
 }
 
+VariantDictionary readVariantDictionaryFrom(sd_bus_message* message) {
+  VariantDictionary dictionary;
+  throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_ARRAY, "{sv}"),
+                "enter D-Bus variant dictionary");
+  while (sd_bus_message_at_end(message, 0) == 0) {
+    throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_DICT_ENTRY, "sv"),
+                  "enter D-Bus variant dictionary entry");
+    char const* key = nullptr;
+    throwIfFailed(sd_bus_message_read_basic(message, 's', &key), "read D-Bus variant dictionary key");
+    dictionary.values[key ? key : ""] = readVariantFrom(message, {});
+    throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus variant dictionary entry");
+  }
+  throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus variant dictionary");
+  return dictionary;
+}
+
 BasicValue propertyValue(ExportedProperty const& property) {
   return property.getter ? property.getter() : property.value;
 }
@@ -414,6 +430,22 @@ int handlePropertiesGet(sd_bus_message* message, ExportState& state) {
                      nullptr);
 }
 
+int handlePropertiesGetAll(sd_bus_message* message, ExportState& state) {
+  char const* interface = nullptr;
+  int result = sd_bus_message_read(message, "s", &interface);
+  if (result < 0) {
+    return result;
+  }
+
+  VariantDictionary values;
+  for (auto const& property : state.definition.properties) {
+    if (property.interface == (interface ? interface : "")) {
+      values.values[property.name] = propertyValue(property);
+    }
+  }
+  return replyWithValues(message, {values});
+}
+
 int handlePropertiesSet(sd_bus_message* message, ExportState& state) {
   char const* interface = nullptr;
   char const* name = nullptr;
@@ -468,6 +500,9 @@ int exportThunk(sd_bus_message* message, void* userdata, sd_bus_error*) {
     if (std::string_view(interface) == "org.freedesktop.DBus.Properties") {
       if (std::string_view(member) == "Get") {
         return handlePropertiesGet(message, *state);
+      }
+      if (std::string_view(member) == "GetAll") {
+        return handlePropertiesGetAll(message, *state);
       }
       if (std::string_view(member) == "Set") {
         return handlePropertiesSet(message, *state);
@@ -767,6 +802,19 @@ BasicValue Message::readVariant(std::string_view expectedSignature) {
 #endif
 }
 
+VariantDictionary Message::readVariantDictionary() {
+#if LAMBDA_HAS_DBUS
+  if (!native_) {
+    throw Error(-EINVAL, "read D-Bus variant dictionary", "message is empty");
+  }
+  return readVariantDictionaryFrom(static_cast<sd_bus_message*>(native_));
+#else
+  throw Error(-ENOTSUP,
+              "read D-Bus variant dictionary",
+              "D-Bus support is not available in this build");
+#endif
+}
+
 NamespacedVariantDictionary Message::readNamespacedVariantDictionary() {
 #if LAMBDA_HAS_DBUS
   if (!native_) {
@@ -873,6 +921,17 @@ Bus Bus::openAddress(std::string const& address) {
 #else
   (void)address;
   throw Error(-ENOTSUP, "open D-Bus address", "D-Bus support is not available in this build");
+#endif
+}
+
+std::string Bus::uniqueName() const {
+#if LAMBDA_HAS_DBUS
+  char const* name = nullptr;
+  throwIfFailed(sd_bus_get_unique_name(static_cast<sd_bus*>(native()), &name),
+                "get D-Bus unique name");
+  return name ? name : "";
+#else
+  throw Error(-ENOTSUP, "get D-Bus unique name", "D-Bus support is not available in this build");
 #endif
 }
 

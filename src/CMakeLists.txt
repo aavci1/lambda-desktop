@@ -4,6 +4,7 @@ set(LAMBDA_CORE_SOURCES
   System/Logind.cpp
   System/Notifications.cpp
   System/PortalSettings.cpp
+  System/StatusNotifierWatcher.cpp
 )
 
 set(LAMBDA_REACTIVE_SOURCES

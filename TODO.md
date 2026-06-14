@@ -21,6 +21,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-022 | Feature | Complete SVC-3 logind power/session integration | N/A | P0.5 |
 | TODO-023 | Feature | Complete SVC-4 xdg-desktop-portal backend | N/A | P0.5 |
 | TODO-024 | Feature | Complete SVC-6 notifications daemon and Shell UI | N/A | P0.5 |
+| TODO-025 | Feature | Complete SVC-7 StatusNotifierWatcher and tray host | N/A | P0.5 |
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -149,9 +150,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Cover object-path reply plumbing through logind `GetSessionByPID` fixture tests.
 - [x] [Auto] Add the first richer D-Bus shapes needed by SVC-4 Settings: string arrays, RGB tuples, variant replies/signals, and the `a{sa{sv}}` namespaced variant dictionary.
 - [x] [Auto] Add notification-service D-Bus helpers for empty `a{sv}` hints dictionaries and explicit skipping of currently ignored dictionaries.
+- [x] [Auto] Add `Properties.GetAll`, `a{sv}` reply reading, and unique-name lookup for StatusNotifierWatcher initialization and path-only item registration.
 - [ ] [Auto] Add async method calls and pending-call cancellation.
 - [ ] [Auto] Add broader generic type support needed by remaining portals and services: object-path arrays, arbitrary arrays, arbitrary dictionaries, richer nested variants, and request option maps.
-- [ ] [Auto] Add object introspection, `GetAll`, and first-class `PropertiesChanged` helpers.
+- [ ] [Auto] Add object introspection and first-class `PropertiesChanged` helpers.
 - [ ] [Auto] Add deterministic fixture tests for the remaining first service clients that consume `lambda::dbus` (UPower, NetworkManager, BlueZ, udisks2).
 - [ ] [Auto + Manual] Wire D-Bus fd pumping into the compositor/service runtime paths that will host SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
 
@@ -205,3 +207,16 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Parse the common notification hints that affect presentation, including urgency, category, desktop-entry, image/icon data, transient, and sound suppression.
 - [ ] [Auto + Manual] Route the SVC-4 portal Notification backend through this service.
 - [ ] [Manual] Validate `notify-send "x"` shows a Shell banner, actions invoke, DND suppresses banners, and history shows past notifications.
+
+## TODO-025: Complete SVC-7 StatusNotifierWatcher and tray host
+
+- [x] [Auto] Add a Linux `lambda-status-notifier-watcher` session-bus service target with D-Bus activation metadata for `org.kde.StatusNotifierWatcher`.
+- [x] [Auto] Export the watcher interface with `RegisterStatusNotifierItem`, `RegisterStatusNotifierHost`, `RegisteredStatusNotifierItems`, `IsStatusNotifierHostRegistered`, `ProtocolVersion`, `StatusNotifierItemRegistered`, `StatusNotifierItemUnregistered`, and `StatusNotifierHostRegistered`.
+- [x] [Auto] Support path-only item registration by using the caller's unique bus name, and remove registered items/hosts when their bus name loses ownership.
+- [x] [Auto] Add deterministic private-bus coverage for host/item registration, properties, `Properties.GetAll`, registration signals, owner-loss removal, and path-only item registration.
+- [x] [Auto] Smoke the built `lambda-status-notifier-watcher` process on a private session bus and verify a `ProtocolVersion` property query through `gdbus`.
+- [ ] [Auto + Manual] Wire Shell's tray host UI to the watcher and render registered status item icons in the bar.
+- [ ] [Auto] Read StatusNotifierItem properties for category, title, status, icon names, icon pixmaps, overlay/attention icons, tooltip, menu object path, and item updates.
+- [ ] [Auto + Manual] Implement `com.canonical.dbusmenu` menu hosting and item `Activate`, `ContextMenu`, `SecondaryActivate`, and `Scroll` actions.
+- [ ] [Auto + Manual] Handle item property/signal changes live without freezing Shell when a tray item misbehaves or disappears.
+- [ ] [Manual] Validate Steam/Discord/Telegram/nm-applet-style tray icons appear, update, activate, and show menus.

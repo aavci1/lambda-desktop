@@ -43,6 +43,7 @@ set(_lambda_test_sources
   RuntimeInputTests.cpp
   RuntimeTests.cpp
   ShowTests.cpp
+  StatusNotifierWatcherTests.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-settings/SettingsBackend.cpp
   SettingsBackendTests.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-shell/Shell/ShellAppRegistry.cpp

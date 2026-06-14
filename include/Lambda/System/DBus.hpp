@@ -155,6 +155,7 @@ public:
   [[nodiscard]] UnixFd readUnixFd();
   [[nodiscard]] BasicValue readBasic(std::string_view signature);
   [[nodiscard]] BasicValue readVariant(std::string_view signature);
+  [[nodiscard]] VariantDictionary readVariantDictionary();
   [[nodiscard]] NamespacedVariantDictionary readNamespacedVariantDictionary();
   void skip(std::string_view signature);
 
@@ -239,6 +240,7 @@ public:
   [[nodiscard]] static Bus open(BusType type);
   [[nodiscard]] static Bus openAddress(std::string const& address);
 
+  [[nodiscard]] std::string uniqueName() const;
   void requestName(std::string const& name, std::uint64_t flags = 0);
   [[nodiscard]] Message call(MethodCall const& call);
   [[nodiscard]] BasicValue getProperty(PropertyAddress const& property, std::string_view signature);

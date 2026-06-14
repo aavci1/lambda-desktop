@@ -5,6 +5,7 @@ add_subdirectory(lambda-portal)
 add_subdirectory(lambda-preview)
 add_subdirectory(lambda-settings)
 add_subdirectory(lambda-shell)
+add_subdirectory(lambda-status-notifier-watcher)
 add_subdirectory(lambda-terminal)
 add_subdirectory(solitaire-app)
 

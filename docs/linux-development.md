@@ -128,6 +128,21 @@ gdbus call --session \
   lambda-smoke "uint32 0" dialog-information "Smoke" "Notification body" "@as []" "@a{sv} {}" 5000
 ```
 
+## StatusNotifierWatcher
+
+The Linux build includes `lambda-status-notifier-watcher`, a basic `org.kde.StatusNotifierWatcher` session-bus daemon. It accepts StatusNotifierItem and StatusNotifierHost registrations, exposes watcher properties, emits registration signals, and is ready for Shell tray UI wiring.
+
+Development smoke without installing:
+
+```sh
+./build/apps/lambda-status-notifier-watcher/lambda-status-notifier-watcher
+gdbus call --session \
+  --dest org.kde.StatusNotifierWatcher \
+  --object-path /StatusNotifierWatcher \
+  --method org.freedesktop.DBus.Properties.Get \
+  org.kde.StatusNotifierWatcher ProtocolVersion
+```
+
 ## Common Failures
 
 - `Missing required Vulkan instance extension: VK_KHR_display`: the ICD or driver does not expose direct display support.
