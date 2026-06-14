@@ -8,6 +8,7 @@ set(LAMBDA_CORE_SOURCES
   System/Notifications.cpp
   System/PortalSettings.cpp
   System/StatusNotifierWatcher.cpp
+  System/UDisks2.cpp
   System/UPower.cpp
 )
 

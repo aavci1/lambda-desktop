@@ -66,6 +66,10 @@ struct ByteArray {
   std::vector<std::uint8_t> values;
 };
 
+struct ByteArrayArray {
+  std::vector<ByteArray> values;
+};
+
 struct RgbColor {
   double red = 0.0;
   double green = 0.0;
@@ -101,7 +105,7 @@ private:
 using BasicValue = std::variant<bool, std::uint8_t, std::int32_t, std::uint32_t,
                                 std::int64_t, std::uint64_t, double, std::string,
                                 ObjectPath, ObjectPathArray, StringArray, ByteArray,
-                                RgbColor, EmptyVariantDictionary,
+                                ByteArrayArray, RgbColor, EmptyVariantDictionary,
                                 std::shared_ptr<VariantDictionary>, UnixFd>;
 
 struct VariantValue {
@@ -174,6 +178,7 @@ public:
   [[nodiscard]] ObjectPathArray readObjectPathArray();
   [[nodiscard]] StringArray readStringArray();
   [[nodiscard]] ByteArray readByteArray();
+  [[nodiscard]] ByteArrayArray readByteArrayArray();
   [[nodiscard]] RgbColor readRgbColor();
   [[nodiscard]] UnixFd readUnixFd();
   [[nodiscard]] BasicValue readBasic(std::string_view signature);

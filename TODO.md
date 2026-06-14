@@ -26,6 +26,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-027 | Feature | Complete SVC-9 NetworkManager connectivity integration | N/A | P0.5 |
 | TODO-028 | Feature | Complete SVC-10 BlueZ Bluetooth integration | N/A | P0.5 |
 | TODO-029 | Feature | Complete SVC-12 MPRIS media integration | N/A | P0.5 |
+| TODO-030 | Feature | Complete SVC-14 udisks2 removable-volume integration | N/A | P0.5 |
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -158,6 +159,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add NetworkManager D-Bus value shapes: object-path arrays, byte arrays, byte scalars, and fixture coverage through the first NetworkManager client.
 - [x] [Auto] Add BlueZ ObjectManager D-Bus shape support for managed-object dictionaries (`a{oa{sa{sv}}}`) and fixture coverage through the first BlueZ client.
 - [x] [Auto] Add nested `a{sv}` variant-property support for MPRIS metadata and fixture coverage through the first MPRIS client.
+- [x] [Auto] Add byte-array-array (`aay`) support for UDisks2 mount points and fixture coverage through the first UDisks2 client.
 - [ ] [Auto] Add async method calls and pending-call cancellation.
 - [ ] [Auto] Add broader generic type support needed by remaining portals and services: arbitrary arrays beyond the service-specific shapes already in tree, arbitrary dictionaries, richer nested variants, and request option maps.
 - [ ] [Auto] Add object introspection and first-class `PropertiesChanged` helpers.
@@ -165,7 +167,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add deterministic fixture tests for the first NetworkManager client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first BlueZ client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first MPRIS client that consumes `lambda::dbus`.
-- [ ] [Auto] Add deterministic fixture tests for the remaining first service clients that consume `lambda::dbus` (udisks2).
+- [x] [Auto] Add deterministic fixture tests for the first UDisks2 client that consumes `lambda::dbus`.
 - [ ] [Auto + Manual] Wire D-Bus fd pumping into the compositor/service runtime paths that will host SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
 
 ## TODO-021: Complete SVC-2 libseat seat/session integration
@@ -273,3 +275,13 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Implement player selection policy for multiple players, including active/playing precedence, stale-player pruning, and per-player capability gating.
 - [ ] [Auto] Add richer metadata handling: art URL/image cache, track length/position progress, album/artist lists, desktop-entry icon lookup, and TrackList support where present.
 - [ ] [Manual] Validate against real MPRIS players such as browser media, VLC, Spotify, or mpv: player appears, metadata updates, media keys control the expected player, and unsupported controls stay disabled.
+
+## TODO-030: Complete SVC-14 udisks2 removable-volume integration
+
+- [x] [Auto] Add a basic `lambda::system::UDisks2Client` on top of `lambda::dbus` for ObjectManager `GetManagedObjects`, drive snapshots, visible filesystem volume snapshots, UDisks byte-array path decoding, mounted mount-point decoding, `Filesystem.Mount`, `Filesystem.Unmount`, and `Drive.Eject`.
+- [x] [Auto] Add deterministic fake-bus coverage for visible-volume filtering, drive/volume metadata, mount point decoding, volume-name formatting, mount/unmount calls, and eject calls.
+- [ ] [Auto + Manual] Wire UDisks2 ObjectManager and property signals into Files so removable volumes appear/disappear without polling.
+- [ ] [Auto + Manual] Surface removable volumes in the Files sidebar, with open, mount, unmount, eject, and error states.
+- [ ] [Auto] Add support for encrypted volumes, locked/unlocked state, mount options, busy-device errors, job progress, and safe retry/cancel messaging.
+- [ ] [Auto + Manual] Decide and implement optional auto-mount policy, respecting user config and avoiding surprise writes.
+- [ ] [Manual] Validate against the real system bus: insert USB media, mount from Files, open files, unmount/eject safely, remove media, and confirm system/internal volumes are hidden unless explicitly requested.

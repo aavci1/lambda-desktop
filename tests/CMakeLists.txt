@@ -73,6 +73,7 @@ set(_lambda_test_sources
   TerminalPtySmokeTests.cpp
   TextInputScrollTests.cpp
   ThemeReactivityTests.cpp
+  UDisks2Tests.cpp
   UPowerTests.cpp
   WaylandScrollAccumulatorTests.cpp
 )

@@ -103,6 +103,15 @@ void appendByteArray(sd_bus_message* message, ByteArray const& value) {
   throwIfFailed(sd_bus_message_close_container(message), "close D-Bus byte array");
 }
 
+void appendByteArrayArray(sd_bus_message* message, ByteArrayArray const& value) {
+  throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, "ay"),
+                "open D-Bus byte array array");
+  for (auto const& item : value.values) {
+    appendByteArray(message, item);
+  }
+  throwIfFailed(sd_bus_message_close_container(message), "close D-Bus byte array array");
+}
+
 void appendRgbColor(sd_bus_message* message, RgbColor const& value) {
   throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_STRUCT, "ddd"),
                 "open D-Bus RGB tuple");
@@ -149,6 +158,9 @@ void appendValue(sd_bus_message* message, BasicValue const& value) {
           return 0;
         } else if constexpr (std::is_same_v<T, ByteArray>) {
           appendByteArray(message, v);
+          return 0;
+        } else if constexpr (std::is_same_v<T, ByteArrayArray>) {
+          appendByteArrayArray(message, v);
           return 0;
         } else if constexpr (std::is_same_v<T, RgbColor>) {
           appendRgbColor(message, v);
@@ -309,6 +321,17 @@ ByteArray readByteArrayFrom(sd_bus_message* message) {
   return array;
 }
 
+ByteArrayArray readByteArrayArrayFrom(sd_bus_message* message) {
+  ByteArrayArray array;
+  throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_ARRAY, "ay"),
+                "enter D-Bus byte array array");
+  while (sd_bus_message_at_end(message, 0) == 0) {
+    array.values.push_back(readByteArrayFrom(message));
+  }
+  throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus byte array array");
+  return array;
+}
+
 RgbColor readRgbColorFrom(sd_bus_message* message) {
   RgbColor color;
   throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_STRUCT, "ddd"),
@@ -329,6 +352,9 @@ BasicValue readValueFromSignature(sd_bus_message* message, std::string_view sign
   }
   if (signature == "ay") {
     return readByteArrayFrom(message);
+  }
+  if (signature == "aay") {
+    return readByteArrayArrayFrom(message);
   }
   if (signature == "a{sv}") {
     return std::make_shared<VariantDictionary>(readVariantDictionaryFrom(message));
@@ -425,8 +451,8 @@ std::optional<BasicValue> readOptionalVariantFrom(sd_bus_message* message) {
   bool const supported = signature == "b" || signature == "y" || signature == "i" ||
                          signature == "u" || signature == "x" || signature == "t" ||
                          signature == "d" || signature == "s" || signature == "o" ||
-                         signature == "as" || signature == "ay" || signature == "a{sv}" ||
-                         signature == "(ddd)";
+                         signature == "as" || signature == "ay" || signature == "aay" ||
+                         signature == "a{sv}" || signature == "(ddd)";
   if (!supported) {
     throwIfFailed(sd_bus_message_skip(message, "v"), "skip unsupported D-Bus variant");
     return std::nullopt;
@@ -762,6 +788,8 @@ std::string signatureFor(BasicValue const& value) {
           return "as";
         } else if constexpr (std::is_same_v<T, ByteArray>) {
           return "ay";
+        } else if constexpr (std::is_same_v<T, ByteArrayArray>) {
+          return "aay";
         } else if constexpr (std::is_same_v<T, RgbColor>) {
           return "(ddd)";
         } else if constexpr (std::is_same_v<T, EmptyVariantDictionary>) {
@@ -970,6 +998,10 @@ StringArray Message::readStringArray() {
 
 ByteArray Message::readByteArray() {
   return std::get<ByteArray>(readBasic("ay"));
+}
+
+ByteArrayArray Message::readByteArrayArray() {
+  return std::get<ByteArrayArray>(readBasic("aay"));
 }
 
 RgbColor Message::readRgbColor() {

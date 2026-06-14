@@ -24,7 +24,7 @@ sudo pacman -S --needed \
   wayland wayland-protocols libxkbcommon \
   vulkan-headers vulkan-icd-loader vulkan-tools glslang \
   mesa libdrm libinput libseat systemd-libs xdg-desktop-portal libnotify \
-  networkmanager bluez bluez-utils upower \
+  networkmanager bluez bluez-utils upower udisks2 \
   freetype2 fontconfig harfbuzz zlib
 ```
 
@@ -199,6 +199,18 @@ gdbus call --system \
   --dest org.freedesktop.UPower \
   --object-path /org/freedesktop/UPower \
   --method org.freedesktop.UPower.GetDisplayDevice
+```
+
+## Removable Volumes
+
+UDisks2 removable-volume state is read from the system bus. For development, confirm the service is visible with:
+
+```sh
+udisksctl status
+gdbus call --system \
+  --dest org.freedesktop.UDisks2 \
+  --object-path /org/freedesktop/UDisks2 \
+  --method org.freedesktop.DBus.ObjectManager.GetManagedObjects
 ```
 
 ## Common Failures
