@@ -1296,8 +1296,17 @@ void KmsApplication::releaseDrmMasterForVt(bool acknowledge) {
 }
 
 void KmsApplication::acquireDrmMasterForVt(bool acknowledge) {
+  auto noteAcquireAck = [&] {
+    if (ttyFd_ >= 0 && acknowledge && vtProcessMode_) vtAcquireAckPending_ = true;
+  };
+
+  noteAcquireAck();
+  if (seat_ && !seatEnabled_) {
+    debugLog("deferring VT acquire until libseat enables seat");
+    return;
+  }
+
   if (vtForeground_) {
-    vtAcquireAckPending_ = ttyFd_ >= 0 && acknowledge && vtProcessMode_;
     acknowledgePendingVtAcquire();
     return;
   }
@@ -1333,7 +1342,6 @@ void KmsApplication::acquireDrmMasterForVt(bool acknowledge) {
       debugLog("tcsetattr compositor mode after VT acquire failed: %s", std::strerror(errno));
     }
   }
-  vtAcquireAckPending_ = ttyFd_ >= 0 && acknowledge && vtProcessMode_;
   vtForeground_ = true;
   resumeInputAfterVtSwitch();
   for (KmsWindow* window : windows_) {
