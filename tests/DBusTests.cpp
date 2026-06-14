@@ -114,6 +114,20 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   });
   CHECK(peerReply.valid());
 
+  auto introspectReply = client.call(lambda::dbus::MethodCall{
+      .destination = serviceName,
+      .path = "/org/lambda/DBusTest",
+      .interface = "org.freedesktop.DBus.Introspectable",
+      .member = "Introspect",
+  });
+  std::string const xml = introspectReply.readString();
+  CHECK(xml.find("<interface name=\"org.freedesktop.DBus.Introspectable\">") != std::string::npos);
+  CHECK(xml.find("<interface name=\"org.freedesktop.DBus.Properties\">") != std::string::npos);
+  CHECK(xml.find("<interface name=\"org.lambda.DBusTest\">") != std::string::npos);
+  CHECK(xml.find("<method name=\"Echo\"/>") != std::string::npos);
+  CHECK(xml.find("<method name=\"GetWriteFd\"/>") != std::string::npos);
+  CHECK(xml.find("<property name=\"Mode\" type=\"s\" access=\"readwrite\"/>") != std::string::npos);
+
   auto echoReply = client.call(lambda::dbus::MethodCall{
       .destination = serviceName,
       .path = "/org/lambda/DBusTest",

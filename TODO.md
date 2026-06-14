@@ -160,9 +160,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add BlueZ ObjectManager D-Bus shape support for managed-object dictionaries (`a{oa{sa{sv}}}`) and fixture coverage through the first BlueZ client.
 - [x] [Auto] Add nested `a{sv}` variant-property support for MPRIS metadata and fixture coverage through the first MPRIS client.
 - [x] [Auto] Add byte-array-array (`aay`) support for UDisks2 mount points and fixture coverage through the first UDisks2 client.
+- [x] [Auto] Add basic `org.freedesktop.DBus.Introspectable.Introspect` XML for exported objects, including standard interfaces, exported method names, and property signatures/access.
 - [ ] [Auto] Add async method calls and pending-call cancellation.
 - [ ] [Auto] Add broader generic type support needed by remaining portals and services: arbitrary arrays beyond the service-specific shapes already in tree, arbitrary dictionaries, richer nested variants, and request option maps.
-- [ ] [Auto] Add object introspection and first-class `PropertiesChanged` helpers.
+- [ ] [Auto] Add first-class `PropertiesChanged` helpers for exported objects and service clients.
 - [x] [Auto] Add deterministic fixture tests for the first UPower client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first NetworkManager client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first BlueZ client that consumes `lambda::dbus`.

@@ -586,6 +586,99 @@ struct ExportState {
   ObjectDefinition definition;
 };
 
+std::string xmlEscape(std::string_view text) {
+  std::string escaped;
+  escaped.reserve(text.size());
+  for (char const ch : text) {
+    switch (ch) {
+    case '&':
+      escaped += "&amp;";
+      break;
+    case '<':
+      escaped += "&lt;";
+      break;
+    case '>':
+      escaped += "&gt;";
+      break;
+    case '"':
+      escaped += "&quot;";
+      break;
+    case '\'':
+      escaped += "&apos;";
+      break;
+    default:
+      escaped.push_back(ch);
+      break;
+    }
+  }
+  return escaped;
+}
+
+void addUniqueInterface(std::vector<std::string>& interfaces, std::string const& name) {
+  if (name.empty()) return;
+  for (auto const& existing : interfaces) {
+    if (existing == name) return;
+  }
+  interfaces.push_back(name);
+}
+
+std::string introspectionXml(ExportState const& state) {
+  std::vector<std::string> interfaces;
+  for (auto const& method : state.definition.methods) {
+    addUniqueInterface(interfaces, method.interface);
+  }
+  for (auto const& property : state.definition.properties) {
+    addUniqueInterface(interfaces, property.interface);
+  }
+
+  std::string xml =
+      "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\"\n"
+      " \"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n"
+      "<node>\n"
+      "  <interface name=\"org.freedesktop.DBus.Peer\">\n"
+      "    <method name=\"Ping\"/>\n"
+      "  </interface>\n"
+      "  <interface name=\"org.freedesktop.DBus.Introspectable\">\n"
+      "    <method name=\"Introspect\">\n"
+      "      <arg name=\"xml_data\" type=\"s\" direction=\"out\"/>\n"
+      "    </method>\n"
+      "  </interface>\n"
+      "  <interface name=\"org.freedesktop.DBus.Properties\">\n"
+      "    <method name=\"Get\">\n"
+      "      <arg name=\"interface_name\" type=\"s\" direction=\"in\"/>\n"
+      "      <arg name=\"property_name\" type=\"s\" direction=\"in\"/>\n"
+      "      <arg name=\"value\" type=\"v\" direction=\"out\"/>\n"
+      "    </method>\n"
+      "    <method name=\"GetAll\">\n"
+      "      <arg name=\"interface_name\" type=\"s\" direction=\"in\"/>\n"
+      "      <arg name=\"values\" type=\"a{sv}\" direction=\"out\"/>\n"
+      "    </method>\n"
+      "    <method name=\"Set\">\n"
+      "      <arg name=\"interface_name\" type=\"s\" direction=\"in\"/>\n"
+      "      <arg name=\"property_name\" type=\"s\" direction=\"in\"/>\n"
+      "      <arg name=\"value\" type=\"v\" direction=\"in\"/>\n"
+      "    </method>\n"
+      "  </interface>\n";
+
+  for (auto const& interface : interfaces) {
+    xml += "  <interface name=\"" + xmlEscape(interface) + "\">\n";
+    for (auto const& method : state.definition.methods) {
+      if (method.interface != interface) continue;
+      xml += "    <method name=\"" + xmlEscape(method.member) + "\"/>\n";
+    }
+    for (auto const& property : state.definition.properties) {
+      if (property.interface != interface) continue;
+      xml += "    <property name=\"" + xmlEscape(property.name) +
+             "\" type=\"" + xmlEscape(signatureFor(property.value)) +
+             "\" access=\"" + (property.writable ? "readwrite" : "read") + "\"/>\n";
+    }
+    xml += "  </interface>\n";
+  }
+
+  xml += "</node>\n";
+  return xml;
+}
+
 ExportedProperty* findProperty(ExportState& state, std::string_view interface, std::string_view name) {
   for (auto& property : state.definition.properties) {
     if (property.interface == interface && property.name == name) {
@@ -706,6 +799,11 @@ int exportThunk(sd_bus_message* message, void* userdata, sd_bus_error*) {
   }
 
   try {
+    if (std::string_view(interface) == "org.freedesktop.DBus.Introspectable" &&
+        std::string_view(member) == "Introspect") {
+      return replyWithValues(message, {BasicValue(introspectionXml(*state))});
+    }
+
     if (std::string_view(interface) == "org.freedesktop.DBus.Properties") {
       if (std::string_view(member) == "Get") {
         return handlePropertiesGet(message, *state);
