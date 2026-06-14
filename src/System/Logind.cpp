@@ -1,5 +1,7 @@
 #include <Lambda/System/Logind.hpp>
 
+#include <unistd.h>
+
 #include <utility>
 
 namespace lambda::system {
@@ -48,6 +50,21 @@ InhibitorLock LogindClient::inhibit(std::string what, std::string who, std::stri
   return InhibitorLock(reply.readUnixFd());
 }
 
+std::string LogindClient::sessionPathForPid(std::uint32_t pid) {
+  dbus::Message reply = bus_.call(dbus::MethodCall{
+      .destination = kLogin1Service,
+      .path = kManagerPath,
+      .interface = kManagerInterface,
+      .member = "GetSessionByPID",
+      .arguments = {pid},
+  });
+  return reply.readObjectPath().value;
+}
+
+std::string LogindClient::currentSessionPath() {
+  return sessionPathForPid(static_cast<std::uint32_t>(getpid()));
+}
+
 dbus::Slot LogindClient::watchPrepareForSleep(std::function<void(bool)> handler) {
   return bus_.matchSignal(
       dbus::SignalMatch{
@@ -61,6 +78,14 @@ dbus::Slot LogindClient::watchPrepareForSleep(std::function<void(bool)> handler)
           handler(message.readBool());
         }
       });
+}
+
+dbus::Slot LogindClient::watchCurrentSessionLock(std::function<void()> handler) {
+  return watchSessionLock(currentSessionPath(), std::move(handler));
+}
+
+dbus::Slot LogindClient::watchCurrentSessionUnlock(std::function<void()> handler) {
+  return watchSessionUnlock(currentSessionPath(), std::move(handler));
 }
 
 dbus::Slot LogindClient::watchSessionLock(std::string const& sessionPath,

@@ -57,6 +57,16 @@ struct PowerCall {
 
 using InhibitRequest = std::tuple<std::string, std::string, std::string, std::string>;
 
+template <typename Callback>
+class ScopeExit {
+public:
+  explicit ScopeExit(Callback callback) : callback_(std::move(callback)) {}
+  ~ScopeExit() { callback_(); }
+
+private:
+  Callback callback_;
+};
+
 } // namespace
 
 TEST_CASE("Logind support is compile-time declared") {
@@ -82,6 +92,7 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
   std::mutex recordsMutex;
   std::vector<PowerCall> powerCalls;
   std::vector<InhibitRequest> inhibitRequests;
+  std::vector<std::uint32_t> sessionPathRequests;
 
   auto recordPowerCall = [&](std::string member) {
     return [&, member = std::move(member)](lambda::dbus::Message& message) {
@@ -135,6 +146,20 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
                     };
                   },
               },
+              lambda::dbus::ExportedMethod{
+                  .interface = kManagerInterface,
+                  .member = "GetSessionByPID",
+                  .handler = [&](lambda::dbus::Message& message) {
+                    std::uint32_t const pid = message.readUint32();
+                    {
+                      std::lock_guard guard(recordsMutex);
+                      sessionPathRequests.push_back(pid);
+                    }
+                    return lambda::dbus::MethodReply{
+                        .values = {lambda::dbus::ObjectPath{kSessionPath}},
+                    };
+                  },
+              },
           },
       });
 
@@ -142,6 +167,12 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
   std::thread serviceThread([&] {
     while (running.load()) {
       pollBus(service, 25);
+    }
+  });
+  ScopeExit stopServiceThread([&] {
+    running = false;
+    if (serviceThread.joinable()) {
+      serviceThread.join();
     }
   });
 
@@ -185,9 +216,20 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
     }
   }
 
+  CHECK(client.sessionPathForPid(4242) == kSessionPath);
+  CHECK(client.currentSessionPath() == kSessionPath);
+  {
+    std::lock_guard guard(recordsMutex);
+    REQUIRE(sessionPathRequests.size() == 2);
+    CHECK(sessionPathRequests[0] == 4242);
+    CHECK(sessionPathRequests[1] == static_cast<std::uint32_t>(getpid()));
+  }
+
   bool preparingForSleep = false;
   int lockSignals = 0;
   int unlockSignals = 0;
+  int currentLockSignals = 0;
+  int currentUnlockSignals = 0;
   auto sleepSlot = client.watchPrepareForSleep([&](bool preparing) {
     preparingForSleep = preparing;
   });
@@ -197,6 +239,12 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
   auto unlockSlot = client.watchSessionUnlock(kSessionPath, [&] {
     ++unlockSignals;
   });
+  auto currentLockSlot = client.watchCurrentSessionLock([&] {
+    ++currentLockSignals;
+  });
+  auto currentUnlockSlot = client.watchCurrentSessionUnlock([&] {
+    ++currentUnlockSignals;
+  });
 
   service.emitSignal(kManagerPath, kManagerInterface, "PrepareForSleep", {true});
   service.emitSignal(kSessionPath, kSessionInterface, "Lock");
@@ -204,11 +252,11 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
   service.flush();
 
   CHECK(pumpUntil(client.bus(),
-                  [&] { return preparingForSleep && lockSignals == 1 && unlockSignals == 1; },
+                  [&] {
+                    return preparingForSleep && lockSignals == 1 && unlockSignals == 1 &&
+                           currentLockSignals == 1 && currentUnlockSignals == 1;
+                  },
                   std::chrono::milliseconds(500)));
-
-  running = false;
-  serviceThread.join();
 }
 
 #endif

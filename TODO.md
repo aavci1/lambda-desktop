@@ -146,6 +146,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add a Linux `lambda::dbus` backend using `sd-bus` with session/system/custom-address connections, sync method calls, signal subscription, simple property get/set, object export, signal emission, and event-loop fd pumping hooks.
 - [x] [Auto] Add focused integration coverage for `Peer.Ping`, exported method calls, exported property get/set, and signal delivery against a private real bus when the local environment allows `dbus-daemon` to bind a socket.
 - [x] [Auto] Add Unix-fd basic value support and focused fd round-trip coverage for fd-returning service APIs such as logind inhibitors.
+- [x] [Auto] Cover object-path reply plumbing through logind `GetSessionByPID` fixture tests.
 - [x] [Auto] Add the first richer D-Bus shapes needed by SVC-4 Settings: string arrays, RGB tuples, variant replies/signals, and the `a{sa{sv}}` namespaced variant dictionary.
 - [x] [Auto] Add notification-service D-Bus helpers for empty `a{sv}` hints dictionaries and explicit skipping of currently ignored dictionaries.
 - [ ] [Auto] Add async method calls and pending-call cancellation.
@@ -170,7 +171,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 - [x] [Auto] Add a basic `lambda::system::LogindClient` on top of `lambda::dbus` for `Suspend`, `Hibernate`, `PowerOff`, `Reboot`, fd-based `Inhibit`, `PrepareForSleep`, and session `Lock`/`Unlock` signals.
 - [x] [Auto] Add deterministic fake-bus coverage for logind power calls, inhibitor fd plumbing, sleep signal delivery, and session lock/unlock signal delivery.
-- [ ] [Auto] Discover the active logind session path instead of requiring callers to provide it manually.
+- [x] [Auto] Discover the active logind session path through `GetSessionByPID` instead of requiring callers to provide it manually, and add current-session lock/unlock watcher helpers.
 - [ ] [Auto + Manual] Wire logind session `Lock`/`Unlock` and `PrepareForSleep` into the lock app / Shell lock flow, including lock-before-sleep behavior.
 - [ ] [Auto + Manual] Wire `Suspend`, `Hibernate`, `PowerOff`, and `Reboot` into the Shell power/session menu.
 - [ ] [Auto + Manual] Hold delay inhibitors for `handle-power-key`, `handle-lid-switch`, and `handle-suspend-key`, then release them at the correct point in the lock/suspend flow.

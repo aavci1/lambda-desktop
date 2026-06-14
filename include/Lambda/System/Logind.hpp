@@ -6,6 +6,7 @@
 
 #include <Lambda/System/DBus.hpp>
 
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -48,7 +49,11 @@ public:
                                       std::string why,
                                       std::string mode);
 
+  [[nodiscard]] std::string sessionPathForPid(std::uint32_t pid);
+  [[nodiscard]] std::string currentSessionPath();
   [[nodiscard]] dbus::Slot watchPrepareForSleep(std::function<void(bool)> handler);
+  [[nodiscard]] dbus::Slot watchCurrentSessionLock(std::function<void()> handler);
+  [[nodiscard]] dbus::Slot watchCurrentSessionUnlock(std::function<void()> handler);
   [[nodiscard]] dbus::Slot watchSessionLock(std::string const& sessionPath,
                                             std::function<void()> handler);
   [[nodiscard]] dbus::Slot watchSessionUnlock(std::string const& sessionPath,
