@@ -1,4 +1,5 @@
 #include "Compositor/Input/VtSwitchShortcut.hpp"
+#include "Platform/Linux/Common/VtSwitch.hpp"
 
 #include <doctest/doctest.h>
 
@@ -134,4 +135,34 @@ TEST_CASE("Arrow keys without Alt are not VT switch shortcuts") {
   auto const right = lambda::compositor::handleVtSwitchShortcut(state, key(KEY_RIGHT, true));
   CHECK_FALSE(right.consume);
   CHECK(right.adjacentDirection == 0);
+}
+
+TEST_CASE("Adjacent VT selection follows the kernel allocated-session mask") {
+  using lambda::linux_platform::adjacentAllocatedVtSession;
+  using lambda::linux_platform::vtStateMaskContainsSession;
+
+  std::uint16_t const allocated =
+      static_cast<std::uint16_t>((1u << 1) | (1u << 2) | (1u << 7) | (1u << 12));
+
+  CHECK(vtStateMaskContainsSession(allocated, 1));
+  CHECK(vtStateMaskContainsSession(allocated, 12));
+  CHECK_FALSE(vtStateMaskContainsSession(allocated, 3));
+  CHECK_FALSE(vtStateMaskContainsSession(allocated, 0));
+
+  CHECK(adjacentAllocatedVtSession(2, allocated, 1) == 7);
+  CHECK(adjacentAllocatedVtSession(7, allocated, -1) == 2);
+  CHECK(adjacentAllocatedVtSession(12, allocated, 1) == 1);
+  CHECK(adjacentAllocatedVtSession(1, allocated, -1) == 12);
+}
+
+TEST_CASE("Adjacent VT selection reports no target when only the current VT is allocated") {
+  using lambda::linux_platform::adjacentAllocatedVtSession;
+  using lambda::linux_platform::adjacentNumberedVtSession;
+
+  std::uint16_t const onlyCurrent = static_cast<std::uint16_t>(1u << 4);
+  CHECK_FALSE(adjacentAllocatedVtSession(4, onlyCurrent, 1).has_value());
+  CHECK_FALSE(adjacentAllocatedVtSession(4, onlyCurrent, -1).has_value());
+
+  CHECK(adjacentNumberedVtSession(4, 1) == 5);
+  CHECK(adjacentNumberedVtSession(1, -1) == 15);
 }

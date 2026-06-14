@@ -1,6 +1,7 @@
 #include "Platform/Linux/KmsPlatform.hpp"
 
 #include "Graphics/Vulkan/VulkanCheck.hpp"
+#include "Platform/Linux/Common/VtSwitch.hpp"
 #include "UI/Platform/WindowFactory.hpp"
 
 #include <Lambda/Debug/DebugFlags.hpp>
@@ -34,6 +35,7 @@ extern "C" {
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <system_error>
@@ -1441,36 +1443,57 @@ bool KmsApplication::switchSession(int session) {
   return false;
 }
 
-int KmsApplication::activeSessionForSwitch() const {
-  if (ttyFd_ >= 0) {
-    vt_stat state{};
-    if (ioctl(ttyFd_, VT_GETSTATE, &state) == 0 && state.v_active > 0) {
-      return state.v_active;
-    }
-  }
-  int const active = readActiveVt();
-  return active > 0 ? active : ourVt_;
-}
-
 bool KmsApplication::switchAdjacentSession(int direction) {
   if (direction == 0) {
     errno = EINVAL;
     return false;
   }
 
-  int const current = activeSessionForSwitch();
+  int current = 0;
+  std::uint16_t allocatedMask = 0;
+  bool haveAllocatedMask = false;
+  if (ttyFd_ >= 0) {
+    vt_stat state{};
+    if (ioctl(ttyFd_, VT_GETSTATE, &state) == 0) {
+      current = state.v_active;
+      allocatedMask = state.v_state;
+      haveAllocatedMask = true;
+    }
+  }
+  if (current <= 0) {
+    int const active = readActiveVt();
+    current = active > 0 ? active : ourVt_;
+  }
   if (current <= 0) {
     errno = ENODEV;
     return false;
   }
 
-  constexpr int kMinShortcutSession = 1;
-  constexpr int kMaxShortcutSession = 12;
-  int target = current + (direction < 0 ? -1 : 1);
-  if (target < kMinShortcutSession) target = kMaxShortcutSession;
-  if (target > kMaxShortcutSession) target = kMinShortcutSession;
-  debugLog("requested adjacent VT switch current=VT%d target=VT%d direction=%d", current, target, direction);
-  return switchSession(target);
+  std::optional<int> target;
+  if (haveAllocatedMask) {
+    target = linux_platform::adjacentAllocatedVtSession(current, allocatedMask, direction);
+    if (!target) {
+      errno = ENODEV;
+      debugLog("no adjacent allocated VT for current=VT%d direction=%d allocated=0x%04x",
+               current,
+               direction,
+               static_cast<unsigned int>(allocatedMask));
+      return false;
+    }
+  } else {
+    target = linux_platform::adjacentNumberedVtSession(current, direction);
+  }
+  if (!target) {
+    errno = ENODEV;
+    return false;
+  }
+
+  debugLog("requested adjacent VT switch current=VT%d target=VT%d direction=%d allocated=0x%04x",
+           current,
+           *target,
+           direction,
+           static_cast<unsigned int>(allocatedMask));
+  return switchSession(*target);
 }
 
 void KmsApplication::pollActiveVt() {
