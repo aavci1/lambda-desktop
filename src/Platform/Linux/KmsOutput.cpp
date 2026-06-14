@@ -4275,6 +4275,12 @@ bool KmsDevice::switchSession(int session) {
   return false;
 }
 
+bool KmsDevice::switchAdjacentSession(int direction) {
+  if (impl_ && impl_->app_) return impl_->app_->switchAdjacentSession(direction);
+  errno = ENODEV;
+  return false;
+}
+
 bool KmsDevice::pollEvents(int timeoutMs, std::span<int const> extraFds) {
   return impl_ && impl_->app_ ? impl_->app_->pollInputAndWake(timeoutMs, extraFds) : false;
 }

@@ -17,11 +17,14 @@ struct VtSwitchShortcutState {
   bool leftAltDown = false;
   bool rightAltDown = false;
   std::array<bool, 13> consumedSessions{};
+  bool consumedPreviousSession = false;
+  bool consumedNextSession = false;
 };
 
 struct VtSwitchShortcutResult {
   bool consume = false;
   std::optional<int> targetSession;
+  int adjacentDirection = 0;
 };
 
 [[nodiscard]] inline std::optional<int> vtSessionForFunctionKey(std::uint32_t key) noexcept {
@@ -58,6 +61,18 @@ struct VtSwitchShortcutResult {
   return state.leftAltDown || state.rightAltDown;
 }
 
+[[nodiscard]] inline int vtAdjacentDirectionForArrowKey(std::uint32_t key) noexcept {
+  if (key == KEY_LEFT) return -1;
+  if (key == KEY_RIGHT) return 1;
+  return 0;
+}
+
+[[nodiscard]] inline VtSwitchShortcutResult consumedVtShortcutResult() noexcept {
+  VtSwitchShortcutResult result;
+  result.consume = true;
+  return result;
+}
+
 [[nodiscard]] inline VtSwitchShortcutResult handleVtSwitchShortcut(VtSwitchShortcutState& state,
                                                                    platform::KmsInputEvent const& event) {
   if (event.kind == platform::KmsInputEvent::Kind::KeyboardReset) {
@@ -83,6 +98,25 @@ struct VtSwitchShortcutResult {
     return {};
   }
 
+  int const adjacentDirection = vtAdjacentDirectionForArrowKey(event.key);
+  if (adjacentDirection != 0) {
+    bool& consumed = adjacentDirection < 0 ? state.consumedPreviousSession : state.consumedNextSession;
+    if (!event.pressed) {
+      if (!consumed) return {};
+      consumed = false;
+      return consumedVtShortcutResult();
+    }
+
+    if (consumed) return consumedVtShortcutResult();
+    if (!vtSwitchAltDown(state)) return {};
+
+    consumed = true;
+    VtSwitchShortcutResult result;
+    result.consume = true;
+    result.adjacentDirection = adjacentDirection;
+    return result;
+  }
+
   auto const target = vtSessionForFunctionKey(event.key);
   if (!target) return {};
 
@@ -90,20 +124,17 @@ struct VtSwitchShortcutResult {
   if (!event.pressed) {
     if (!consumed) return {};
     consumed = false;
-    VtSwitchShortcutResult result;
-    result.consume = true;
-    return result;
+    return consumedVtShortcutResult();
   }
 
-  if (consumed) {
-    VtSwitchShortcutResult result;
-    result.consume = true;
-    return result;
-  }
+  if (consumed) return consumedVtShortcutResult();
   if (!vtSwitchCtrlDown(state) || !vtSwitchAltDown(state)) return {};
 
   consumed = true;
-  return {.consume = true, .targetSession = *target};
+  VtSwitchShortcutResult result;
+  result.consume = true;
+  result.targetSession = *target;
+  return result;
 }
 
 } // namespace lambda::compositor

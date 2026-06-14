@@ -186,6 +186,7 @@ public:
   void emitInputEventForDiagnostics(KmsInputEvent const& event);
   void acknowledgeVtAcquire();
   bool switchSession(int session);
+  bool switchAdjacentSession(int direction);
 
   /// Services signal, VT-switch, input, wake, and hotplug events owned by the KMS device.
   bool pollEvents(int timeoutMs = 0, std::span<int const> extraFds = {});

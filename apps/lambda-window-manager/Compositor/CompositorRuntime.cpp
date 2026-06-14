@@ -1105,6 +1105,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                          *vtSwitch.targetSession,
                          std::strerror(errno));
           }
+        } else if (vtSwitch.adjacentDirection != 0) {
+          if (!device->switchAdjacentSession(vtSwitch.adjacentDirection)) {
+            std::fprintf(stderr,
+                         "lambda-window-manager: failed to switch to adjacent VT direction %d: %s\n",
+                         vtSwitch.adjacentDirection,
+                         std::strerror(errno));
+          }
         }
         if (vtSwitch.consume) return;
         if (idleBlanked) {

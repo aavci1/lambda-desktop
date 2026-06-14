@@ -95,3 +95,43 @@ TEST_CASE("VT switch shortcut tracks left and right modifiers independently") {
   REQUIRE(press.targetSession);
   CHECK(*press.targetSession == 4);
 }
+
+TEST_CASE("Alt arrow keys request adjacent VT switches") {
+  lambda::compositor::VtSwitchShortcutState state;
+
+  CHECK_FALSE(lambda::compositor::handleVtSwitchShortcut(state, key(KEY_LEFTALT, true)).consume);
+
+  auto const previous = lambda::compositor::handleVtSwitchShortcut(state, key(KEY_LEFT, true));
+  REQUIRE(previous.consume);
+  CHECK_FALSE(previous.targetSession.has_value());
+  CHECK(previous.adjacentDirection == -1);
+
+  auto const previousRepeat = lambda::compositor::handleVtSwitchShortcut(state, key(KEY_LEFT, true));
+  CHECK(previousRepeat.consume);
+  CHECK(previousRepeat.adjacentDirection == 0);
+
+  auto const previousRelease = lambda::compositor::handleVtSwitchShortcut(state, key(KEY_LEFT, false));
+  CHECK(previousRelease.consume);
+  CHECK(previousRelease.adjacentDirection == 0);
+
+  auto const next = lambda::compositor::handleVtSwitchShortcut(state, key(KEY_RIGHT, true));
+  REQUIRE(next.consume);
+  CHECK_FALSE(next.targetSession.has_value());
+  CHECK(next.adjacentDirection == 1);
+
+  auto const nextRelease = lambda::compositor::handleVtSwitchShortcut(state, key(KEY_RIGHT, false));
+  CHECK(nextRelease.consume);
+  CHECK(nextRelease.adjacentDirection == 0);
+}
+
+TEST_CASE("Arrow keys without Alt are not VT switch shortcuts") {
+  lambda::compositor::VtSwitchShortcutState state;
+
+  auto const left = lambda::compositor::handleVtSwitchShortcut(state, key(KEY_LEFT, true));
+  CHECK_FALSE(left.consume);
+  CHECK(left.adjacentDirection == 0);
+
+  auto const right = lambda::compositor::handleVtSwitchShortcut(state, key(KEY_RIGHT, true));
+  CHECK_FALSE(right.consume);
+  CHECK(right.adjacentDirection == 0);
+}

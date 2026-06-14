@@ -124,7 +124,9 @@ private:
   void releaseDrmMasterForVt(bool acknowledge);
   void acquireDrmMasterForVt(bool acknowledge);
   void acknowledgePendingVtAcquire();
+  int activeSessionForSwitch() const;
   bool switchSession(int session);
+  bool switchAdjacentSession(int direction);
   KmsWindow* windowForConnector(std::uint32_t connectorId) const;
   Point windowOrigin(KmsWindow const* window) const;
   Point clampGlobalPointer(Point position) const;

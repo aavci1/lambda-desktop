@@ -1406,6 +1406,38 @@ bool KmsApplication::switchSession(int session) {
   return false;
 }
 
+int KmsApplication::activeSessionForSwitch() const {
+  if (ttyFd_ >= 0) {
+    vt_stat state{};
+    if (ioctl(ttyFd_, VT_GETSTATE, &state) == 0 && state.v_active > 0) {
+      return state.v_active;
+    }
+  }
+  int const active = readActiveVt();
+  return active > 0 ? active : ourVt_;
+}
+
+bool KmsApplication::switchAdjacentSession(int direction) {
+  if (direction == 0) {
+    errno = EINVAL;
+    return false;
+  }
+
+  int const current = activeSessionForSwitch();
+  if (current <= 0) {
+    errno = ENODEV;
+    return false;
+  }
+
+  constexpr int kMinShortcutSession = 1;
+  constexpr int kMaxShortcutSession = 12;
+  int target = current + (direction < 0 ? -1 : 1);
+  if (target < kMinShortcutSession) target = kMaxShortcutSession;
+  if (target > kMaxShortcutSession) target = kMinShortcutSession;
+  debugLog("requested adjacent VT switch current=VT%d target=VT%d direction=%d", current, target, direction);
+  return switchSession(target);
+}
+
 void KmsApplication::pollActiveVt() {
   if (ourVt_ <= 0) return;
   if (activeVtNotifyFd_ >= 0) return;

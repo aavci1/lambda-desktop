@@ -286,6 +286,7 @@ Current shortcuts:
 | `Super+Shift+4` | Select a screenshot region |
 | `Alt+PrintScreen`, `Alt+SysRq`, `Super+Shift+5` | Capture the active window |
 | `Ctrl+Alt+F1` ... `Ctrl+Alt+F12` | Switch to another VT/session |
+| `Alt+Left`, `Alt+Right` | Switch to the previous or next VT/session |
 | `Ctrl+Alt+Backspace` | Terminate the compositor |
 
 Mouse behavior:
