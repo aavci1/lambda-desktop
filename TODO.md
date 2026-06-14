@@ -16,6 +16,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-015 | Feature | Add a cross-window command registry and command palette | N/A | P2 |
 | TODO-016 | Bug | useAutoFocus cannot focus targets inside nested child components | Medium | P2 |
 | TODO-019 | Performance | Work through the frame-pacing improvement plan | High | P1 |
+| TODO-020 | Feature | Complete SVC-1 D-Bus capability details | N/A | P0.5 |
+| TODO-021 | Feature | Complete SVC-2 libseat seat/session integration | N/A | P0.5 |
+| TODO-022 | Feature | Complete SVC-3 logind power/session integration | N/A | P0.5 |
+| TODO-023 | Feature | Complete SVC-4 xdg-desktop-portal backend | N/A | P0.5 |
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -135,3 +139,51 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add and run remaining-gate audit helper: `scripts/audit-todo019-validation-gates.sh` reports input tools plus evdev/VT/macOS helpers are present, but KMS VT switching still needs a real TTY, `/dev/uinput` is still `crw------- root root`, noninteractive sudo still fails, live manual Wayland smoke is not currently attached to a compositor session, and macOS runtime validation still requires macOS.
 - [ ] [Manual] Complete remaining macOS runtime/visual verification for FP-14/FP-16 and latest Metal fixes: run `scripts/verify-macos-metal-editor-perf.sh` on macOS and compare backdrop-blur visuals.
 - [ ] [Auto] When all REV items, manual verification gaps, and macOS runtime checks are done, delete the plan document and this TODO item.
+
+## TODO-020: Complete SVC-1 D-Bus capability details
+
+- [x] [Auto] Add a Linux `lambda::dbus` backend using `sd-bus` with session/system/custom-address connections, sync method calls, signal subscription, simple property get/set, object export, signal emission, and event-loop fd pumping hooks.
+- [x] [Auto] Add focused integration coverage for `Peer.Ping`, exported method calls, exported property get/set, and signal delivery against a private real bus when the local environment allows `dbus-daemon` to bind a socket.
+- [x] [Auto] Add Unix-fd basic value support and focused fd round-trip coverage for fd-returning service APIs such as logind inhibitors.
+- [x] [Auto] Add the first richer D-Bus shapes needed by SVC-4 Settings: string arrays, RGB tuples, variant replies/signals, and the `a{sa{sv}}` namespaced variant dictionary.
+- [ ] [Auto] Add async method calls and pending-call cancellation.
+- [ ] [Auto] Add broader generic type support needed by remaining portals and services: object-path arrays, arbitrary arrays, arbitrary dictionaries, richer nested variants, and request option maps.
+- [ ] [Auto] Add object introspection, `GetAll`, and first-class `PropertiesChanged` helpers.
+- [ ] [Auto] Add deterministic fixture tests for the remaining first service clients that consume `lambda::dbus` (UPower, NetworkManager, BlueZ, udisks2).
+- [ ] [Auto + Manual] Wire D-Bus fd pumping into the compositor/service runtime paths that will host SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
+
+## TODO-021: Complete SVC-2 libseat seat/session integration
+
+- [x] [Auto] Add `libseat` build wiring for the KMS platform and `lambda-window-manager`.
+- [x] [Auto] Open a libseat seat at KMS startup when available, poll/dispatch the libseat fd, and keep direct-open fallback for environments where libseat is unavailable or cannot open a specific device.
+- [x] [Auto] Open DRM cards and libinput evdev devices through `libseat_open_device`, track returned device IDs, and close them through `libseat_close_device`.
+- [x] [Auto] Route `enable_seat`/`disable_seat` callbacks through the existing DRM-master release/reacquire and libinput suspend/resume path.
+- [ ] [Auto + Manual] Reopen all seat-managed DRM/input devices on `enable_seat` instead of relying on still-valid fds.
+- [ ] [Auto] Implement `libseat_switch_session` support for explicit VT/session switching.
+- [ ] [Manual] Validate `lambda-window-manager` starts as an unprivileged user inside a logind session with no manual `/dev/dri` or `/dev/input` permissions.
+- [ ] [Manual] Validate Ctrl-Alt-F<n> VT switching away and back releases/reacquires the GPU and resumes input without corruption.
+- [ ] [Auto + Manual] Decide when to remove or hard-disable direct device-open fallback after target-hardware libseat validation passes.
+
+## TODO-022: Complete SVC-3 logind power/session integration
+
+- [x] [Auto] Add a basic `lambda::system::LogindClient` on top of `lambda::dbus` for `Suspend`, `Hibernate`, `PowerOff`, `Reboot`, fd-based `Inhibit`, `PrepareForSleep`, and session `Lock`/`Unlock` signals.
+- [x] [Auto] Add deterministic fake-bus coverage for logind power calls, inhibitor fd plumbing, sleep signal delivery, and session lock/unlock signal delivery.
+- [ ] [Auto] Discover the active logind session path instead of requiring callers to provide it manually.
+- [ ] [Auto + Manual] Wire logind session `Lock`/`Unlock` and `PrepareForSleep` into the lock app / Shell lock flow, including lock-before-sleep behavior.
+- [ ] [Auto + Manual] Wire `Suspend`, `Hibernate`, `PowerOff`, and `Reboot` into the Shell power/session menu.
+- [ ] [Auto + Manual] Hold delay inhibitors for `handle-power-key`, `handle-lid-switch`, and `handle-suspend-key`, then release them at the correct point in the lock/suspend flow.
+- [ ] [Auto + Manual] Honor logind `IdleAction` together with WM-13 idle-notify and WM-14 DPMS behavior.
+- [ ] [Manual] Validate against the real system bus: `loginctl lock-session` locks, suspend/resume returns to the lock screen, lid close suspends after locking, and the power key opens the Shell power menu.
+
+## TODO-023: Complete SVC-4 xdg-desktop-portal backend
+
+- [x] [Auto] Add a Linux `lambda-portal` session-bus service target with D-Bus service metadata and `lambda.portal` selector metadata for `org.freedesktop.impl.portal.desktop.lambda`.
+- [x] [Auto] Export the `org.freedesktop.impl.portal.Settings` backend interface with `Read`, `ReadAll`, `SettingChanged`, and `version`.
+- [x] [Auto] Expose `org.freedesktop.appearance` values for `color-scheme`, `accent-color`, `contrast`, and `reduced-motion`; for now these default from `LAMBDA_PORTAL_COLOR_SCHEME`, `LAMBDA_PORTAL_ACCENT_COLOR`, `LAMBDA_PORTAL_HIGH_CONTRAST`, and `LAMBDA_PORTAL_REDUCED_MOTION`.
+- [x] [Auto] Add deterministic private-bus coverage for portal Settings methods, property, namespaced dictionary response, RGB tuple variant, and `SettingChanged` signal.
+- [x] [Auto] Smoke the built `lambda-portal` process on a private session bus and verify a Settings `Read` call through `gdbus`.
+- [ ] [Auto + Manual] Wire Settings/Shell-owned appearance preferences into `lambda-portal` instead of relying on environment variables.
+- [ ] [Manual] Install or stage `lambda-portal` with `xdg-desktop-portal`, set `XDG_CURRENT_DESKTOP=Lambda`, and verify a real GTK/Qt app reads the color-scheme/accent through the frontend portal.
+- [ ] [Auto + Manual] Implement the FileChooser portal backend for Open/Save using a Lambda file-chooser surface backed by `lambda-files` components.
+- [ ] [Auto + Manual] Implement OpenURI, Inhibit, Account, and Notification portal backends; route Notification through SVC-6 once the notifications daemon exists.
+- [ ] [Auto + Manual] Add real frontend request/response tests for xdg-desktop-portal request objects, handles, cancellation, and response codes.

@@ -89,13 +89,13 @@ pkill -TERM lambda-window-manager
 
 ## Input Permissions
 
-The compositor reads `/dev/input/event*` directly through the KMS platform layer. After reboot, local ACLs may need to be restored before mouse and keyboard input work:
+The KMS platform tries to open DRM and input devices through libseat/logind or seatd first. If no seat manager is available, the development direct-open fallback may still need local ACLs before mouse and keyboard input work:
 
 ```sh
 sudo setfacl -m "u:$USER:rw" /dev/input/event*
 ```
 
-If the cursor is visible but does not move, or no shortcuts work, check ACLs first.
+If the cursor is visible but does not move, or no shortcuts work, check whether libseat opened the device path; if it fell back to direct opens, check ACLs.
 
 ## Session and environment
 
@@ -116,7 +116,7 @@ If the cursor is visible but does not move, or no shortcuts work, check ACLs fir
 Typical TTY session:
 
 1. Log in on TTY1; ensure `XDG_RUNTIME_DIR` is set (usually `/run/user/$UID` on systemd).
-2. Run `./build/lambda-window-manager` (optionally `--output`, `--config`).
+2. Run `./build/lambda-window-manager` (optionally `--output`, `--config`). The compositor uses libseat/logind or seatd for DRM/input device access when available and falls back to direct device opens for development.
 3. From TTY2 or SSH, run `./build/lambda-shell` after the compositor logs its socket path.
 4. Wayland clients use `$XDG_RUNTIME_DIR/lambda-window-manager-display` unless they read the compositor-published env.
 
@@ -343,7 +343,7 @@ Set them before launching the compositor if you need to force a theme or size.
 - Broader popup/menu validation with GTK, Qt, and unusual nested/grabbed popup workflows.
 - Hardware validation of the new GBM/atomic-KMS page-flip completion path, then broader video/game validation of presentation-time feedback.
 - Adaptive sync and triple-buffering.
-- Proper input/session brokering instead of manual `/dev/input/event*` ACLs.
+- Target-hardware validation of libseat/logind input/session brokering without manual `/dev/input/event*` ACLs.
 - Full multi-output desktop layout if it lands in v1.
 - Install/session-manager packaging documentation.
 

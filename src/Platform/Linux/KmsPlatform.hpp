@@ -22,6 +22,7 @@
 
 struct libinput;
 struct libinput_device;
+struct libseat;
 struct udev;
 struct udev_monitor;
 
@@ -86,6 +87,10 @@ public:
   void releaseRawInputState(std::uint32_t timeMs);
   void suspendInputForVtSwitch();
   void resumeInputAfterVtSwitch();
+  int openRestrictedDevice(char const* path, int flags);
+  void closeRestrictedDevice(int fd);
+  void handleSeatEnabled();
+  void handleSeatDisabled();
 
 private:
   friend class platform::KmsDevice;
@@ -95,6 +100,9 @@ private:
   bool openFirstDisplayCard();
   void enumerateConnectors();
   void initializeInput();
+  void initializeSeat();
+  void closeSeat();
+  void dispatchSeatEvents();
   void initializeDrmMonitor();
   void drainDrmMonitor();
   std::vector<KmsConnector> scanConnectors() const;
@@ -123,6 +131,10 @@ private:
   void focusPointerWindow(KmsWindow* window);
 
   int drmFd_ = -1;
+  libseat* seat_ = nullptr;
+  int seatFd_ = -1;
+  std::string seatName_;
+  std::unordered_map<int, int> seatDeviceIdsByFd_;
   int ttyFd_ = -1;
   int activeVtNotifyFd_ = -1;
   int activeVtWatch_ = -1;
@@ -147,6 +159,8 @@ private:
   std::atomic<bool> terminateRequested_{false};
   bool signalHandlersInstalled_ = false;
   bool drmMaster_ = false;
+  bool seatEnabled_ = false;
+  bool seatDisablePending_ = false;
   bool consoleInitialized_ = false;
   bool terminalConfigured_ = false;
   bool vtProcessMode_ = false;

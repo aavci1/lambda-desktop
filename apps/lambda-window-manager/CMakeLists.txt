@@ -16,6 +16,7 @@ pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
 pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
 pkg_check_modules(GBM REQUIRED IMPORTED_TARGET gbm)
 pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
+pkg_check_modules(LIBSEAT REQUIRED IMPORTED_TARGET libseat)
 pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
 pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
 pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
@@ -78,6 +79,7 @@ target_link_libraries(lambda-window-manager PRIVATE
   PkgConfig::LIBDRM
   PkgConfig::GBM
   PkgConfig::LIBINPUT
+  PkgConfig::LIBSEAT
   PkgConfig::LIBUDEV
   PkgConfig::XKBCOMMON
   PkgConfig::VULKAN

@@ -16,6 +16,7 @@ set(_lambda_test_sources
   AlertTests.cpp
   AnimationTests.cpp
   BindableInferenceTests.cpp
+  DBusTests.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-editor/EditorCommands.cpp
   EditorCommandsTests.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-editor/EditorDocument.cpp
@@ -30,9 +31,11 @@ set(_lambda_test_sources
   ${PROJECT_SOURCE_DIR}/apps/lambda-files/FilesStore.cpp
   FilesStoreTests.cpp
   ForTests.cpp
+  LogindTests.cpp
   MountRootTests.cpp
   main.cpp
   PathFlattenerTests.cpp
+  PortalSettingsTests.cpp
   SceneGraphTests.cpp
   ParagraphCacheTests.cpp
   ParagraphCacheIncrementalTests.cpp

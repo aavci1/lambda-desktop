@@ -21,6 +21,10 @@
 #include <vulkan/vulkan.h>
 #include <xf86drm.h>
 
+extern "C" {
+#include <libseat.h>
+}
+
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
@@ -133,6 +137,13 @@ void libinputLog(libinput*, libinput_log_priority priority, char const* format, 
   std::fflush(stderr);
 }
 
+void libseatLog(libseat_log_level level, char const* format, va_list args) {
+  if (!debugKms()) return;
+  std::fprintf(stderr, "[lambda:kms:libseat:%d] ", static_cast<int>(level));
+  std::vfprintf(stderr, format, args);
+  std::fflush(stderr);
+}
+
 std::int64_t monotonicMillis() {
   using namespace std::chrono;
   return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
@@ -162,19 +173,33 @@ std::string appDir(std::string const& base, std::string const& appName) {
   return path.string();
 }
 
-int openRestricted(char const* path, int flags, void*) {
-  int fd = open(path, flags | O_CLOEXEC);
-  if (fd < 0) {
-    debugLog("failed to open input device %s: %s", path, std::strerror(errno));
-  }
+int openRestricted(char const* path, int flags, void* userdata) {
+  auto* app = static_cast<KmsApplication*>(userdata);
+  int fd = app ? app->openRestrictedDevice(path, flags) : open(path, flags | O_CLOEXEC);
+  if (fd < 0) debugLog("failed to open input device %s: %s", path, std::strerror(errno));
   return fd;
 }
 
-void closeRestricted(int fd, void*) {
-  close(fd);
+void closeRestricted(int fd, void* userdata) {
+  auto* app = static_cast<KmsApplication*>(userdata);
+  if (app) app->closeRestrictedDevice(fd);
+  else close(fd);
 }
 
 libinput_interface const kLibinputInterface{openRestricted, closeRestricted};
+
+void seatEnabled(libseat*, void* userdata) {
+  if (auto* app = static_cast<KmsApplication*>(userdata)) app->handleSeatEnabled();
+}
+
+void seatDisabled(libseat*, void* userdata) {
+  if (auto* app = static_cast<KmsApplication*>(userdata)) app->handleSeatDisabled();
+}
+
+libseat_seat_listener const kSeatListener{
+    .enable_seat = seatEnabled,
+    .disable_seat = seatDisabled,
+};
 
 std::string connectorName(drmModeConnector const& connector) {
   char const* type = "UNKNOWN";
@@ -396,8 +421,9 @@ KmsApplication::~KmsApplication() {
       if (drmDropMaster(drmFd_) != 0) debugLog("drmDropMaster during shutdown failed: %s", std::strerror(errno));
       drmMaster_ = false;
     }
-    close(drmFd_);
+    closeRestrictedDevice(drmFd_);
   }
+  closeSeat();
   closeActiveVtWatch();
   if (ttyFd_ >= 0) close(ttyFd_);
   if (wakePipe_[0] >= 0) close(wakePipe_[0]);
@@ -410,6 +436,7 @@ void KmsApplication::initialize() {
   fcntl(wakePipe_[0], F_SETFL, fcntl(wakePipe_[0], F_GETFL, 0) | O_NONBLOCK);
   fcntl(wakePipe_[1], F_SETFL, fcntl(wakePipe_[1], F_GETFL, 0) | O_NONBLOCK);
   installSignalHandlers();
+  initializeSeat();
   initializeConsole();
   if (!openFirstDisplayCard()) {
     throw std::runtime_error("No connected DRM/KMS display found");
@@ -423,12 +450,132 @@ void KmsApplication::initialize() {
   initializeDrmMonitor();
 }
 
+void KmsApplication::initializeSeat() {
+  libseat_set_log_handler(libseatLog);
+  libseat_set_log_level(debugKms() ? LIBSEAT_LOG_LEVEL_DEBUG : LIBSEAT_LOG_LEVEL_ERROR);
+  seat_ = libseat_open_seat(&kSeatListener, this);
+  if (!seat_) {
+    debugLog("libseat_open_seat failed; falling back to direct device opens: %s", std::strerror(errno));
+    return;
+  }
+
+  seatFd_ = libseat_get_fd(seat_);
+  char const* seatName = libseat_seat_name(seat_);
+  seatName_ = seatName && *seatName ? seatName : "seat0";
+  seatEnabled_ = true;
+  debugLog("opened libseat seat=%s fd=%d", seatName_.c_str(), seatFd_);
+  dispatchSeatEvents();
+}
+
+void KmsApplication::closeSeat() {
+  if (!seat_) return;
+  for (auto const& [fd, deviceId] : seatDeviceIdsByFd_) {
+    debugLog("closing lingering libseat device fd=%d id=%d", fd, deviceId);
+    if (libseat_close_device(seat_, deviceId) != 0) {
+      close(fd);
+    }
+  }
+  seatDeviceIdsByFd_.clear();
+  if (libseat_close_seat(seat_) != 0) {
+    debugLog("libseat_close_seat failed: %s", std::strerror(errno));
+  }
+  seat_ = nullptr;
+  seatFd_ = -1;
+  seatName_.clear();
+  seatEnabled_ = false;
+  seatDisablePending_ = false;
+}
+
+void KmsApplication::dispatchSeatEvents() {
+  if (!seat_) return;
+  for (;;) {
+    int const result = libseat_dispatch(seat_, 0);
+    if (result > 0) continue;
+    if (result < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+      debugLog("libseat_dispatch failed: %s", std::strerror(errno));
+    }
+    break;
+  }
+}
+
+int KmsApplication::openRestrictedDevice(char const* path, int flags) {
+  if (!path || !*path) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (seat_) {
+    if (!seatEnabled_) {
+      errno = EACCES;
+      debugLog("refusing to open %s while libseat seat is disabled", path);
+      return -1;
+    }
+    int fd = -1;
+    int const deviceId = libseat_open_device(seat_, path, &fd);
+    if (deviceId >= 0 && fd >= 0) {
+      int const fdFlags = fcntl(fd, F_GETFD, 0);
+      if (fdFlags >= 0) {
+        fcntl(fd, F_SETFD, fdFlags | FD_CLOEXEC);
+      }
+      seatDeviceIdsByFd_[fd] = deviceId;
+      debugLog("opened %s through libseat id=%d fd=%d", path, deviceId, fd);
+      return fd;
+    }
+    debugLog("libseat_open_device(%s) failed; falling back to direct open: %s", path, std::strerror(errno));
+  }
+
+  int fd = open(path, flags | O_CLOEXEC);
+  if (fd >= 0) {
+    debugLog("opened %s directly fd=%d", path, fd);
+  }
+  return fd;
+}
+
+void KmsApplication::closeRestrictedDevice(int fd) {
+  if (fd < 0) return;
+  auto it = seatDeviceIdsByFd_.find(fd);
+  if (it != seatDeviceIdsByFd_.end()) {
+    int const deviceId = it->second;
+    seatDeviceIdsByFd_.erase(it);
+    if (seat_ && libseat_close_device(seat_, deviceId) == 0) {
+      debugLog("closed libseat device id=%d fd=%d", deviceId, fd);
+      return;
+    }
+    debugLog("libseat_close_device id=%d fd=%d failed; closing fd directly: %s",
+             deviceId,
+             fd,
+             std::strerror(errno));
+  }
+  close(fd);
+}
+
+void KmsApplication::handleSeatEnabled() {
+  if (!seat_) return;
+  seatEnabled_ = true;
+  seatDisablePending_ = false;
+  debugLog("libseat enabled seat=%s", seatName_.empty() ? "(unknown)" : seatName_.c_str());
+  acquireDrmMasterForVt(false);
+}
+
+void KmsApplication::handleSeatDisabled() {
+  if (!seat_) return;
+  if (seatDisablePending_) return;
+  seatDisablePending_ = true;
+  seatEnabled_ = false;
+  debugLog("libseat disabled seat=%s", seatName_.empty() ? "(unknown)" : seatName_.c_str());
+  releaseDrmMasterForVt(false);
+  if (libseat_disable_seat(seat_) != 0) {
+    debugLog("libseat_disable_seat failed: %s", std::strerror(errno));
+  }
+  seatDisablePending_ = false;
+}
+
 bool KmsApplication::openFirstDisplayCard() {
   if (!std::filesystem::exists("/dev/dri")) return false;
   for (auto const& entry : std::filesystem::directory_iterator("/dev/dri")) {
     std::string name = entry.path().filename().string();
     if (!name.starts_with("card")) continue;
-    int fd = open(entry.path().c_str(), O_RDWR | O_CLOEXEC);
+    int fd = openRestrictedDevice(entry.path().c_str(), O_RDWR);
     if (fd < 0) continue;
     drmModeRes* resources = drmModeGetResources(fd);
     bool hasConnected = false;
@@ -444,7 +591,7 @@ bool KmsApplication::openFirstDisplayCard() {
       drmFd_ = fd;
       return true;
     }
-    close(fd);
+    closeRestrictedDevice(fd);
   }
   return false;
 }
@@ -482,7 +629,7 @@ std::vector<KmsConnector> KmsApplication::scanConnectors() const {
 void KmsApplication::initializeInput() {
   udev_ = udev_new();
   if (!udev_) throw std::runtime_error("udev_new failed");
-  input_ = libinput_udev_create_context(&kLibinputInterface, nullptr, udev_);
+  input_ = libinput_udev_create_context(&kLibinputInterface, this, udev_);
   if (!input_) throw std::runtime_error("libinput_udev_create_context failed");
   libinput_log_set_handler(input_, libinputLog);
   libinput_log_set_priority(input_, debugKms() ? LIBINPUT_LOG_PRIORITY_DEBUG : LIBINPUT_LOG_PRIORITY_ERROR);
@@ -496,7 +643,7 @@ void KmsApplication::initializeInput() {
 
   debugLog("udev seat0 reported no input devices; falling back to /dev/input/event*");
   libinput_unref(input_);
-  input_ = libinput_path_create_context(&kLibinputInterface, nullptr);
+  input_ = libinput_path_create_context(&kLibinputInterface, this);
   if (!input_) throw std::runtime_error("libinput_path_create_context failed");
   libinput_log_set_handler(input_, libinputLog);
   libinput_log_set_priority(input_, debugKms() ? LIBINPUT_LOG_PRIORITY_DEBUG : LIBINPUT_LOG_PRIORITY_ERROR);
@@ -1188,6 +1335,7 @@ platform::KmsPollResult KmsApplication::pollInputAndWakeDetailed(int timeoutMs, 
   handlePendingVtSignal();
   pollActiveVt();
   std::vector<pollfd> fds;
+  if (seatFd_ >= 0) fds.push_back({seatFd_, POLLIN, 0});
   if (isVtForeground() && inputFd() >= 0) fds.push_back({inputFd(), POLLIN, 0});
   if (isVtForeground() && udevMonitorFd_ >= 0) fds.push_back({udevMonitorFd_, POLLIN, 0});
   if (activeVtNotifyFd_ >= 0) fds.push_back({activeVtNotifyFd_, POLLIN, 0});
@@ -1241,6 +1389,9 @@ platform::KmsPollResult KmsApplication::pollInputAndWakeDetailed(int timeoutMs, 
       }
     }
     if (fd.fd == wakePipe_[0] && (fd.revents & POLLIN)) drainWakePipe();
+    if (fd.fd == seatFd_ && (fd.revents & (POLLIN | POLLERR | POLLHUP))) {
+      dispatchSeatEvents();
+    }
     if (fd.fd == activeVtNotifyFd_ && (fd.revents & (POLLIN | POLLERR | POLLHUP))) {
       drainActiveVtWatch();
     }

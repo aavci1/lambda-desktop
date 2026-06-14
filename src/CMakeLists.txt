@@ -1,5 +1,8 @@
 set(LAMBDA_CORE_SOURCES
   Core/Identity.cpp
+  System/DBus.cpp
+  System/Logind.cpp
+  System/PortalSettings.cpp
 )
 
 set(LAMBDA_REACTIVE_SOURCES
@@ -173,6 +176,7 @@ elseif(LAMBDA_PLATFORM_LINUX_WAYLAND)
   pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
   pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
   pkg_check_modules(LIBRSVG REQUIRED IMPORTED_TARGET librsvg-2.0)
+  pkg_check_modules(SYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
   pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
   find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
   lambda_setup_wayland_protocol_paths("${WAYLAND_PROTOCOLS_DIR}")
@@ -213,6 +217,7 @@ elseif(LAMBDA_PLATFORM_LINUX_KMS)
   pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
   pkg_check_modules(GBM REQUIRED IMPORTED_TARGET gbm)
   pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
+  pkg_check_modules(LIBSEAT REQUIRED IMPORTED_TARGET libseat)
   pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
   pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
   pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
@@ -220,6 +225,7 @@ elseif(LAMBDA_PLATFORM_LINUX_KMS)
   pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
   pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
   pkg_check_modules(LIBRSVG REQUIRED IMPORTED_TARGET librsvg-2.0)
+  pkg_check_modules(SYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
   pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
   find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
   target_sources(lambda PRIVATE
@@ -309,7 +315,7 @@ if(LAMBDA_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT)
 endif()
 
 if(LAMBDA_PLATFORM_MACOS)
-  target_compile_definitions(lambda PUBLIC LAMBDA_METAL=1 LAMBDA_VULKAN=0 PRIVATE LAMBDA_PLATFORM_MACOS=1)
+  target_compile_definitions(lambda PUBLIC LAMBDA_METAL=1 LAMBDA_VULKAN=0 LAMBDA_HAS_DBUS=0 PRIVATE LAMBDA_PLATFORM_MACOS=1)
   target_link_libraries(lambda PRIVATE
     "-framework Cocoa"
     "-framework QuartzCore"
@@ -319,7 +325,7 @@ if(LAMBDA_PLATFORM_MACOS)
     "-framework CoreText"
     "-framework CoreVideo")
 elseif(LAMBDA_PLATFORM_LINUX_WAYLAND)
-  target_compile_definitions(lambda PUBLIC LAMBDA_METAL=0 LAMBDA_VULKAN=1 PRIVATE LAMBDA_PLATFORM_LINUX_WAYLAND=1)
+  target_compile_definitions(lambda PUBLIC LAMBDA_METAL=0 LAMBDA_VULKAN=1 LAMBDA_HAS_DBUS=1 PRIVATE LAMBDA_PLATFORM_LINUX_WAYLAND=1)
   target_include_directories(lambda PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
   target_link_libraries(lambda PRIVATE
     PkgConfig::WAYLAND_CLIENT
@@ -331,14 +337,16 @@ elseif(LAMBDA_PLATFORM_LINUX_WAYLAND)
     PkgConfig::FONTCONFIG
     PkgConfig::HARFBUZZ
     PkgConfig::LIBRSVG
+    PkgConfig::SYSTEMD
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
 elseif(LAMBDA_PLATFORM_LINUX_KMS)
-  target_compile_definitions(lambda PUBLIC LAMBDA_METAL=0 LAMBDA_VULKAN=1 PRIVATE LAMBDA_PLATFORM_LINUX_KMS=1)
+  target_compile_definitions(lambda PUBLIC LAMBDA_METAL=0 LAMBDA_VULKAN=1 LAMBDA_HAS_DBUS=1 PRIVATE LAMBDA_PLATFORM_LINUX_KMS=1)
   target_link_libraries(lambda PRIVATE
     PkgConfig::LIBDRM
     PkgConfig::GBM
     PkgConfig::LIBINPUT
+    PkgConfig::LIBSEAT
     PkgConfig::LIBUDEV
     PkgConfig::XKBCOMMON
     PkgConfig::VULKAN
@@ -346,6 +354,7 @@ elseif(LAMBDA_PLATFORM_LINUX_KMS)
     PkgConfig::FONTCONFIG
     PkgConfig::HARFBUZZ
     PkgConfig::LIBRSVG
+    PkgConfig::SYSTEMD
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
 endif()

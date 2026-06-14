@@ -23,7 +23,7 @@ Graphics and text dependencies:
 sudo pacman -S --needed \
   wayland wayland-protocols libxkbcommon \
   vulkan-headers vulkan-icd-loader vulkan-tools glslang \
-  mesa libdrm libinput systemd-libs \
+  mesa libdrm libinput libseat systemd-libs xdg-desktop-portal \
   freetype2 fontconfig harfbuzz zlib
 ```
 
@@ -77,7 +77,7 @@ cmake --build build-linux-kms
 
 ## KMS Window Manager
 
-KMS needs DRM master. Run the window manager from a real TTY, not inside a desktop session that already owns DRM master. If needed, switch to a spare VT with `Ctrl+Alt+F3`, log in, then run:
+KMS needs DRM master. `lambda-window-manager` now tries libseat/logind or seatd for DRM and input device access, with a direct-open fallback for development. Run it from a real TTY, not inside a desktop session that already owns DRM master. If needed, switch to a spare VT with `Ctrl+Alt+F3`, log in, then run:
 
 ```sh
 ./build-linux-kms/apps/lambda-window-manager/lambda-window-manager
@@ -98,6 +98,20 @@ For KMS debugging:
 ```sh
 LAMBDA_DEBUG_KMS=1 ./build-linux-kms/apps/lambda-window-manager/lambda-window-manager
 ```
+
+## Portal Backend
+
+The Linux build includes `lambda-portal`, a session-bus backend for the first Lambda portal slice. It currently exports the xdg-desktop-portal Settings backend (`org.freedesktop.impl.portal.Settings`) with appearance color-scheme, accent-color, contrast, and reduced-motion values.
+
+Development smoke without installing:
+
+```sh
+LAMBDA_PORTAL_COLOR_SCHEME=dark \
+LAMBDA_PORTAL_ACCENT_COLOR=0.25,0.5,0.75 \
+./build/apps/lambda-portal/lambda-portal
+```
+
+For installed portal selection, run a session with `XDG_CURRENT_DESKTOP=Lambda` and install the generated D-Bus service plus `lambda.portal` metadata alongside `xdg-desktop-portal`. Until Settings owns these preferences, the environment variables above control the advertised appearance values.
 
 ## Common Failures
 
