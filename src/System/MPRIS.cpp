@@ -9,8 +9,16 @@ namespace lambda::system {
 
 namespace {
 
+constexpr char kPropertiesInterface[] = "org.freedesktop.DBus.Properties";
+
 bool startsWith(std::string const& value, std::string_view prefix) {
   return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
+}
+
+void notify(std::shared_ptr<std::function<void()>> const& handler) {
+  if (handler && *handler) {
+    (*handler)();
+  }
 }
 
 std::string stringValue(dbus::VariantDictionary const& metadata, std::string const& key) {
@@ -148,6 +156,55 @@ MPRISPlayerSnapshot MPRISClient::readPlayer(std::string const& serviceName) {
   player.canSeek = std::get<bool>(getPlayerProperty(serviceName, "CanSeek", "b"));
   player.canControl = std::get<bool>(getPlayerProperty(serviceName, "CanControl", "b"));
   return player;
+}
+
+MPRISChangeWatch MPRISClient::watchPlayerChanges(std::function<void()> handler) {
+  auto sharedHandler = std::make_shared<std::function<void()>>(std::move(handler));
+  return MPRISChangeWatch{
+      .propertiesChanged =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = {},
+                  .path = objectPath,
+                  .interface = kPropertiesInterface,
+                  .member = "PropertiesChanged",
+              },
+              [sharedHandler](dbus::Message& message) {
+                auto const changed = dbus::readPropertiesChanged(message);
+                if (changed.interface != MPRISClient::rootInterfaceName &&
+                    changed.interface != MPRISClient::playerInterfaceName) {
+                  return;
+                }
+                notify(sharedHandler);
+              }),
+      .seeked =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = {},
+                  .path = objectPath,
+                  .interface = playerInterfaceName,
+                  .member = "Seeked",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+      .nameOwnerChanged =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = dbusServiceName,
+                  .path = dbusObjectPath,
+                  .interface = dbusInterfaceName,
+                  .member = "NameOwnerChanged",
+              },
+              [sharedHandler](dbus::Message& message) {
+                std::string name = message.readString();
+                (void)message.readString();
+                (void)message.readString();
+                if (startsWith(name, MPRISClient::servicePrefix)) {
+                  notify(sharedHandler);
+                }
+              }),
+  };
 }
 
 void MPRISClient::playPause(std::string const& serviceName) {

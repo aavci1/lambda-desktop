@@ -132,10 +132,22 @@ struct ShellBluetoothStatusWatcher {
   lambda::dbus::Slot bluetoothChanged;
 };
 
+struct ShellMediaStatusWatcher {
+  ShellMediaStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
+      : mpris(lambda::system::MPRISClient::connectSession()),
+        mprisPump(app, mpris.bus()),
+        mprisChanged(mpris.watchPlayerChanges(std::move(onChanged))) {}
+
+  lambda::system::MPRISClient mpris;
+  lambda::dbus::BusEventPump mprisPump;
+  lambda::system::MPRISChangeWatch mprisChanged;
+};
+
 struct ShellSystemStatusWatchers {
   std::unique_ptr<ShellPowerStatusWatcher> power;
   std::unique_ptr<ShellNetworkStatusWatcher> network;
   std::unique_ptr<ShellBluetoothStatusWatcher> bluetooth;
+  std::unique_ptr<ShellMediaStatusWatcher> media;
 };
 
 lambda::WindowConfig dockWindowConfig(int width,
@@ -609,7 +621,14 @@ void ShellController::setupSystemStatusWatchers() {
 
   if (!systemStatusWatchers_->bluetooth) {
     try {
-      systemStatusWatchers_->bluetooth = std::make_unique<ShellBluetoothStatusWatcher>(app_, std::move(refreshStatus));
+      systemStatusWatchers_->bluetooth = std::make_unique<ShellBluetoothStatusWatcher>(app_, refreshStatus);
+    } catch (...) {
+    }
+  }
+
+  if (!systemStatusWatchers_->media) {
+    try {
+      systemStatusWatchers_->media = std::make_unique<ShellMediaStatusWatcher>(app_, std::move(refreshStatus));
     } catch (...) {
     }
   }

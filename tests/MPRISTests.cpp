@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <thread>
@@ -15,6 +16,7 @@
 namespace {
 
 using lambda::testing::dbus::pollBus;
+using lambda::testing::dbus::pumpUntil;
 using lambda::testing::dbus::startPrivateBus;
 
 template <typename Callback>
@@ -217,6 +219,36 @@ TEST_CASE("MPRISClient discovers players reads metadata and sends controls") {
   CHECK(player.canControl);
   CHECK(lambda::system::activeMPRISPlayerService({player}) == serviceName);
   CHECK(lambda::system::formatMPRISStatus({player}) == "Lambda Artist - Test Song");
+
+  int playerChanges = 0;
+  auto playerChangedWatch = client.watchPlayerChanges([&] {
+    ++playerChanges;
+  });
+  service.emitPropertiesChanged(
+      lambda::system::MPRISClient::objectPath,
+      lambda::system::MPRISClient::playerInterfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {{"PlaybackStatus", lambda::dbus::BasicValue(playbackStatus)}},
+      });
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return playerChanges == 1; },
+                  std::chrono::milliseconds(500)));
+
+  service.emitSignal(lambda::system::MPRISClient::objectPath,
+                     lambda::system::MPRISClient::playerInterfaceName,
+                     "Seeked",
+                     {std::int64_t(12000000)});
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return playerChanges == 2; },
+                  std::chrono::milliseconds(500)));
+
+  auto transientPlayer = lambda::dbus::Bus::openAddress(privateBus->address);
+  transientPlayer.requestName(serviceName + ".transient");
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return playerChanges == 3; },
+                  std::chrono::milliseconds(500)));
 
   client.playPause(serviceName);
   CHECK(playPauseCalls == 1);

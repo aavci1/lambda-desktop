@@ -7,6 +7,7 @@
 #include <Lambda/System/DBus.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -43,6 +44,12 @@ struct MPRISPlayerSnapshot {
   bool operator==(MPRISPlayerSnapshot const&) const = default;
 };
 
+struct MPRISChangeWatch {
+  dbus::Slot propertiesChanged;
+  dbus::Slot seeked;
+  dbus::Slot nameOwnerChanged;
+};
+
 class MPRISClient {
 public:
   static constexpr char const* servicePrefix = "org.mpris.MediaPlayer2.";
@@ -63,6 +70,7 @@ public:
   [[nodiscard]] std::vector<std::string> playerServiceNames();
   [[nodiscard]] std::vector<MPRISPlayerSnapshot> readPlayers();
   [[nodiscard]] MPRISPlayerSnapshot readPlayer(std::string const& serviceName);
+  [[nodiscard]] MPRISChangeWatch watchPlayerChanges(std::function<void()> handler);
 
   void playPause(std::string const& serviceName);
   void play(std::string const& serviceName);
