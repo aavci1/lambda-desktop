@@ -103,11 +103,11 @@ struct ShellPowerStatusWatcher {
   ShellPowerStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
       : upower(lambda::system::UPowerClient::connectSystem()),
         upowerPump(app, upower.bus()),
-        upowerDisplayChanged(upower.watchDisplayDeviceChanged(std::move(onChanged))) {}
+        upowerChanged(upower.watchStatusChanges(std::move(onChanged))) {}
 
   lambda::system::UPowerClient upower;
   lambda::dbus::BusEventPump upowerPump;
-  lambda::dbus::Slot upowerDisplayChanged;
+  lambda::system::UPowerStatusWatch upowerChanged;
 };
 
 struct ShellNetworkStatusWatcher {

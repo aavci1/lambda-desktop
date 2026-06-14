@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <utility>
 
 namespace lambda::system {
@@ -9,6 +10,12 @@ namespace lambda::system {
 namespace {
 
 constexpr char kPropertiesInterface[] = "org.freedesktop.DBus.Properties";
+
+void notify(std::shared_ptr<std::function<void()>> const& handler) {
+  if (handler && *handler) {
+    (*handler)();
+  }
+}
 
 } // namespace
 
@@ -61,6 +68,65 @@ dbus::Slot UPowerClient::watchDisplayDeviceChanged(std::function<void()> handler
           handler();
         }
       });
+}
+
+UPowerStatusWatch UPowerClient::watchStatusChanges(std::function<void()> handler) {
+  std::string const displayPath = displayDevicePath();
+  auto sharedHandler = std::make_shared<std::function<void()>>(std::move(handler));
+  return UPowerStatusWatch{
+      .displayDeviceChanged =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = displayPath,
+                  .interface = kPropertiesInterface,
+                  .member = "PropertiesChanged",
+              },
+              [sharedHandler](dbus::Message& message) {
+                auto const changed = dbus::readPropertiesChanged(message);
+                if (changed.interface != UPowerClient::deviceInterfaceName) {
+                  return;
+                }
+                notify(sharedHandler);
+              }),
+      .managerChanged =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = objectPath,
+                  .interface = kPropertiesInterface,
+                  .member = "PropertiesChanged",
+              },
+              [sharedHandler](dbus::Message& message) {
+                auto const changed = dbus::readPropertiesChanged(message);
+                if (changed.interface != UPowerClient::interfaceName) {
+                  return;
+                }
+                notify(sharedHandler);
+              }),
+      .deviceAdded =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = objectPath,
+                  .interface = interfaceName,
+                  .member = "DeviceAdded",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+      .deviceRemoved =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = objectPath,
+                  .interface = interfaceName,
+                  .member = "DeviceRemoved",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+  };
 }
 
 dbus::BasicValue UPowerClient::getDeviceProperty(std::string const& path,

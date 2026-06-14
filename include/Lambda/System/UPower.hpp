@@ -34,6 +34,13 @@ struct UPowerDisplayDevice {
   bool operator==(UPowerDisplayDevice const&) const = default;
 };
 
+struct UPowerStatusWatch {
+  dbus::Slot displayDeviceChanged;
+  dbus::Slot managerChanged;
+  dbus::Slot deviceAdded;
+  dbus::Slot deviceRemoved;
+};
+
 class UPowerClient {
 public:
   static constexpr char const* serviceName = "org.freedesktop.UPower";
@@ -51,6 +58,7 @@ public:
   [[nodiscard]] std::string displayDevicePath();
   [[nodiscard]] UPowerDisplayDevice readDisplayDevice();
   [[nodiscard]] dbus::Slot watchDisplayDeviceChanged(std::function<void()> handler);
+  [[nodiscard]] UPowerStatusWatch watchStatusChanges(std::function<void()> handler);
 
 private:
   [[nodiscard]] dbus::BasicValue getDeviceProperty(std::string const& path,

@@ -242,7 +242,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add deterministic fake-bus coverage for display-device reads, battery status formatting, and change-signal delivery.
 - [x] [Auto] Make Shell battery status prefer UPower on the real `/sys` path and preserve the existing sysfs fallback when UPower is unavailable or tests use a fixture sysroot.
 - [x] [Auto] Wire UPower display-device `PropertiesChanged` into production Shell through `BusEventPump` so battery percentage/status can refresh immediately instead of waiting for the polling timer.
-- [ ] [Auto + Manual] Wire UPower manager `PropertiesChanged`, `DeviceAdded`, and `DeviceRemoved` into Shell so AC state and battery device changes update without waiting for the polling timer.
+- [x] [Auto] Wire UPower manager `PropertiesChanged`, `DeviceAdded`, and `DeviceRemoved` into production Shell through `BusEventPump` so AC state and battery device changes update without waiting for the polling timer.
 - [ ] [Auto] Expose richer UPower state in Shell status models: charging/discharging/full/empty, on-AC/on-battery, warning level, time-to-empty/full, and icon-name hints.
 - [ ] [Auto + Manual] Add quick-settings/power UI affordances once policy controls exist, while keeping read-only status truthful until then.
 - [ ] [Manual] Validate against the real system bus: AC plug/unplug and battery percentage changes update the Shell docklet, and systems without batteries still report unavailable truthfully.

@@ -160,25 +160,71 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
   CHECK(display.iconName == "battery-good-symbolic");
   CHECK(lambda::system::formatUPowerBatteryStatus(display) == "88%");
 
-  int changes = 0;
-  auto changedSlot = client.watchDisplayDeviceChanged([&] {
-    ++changes;
+  int displayChanges = 0;
+  auto displayChangedSlot = client.watchDisplayDeviceChanged([&] {
+    ++displayChanges;
   });
-  percentage = 64.2;
-  service.emitSignal(
-      kDisplayDevicePath,
-      "org.freedesktop.DBus.Properties",
-      "PropertiesChanged",
-      {
-          std::string(lambda::system::UPowerClient::deviceInterfaceName),
-          lambda::dbus::VariantDictionary{
-              .values = {{"Percentage", lambda::dbus::BasicValue(percentage)}},
-          },
-          lambda::dbus::BasicValue(lambda::dbus::StringArray{}),
+
+  int statusChanges = 0;
+  auto statusWatch = client.watchStatusChanges([&] {
+    ++statusChanges;
+  });
+
+  onBattery = false;
+  service.emitPropertiesChanged(
+      lambda::system::UPowerClient::objectPath,
+      lambda::system::UPowerClient::interfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {{"OnBattery", lambda::dbus::BasicValue(onBattery)}},
       });
   service.flush();
   CHECK(pumpUntil(client.bus(),
-                  [&] { return changes == 1; },
+                  [&] { return statusChanges == 1; },
+                  std::chrono::milliseconds(500)));
+  CHECK(displayChanges == 0);
+
+  service.emitSignal(lambda::system::UPowerClient::objectPath,
+                     lambda::system::UPowerClient::interfaceName,
+                     "DeviceAdded",
+                     {lambda::dbus::ObjectPath{"/org/freedesktop/UPower/devices/battery_BAT0"}});
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 2; },
+                  std::chrono::milliseconds(500)));
+
+  service.emitSignal(lambda::system::UPowerClient::objectPath,
+                     lambda::system::UPowerClient::interfaceName,
+                     "DeviceRemoved",
+                     {lambda::dbus::ObjectPath{"/org/freedesktop/UPower/devices/battery_BAT0"}});
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 3; },
+                  std::chrono::milliseconds(500)));
+
+  onBattery = true;
+  service.emitPropertiesChanged(
+      lambda::system::UPowerClient::objectPath,
+      lambda::system::UPowerClient::interfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {{"OnBattery", lambda::dbus::BasicValue(onBattery)}},
+      });
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 4; },
+                  std::chrono::milliseconds(500)));
+
+  CHECK(displayChanges == 0);
+
+  percentage = 64.2;
+  service.emitPropertiesChanged(
+      kDisplayDevicePath,
+      lambda::system::UPowerClient::deviceInterfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {{"Percentage", lambda::dbus::BasicValue(percentage)}},
+      });
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return displayChanges == 1 && statusChanges == 5; },
                   std::chrono::milliseconds(500)));
 
   display = client.readDisplayDevice();
