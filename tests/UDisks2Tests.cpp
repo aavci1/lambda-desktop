@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <thread>
@@ -14,6 +15,7 @@
 namespace {
 
 using lambda::testing::dbus::pollBus;
+using lambda::testing::dbus::pumpUntil;
 using lambda::testing::dbus::startPrivateBus;
 
 constexpr char kDrivePath[] = "/org/freedesktop/UDisks2/drives/Lambda_USB";
@@ -215,6 +217,47 @@ TEST_CASE("UDisks2Client reads visible filesystems and sends mount operations") 
   CHECK(snapshot.volumes.front().hintAuto);
   CHECK(!snapshot.volumes.front().mounted());
   CHECK(lambda::system::formatUDisks2VolumeName(snapshot.volumes.front()) == "LAMBDA_USB");
+
+  int statusChanges = 0;
+  auto statusWatch = client.watchStatusChanges([&] {
+    ++statusChanges;
+  });
+  service.emitPropertiesChanged(
+      kDrivePath,
+      lambda::system::UDisks2Client::driveInterfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {{"Ejectable", lambda::dbus::BasicValue(true)}},
+      });
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 1; },
+                  std::chrono::milliseconds(500)));
+
+  lambda::dbus::NamespacedVariantDictionary addedInterfaces;
+  addedInterfaces.values[lambda::system::UDisks2Client::blockInterfaceName] = {
+      {"HintIgnore", lambda::dbus::BasicValue(false)},
+  };
+  service.emitSignal(lambda::system::UDisks2Client::objectManagerPath,
+                     lambda::system::UDisks2Client::objectManagerInterfaceName,
+                     "InterfacesAdded",
+                     {lambda::dbus::ObjectPath{"/org/freedesktop/UDisks2/block_devices/sdc1"},
+                      addedInterfaces});
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 2; },
+                  std::chrono::milliseconds(500)));
+
+  service.emitSignal(lambda::system::UDisks2Client::objectManagerPath,
+                     lambda::system::UDisks2Client::objectManagerInterfaceName,
+                     "InterfacesRemoved",
+                     {lambda::dbus::ObjectPath{"/org/freedesktop/UDisks2/block_devices/sdc1"},
+                      lambda::dbus::StringArray{
+                          .values = {lambda::system::UDisks2Client::blockInterfaceName},
+                      }});
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 3; },
+                  std::chrono::milliseconds(500)));
 
   CHECK(client.mountFilesystem(kVolumePath) == "/run/media/test/LAMBDA_USB");
   CHECK(mountCalls == 1);

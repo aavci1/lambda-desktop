@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Lambda/System/UDisks2.hpp>
 #include <Lambda/UI/IconName.hpp>
 #include <Lambda/UI/Input.hpp>
 
@@ -71,6 +72,8 @@ struct SidebarPlace {
   std::string label;
   lambda::IconName icon = lambda::IconName::Folder;
   std::filesystem::path path;
+
+  bool operator==(SidebarPlace const&) const = default;
 };
 
 struct BreadcrumbCrumb {
@@ -279,6 +282,9 @@ std::filesystem::path trashInfoDirectory();
 std::map<std::string, std::filesystem::path> parseXdgUserDirs(std::string_view configText,
                                                               std::filesystem::path const& home);
 std::vector<SidebarPlace> const& sidebarPlaces();
+std::vector<SidebarPlace> sidebarPlacesWithVolumes(std::vector<SidebarPlace> places,
+                                                   lambda::system::UDisks2Snapshot const& snapshot);
+std::vector<SidebarPlace> sidebarPlacesWithMountedVolumes();
 ListDirectoryResult listDirectory(std::filesystem::path const& directory, bool includeHidden = false);
 std::vector<FileEntry> sortedEntries(std::vector<FileEntry> entries,
                                      FileSortKey key = FileSortKey::Name,

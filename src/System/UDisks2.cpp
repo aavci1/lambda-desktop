@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <utility>
 
 namespace lambda::system {
@@ -10,6 +11,14 @@ namespace lambda::system {
 namespace {
 
 using InterfaceProperties = std::map<std::string, dbus::BasicValue>;
+
+constexpr char kPropertiesInterface[] = "org.freedesktop.DBus.Properties";
+
+void notify(std::shared_ptr<std::function<void()>> const& handler) {
+  if (handler && *handler) {
+    (*handler)();
+  }
+}
 
 std::string bytesToString(dbus::ByteArray const& bytes) {
   std::string value;
@@ -186,6 +195,51 @@ UDisks2Snapshot UDisks2Client::readSnapshot() {
     return formatUDisks2VolumeName(lhs) < formatUDisks2VolumeName(rhs);
   });
   return snapshot;
+}
+
+UDisks2StatusWatch UDisks2Client::watchStatusChanges(std::function<void()> handler) {
+  auto sharedHandler = std::make_shared<std::function<void()>>(std::move(handler));
+  return UDisks2StatusWatch{
+      .propertiesChanged =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = {},
+                  .interface = kPropertiesInterface,
+                  .member = "PropertiesChanged",
+              },
+              [sharedHandler](dbus::Message& message) {
+                auto const changed = dbus::readPropertiesChanged(message);
+                if (changed.interface != UDisks2Client::blockInterfaceName &&
+                    changed.interface != UDisks2Client::filesystemInterfaceName &&
+                    changed.interface != UDisks2Client::driveInterfaceName) {
+                  return;
+                }
+                notify(sharedHandler);
+              }),
+      .interfacesAdded =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = objectManagerPath,
+                  .interface = objectManagerInterfaceName,
+                  .member = "InterfacesAdded",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+      .interfacesRemoved =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = objectManagerPath,
+                  .interface = objectManagerInterfaceName,
+                  .member = "InterfacesRemoved",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+  };
 }
 
 std::string UDisks2Client::mountFilesystem(std::string const& filesystemPath) {

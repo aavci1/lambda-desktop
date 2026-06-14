@@ -647,6 +647,42 @@ std::vector<SidebarPlace> const& sidebarPlaces() {
   return places;
 }
 
+std::vector<SidebarPlace> sidebarPlacesWithVolumes(std::vector<SidebarPlace> places,
+                                                   lambda::system::UDisks2Snapshot const& snapshot) {
+  auto hasPath = [&places](std::filesystem::path const& path) {
+    return std::any_of(places.begin(), places.end(), [&](SidebarPlace const& place) {
+      return place.path == path;
+    });
+  };
+
+  for (auto const& volume : snapshot.volumes) {
+    if (!volume.userVisible() || !volume.mounted()) {
+      continue;
+    }
+    std::filesystem::path const mountPath = volume.mountPoints.front();
+    if (mountPath.empty() || hasPath(mountPath)) {
+      continue;
+    }
+    places.push_back({
+        .id = "volume:" + volume.path,
+        .label = lambda::system::formatUDisks2VolumeName(volume),
+        .icon = lambda::IconName::DevicesOther,
+        .path = mountPath,
+    });
+  }
+  return places;
+}
+
+std::vector<SidebarPlace> sidebarPlacesWithMountedVolumes() {
+  std::vector<SidebarPlace> places = sidebarPlaces();
+  try {
+    auto client = lambda::system::UDisks2Client::connectSystem();
+    return sidebarPlacesWithVolumes(std::move(places), client.readSnapshot());
+  } catch (...) {
+    return places;
+  }
+}
+
 std::string gridDisplayName(std::string name) {
   constexpr std::size_t kMaxChars = 20;
   if (kMaxChars <= 3) {

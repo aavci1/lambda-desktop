@@ -8,6 +8,7 @@
 #include "FilesTrace.hpp"
 
 #include <Lambda.hpp>
+#include <Lambda/System/DBus.hpp>
 #include <Lambda/UI/EnvironmentKeys.hpp>
 #include <Lambda/UI/Hooks.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
@@ -27,6 +28,7 @@
 #include <chrono>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -251,6 +253,25 @@ struct SideItemRow {
     }
     return row;
   }
+};
+
+struct FilesVolumeWatcher {
+  FilesVolumeWatcher(lambda::Application& app, std::function<bool()> refreshPlaces)
+      : refreshPlaces(std::move(refreshPlaces)),
+        udisks(lambda::system::UDisks2Client::connectSystem()),
+        pump(app, udisks.bus()),
+        changed(udisks.watchStatusChanges([this] { refresh(); })) {}
+
+  void refresh() {
+    if (refreshPlaces && refreshPlaces() && lambda::Application::hasInstance()) {
+      lambda::Application::instance().requestRedraw();
+    }
+  }
+
+  std::function<bool()> refreshPlaces;
+  lambda::system::UDisks2Client udisks;
+  lambda::dbus::BusEventPump pump;
+  lambda::system::UDisks2StatusWatch changed;
 };
 
 struct BreadcrumbCrumbView {
@@ -544,7 +565,7 @@ struct FilesAppRoot {
     auto viewMode = useState(preferences().viewMode);
     auto iconThemeRoots = useState(lambda_shell::defaultIconThemeRoots(""));
 
-    auto places = useState(sidebarPlaces());
+    auto places = useState(sidebarPlacesWithMountedVolumes());
 
     auto syncListing = [history, entries, listingKey, crumbs, listError, showHiddenFiles,
                         selection, selectedPath](bool force = true) {
@@ -613,6 +634,15 @@ struct FilesAppRoot {
 
     syncListing();
 
+    auto syncPlaces = [places] {
+      auto nextPlaces = sidebarPlacesWithMountedVolumes();
+      if (nextPlaces == places()) {
+        return false;
+      }
+      places.set(std::move(nextPlaces));
+      return true;
+    };
+
     if (Application::hasInstance()) {
       auto refreshTimerId = std::make_shared<std::uint64_t>(
           Application::instance().scheduleRepeatingTimer(std::chrono::seconds{2},
@@ -633,6 +663,18 @@ struct FilesAppRoot {
         }
       });
     }
+
+    useEffect([syncPlaces] {
+      if (!Application::hasInstance()) {
+        return;
+      }
+      try {
+        auto watcher = std::make_shared<FilesVolumeWatcher>(Application::instance(), syncPlaces);
+        std::shared_ptr<void> keepAlive = watcher;
+        Reactive::onCleanup([keepAlive] {});
+      } catch (...) {
+      }
+    });
 
     auto applyHistory = [history, activePlaceId, selectedPath, selection, scrollOffset, syncListing](
                             NavigationHistory next) {

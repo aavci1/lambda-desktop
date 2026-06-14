@@ -7,6 +7,7 @@
 #include <Lambda/System/DBus.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -59,6 +60,12 @@ struct UDisks2Snapshot {
   bool operator==(UDisks2Snapshot const&) const = default;
 };
 
+struct UDisks2StatusWatch {
+  dbus::Slot propertiesChanged;
+  dbus::Slot interfacesAdded;
+  dbus::Slot interfacesRemoved;
+};
+
 class UDisks2Client {
 public:
   static constexpr char const* serviceName = "org.freedesktop.UDisks2";
@@ -76,6 +83,7 @@ public:
   [[nodiscard]] dbus::Bus const& bus() const noexcept { return bus_; }
 
   [[nodiscard]] UDisks2Snapshot readSnapshot();
+  [[nodiscard]] UDisks2StatusWatch watchStatusChanges(std::function<void()> handler);
   [[nodiscard]] std::string mountFilesystem(std::string const& filesystemPath);
   void unmountFilesystem(std::string const& filesystemPath);
   void ejectDrive(std::string const& drivePath);

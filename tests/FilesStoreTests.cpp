@@ -85,6 +85,47 @@ TEST_CASE("FilesStore home directory falls back when HOME is unusable") {
   CHECK(lambda_files::homeDirectory() == std::filesystem::current_path());
 }
 
+TEST_CASE("FilesStore appends mounted UDisks2 volumes to sidebar places") {
+  std::vector<lambda_files::SidebarPlace> places = {
+      {.id = "home", .label = "Home", .icon = lambda::IconName::Home, .path = "/home/tester"},
+      {.id = "downloads", .label = "Downloads", .icon = lambda::IconName::Download, .path = "/media/DUP"},
+  };
+
+  lambda::system::UDisks2Snapshot snapshot;
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/sdb1",
+      .label = "USB_DISK",
+      .hasFilesystem = true,
+      .mountPoints = {"/media/USB_DISK"},
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/sdc1",
+      .label = "DUP",
+      .hasFilesystem = true,
+      .mountPoints = {"/media/DUP"},
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/sdd1",
+      .label = "UNMOUNTED",
+      .hasFilesystem = true,
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/nvme0n1p1",
+      .label = "ROOT",
+      .hintSystem = true,
+      .hasFilesystem = true,
+      .mountPoints = {"/"},
+  });
+
+  auto withVolumes = lambda_files::sidebarPlacesWithVolumes(std::move(places), snapshot);
+
+  REQUIRE(withVolumes.size() == 3);
+  CHECK(withVolumes.back().id == "volume:/org/freedesktop/UDisks2/block_devices/sdb1");
+  CHECK(withVolumes.back().label == "USB_DISK");
+  CHECK(withVolumes.back().icon == lambda::IconName::DevicesOther);
+  CHECK(withVolumes.back().path == "/media/USB_DISK");
+}
+
 TEST_CASE("FilesStore breadcrumbs handle home root and outside home") {
   ScopedEnv homeEnv("HOME");
   auto root = tempRoot("lambda-files-breadcrumb-test");

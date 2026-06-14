@@ -288,7 +288,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 - [x] [Auto] Add a basic `lambda::system::UDisks2Client` on top of `lambda::dbus` for ObjectManager `GetManagedObjects`, drive snapshots, visible filesystem volume snapshots, UDisks byte-array path decoding, mounted mount-point decoding, `Filesystem.Mount`, `Filesystem.Unmount`, and `Drive.Eject`.
 - [x] [Auto] Add deterministic fake-bus coverage for visible-volume filtering, drive/volume metadata, mount point decoding, volume-name formatting, mount/unmount calls, and eject calls.
-- [ ] [Auto + Manual] Wire UDisks2 ObjectManager and property signals into Files so removable volumes appear/disappear without polling.
+- [x] [Auto] Add UDisks2 ObjectManager/property signal watchers and wire Files to refresh mounted visible volume sidebar places through `BusEventPump` so mounted removable media can appear/disappear without polling.
 - [ ] [Auto + Manual] Surface removable volumes in the Files sidebar, with open, mount, unmount, eject, and error states.
 - [ ] [Auto] Add support for encrypted volumes, locked/unlocked state, mount options, busy-device errors, job progress, and safe retry/cancel messaging.
 - [ ] [Auto + Manual] Decide and implement optional auto-mount policy, respecting user config and avoiding surprise writes.
