@@ -400,6 +400,32 @@ std::uint32_t chooseCrtc(int fd, drmModeRes* resources, drmModeConnector const& 
   return 0;
 }
 
+bool acquireDrmMaster(int fd, char const* context) {
+  if (fd < 0) {
+    errno = EBADF;
+    return false;
+  }
+
+  if (drmSetMaster(fd) == 0) {
+    return true;
+  }
+
+  int const setMasterErrno = errno;
+  int const masterState = drmIsMaster(fd);
+  if (masterState > 0) {
+    debugLog("drmSetMaster %s failed with %s, but the fd is already DRM master",
+             context,
+             std::strerror(setMasterErrno));
+    errno = 0;
+    return true;
+  }
+  if (masterState < 0) {
+    debugLog("drmIsMaster after drmSetMaster %s failed: %s", context, std::strerror(errno));
+  }
+  errno = setMasterErrno;
+  return false;
+}
+
 } // namespace
 
 KmsApplication::KmsApplication() {
@@ -441,8 +467,11 @@ void KmsApplication::initialize() {
   if (!openFirstDisplayCard()) {
     throw std::runtime_error("No connected DRM/KMS display found");
   }
-  if (drmSetMaster(drmFd_) != 0) {
-    throw std::runtime_error("DRM master unavailable; another graphical session may be running.");
+  if (!acquireDrmMaster(drmFd_, "during startup")) {
+    int const masterErrno = errno;
+    throw std::runtime_error(std::string("DRM master unavailable during startup: ") +
+                             std::strerror(masterErrno) +
+                             ". Run from an active TTY and make sure no other compositor owns the card.");
   }
   drmMaster_ = true;
   enumerateConnectors();
@@ -1264,7 +1293,7 @@ void KmsApplication::acquireDrmMasterForVt(bool acknowledge) {
   debugLog("reacquiring DRM master after VT switch");
   if (drmFd_ >= 0 && !drmMaster_) {
     for (int attempt = 0; attempt < 10 && !drmMaster_; ++attempt) {
-      if (drmSetMaster(drmFd_) == 0) {
+      if (acquireDrmMaster(drmFd_, "after VT acquire")) {
         drmMaster_ = true;
       } else {
         debugLog("drmSetMaster attempt %d failed: %s", attempt + 1, std::strerror(errno));

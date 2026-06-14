@@ -219,4 +219,4 @@ gdbus call --system \
 - `Vulkan 1.3 required`: update Mesa/driver or select a different GPU.
 - `missing Vulkan 1.3 feature(s): dynamicRendering, synchronization2`: the device or driver cannot run the Lambda Vulkan backend.
 - `no graphics queue family can present to this surface`: the selected Vulkan device cannot present to the KMS/Wayland surface.
-- `drmModeGetResources failed` or no connectors: run from a real TTY, check permissions, and confirm another compositor is not holding DRM master.
+- `DRM master unavailable` or `drmModeGetResources failed`: run from a real TTY, check the reported errno, confirm no other compositor owns the card, and use `fuser -v /dev/dri/card*` to find card holders.
