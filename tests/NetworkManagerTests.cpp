@@ -252,6 +252,10 @@ TEST_CASE("NetworkManagerClient reads device and Wi-Fi status") {
   auto managerChangedSlot = client.watchManagerChanged([&] {
     ++managerChanges;
   });
+  int statusChanges = 0;
+  auto statusWatch = client.watchStatusChanges([&] {
+    ++statusChanges;
+  });
   managerState = static_cast<std::uint32_t>(lambda::system::NetworkManagerState::Disconnected);
   service.emitPropertiesChanged(
       lambda::system::NetworkManagerClient::objectPath,
@@ -263,6 +267,66 @@ TEST_CASE("NetworkManagerClient reads device and Wi-Fi status") {
   CHECK(pumpUntil(client.bus(),
                   [&] { return managerChanges == 1; },
                   std::chrono::milliseconds(500)));
+  CHECK(statusChanges == 1);
+
+  wifiState = static_cast<std::uint32_t>(lambda::system::NetworkDeviceState::Activated);
+  service.emitPropertiesChanged(
+      kWifiDevicePath,
+      lambda::system::NetworkManagerClient::deviceInterfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {{"State", lambda::dbus::BasicValue(wifiState)}},
+      });
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 2; },
+                  std::chrono::milliseconds(500)));
+
+  service.emitPropertiesChanged(
+      kWifiDevicePath,
+      lambda::system::NetworkManagerClient::wirelessDeviceInterfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {
+              {"ActiveAccessPoint", lambda::dbus::BasicValue(lambda::dbus::ObjectPath{kAccessPointPath})},
+          },
+      });
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 3; },
+                  std::chrono::milliseconds(500)));
+
+  ssid = "UpdatedNet";
+  service.emitPropertiesChanged(
+      kAccessPointPath,
+      lambda::system::NetworkManagerClient::accessPointInterfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {{"Ssid", lambda::dbus::BasicValue(ssidBytes(ssid))}},
+      });
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 4; },
+                  std::chrono::milliseconds(500)));
+
+  service.emitSignal(lambda::system::NetworkManagerClient::objectPath,
+                     lambda::system::NetworkManagerClient::interfaceName,
+                     "DeviceAdded",
+                     {lambda::dbus::ObjectPath{"/org/freedesktop/NetworkManager/Devices/3"}});
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 5; },
+                  std::chrono::milliseconds(500)));
+
+  service.emitSignal(lambda::system::NetworkManagerClient::objectPath,
+                     lambda::system::NetworkManagerClient::interfaceName,
+                     "DeviceRemoved",
+                     {lambda::dbus::ObjectPath{"/org/freedesktop/NetworkManager/Devices/3"}});
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 6; },
+                  std::chrono::milliseconds(500)));
+
+  managerState = static_cast<std::uint32_t>(lambda::system::NetworkManagerState::ConnectedGlobal);
+  snapshot = client.readSnapshot();
+  CHECK(lambda::system::formatWifiStatus(snapshot) == "UpdatedNet");
 }
 
 #endif

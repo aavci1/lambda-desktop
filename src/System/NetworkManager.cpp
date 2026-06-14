@@ -1,11 +1,14 @@
 #include <Lambda/System/NetworkManager.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace lambda::system {
 
 namespace {
+
+constexpr char kPropertiesInterface[] = "org.freedesktop.DBus.Properties";
 
 std::string decodeSsid(dbus::ByteArray const& bytes) {
   std::string ssid;
@@ -29,6 +32,12 @@ bool connectingState(NetworkDeviceState state) {
   return state == NetworkDeviceState::Prepare || state == NetworkDeviceState::Config ||
          state == NetworkDeviceState::NeedAuth || state == NetworkDeviceState::IpConfig ||
          state == NetworkDeviceState::IpCheck || state == NetworkDeviceState::Secondaries;
+}
+
+void notify(std::shared_ptr<std::function<void()>> const& handler) {
+  if (handler && *handler) {
+    (*handler)();
+  }
 }
 
 } // namespace
@@ -81,7 +90,7 @@ dbus::Slot NetworkManagerClient::watchManagerChanged(std::function<void()> handl
       dbus::SignalMatch{
           .sender = serviceName,
           .path = objectPath,
-          .interface = "org.freedesktop.DBus.Properties",
+          .interface = kPropertiesInterface,
           .member = "PropertiesChanged",
       },
       [handler = std::move(handler)](dbus::Message& message) mutable {
@@ -93,6 +102,66 @@ dbus::Slot NetworkManagerClient::watchManagerChanged(std::function<void()> handl
           handler();
         }
       });
+}
+
+NetworkManagerStatusWatch NetworkManagerClient::watchStatusChanges(std::function<void()> handler) {
+  auto sharedHandler = std::make_shared<std::function<void()>>(std::move(handler));
+  return NetworkManagerStatusWatch{
+      .managerChanged =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = objectPath,
+                  .interface = kPropertiesInterface,
+                  .member = "PropertiesChanged",
+              },
+              [sharedHandler](dbus::Message& message) {
+                auto const changed = dbus::readPropertiesChanged(message);
+                if (changed.interface != NetworkManagerClient::interfaceName) {
+                  return;
+                }
+                notify(sharedHandler);
+              }),
+      .deviceOrAccessPointChanged =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = {},
+                  .interface = kPropertiesInterface,
+                  .member = "PropertiesChanged",
+              },
+              [sharedHandler](dbus::Message& message) {
+                auto const changed = dbus::readPropertiesChanged(message);
+                if (changed.interface != NetworkManagerClient::deviceInterfaceName &&
+                    changed.interface != NetworkManagerClient::wirelessDeviceInterfaceName &&
+                    changed.interface != NetworkManagerClient::accessPointInterfaceName) {
+                  return;
+                }
+                notify(sharedHandler);
+              }),
+      .deviceAdded =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = objectPath,
+                  .interface = interfaceName,
+                  .member = "DeviceAdded",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+      .deviceRemoved =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = objectPath,
+                  .interface = interfaceName,
+                  .member = "DeviceRemoved",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+  };
 }
 
 void NetworkManagerClient::setWirelessEnabled(bool enabled) {

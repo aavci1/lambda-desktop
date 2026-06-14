@@ -75,6 +75,13 @@ struct NetworkManagerSnapshot {
   bool operator==(NetworkManagerSnapshot const&) const = default;
 };
 
+struct NetworkManagerStatusWatch {
+  dbus::Slot managerChanged;
+  dbus::Slot deviceOrAccessPointChanged;
+  dbus::Slot deviceAdded;
+  dbus::Slot deviceRemoved;
+};
+
 class NetworkManagerClient {
 public:
   static constexpr char const* serviceName = "org.freedesktop.NetworkManager";
@@ -96,6 +103,7 @@ public:
   [[nodiscard]] std::vector<std::string> devicePaths();
   [[nodiscard]] NetworkManagerSnapshot readSnapshot();
   [[nodiscard]] dbus::Slot watchManagerChanged(std::function<void()> handler);
+  [[nodiscard]] NetworkManagerStatusWatch watchStatusChanges(std::function<void()> handler);
   void setWirelessEnabled(bool enabled);
 
 private:

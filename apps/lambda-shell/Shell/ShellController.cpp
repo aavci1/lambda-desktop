@@ -114,11 +114,11 @@ struct ShellNetworkStatusWatcher {
   ShellNetworkStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
       : network(lambda::system::NetworkManagerClient::connectSystem()),
         networkPump(app, network.bus()),
-        networkManagerChanged(network.watchManagerChanged(std::move(onChanged))) {}
+        networkChanged(network.watchStatusChanges(std::move(onChanged))) {}
 
   lambda::system::NetworkManagerClient network;
   lambda::dbus::BusEventPump networkPump;
-  lambda::dbus::Slot networkManagerChanged;
+  lambda::system::NetworkManagerStatusWatch networkChanged;
 };
 
 struct ShellBluetoothStatusWatcher {
