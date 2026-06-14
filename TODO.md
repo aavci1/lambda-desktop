@@ -253,7 +253,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add deterministic fake-bus coverage for device enumeration, connected Wi-Fi SSID/signal formatting, connecting/off mapping, and Wi-Fi toggle property writes.
 - [x] [Auto] Make Shell network/Wi-Fi status prefer NetworkManager on the real `/sys` path and preserve the existing sysfs fallback when NetworkManager is unavailable or tests use a fixture sysroot.
 - [x] [Auto] Route the Shell network docklet primary action to NetworkManager `WirelessEnabled` toggling when Wi-Fi hardware is available.
-- [ ] [Auto + Manual] Wire NetworkManager state, device, and access-point signals into Shell so network/Wi-Fi status updates without waiting for the polling timer.
+- [x] [Auto] Wire NetworkManager manager `PropertiesChanged` into production Shell through `BusEventPump` so global network state and Wi-Fi enablement can refresh immediately instead of waiting for the polling timer.
+- [ ] [Auto + Manual] Wire NetworkManager device and access-point signals into Shell so active interface, SSID, and signal strength update without waiting for the polling timer.
 - [ ] [Auto] Enumerate visible access points, saved connections, active connections, metered state, connectivity state, and VPN state for Shell quick settings and Settings.
 - [ ] [Auto + Manual] Implement Wi-Fi access-point connect/disconnect flows, including a secrets path for password-protected networks.
 - [ ] [Auto + Manual] Build the Settings network page for saved networks, VPNs, and detailed adapter/IP state.

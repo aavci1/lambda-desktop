@@ -76,6 +76,25 @@ NetworkManagerSnapshot NetworkManagerClient::readSnapshot() {
   return snapshot;
 }
 
+dbus::Slot NetworkManagerClient::watchManagerChanged(std::function<void()> handler) {
+  return bus_.matchSignal(
+      dbus::SignalMatch{
+          .sender = serviceName,
+          .path = objectPath,
+          .interface = "org.freedesktop.DBus.Properties",
+          .member = "PropertiesChanged",
+      },
+      [handler = std::move(handler)](dbus::Message& message) mutable {
+        auto const changed = dbus::readPropertiesChanged(message);
+        if (changed.interface != NetworkManagerClient::interfaceName) {
+          return;
+        }
+        if (handler) {
+          handler();
+        }
+      });
+}
+
 void NetworkManagerClient::setWirelessEnabled(bool enabled) {
   bus_.setProperty(dbus::PropertyAddress{
                        .destination = serviceName,

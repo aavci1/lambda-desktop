@@ -32,6 +32,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <thread>
 #include <utility>
 
@@ -98,15 +99,31 @@ LayerShellOptions visibleMenuLayer(char const* nameSpace) {
 
 } // namespace
 
-struct ShellSystemStatusWatchers {
-  ShellSystemStatusWatchers(lambda::Application& app, std::function<void()> onPowerChanged)
+struct ShellPowerStatusWatcher {
+  ShellPowerStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
       : upower(lambda::system::UPowerClient::connectSystem()),
         upowerPump(app, upower.bus()),
-        upowerDisplayChanged(upower.watchDisplayDeviceChanged(std::move(onPowerChanged))) {}
+        upowerDisplayChanged(upower.watchDisplayDeviceChanged(std::move(onChanged))) {}
 
   lambda::system::UPowerClient upower;
   lambda::dbus::BusEventPump upowerPump;
   lambda::dbus::Slot upowerDisplayChanged;
+};
+
+struct ShellNetworkStatusWatcher {
+  ShellNetworkStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
+      : network(lambda::system::NetworkManagerClient::connectSystem()),
+        networkPump(app, network.bus()),
+        networkManagerChanged(network.watchManagerChanged(std::move(onChanged))) {}
+
+  lambda::system::NetworkManagerClient network;
+  lambda::dbus::BusEventPump networkPump;
+  lambda::dbus::Slot networkManagerChanged;
+};
+
+struct ShellSystemStatusWatchers {
+  std::unique_ptr<ShellPowerStatusWatcher> power;
+  std::unique_ptr<ShellNetworkStatusWatcher> network;
 };
 
 lambda::WindowConfig dockWindowConfig(int width,
@@ -556,12 +573,26 @@ bool ShellController::refreshSystemStatus() {
 }
 
 void ShellController::setupSystemStatusWatchers() {
-  if (systemStatusWatchers_) return;
-  try {
-    systemStatusWatchers_ = std::make_unique<ShellSystemStatusWatchers>(app_, [this] {
-      app_.eventQueue().post(ShellStatusCommandCompleted{.changed = true});
-    });
-  } catch (...) {
+  if (!systemStatusWatchers_) {
+    systemStatusWatchers_ = std::make_unique<ShellSystemStatusWatchers>();
+  }
+
+  auto refreshStatus = [this] {
+    app_.eventQueue().post(ShellStatusCommandCompleted{.changed = true});
+  };
+
+  if (!systemStatusWatchers_->power) {
+    try {
+      systemStatusWatchers_->power = std::make_unique<ShellPowerStatusWatcher>(app_, refreshStatus);
+    } catch (...) {
+    }
+  }
+
+  if (!systemStatusWatchers_->network) {
+    try {
+      systemStatusWatchers_->network = std::make_unique<ShellNetworkStatusWatcher>(app_, std::move(refreshStatus));
+    } catch (...) {
+    }
   }
 }
 

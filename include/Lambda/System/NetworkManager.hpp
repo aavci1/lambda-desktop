@@ -7,6 +7,7 @@
 #include <Lambda/System/DBus.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -94,6 +95,7 @@ public:
 
   [[nodiscard]] std::vector<std::string> devicePaths();
   [[nodiscard]] NetworkManagerSnapshot readSnapshot();
+  [[nodiscard]] dbus::Slot watchManagerChanged(std::function<void()> handler);
   void setWirelessEnabled(bool enabled);
 
 private:

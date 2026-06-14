@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -13,6 +14,7 @@
 namespace {
 
 using lambda::testing::dbus::pollBus;
+using lambda::testing::dbus::pumpUntil;
 using lambda::testing::dbus::startPrivateBus;
 
 constexpr char kEthernetDevicePath[] = "/org/freedesktop/NetworkManager/Devices/1";
@@ -245,6 +247,22 @@ TEST_CASE("NetworkManagerClient reads device and Wi-Fi status") {
   snapshot = client.readSnapshot();
   CHECK(lambda::system::formatNetworkStatus(snapshot) == "connecting");
   CHECK(lambda::system::formatWifiStatus(snapshot) == "connecting");
+
+  int managerChanges = 0;
+  auto managerChangedSlot = client.watchManagerChanged([&] {
+    ++managerChanges;
+  });
+  managerState = static_cast<std::uint32_t>(lambda::system::NetworkManagerState::Disconnected);
+  service.emitPropertiesChanged(
+      lambda::system::NetworkManagerClient::objectPath,
+      lambda::system::NetworkManagerClient::interfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {{"State", lambda::dbus::BasicValue(managerState)}},
+      });
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return managerChanges == 1; },
+                  std::chrono::milliseconds(500)));
 }
 
 #endif
