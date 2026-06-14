@@ -22,6 +22,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-023 | Feature | Complete SVC-4 xdg-desktop-portal backend | N/A | P0.5 |
 | TODO-024 | Feature | Complete SVC-6 notifications daemon and Shell UI | N/A | P0.5 |
 | TODO-025 | Feature | Complete SVC-7 StatusNotifierWatcher and tray host | N/A | P0.5 |
+| TODO-026 | Feature | Complete SVC-11 UPower power-status integration | N/A | P0.5 |
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -154,7 +155,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Add async method calls and pending-call cancellation.
 - [ ] [Auto] Add broader generic type support needed by remaining portals and services: object-path arrays, arbitrary arrays, arbitrary dictionaries, richer nested variants, and request option maps.
 - [ ] [Auto] Add object introspection and first-class `PropertiesChanged` helpers.
-- [ ] [Auto] Add deterministic fixture tests for the remaining first service clients that consume `lambda::dbus` (UPower, NetworkManager, BlueZ, udisks2).
+- [x] [Auto] Add deterministic fixture tests for the first UPower client that consumes `lambda::dbus`.
+- [ ] [Auto] Add deterministic fixture tests for the remaining first service clients that consume `lambda::dbus` (NetworkManager, BlueZ, udisks2).
 - [ ] [Auto + Manual] Wire D-Bus fd pumping into the compositor/service runtime paths that will host SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
 
 ## TODO-021: Complete SVC-2 libseat seat/session integration
@@ -220,3 +222,13 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Implement `com.canonical.dbusmenu` menu hosting and item `Activate`, `ContextMenu`, `SecondaryActivate`, and `Scroll` actions.
 - [ ] [Auto + Manual] Handle item property/signal changes live without freezing Shell when a tray item misbehaves or disappears.
 - [ ] [Manual] Validate Steam/Discord/Telegram/nm-applet-style tray icons appear, update, activate, and show menus.
+
+## TODO-026: Complete SVC-11 UPower power-status integration
+
+- [x] [Auto] Add a basic `lambda::system::UPowerClient` on top of `lambda::dbus` for `GetDisplayDevice`, display-device battery properties, manager `OnBattery`, and display-device `PropertiesChanged` signals.
+- [x] [Auto] Add deterministic fake-bus coverage for display-device reads, battery status formatting, and change-signal delivery.
+- [x] [Auto] Make Shell battery status prefer UPower on the real `/sys` path and preserve the existing sysfs fallback when UPower is unavailable or tests use a fixture sysroot.
+- [ ] [Auto + Manual] Wire UPower `PropertiesChanged`, `DeviceAdded`, and `DeviceRemoved` into Shell so battery/AC status updates without waiting for the polling timer.
+- [ ] [Auto] Expose richer UPower state in Shell status models: charging/discharging/full/empty, on-AC/on-battery, warning level, time-to-empty/full, and icon-name hints.
+- [ ] [Auto + Manual] Add quick-settings/power UI affordances once policy controls exist, while keeping read-only status truthful until then.
+- [ ] [Manual] Validate against the real system bus: AC plug/unplug and battery percentage changes update the Shell docklet, and systems without batteries still report unavailable truthfully.

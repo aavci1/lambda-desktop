@@ -23,7 +23,7 @@ Graphics and text dependencies:
 sudo pacman -S --needed \
   wayland wayland-protocols libxkbcommon \
   vulkan-headers vulkan-icd-loader vulkan-tools glslang \
-  mesa libdrm libinput libseat systemd-libs xdg-desktop-portal libnotify \
+  mesa libdrm libinput libseat systemd-libs xdg-desktop-portal libnotify upower \
   freetype2 fontconfig harfbuzz zlib
 ```
 
@@ -141,6 +141,18 @@ gdbus call --session \
   --object-path /StatusNotifierWatcher \
   --method org.freedesktop.DBus.Properties.Get \
   org.kde.StatusNotifierWatcher ProtocolVersion
+```
+
+## Power Status
+
+Shell battery status prefers UPower when reading the live system and falls back to `/sys/class/power_supply` when UPower is unavailable. For development, confirm the system service is visible with:
+
+```sh
+upower -d
+gdbus call --system \
+  --dest org.freedesktop.UPower \
+  --object-path /org/freedesktop/UPower \
+  --method org.freedesktop.UPower.GetDisplayDevice
 ```
 
 ## Common Failures

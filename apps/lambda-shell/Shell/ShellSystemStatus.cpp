@@ -1,5 +1,7 @@
 #include "Shell/ShellSystemStatus.hpp"
 
+#include <Lambda/System/UPower.hpp>
+
 #include "Shell/ShellAudioControl.hpp"
 
 #include <algorithm>
@@ -118,6 +120,18 @@ std::string readBluetoothStatus(std::filesystem::path const& sysRoot) {
 }
 
 std::string readBatteryStatus(std::filesystem::path const& sysRoot) {
+  if (sysRoot == "/sys") {
+    try {
+      auto client = lambda::system::UPowerClient::connectSystem();
+      auto const device = client.readDisplayDevice();
+      std::string const status = lambda::system::formatUPowerBatteryStatus(device);
+      if (status != "unavailable") {
+        return status;
+      }
+    } catch (...) {
+    }
+  }
+
   for (auto const& supplyPath : childDirectories(sysRoot / "class" / "power_supply")) {
     if (lowerAscii(readText(supplyPath / "type").value_or("")) != "battery") continue;
     if (auto capacity = readText(supplyPath / "capacity")) {
