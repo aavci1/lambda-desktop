@@ -33,6 +33,7 @@ set(_lambda_test_sources
   ForTests.cpp
   LogindTests.cpp
   MountRootTests.cpp
+  NotificationsTests.cpp
   main.cpp
   PathFlattenerTests.cpp
   PortalSettingsTests.cpp

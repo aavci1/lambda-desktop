@@ -89,6 +89,12 @@ void appendRgbColor(sd_bus_message* message, RgbColor const& value) {
   throwIfFailed(sd_bus_message_close_container(message), "close D-Bus RGB tuple");
 }
 
+void appendEmptyVariantDictionary(sd_bus_message* message) {
+  throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, "{sv}"),
+                "open empty D-Bus variant dictionary");
+  throwIfFailed(sd_bus_message_close_container(message), "close empty D-Bus variant dictionary");
+}
+
 void appendValue(sd_bus_message* message, BasicValue const& value) {
   int result = std::visit(
       [message](auto const& v) -> int {
@@ -116,6 +122,9 @@ void appendValue(sd_bus_message* message, BasicValue const& value) {
         } else if constexpr (std::is_same_v<T, RgbColor>) {
           appendRgbColor(message, v);
           return 0;
+        } else if constexpr (std::is_same_v<T, EmptyVariantDictionary>) {
+          appendEmptyVariantDictionary(message);
+          return 0;
         } else if constexpr (std::is_same_v<T, UnixFd>) {
           int const fd = v.get();
           return sd_bus_message_append_basic(message, 'h', &fd);
@@ -131,6 +140,20 @@ void appendVariant(sd_bus_message* message, BasicValue const& value) {
                 "open D-Bus variant");
   appendValue(message, value);
   throwIfFailed(sd_bus_message_close_container(message), "close D-Bus variant");
+}
+
+void appendVariantDictionary(sd_bus_message* message, VariantDictionary const& value) {
+  throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, "{sv}"),
+                "open D-Bus variant dictionary");
+  for (auto const& [key, settingValue] : value.values) {
+    throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_DICT_ENTRY, "sv"),
+                  "open D-Bus variant dictionary entry");
+    throwIfFailed(sd_bus_message_append_basic(message, 's', key.c_str()),
+                  "append D-Bus variant dictionary key");
+    appendVariant(message, settingValue);
+    throwIfFailed(sd_bus_message_close_container(message), "close D-Bus variant dictionary entry");
+  }
+  throwIfFailed(sd_bus_message_close_container(message), "close D-Bus variant dictionary");
 }
 
 void appendNamespacedVariantDictionary(sd_bus_message* message, NamespacedVariantDictionary const& value) {
@@ -165,6 +188,8 @@ void appendReplyValue(sd_bus_message* message, ReplyValue const& value) {
           appendValue(message, v);
         } else if constexpr (std::is_same_v<T, VariantValue>) {
           appendVariant(message, v.value);
+        } else if constexpr (std::is_same_v<T, VariantDictionary>) {
+          appendVariantDictionary(message, v);
         } else if constexpr (std::is_same_v<T, NamespacedVariantDictionary>) {
           appendNamespacedVariantDictionary(message, v);
         }
@@ -515,6 +540,8 @@ std::string signatureFor(BasicValue const& value) {
           return "as";
         } else if constexpr (std::is_same_v<T, RgbColor>) {
           return "(ddd)";
+        } else if constexpr (std::is_same_v<T, EmptyVariantDictionary>) {
+          return "a{sv}";
         } else if constexpr (std::is_same_v<T, UnixFd>) {
           return "h";
         }
@@ -750,6 +777,20 @@ NamespacedVariantDictionary Message::readNamespacedVariantDictionary() {
   throw Error(-ENOTSUP,
               "read D-Bus namespaced variant dictionary",
               "D-Bus support is not available in this build");
+#endif
+}
+
+void Message::skip(std::string_view signature) {
+#if LAMBDA_HAS_DBUS
+  if (!native_) {
+    throw Error(-EINVAL, "skip D-Bus value", "message is empty");
+  }
+  std::string const sig(signature);
+  throwIfFailed(sd_bus_message_skip(static_cast<sd_bus_message*>(native_), sig.c_str()),
+                "skip D-Bus value");
+#else
+  (void)signature;
+  throw Error(-ENOTSUP, "skip D-Bus value", "D-Bus support is not available in this build");
 #endif
 }
 

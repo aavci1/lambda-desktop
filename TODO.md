@@ -20,6 +20,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-021 | Feature | Complete SVC-2 libseat seat/session integration | N/A | P0.5 |
 | TODO-022 | Feature | Complete SVC-3 logind power/session integration | N/A | P0.5 |
 | TODO-023 | Feature | Complete SVC-4 xdg-desktop-portal backend | N/A | P0.5 |
+| TODO-024 | Feature | Complete SVC-6 notifications daemon and Shell UI | N/A | P0.5 |
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -146,6 +147,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add focused integration coverage for `Peer.Ping`, exported method calls, exported property get/set, and signal delivery against a private real bus when the local environment allows `dbus-daemon` to bind a socket.
 - [x] [Auto] Add Unix-fd basic value support and focused fd round-trip coverage for fd-returning service APIs such as logind inhibitors.
 - [x] [Auto] Add the first richer D-Bus shapes needed by SVC-4 Settings: string arrays, RGB tuples, variant replies/signals, and the `a{sa{sv}}` namespaced variant dictionary.
+- [x] [Auto] Add notification-service D-Bus helpers for empty `a{sv}` hints dictionaries and explicit skipping of currently ignored dictionaries.
 - [ ] [Auto] Add async method calls and pending-call cancellation.
 - [ ] [Auto] Add broader generic type support needed by remaining portals and services: object-path arrays, arbitrary arrays, arbitrary dictionaries, richer nested variants, and request option maps.
 - [ ] [Auto] Add object introspection, `GetAll`, and first-class `PropertiesChanged` helpers.
@@ -185,5 +187,20 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Wire Settings/Shell-owned appearance preferences into `lambda-portal` instead of relying on environment variables.
 - [ ] [Manual] Install or stage `lambda-portal` with `xdg-desktop-portal`, set `XDG_CURRENT_DESKTOP=Lambda`, and verify a real GTK/Qt app reads the color-scheme/accent through the frontend portal.
 - [ ] [Auto + Manual] Implement the FileChooser portal backend for Open/Save using a Lambda file-chooser surface backed by `lambda-files` components.
-- [ ] [Auto + Manual] Implement OpenURI, Inhibit, Account, and Notification portal backends; route Notification through SVC-6 once the notifications daemon exists.
+- [ ] [Auto + Manual] Implement OpenURI, Inhibit, Account, and Notification portal backends; route portal Notification requests through the SVC-6 daemon.
 - [ ] [Auto + Manual] Add real frontend request/response tests for xdg-desktop-portal request objects, handles, cancellation, and response codes.
+
+## TODO-024: Complete SVC-6 notifications daemon and Shell UI
+
+- [x] [Auto] Add a Linux `lambda-notifications` session-bus service target with D-Bus activation metadata for `org.freedesktop.Notifications`.
+- [x] [Auto] Export the Freedesktop notifications interface with `Notify`, `CloseNotification`, `GetCapabilities`, `GetServerInformation`, `NotificationClosed`, and `ActionInvoked`.
+- [x] [Auto] Keep basic in-memory notification history with replacement support, action parsing, DND state plumbing, and close/action signal helpers.
+- [x] [Auto] Add deterministic private-bus coverage for capabilities, server information, notification creation/replacement, close signals, and action signals.
+- [x] [Auto] Smoke the built `lambda-notifications` process on a private session bus and verify a real `Notify` call through `gdbus`.
+- [ ] [Auto + Manual] Wire `lambda-notifications` into Shell's live notification banner and notification-center UI.
+- [ ] [Auto + Manual] Route action button clicks from Shell UI back to `ActionInvoked`, close/dismiss events to `NotificationClosed`, and close all visible UI when notifications are closed by D-Bus.
+- [ ] [Auto + Manual] Enforce Shell notification config, including enabled/disabled, DND, banner timeout, history limit, and preview visibility.
+- [ ] [Auto + Manual] Implement timeout expiry, grouping, persistence policy, and clear-all behavior against the service history.
+- [ ] [Auto] Parse the common notification hints that affect presentation, including urgency, category, desktop-entry, image/icon data, transient, and sound suppression.
+- [ ] [Auto + Manual] Route the SVC-4 portal Notification backend through this service.
+- [ ] [Manual] Validate `notify-send "x"` shows a Shell banner, actions invoke, DND suppresses banners, and history shows past notifications.

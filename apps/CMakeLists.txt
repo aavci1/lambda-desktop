@@ -1,5 +1,6 @@
 add_subdirectory(lambda-editor)
 add_subdirectory(lambda-files)
+add_subdirectory(lambda-notifications)
 add_subdirectory(lambda-portal)
 add_subdirectory(lambda-preview)
 add_subdirectory(lambda-settings)

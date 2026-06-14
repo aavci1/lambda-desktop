@@ -2,6 +2,7 @@ set(LAMBDA_CORE_SOURCES
   Core/Identity.cpp
   System/DBus.cpp
   System/Logind.cpp
+  System/Notifications.cpp
   System/PortalSettings.cpp
 )
 

@@ -62,6 +62,8 @@ struct RgbColor {
   double blue = 0.0;
 };
 
+struct EmptyVariantDictionary {};
+
 class UnixFd {
 public:
   UnixFd() = default;
@@ -88,17 +90,21 @@ private:
 
 using BasicValue = std::variant<bool, std::int32_t, std::uint32_t, std::int64_t,
                                 std::uint64_t, double, std::string, ObjectPath, StringArray,
-                                RgbColor, UnixFd>;
+                                RgbColor, EmptyVariantDictionary, UnixFd>;
 
 struct VariantValue {
   BasicValue value;
+};
+
+struct VariantDictionary {
+  std::map<std::string, BasicValue> values;
 };
 
 struct NamespacedVariantDictionary {
   std::map<std::string, std::map<std::string, BasicValue>> values;
 };
 
-using ReplyValue = std::variant<BasicValue, VariantValue, NamespacedVariantDictionary>;
+using ReplyValue = std::variant<BasicValue, VariantValue, VariantDictionary, NamespacedVariantDictionary>;
 
 [[nodiscard]] std::string signatureFor(BasicValue const& value);
 
@@ -150,6 +156,7 @@ public:
   [[nodiscard]] BasicValue readBasic(std::string_view signature);
   [[nodiscard]] BasicValue readVariant(std::string_view signature);
   [[nodiscard]] NamespacedVariantDictionary readNamespacedVariantDictionary();
+  void skip(std::string_view signature);
 
 private:
   friend class Bus;

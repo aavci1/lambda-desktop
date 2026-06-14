@@ -23,7 +23,7 @@ Graphics and text dependencies:
 sudo pacman -S --needed \
   wayland wayland-protocols libxkbcommon \
   vulkan-headers vulkan-icd-loader vulkan-tools glslang \
-  mesa libdrm libinput libseat systemd-libs xdg-desktop-portal \
+  mesa libdrm libinput libseat systemd-libs xdg-desktop-portal libnotify \
   freetype2 fontconfig harfbuzz zlib
 ```
 
@@ -112,6 +112,21 @@ LAMBDA_PORTAL_ACCENT_COLOR=0.25,0.5,0.75 \
 ```
 
 For installed portal selection, run a session with `XDG_CURRENT_DESKTOP=Lambda` and install the generated D-Bus service plus `lambda.portal` metadata alongside `xdg-desktop-portal`. Until Settings owns these preferences, the environment variables above control the advertised appearance values.
+
+## Notifications Daemon
+
+The Linux build includes `lambda-notifications`, a basic `org.freedesktop.Notifications` session-bus daemon. It currently accepts notifications, stores in-memory history, supports replacement/close/action signals, and is ready for Shell banner/notification-center wiring.
+
+Development smoke without installing:
+
+```sh
+./build/apps/lambda-notifications/lambda-notifications
+gdbus call --session \
+  --dest org.freedesktop.Notifications \
+  --object-path /org/freedesktop/Notifications \
+  --method org.freedesktop.Notifications.Notify \
+  lambda-smoke "uint32 0" dialog-information "Smoke" "Notification body" "@as []" "@a{sv} {}" 5000
+```
 
 ## Common Failures
 
