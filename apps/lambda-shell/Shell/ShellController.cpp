@@ -125,11 +125,11 @@ struct ShellBluetoothStatusWatcher {
   ShellBluetoothStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
       : bluetooth(lambda::system::BlueZClient::connectSystem()),
         bluetoothPump(app, bluetooth.bus()),
-        bluetoothChanged(bluetooth.watchAdapterOrDeviceChanged(std::move(onChanged))) {}
+        bluetoothChanged(bluetooth.watchStatusChanges(std::move(onChanged))) {}
 
   lambda::system::BlueZClient bluetooth;
   lambda::dbus::BusEventPump bluetoothPump;
-  lambda::dbus::Slot bluetoothChanged;
+  lambda::system::BlueZStatusWatch bluetoothChanged;
 };
 
 struct ShellMediaStatusWatcher {

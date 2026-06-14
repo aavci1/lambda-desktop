@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -10,6 +11,14 @@ namespace lambda::system {
 namespace {
 
 using InterfaceProperties = std::map<std::string, dbus::BasicValue>;
+
+constexpr char kPropertiesInterface[] = "org.freedesktop.DBus.Properties";
+
+void notify(std::shared_ptr<std::function<void()>> const& handler) {
+  if (handler && *handler) {
+    (*handler)();
+  }
+}
 
 std::string stringProperty(InterfaceProperties const& properties, std::string const& name) {
   auto const it = properties.find(name);
@@ -119,7 +128,7 @@ dbus::Slot BlueZClient::watchAdapterOrDeviceChanged(std::function<void()> handle
       dbus::SignalMatch{
           .sender = serviceName,
           .path = {},
-          .interface = "org.freedesktop.DBus.Properties",
+          .interface = kPropertiesInterface,
           .member = "PropertiesChanged",
       },
       [handler = std::move(handler)](dbus::Message& message) mutable {
@@ -132,6 +141,50 @@ dbus::Slot BlueZClient::watchAdapterOrDeviceChanged(std::function<void()> handle
           handler();
         }
       });
+}
+
+BlueZStatusWatch BlueZClient::watchStatusChanges(std::function<void()> handler) {
+  auto sharedHandler = std::make_shared<std::function<void()>>(std::move(handler));
+  return BlueZStatusWatch{
+      .adapterOrDeviceChanged =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = {},
+                  .interface = kPropertiesInterface,
+                  .member = "PropertiesChanged",
+              },
+              [sharedHandler](dbus::Message& message) {
+                auto const changed = dbus::readPropertiesChanged(message);
+                if (changed.interface != BlueZClient::adapterInterfaceName &&
+                    changed.interface != BlueZClient::deviceInterfaceName) {
+                  return;
+                }
+                notify(sharedHandler);
+              }),
+      .interfacesAdded =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = objectManagerPath,
+                  .interface = objectManagerInterfaceName,
+                  .member = "InterfacesAdded",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+      .interfacesRemoved =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = objectManagerPath,
+                  .interface = objectManagerInterfaceName,
+                  .member = "InterfacesRemoved",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+  };
 }
 
 dbus::ManagedObjectDictionary BlueZClient::managedObjects() {

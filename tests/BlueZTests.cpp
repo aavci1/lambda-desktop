@@ -140,6 +140,10 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   auto adapterChangedSlot = client.watchAdapterOrDeviceChanged([&] {
     ++adapterChanges;
   });
+  int statusChanges = 0;
+  auto statusWatch = client.watchStatusChanges([&] {
+    ++statusChanges;
+  });
   powered = true;
   service.emitPropertiesChanged(
       kAdapterPath,
@@ -150,6 +154,33 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   service.flush();
   CHECK(pumpUntil(client.bus(),
                   [&] { return adapterChanges == 1; },
+                  std::chrono::milliseconds(500)));
+  CHECK(statusChanges == 1);
+
+  lambda::dbus::NamespacedVariantDictionary addedInterfaces;
+  addedInterfaces.values[lambda::system::BlueZClient::deviceInterfaceName] = {
+      {"Connected", lambda::dbus::BasicValue(false)},
+  };
+  service.emitSignal(lambda::system::BlueZClient::objectManagerPath,
+                     lambda::system::BlueZClient::objectManagerInterfaceName,
+                     "InterfacesAdded",
+                     {lambda::dbus::ObjectPath{"/org/bluez/hci0/dev_11_22_33_44_55_66"},
+                      addedInterfaces});
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 2; },
+                  std::chrono::milliseconds(500)));
+
+  service.emitSignal(lambda::system::BlueZClient::objectManagerPath,
+                     lambda::system::BlueZClient::objectManagerInterfaceName,
+                     "InterfacesRemoved",
+                     {lambda::dbus::ObjectPath{"/org/bluez/hci0/dev_11_22_33_44_55_66"},
+                      lambda::dbus::StringArray{
+                          .values = {lambda::system::BlueZClient::deviceInterfaceName},
+                      }});
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 3; },
                   std::chrono::milliseconds(500)));
 
   CHECK(lambda::system::formatBluetoothStatus(lambda::system::BlueZSnapshot{}) == "unavailable");

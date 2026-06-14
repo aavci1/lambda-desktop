@@ -41,6 +41,12 @@ struct BlueZSnapshot {
   bool operator==(BlueZSnapshot const&) const = default;
 };
 
+struct BlueZStatusWatch {
+  dbus::Slot adapterOrDeviceChanged;
+  dbus::Slot interfacesAdded;
+  dbus::Slot interfacesRemoved;
+};
+
 class BlueZClient {
 public:
   static constexpr char const* serviceName = "org.bluez";
@@ -58,6 +64,7 @@ public:
 
   [[nodiscard]] BlueZSnapshot readSnapshot();
   [[nodiscard]] dbus::Slot watchAdapterOrDeviceChanged(std::function<void()> handler);
+  [[nodiscard]] BlueZStatusWatch watchStatusChanges(std::function<void()> handler);
   void setAdapterPowered(std::string const& adapterPath, bool powered);
 
 private:
