@@ -6,6 +6,7 @@
 
 #include <Lambda/System/DBus.hpp>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,7 @@ public:
   [[nodiscard]] dbus::Bus const& bus() const noexcept { return bus_; }
 
   [[nodiscard]] BlueZSnapshot readSnapshot();
+  [[nodiscard]] dbus::Slot watchAdapterOrDeviceChanged(std::function<void()> handler);
   void setAdapterPowered(std::string const& adapterPath, bool powered);
 
 private:

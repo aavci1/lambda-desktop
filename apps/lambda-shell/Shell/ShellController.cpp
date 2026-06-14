@@ -121,9 +121,21 @@ struct ShellNetworkStatusWatcher {
   lambda::dbus::Slot networkManagerChanged;
 };
 
+struct ShellBluetoothStatusWatcher {
+  ShellBluetoothStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
+      : bluetooth(lambda::system::BlueZClient::connectSystem()),
+        bluetoothPump(app, bluetooth.bus()),
+        bluetoothChanged(bluetooth.watchAdapterOrDeviceChanged(std::move(onChanged))) {}
+
+  lambda::system::BlueZClient bluetooth;
+  lambda::dbus::BusEventPump bluetoothPump;
+  lambda::dbus::Slot bluetoothChanged;
+};
+
 struct ShellSystemStatusWatchers {
   std::unique_ptr<ShellPowerStatusWatcher> power;
   std::unique_ptr<ShellNetworkStatusWatcher> network;
+  std::unique_ptr<ShellBluetoothStatusWatcher> bluetooth;
 };
 
 lambda::WindowConfig dockWindowConfig(int width,
@@ -590,7 +602,14 @@ void ShellController::setupSystemStatusWatchers() {
 
   if (!systemStatusWatchers_->network) {
     try {
-      systemStatusWatchers_->network = std::make_unique<ShellNetworkStatusWatcher>(app_, std::move(refreshStatus));
+      systemStatusWatchers_->network = std::make_unique<ShellNetworkStatusWatcher>(app_, refreshStatus);
+    } catch (...) {
+    }
+  }
+
+  if (!systemStatusWatchers_->bluetooth) {
+    try {
+      systemStatusWatchers_->bluetooth = std::make_unique<ShellBluetoothStatusWatcher>(app_, std::move(refreshStatus));
     } catch (...) {
     }
   }

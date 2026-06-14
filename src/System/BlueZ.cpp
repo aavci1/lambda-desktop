@@ -114,6 +114,26 @@ void BlueZClient::setAdapterPowered(std::string const& adapterPath, bool powered
                    powered);
 }
 
+dbus::Slot BlueZClient::watchAdapterOrDeviceChanged(std::function<void()> handler) {
+  return bus_.matchSignal(
+      dbus::SignalMatch{
+          .sender = serviceName,
+          .path = {},
+          .interface = "org.freedesktop.DBus.Properties",
+          .member = "PropertiesChanged",
+      },
+      [handler = std::move(handler)](dbus::Message& message) mutable {
+        auto const changed = dbus::readPropertiesChanged(message);
+        if (changed.interface != BlueZClient::adapterInterfaceName &&
+            changed.interface != BlueZClient::deviceInterfaceName) {
+          return;
+        }
+        if (handler) {
+          handler();
+        }
+      });
+}
+
 dbus::ManagedObjectDictionary BlueZClient::managedObjects() {
   dbus::Message reply = bus_.call(dbus::MethodCall{
       .destination = serviceName,

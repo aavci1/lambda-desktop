@@ -5,12 +5,14 @@
 #include <doctest/doctest.h>
 
 #include <atomic>
+#include <chrono>
 #include <thread>
 #include <utility>
 
 namespace {
 
 using lambda::testing::dbus::pollBus;
+using lambda::testing::dbus::pumpUntil;
 using lambda::testing::dbus::startPrivateBus;
 
 constexpr char kAdapterPath[] = "/org/bluez/hci0";
@@ -133,6 +135,22 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   CHECK(!powered);
   snapshot = client.readSnapshot();
   CHECK(lambda::system::formatBluetoothStatus(snapshot) == "off");
+
+  int adapterChanges = 0;
+  auto adapterChangedSlot = client.watchAdapterOrDeviceChanged([&] {
+    ++adapterChanges;
+  });
+  powered = true;
+  service.emitPropertiesChanged(
+      kAdapterPath,
+      lambda::system::BlueZClient::adapterInterfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {{"Powered", lambda::dbus::BasicValue(powered)}},
+      });
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return adapterChanges == 1; },
+                  std::chrono::milliseconds(500)));
 
   CHECK(lambda::system::formatBluetoothStatus(lambda::system::BlueZSnapshot{}) == "unavailable");
 }

@@ -266,7 +266,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add deterministic fake-bus coverage for adapter/device enumeration, connected-device status formatting, off/on/unavailable mapping, adapter power writes, and unsupported ObjectManager property skipping.
 - [x] [Auto] Make Shell Bluetooth status prefer BlueZ on the real `/sys` path and preserve the existing rfkill/sysfs fallback when BlueZ is unavailable or tests use a fixture sysroot.
 - [x] [Auto] Route the Shell Bluetooth docklet primary action to toggle all known BlueZ adapters powered on/off.
-- [ ] [Auto + Manual] Wire BlueZ ObjectManager, adapter, and device signals into Shell so Bluetooth status updates without waiting for the polling timer.
+- [x] [Auto] Wire BlueZ adapter/device `PropertiesChanged` into production Shell through `BusEventPump` so power and connection state can refresh immediately instead of waiting for the polling timer.
+- [ ] [Auto + Manual] Wire BlueZ ObjectManager add/remove signals into Shell so adapter and device arrival/removal update without waiting for the polling timer.
 - [ ] [Auto] Enumerate adapters and devices with richer state: discoverable/discovering, trusted/blocked, paired/unpaired, battery where exposed, icon/class/category, and connection errors.
 - [ ] [Auto + Manual] Expand Bluetooth controls with discovery, pairing-agent, pair/unpair, trust/untrust, connect/disconnect, per-adapter handling, and forget-device flows.
 - [ ] [Auto + Manual] Build the Settings Bluetooth page for pairing, device management, and adapter details.
