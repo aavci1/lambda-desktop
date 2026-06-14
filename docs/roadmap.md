@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-06-13 (WM-COMP-23 native popover Escape verifier)
+**Last updated:** 2026-06-14 (integrated daily-driver gap analysis: new System Services workstream SVC-*, compositor protocol/power gates WM-11…WM-21, missing-app specs, reprioritized gate)
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -20,6 +20,10 @@ This document replaces the older roadmap, Lambda desktop readiness index, compon
 | [linux-development.md](linux-development.md) | Linux package setup and KMS/Vulkan development notes |
 | [conventions.md](conventions.md) | Repository layout, CMake, namespaces, platforms, examples |
 | [reactive-graph.md](reactive-graph.md), [composites.md](composites.md), [migrating-to-v5.md](migrating-to-v5.md), [ui-view-body-style.md](ui-view-body-style.md), [event_queue.md](event_queue.md) | Lambda v5 framework reference |
+
+Folded into this roadmap (2026-06-14):
+
+- `lambda-daily-driver-gap-analysis.md` — findings integrated into Product Decisions, the Daily-Driver Gate, the new System Services section, the Window Manager protocol/power gates, the Shell provider work, and the missing-app specs in P6.
 
 Deleted/superseded docs:
 
@@ -41,13 +45,25 @@ Deleted/superseded docs:
 - Browser, mail, calendar, and media can be mature external Wayland apps unless Lambda explicitly decides to own them.
 - Settings edits component-owned config. It must not become a second source of truth for Window Manager, Shell, Files, or Terminal preferences.
 
+### Recommended revisions to product decisions (from 2026-06-14 gap analysis)
+
+These revise the decisions above. They are recommendations for the owner to accept or reject; the gate below is written assuming acceptance. Each carries a one-line rationale.
+
+- **Adopt a System Services layer as a first-class workstream (new, accept).** D-Bus integration, seat/session management, and portals are prerequisites for most Shell and app gates. They are currently scattered across Shell provider notes and a single "portal direction" backlog line. Promote them to the SVC-* workstream and schedule them early. Rationale: the Shell status providers, file dialogs in third-party apps, screen sharing, suspend, and tray apps all depend on this layer; without it those gates cannot close.
+- **Pull screen lock, logout, and suspend/power into the gate (revises "intentionally outside the gate").** Rationale: a machine you cannot lock, suspend, or cleanly log out of is not a daily driver. These are small once logind + session-lock + PAM exist (SVC-3, WM-11, the lock app). Greeter/login and crash-restart policy can stay deferred.
+- **Pull XWayland into the gate as a late item (revises "later explicit product decision").** Rationale: keep pure-Wayland as the bring-up target, but a daily driver must run the long tail (some games, proprietary tools, older Electron, and screen-share fallbacks). Schedule it after the Wayland-native path is solid (WM-20), not at the end of everything.
+- **Workspaces / virtual desktops: explicit decision required (still open).** Not currently planned. Many users consider them table-stakes. Recommendation: commit to `ext-workspace-v1` + a Shell switcher as a post-gate fast-follow, or explicitly state Lambda ships without workspaces in v1.
+- **Touch and IME: explicit decision required (still open).** Touch and input methods remain out of scope. Recommendation: keep deferred unless touchscreen/2-in-1 hardware or non-Latin input is a target audience; if so, schedule `wl_touch` and `text-input-v3`/`input-method-v2` as a separate workstream.
+- **Toolkit theming bridge (new, accept).** Without the portal Settings interface (+ XSettings/gsettings fallback), external GTK/Qt apps will not follow the desktop theme, dark-mode, cursor, or font. Tracked as SVC-15. Rationale: visual coherence of the whole desktop, not just Lambda apps.
+
 ## Ownership Boundaries
 
-- Window Manager owns KMS/Wayland composition, output/scale, window state/focus, input routing, layer-shell placement, compositor chrome, screenshots, compositor-drawn screenshot UI, and protocol validation.
-- Shell owns persistent desktop chrome: dock, command launcher, app presentation, status docklets/quick settings, notifications, clipboard-history UI/policy, Shell preferences, and user-facing desktop navigation.
+- Window Manager owns KMS/Wayland composition, output/scale, window state/focus, input routing, layer-shell placement, compositor chrome, screenshots, compositor-drawn screenshot UI, protocol validation, **and the compositor-side implementation of session-lock, client screen-capture, idle-notify, DPMS/output power, foreign-toplevel, output-management, data-control, and gamma/color protocols (WM-11…WM-21).**
+- Shell owns persistent desktop chrome: dock, command launcher, app presentation, status docklets/quick settings, notifications, clipboard-history UI/policy, Shell preferences, user-facing desktop navigation, **the system-tray (StatusNotifierItem) host UI, the power/session menu UI, media-key/OSD behavior, and the lock-screen front-end** (authentication and the lock protocol client live with the lock app/SVC).
 - Settings owns GUI editing for owner config files and truthful system/about status. The owning process remains the runtime authority.
-- Files owns safe local file management, trash-first delete, selection, clipboard file operations, open-with UI, file icons, and current-folder refresh/watch behavior.
+- Files owns safe local file management, trash-first delete, selection, clipboard file operations, open-with UI, file icons, current-folder refresh/watch behavior, **and removable-volume presentation/mount/unmount via the udisks2 service (SVC-14).**
 - Terminal owns pty/libvterm behavior, scrollback, keyboard/input encoding, selection/copy/paste, terminal rendering, terminal preferences, and terminal desktop integration.
+- **System Services (new) owns the cross-cutting desktop backends that have no single app home: the D-Bus capability, seat/session management (libseat/logind), the xdg-desktop-portal backend, the notifications daemon, the StatusNotifierWatcher, the polkit authentication agent, the NetworkManager/BlueZ/UPower/MPRIS/Secret Service/udisks2 clients, and the toolkit theming bridge. These are libraries and small service processes consumed by Shell, Settings, Files, and the lock app. They are not a second source of truth for component config.**
 - Shared desktop services are still needed for app registry, icon theme, MIME/default-app/open-with, status providers, notifications, clipboard history, portals, secrets/keyring, and future file chooser/screenshot/screencast APIs.
 
 ## Project Snapshot
@@ -57,114 +73,94 @@ Deleted/superseded docs:
 | Lambda v5 UI runtime | Shipped. Retained mount, reactive graph, `Bindable` modifiers, `For`/`Show`/`Switch`. |
 | App platforms | macOS Metal, Linux Wayland Vulkan, Linux KMS Vulkan. |
 | Examples | Demo and Lambda app targets build through CMake when examples are enabled. |
-| Window Manager | Core compositor is usable for dogfooding on the target hardware; remaining gate is deferred titlebar/content frame coherence, the rest of the wlroots comparison backlog, broader real-app validation, and visual polish. |
-| Shell | App registry, dock, IPC, config, icons, and status fallback exist; live notification/clipboard/provider work remains. |
-| Settings | Real owner-config editor exists; live apply depends on Window Manager/Shell hot-reload support. |
-| Files | Live file browser/manager exists; model layer is ahead of live UI for several commands. |
+| Window Manager | Core compositor is usable for dogfooding. Open: titlebar/content frame coherence, wlroots backlog, real-app validation, polish, **and the daily-driver protocol/power gates (session-lock, screen-capture, idle-notify, DPMS, foreign-toplevel, output-management) — not yet started.** |
+| System Services | **Not started. No D-Bus capability in the tree; KMS opens devices directly without libseat/logind; no portal backend, notifications daemon, tray host, polkit agent, or NetworkManager/BlueZ/UPower/MPRIS/secrets/udisks clients. Largest greenfield gap.** |
+| Shell | App registry, dock, IPC, config, icons, and status *fallback* exist; live notifications/clipboard/tray/network and most provider control remain, gated on System Services. |
+| Settings | Real owner-config editor exists; live apply depends on Window Manager/Shell hot-reload; network/Bluetooth/display-output pages depend on System Services + output-management. |
+| Files | Live file browser/manager exists; model layer is ahead of live UI for several commands; removable-media mounting depends on udisks2 (SVC-14). |
 | Terminal | Usable for basic shell work; search UI, mouse reporting, and complex Unicode remain open. |
+| Apps | Editor substantial but mid-gate; image viewer (`lambda-preview`) is a 232-line stub; screenshot tool, PDF viewer, archive manager, calculator, system monitor, media player not built. |
 
 ## Daily-Driver Gate
 
-Lambda is not daily-driver complete until these gates are closed.
+Lambda is not daily-driver complete until these gates are closed. The 2026-06-14 gap analysis inserts a System Services layer (P0.5) ahead of most Shell/app polish, because those gates depend on it, and pulls lock/logout/suspend and XWayland into the gate (see Product Decisions revisions).
 
 | Priority | Area | Gate | Status |
 | --- | --- | --- | --- |
 | P0 | Window Manager | Visual stability and real-app compositor validation | Open: narrowed to validation/polish |
-| P1 | Shell | Live launcher providers, notifications, clipboard history, quick settings providers | Open |
-| P2 | Settings | Owner config editing plus live-apply clarity | Mostly done |
-| P3 | Files | Safe file-management live UI beyond the model layer | Open |
+| P0.5 | System Services and Session | D-Bus capability; libseat/logind seat+power; portal backend (file chooser, settings, screencast); notifications daemon; tray host; idle-notify+DPMS; screen lock; polkit; network/audio/bluetooth/power/media/secrets/mounts | **Open: not started — top new priority** |
+| P1 | Shell | Live launcher providers, notifications, clipboard history, quick-settings providers, tray, power/session menu, media keys/OSD | Open (most items gated on P0.5) |
+| P2 | Settings | Owner config editing plus live-apply clarity; network/Bluetooth/display-output pages | Mostly done for owner config; system pages gated on P0.5/WM-16 |
+| P3 | Files | Safe file-management live UI beyond the model layer; removable-media mounting | Open |
 | P4 | Terminal | Daily terminal UI completeness | Open |
-| P5 | Shared services and missing core apps | Shared desktop backends, editor, document viewer | Editor backlog integrated; other apps remain preliminary |
+| P5 | Compositor protocol/power | Session-lock, client screen-capture, idle-notify, DPMS, foreign-toplevel, output-management, data-control, gamma; XWayland | **Open: not started (WM-11…WM-21)** |
+| P6 | Shared services and missing core apps | Shared desktop backends, real image viewer, screenshot tool, PDF viewer, archive manager, calculator, system monitor, media player | Editor backlog integrated; image viewer is a stub; others not built |
+
+Recommended sequencing (phases, not strict serialization — many SVC items parallelize once the D-Bus capability exists):
+
+- **Phase A — make it run as a session:** SVC-2 (libseat/logind seat), SVC-1 (D-Bus capability). Until these land, Lambda needs root/manual perms on bare metal and has no system bus.
+- **Phase B — make the session safe and modern:** SVC-3 (logind power/inhibit) + WM-13 (idle-notify) + WM-14 (DPMS); WM-11 (session-lock) + lock app + PAM; WM-12 (screen capture) + SVC-5 (screencast portal) + SVC-4 (portal file chooser/settings); SVC-6 (notifications daemon).
+- **Phase C — connectivity and polish:** SVC-9 (NetworkManager) + Shell Wi-Fi; SVC-7 (tray host); SVC-8 (polkit); SVC-10/11/12/13/14 (BlueZ/UPower/MPRIS/secrets/udisks); SVC-15 (theming bridge); WM-15/16/17/18 (foreign-toplevel/output-management/data-control/gamma).
+- **Phase D — finish apps and the long tail:** Files (P3), Terminal (P4), Editor gate; real image viewer (IMG-*) and screenshot tool (SHOT-*); WM-20 (XWayland); then optional apps (PDF, archive, calculator, system monitor, media) and the workspaces/touch/IME decisions.
 
 ## Detailed Workstream Index
 
-The old readiness specs used component-specific workstream IDs. This section keeps those workstreams in the roadmap so no active spec work is lost.
+The old readiness specs used component-specific workstream IDs. This section keeps those workstreams in the roadmap so no active spec work is lost. SVC-* and WM-11…WM-21 and the new app IDs are added from the 2026-06-14 gap analysis.
 
-Window Manager:
+System Services and Session (new):
 
-- WM-1: Baseline idle and frame scheduling.
-- WM-2: Resize and snap visual stability.
-- WM-3: Window geometry and state invariants.
-- WM-4: Chrome, decorations, glass, and shadows.
-- WM-5: Output selection and scale.
-- WM-6: Input, keyboard, and cursor readiness.
-- WM-7: Screenshot readiness.
-- WM-8: Wayland protocol validation.
-- WM-9: Config contract.
-- WM-10: Real-app validation.
+- SVC-1: D-Bus capability in the framework (session + system bus, calls, signals, properties, object export, event-loop integration).
+- SVC-2: Seat/session management via libseat (logind/seatd), VT switching, unprivileged device access.
+- SVC-3: logind client — suspend/hibernate/poweroff/reboot, lid/power-key/idle inhibitors, sleep signals, lock/unlock session.
+- SVC-4: xdg-desktop-portal backend — FileChooser, Settings (color-scheme/accent), OpenURI, Inhibit, Account, Notification routing.
+- SVC-5: Screencast/RemoteDesktop portal + PipeWire stream (depends on WM-12 capture + dmabuf export).
+- SVC-6: Notifications daemon (`org.freedesktop.Notifications`) backing Shell SH-8.
+- SVC-7: StatusNotifierWatcher + tray host + DBusMenu rendering (Shell SH bar).
+- SVC-8: polkit authentication agent.
+- SVC-9: NetworkManager client (Wi-Fi/ethernet/VPN) for Shell quick settings + Settings network page.
+- SVC-10: BlueZ client (adapters, discovery, pairing agent, connect).
+- SVC-11: UPower client (rich battery/AC events; augments sysfs).
+- SVC-12: MPRIS controller + media-key bindings + Shell now-playing.
+- SVC-13: Secret Service / keyring (bundle or implement; libsecret-compatible).
+- SVC-14: udisks2 client — removable volumes, mount/unmount/eject, Files integration.
+- SVC-15: Toolkit theming bridge (portal Settings + XSettings/gsettings dark-mode/cursor/font).
 
-Shell:
+Window Manager (existing WM-1…WM-10 plus new protocol/power gates):
 
-- SH-1: Process, IPC, and failure behavior.
-- SH-2: Shared app registry.
-- SH-3: Icon theme provider.
-- SH-4: Dock model and behavior.
-- SH-5: Command launcher.
-- SH-6: Top bar and status modules.
-- SH-7: Quick settings and status controls.
-- SH-8: Notifications.
-- SH-9: Clipboard history.
-- SH-10: Shell config and preferences.
-- SH-11: Visual quality and layout.
-- SH-12: Accessibility and keyboard behavior.
-- SH-13: Tests and validation.
+- WM-1…WM-10: as previously defined (idle/frame scheduling, resize/snap stability, geometry/state invariants, chrome/decorations/glass/shadows, output selection/scale, input/keyboard/cursor, screenshot readiness, protocol validation, config contract, real-app validation).
+- WM-11: `ext-session-lock-v1` (compositor side; secure lock surfaces, input isolation, crash-stays-locked).
+- WM-12: Client screen capture — `wlr-screencopy-v1` (tooling) and `ext-image-copy-capture-v1` + capture sources (modern), with dmabuf export for screencast.
+- WM-13: `ext-idle-notify-v1` (idle timers driving auto-lock/dim/blank).
+- WM-14: DPMS / real output power-off on KMS, tied to idle-notify and logind idle-action.
+- WM-15: `wlr-foreign-toplevel-management-v1` (or `ext-foreign-toplevel-list-v1`) for docks/switchers.
+- WM-16: Output management protocol (`wlr-output-management-v1` / `ext-output-management`) for GUI display config (Settings ST-5, kanshi).
+- WM-17: `wlr-data-control-v1` / `ext-data-control-v1` for external clipboard managers.
+- WM-18: `wlr-gamma-control-v1` and/or `wp-color-management-v1` (night light / color temperature / calibration).
+- WM-19: Touch input (`wl_seat` touch capability + dispatch) — gated on the touch product decision.
+- WM-20: XWayland (rootless X11 server integration, window mapping, clipboard bridge, DnD bridge, scaling).
+- WM-21: Misc protocol fills — `keyboard-shortcuts-inhibit-v1`, `security-context-v1`, `xdg-foreign`, `tearing-control`, `content-type`, `single-pixel-buffer`, `alpha-modifier` as consumers appear.
 
-Settings:
+Shell: SH-1…SH-13 (as previously defined; SH-8 notifications, SH-9 clipboard history, SH-6/SH-7 status/quick settings now consume SVC backends; new SH items for tray host UI, power/session menu, media-key/OSD, lock front-end are tracked under SH-7/SH-11 and SVC-6/7/12 and WM-11).
 
-- ST-1: Settings model, schema, and persistence.
-- ST-2: Window Manager settings integration.
-- ST-3: Shell settings integration.
-- ST-4: Appearance, theme, and personalization.
-- ST-5: Display and output settings.
-- ST-6: Keyboard, shortcuts, cursor, and input.
-- ST-7: Desktop, screenshots, and app defaults.
-- ST-8: System status and About.
-- ST-9: Page structure and UX cleanup.
-- ST-10: Tests and validation.
+Settings: ST-1…ST-10 (as previously defined; ST-5 display gains WM-16 dependency; new network/Bluetooth/sound pages gain SVC-9/10/audio dependencies).
 
-Files:
+Files: FI-1…FI-14 (as previously defined; add removable-media mounting via SVC-14 under FI-10/new FI item).
 
-- FI-1: Files model and state ownership.
-- FI-2: Navigation, places, and path entry.
-- FI-3: Selection and keyboard behavior.
-- FI-4: Core file operations.
-- FI-5: Trash service.
-- FI-6: Clipboard and drag/drop.
-- FI-7: Context menus and commands.
-- FI-8: Views, sorting, search, and filtering.
-- FI-9: Filesystem watching and refresh.
-- FI-10: Open-with, MIME, icons, and thumbnails.
-- FI-11: Errors, progress, cancellation, and undo.
-- FI-12: Preferences and Settings integration.
-- FI-13: Accessibility and keyboard quality.
-- FI-14: Tests and validation.
+Terminal: TE-1…TE-13 (as previously defined).
 
-Terminal:
+Editor: ED-1…ED-8 (as previously defined).
 
-- TE-1: App identity, lifecycle, and structure.
-- TE-2: PTY and event-loop reliability.
-- TE-3: Scrollback and viewport.
-- TE-4: Selection, copy, paste, and clipboard.
-- TE-5: Keyboard input coverage.
-- TE-6: Mouse reporting and pointer behavior.
-- TE-7: Unicode, width, and text attributes.
-- TE-8: Color, theme, cursor, and visual rendering.
-- TE-9: Resize, reflow, and performance.
-- TE-10: Search and navigation.
-- TE-11: Preferences, profiles, and Settings handoff.
-- TE-12: Desktop integration.
-- TE-13: Tests and validation.
+Missing/expanded apps (new):
 
-Editor:
+- IMG-*: Image viewer (replace `lambda-preview` stub with a real viewer).
+- SHOT-*: Screenshot tool front-end (on the compositor capture + portal Screenshot).
+- PDF-*: PDF/document viewer.
+- ARC-*: Archive manager.
+- CALC-*: Calculator.
+- MON-*: System monitor.
+- MED-*: Media player.
 
-- ED-1: Document model, file I/O, dirty state, and save prompts.
-- ED-2: Platform file dialogs, print/page setup, and desktop integration.
-- ED-3: Text editing engine, undo/redo, selection, scrolling, and performance.
-- ED-4: Find, replace, go-to-line, time/date insertion, and editor commands.
-- ED-5: Menus, shortcuts, context menus, status bar, zoom, wrap, and font settings.
-- ED-6: Tabs, session restore, and unsaved-content recovery.
-- ED-7: Encoding, newline, file-type policy, spellcheck, autocorrect, and optional AI features.
-- ED-8: Tests and validation.
+---
 
 ## P0 Window Manager
 
@@ -172,345 +168,279 @@ Current implementation:
 
 - `lambda-window-manager` owns a selected KMS output, runs a Wayland server, renders through Vulkan/Canvas, and hosts Lambda plus normal Wayland apps.
 - Core idle behavior, Lambda app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, real-app smoke tooling with optional owned-compositor trace collection, Wayland registry validation, source/list drift checking for advertised globals, and the WM-COMP-27 real-app validation matrix exist.
-- Screenshot full-output, active-window, and region capture are implemented with compositor-owned region UI.
-- Protocol work includes layer-shell, xdg-shell, xdg-output, viewporter, cursor-shape, fractional-scale, activation, presentation-time, relative pointer, pointer constraints, primary selection, clipboard/data-device, idle inhibit, and background-effect paths. Clipboard/data-device protocol coverage is separate from the app-level shortcut and cross-application text workflow tracked in `TODO.md` TODO-002, and from Shell clipboard-history UI work.
-- The active wlroots comparison plan has verified core surface-state slices, layer-shell state, subsurface sync, scene damage, seat serials, dmabuf lifetime, popup/xdg lifecycle, activation, pointer constraints, presentation-time, fractional-scale, idle-inhibit, output/xdg-output updates, pointer-extension cleanup, cursor-shape cleanup, viewporter resource hygiene, remaining global resource hygiene through WM-COMP-21, WM-COMP-22 XDG configure/frame-size parity, WM-COMP-23 popup-grab/cursor/cursor-shape surface-lifetime/popup-parent cleanup/seat cleanup/pointer-button-grab/implicit-grab-motion/keyboard-focus/keyboard-dismissal/seat-resource/data/selection-device stale-resource cleanup slices plus native Wayland popover Escape validation, WM-COMP-24 DnD lifecycle parity, WM-COMP-25 layer-shell dynamic behavior helper/state validation, WM-COMP-26 output-layout foundation, and WM-COMP-27 real-app harness registry validation.
-- Firefox dogfooding blockers addressed in the tested paths: xdg-popup lifecycle cleanup follows the wlroots-style inert-resource pattern, Firefox crash/recovery windows no longer grow on focus changes, fullscreen video can restore, and fullscreen preserves pre-fullscreen maximized/snapped/normal state.
-- Fullscreen shell-panel behavior exists for the current single-output desktop: panels leave the fullscreen area and restore afterward.
-- KMS presentation has a compositor frame queue, improved frame pacing, direct scanout/overlay paths for video, hardware-cursor motion that does not force scene redraws, and video overlay tracing for skipped-frame analysis.
-- Explicit sync is removed for now; it did not fix the observed rendering artifacts and created client-crash risk when syncobj state was advertised without a matching attached buffer.
-- Wayland buffer damage is tracked through snapshots and used for partial cached-image updates on the SHM image path. Current high-value clients in daily testing mostly use dma-buf, so this is plumbing rather than a proven daily-driver win.
+- Screenshot full-output, active-window, and region capture are implemented with compositor-owned region UI. (Note: this is the compositor's own capture; client-facing capture for external tools and screencast is WM-12.)
+- Protocol work includes layer-shell, xdg-shell, xdg-output, viewporter, cursor-shape, fractional-scale, activation, presentation-time, relative pointer, pointer constraints, primary selection, clipboard/data-device, idle inhibit, and background-effect paths.
+- The active wlroots comparison plan has verified core surface-state slices through WM-COMP-27 (see [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md)).
+- Firefox dogfooding blockers addressed in the tested paths; fullscreen shell-panel behavior exists for the single-output desktop; KMS presentation has a frame queue, improved pacing, direct scanout/overlay for video, and hardware-cursor motion that does not force scene redraws.
 
-Open gate:
+Open gate (visual stability and validation — unchanged):
 
-- Resolve the deferred system-titlebar/content frame-coherence issue: Settings resize on DP-1 HiDPI can still show momentary non-synced titlebar/content width even though borders stay synced and flicker is gone.
-- Finish the remaining wlroots comparison backlog in [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md): broader non-popup seat/grab workflow parity and a visual regression/real-app harness.
-- Continue resize/snap/maximize/restore validation across more apps; Firefox restore/fullscreen paths are fixed in the tested scenarios, but GTK/Qt/terminal coverage still needs a pass.
-- Complete the active Window Manager TODO items tracked in `TODO.md`: TODO-006 close animation as one whole-window snapshot path, TODO-007 minimized window state and Shell dock-preview handoff, and TODO-008 live resize frame coherence.
-- Re-test Shell panel behavior around fullscreen, window animations, launcher/dock popovers, dock context menus, and long-running browser/video sessions.
-- Complete live real-app validation with Lambda apps plus browser, GTK, Qt, `foot`, clipboard, menus/popups, maximize/restore/snap/minimize, screenshots, fullscreen video, mpv playback, and long idle sessions.
-- Keep popup grabs honest: config-gated until hardware validation says they can be enabled by default.
-- Keep unsupported touch/tablet behavior absent or clearly non-advertised.
+- Resolve the deferred system-titlebar/content frame-coherence issue on DP-1 HiDPI resize.
+- Finish the remaining wlroots comparison backlog: broader non-popup seat/grab workflow parity and a visual regression/real-app harness.
+- Continue resize/snap/maximize/restore validation across GTK/Qt/terminal apps.
+- Complete `TODO.md` WM items TODO-006 (close animation snapshot), TODO-007 (minimized state + dock-preview handoff), TODO-008 (live resize frame coherence).
+- Complete live real-app validation (Lambda apps, browser, GTK, Qt, `foot`, clipboard, menus/popups, maximize/restore/snap/minimize, screenshots, fullscreen video, mpv, long idle).
+- Keep popup grabs config-gated until hardware validation; keep unsupported touch/tablet non-advertised until WM-19.
+
+Open gate (daily-driver protocol and power gates — new, WM-11…WM-21):
+
+These are the compositor-side prerequisites for a usable daily desktop. They are not started. Detailed implementation:
+
+- **WM-11 — `ext-session-lock-v1`.** Implement the lock manager global. On `lock`: stop presenting normal client surfaces, present only the per-output lock surfaces the lock client commits, route all input exclusively to lock surfaces, and refuse to unlock until the client calls `unlock_and_destroy`. Crash safety is mandatory: if the lock client dies while locked, the compositor must keep the outputs secured (solid/blanked, no client content) rather than revealing the desktop. Provide one lock surface per output and reconfigure on output hotplug. Acceptance: `loginctl lock-session` (via SVC-3) or the Shell lock action shows only the lock UI; killing the lock client keeps the screen secure; unlock restores the prior scene.
+- **WM-12 — client screen capture.** Implement `wlr-screencopy-v1` for the existing tooling ecosystem (grim/slurp/wf-recorder) and `ext-image-copy-capture-v1` with output and foreign-toplevel capture sources for the modern path. Support SHM and dmabuf capture; reuse the existing internal screenshot pipeline for pixel readback. Expose dmabuf-exported frames so SVC-5 can feed PipeWire without an extra copy. Acceptance: `grim` saves a correct screenshot; `slurp | grim -g -` captures a region; a dmabuf frame can be imported by the screencast path.
+- **WM-13 — `ext-idle-notify-v1`.** Implement the idle-notifier global. Track input activity per seat; fire `idled` after each client's requested timeout and `resumed` on activity. This is the signal source for auto-lock, auto-dim, and DPMS-off. Honor active idle-inhibitors (already implemented) by suppressing idle while inhibited. Acceptance: a client idle timer fires after the configured interval and resumes on input; an active inhibitor prevents firing.
+- **WM-14 — DPMS / output power-off.** On KMS, actually power off the panel at idle (atomic CRTC disable or the DPMS connector property), not just paint black. Drive from WM-13 idle and from logind idle-action (SVC-3). Restore on input. Replace the current software-only blanking noted in `compositor.md`. Acceptance: after idle, the backlight turns off and the panel powers down; input wakes it; no scene corruption on restore.
+- **WM-15 — foreign-toplevel management.** Implement `wlr-foreign-toplevel-management-v1` (and/or `ext-foreign-toplevel-list-v1`) so a separate client (dock, alt-tab switcher, taskbar) can enumerate toplevels, observe title/app-id/state, and request activate/minimize/maximize/close. This also cleans up the Shell/compositor split (the dock can stop relying on private state). Acceptance: an external taskbar lists windows and can focus/close them; the Shell dock can be reworked onto it.
+- **WM-16 — output management protocol.** Implement `wlr-output-management-v1` (broad tool support) and/or `ext-output-management`. Expose heads/modes/position/scale/transform and apply configurations transactionally with a test/apply/revert cycle. This backs Settings ST-5 (display page) and tools like kanshi/wdisplays. Acceptance: `wlr-randr` lists and changes modes/scale/position; Settings display page drives real changes; a bad config reverts.
+- **WM-17 — data-control.** Implement `wlr-data-control-v1` / `ext-data-control-v1` so clipboard-history and `wl-clipboard` tools can observe and set selections out-of-band. Complements the Shell's internal clipboard-history model (SH-9). Acceptance: `wl-paste --watch` sees clipboard changes; `wl-copy` sets them.
+- **WM-18 — gamma / color.** Implement `wlr-gamma-control-v1` (and consider `wp-color-management-v1`) for night-light/color-temperature and basic calibration via gammastep/wlsunset. Acceptance: gammastep warms the display on a schedule; resetting restores.
+- **WM-19 — touch input (gated on product decision).** Advertise `WL_SEAT_CAPABILITY_TOUCH`, dispatch `wl_touch` down/up/motion/frame/cancel, and route to surface hit-testing. Only schedule if touch hardware is a target. Acceptance: a touchscreen drives taps/drags to clients.
+- **WM-20 — XWayland (gated on product decision; scheduled late).** Integrate a rootless XWayland server: launch and supervise Xwayland, map X11 windows into the scene as toplevels, bridge clipboard and primary selection both ways, bridge DnD, handle X11 override-redirect/popups, and apply per-window scaling. Acceptance: an X11-only app (e.g., an older game or tool) runs, is focusable/movable, copy-paste works to/from Wayland apps, and DnD works.
+- **WM-21 — protocol fills.** Add `keyboard-shortcuts-inhibit-v1` (VMs/remote-desktop/games), `security-context-v1` (Flatpak/portal policy), `xdg-foreign` (cross-client dialog parenting), and perf protocols (`tearing-control`, `content-type`, `single-pixel-buffer`, `alpha-modifier`) as real consumers appear. Acceptance: per-protocol conformance demo + a real client that needs it.
+
+Validation (additions for WM-11…WM-21):
+
+- Deterministic tests for: session-lock state machine (locked/unlocked, surface-per-output, crash-stays-locked), idle-notify timer/inhibitor logic, output-management transaction test/apply/revert, capture frame plumbing (SHM and dmabuf), foreign-toplevel state transitions, and data-control selection events.
+- Manual hardware: lock/unlock with PAM, DPMS power-off/restore on the target panel, `grim`/`slurp`/`wf-recorder`/OBS capture, gammastep, `wlr-randr`/kanshi output config, and (if scheduled) XWayland real-app matrix.
+
+Deferred (revised):
+
+- Multi-output desktop *layout* management beyond the single-output foundations (basic multi-output presentation should be validated as part of WM-16).
+- Workspaces / virtual desktops (`ext-workspace-v1`) — pending the workspaces product decision.
+- Greeter/login and crash-restart policy (session lock/logout/suspend are now in-gate via WM-11 + SVC-3 + the lock app).
+
+---
+
+## P0.5 System Services and Session Integration  *(new — top new priority)*
+
+This layer is almost entirely greenfield. There is no D-Bus capability in the tree; the KMS backend opens `/dev/dri` and `/dev/input` directly without libseat/logind; and there is no portal backend, notifications daemon, tray host, polkit agent, or NetworkManager/BlueZ/UPower/MPRIS/secrets/udisks integration. The Shell's existing provider notes already name these D-Bus services as consumers — this section provides the shared capability and service implementations they depend on.
+
+Process/library shape:
+
+- Add a framework-level `lambda::dbus` capability (recommended backend: `sd-bus` from systemd/elogind — present on the target distro, ergonomic, integrates with an external event loop via `sd_bus_get_fd`/`sd_bus_process`/`sd_bus_get_events`; alternative: `sdbus-c++`). It must support: connecting to the session and system buses, async + sync method calls, signal subscription, property get/set/watch, and exporting objects/interfaces (needed for being a service: notifications, StatusNotifierWatcher, portal backend, polkit agent).
+- First-party service processes where a daemon boundary is cleaner than in-process: a `lambda-portal` backend binary, optionally a `lambda-polkit-agent`, and the lock app `lambda-lock`. Bus clients (logind, NetworkManager, BlueZ, UPower, MPRIS, udisks, secrets) can be in-process libraries consumed by Shell/Settings/Files.
+
+Workstreams:
+
+- **SVC-1 — D-Bus capability.** Implement `lambda::dbus` as above; pump the bus fd(s) through the existing Lambda/compositor event loop (no second thread unless necessary). Provide typed helpers for the common call/signal/property patterns and an object-export API. Acceptance: a unit/integration test calls `org.freedesktop.DBus.Peer.Ping` on the session bus, subscribes to a signal, reads a property, and exports a test object another client can call.
+- **SVC-2 — Seat/session via libseat.** Replace direct device opens in `KmsApplication.cpp` with libseat: open DRM and input devices through `libseat_open_device`; handle the `enable_seat`/`disable_seat` callbacks for VT switching (on disable: drop DRM master + suspend libinput; on enable: reacquire master + resume); support `libseat_switch_session`. libseat auto-selects logind/seatd/builtin. Route the libseat fd into the event loop. Acceptance: `lambda-window-manager` launches as an unprivileged user inside a logind session with no manual device permissions; Ctrl-Alt-F<n> switches VTs and returns cleanly; the GPU is released/reacquired without corruption.
+- **SVC-3 — logind client.** System bus `org.freedesktop.login1`. Take delay inhibitor locks (fd-based) for `handle-power-key`, `handle-lid-switch`, and `handle-suspend-key`; subscribe to `PrepareForSleep` (lock before sleep, refresh after); call `Suspend`/`Hibernate`/`PowerOff`/`Reboot` for the power menu; watch the session `Lock`/`Unlock` signals to trigger the lock app; honor `IdleAction` together with WM-13. Acceptance: closing the lid suspends (and locks first); the power key triggers the Shell power menu; `loginctl lock-session` locks; resume-from-suspend shows the lock screen.
+- **SVC-4 — xdg-desktop-portal backend.** Implement the `org.freedesktop.impl.portal.*` interfaces in `lambda-portal` and ship a portals config naming Lambda as the backend (with the generic `xdg-desktop-portal` frontend installed): **FileChooser** (Open/Save → a Lambda file-chooser surface, reusing `lambda-files` components) — critical for Firefox/Flatpak dialogs; **Settings** (expose `org.freedesktop.appearance color-scheme` and accent so apps get dark-mode — pairs with SVC-15); **OpenURI**, **Inhibit**, **Account**, and **Notification** (route to SVC-6). Acceptance: Firefox/Flatpak "Open File" shows Lambda's chooser; a Flatpak app launches and can pick files; dark-mode preference propagates to a GTK app.
+- **SVC-5 — Screencast/RemoteDesktop portal + PipeWire.** Implement `org.freedesktop.impl.portal.ScreenCast` (and `RemoteDesktop`) backed by WM-12 dmabuf capture, publishing frames through a `libpipewire` stream so browsers and conferencing apps can share the screen; provide a source-picker UI (whole output / window / region). Acceptance: Firefox/Chromium and OBS (PipeWire source) can share a screen/window via the portal.
+- **SVC-6 — Notifications daemon.** Export `org.freedesktop.Notifications` on the session bus (`Notify`, `CloseNotification`, `GetCapabilities`, `GetServerInformation`, `NotificationClosed`/`ActionInvoked` signals). Back it with the Shell's existing notification model/UI (SH-8): banners, center/history, grouping, actions, DND. Acceptance: `notify-send "x"` shows a banner; actions invoke; DND suppresses; history shows past notifications.
+- **SVC-7 — StatusNotifierWatcher + tray host.** Implement `org.kde.StatusNotifierWatcher`, host registered `org.kde.StatusNotifierItem`s, render their icons and `com.canonical.dbusmenu` menus in the Shell bar. Acceptance: Steam/Discord/Telegram/nm-applet-style tray icons appear and their menus work.
+- **SVC-8 — polkit agent.** Register an `org.freedesktop.PolicyKit1.AuthenticationAgent` for the session with the polkit authority; present an authentication dialog; authenticate via `polkit-agent-helper-1`/PAM. Acceptance: a `pkexec`/privileged action prompts for a password and succeeds/fails correctly.
+- **SVC-9 — NetworkManager client.** System bus `org.freedesktop.NetworkManager`. Enumerate devices and access points; report wired/Wi-Fi/disconnected/connecting/connected + SSID/signal; toggle Wi-Fi; connect (with a secret agent for passwords). Shell quick-settings exposes enable/disable + connect; Settings owns full management (saved networks, VPN). Acceptance: connect to a WPA2 network from the desktop; state updates live in the docklet.
+- **SVC-10 — BlueZ client.** System bus `org.bluez`. Adapters, discovery, pairing (agent), connect/disconnect; report powered/connected. Shell toggles adapter power; Settings owns pairing/device management. Acceptance: pair and connect a Bluetooth device.
+- **SVC-11 — UPower client.** System bus `org.freedesktop.UPower`. Rich battery/AC state, percentage, time-to-empty/full, and change events; augment the existing sysfs read in `ShellSystemStatus.cpp`. Acceptance: the battery docklet updates on AC plug/unplug and percentage changes without polling.
+- **SVC-12 — MPRIS + media keys.** Session bus; watch `org.mpris.MediaPlayer2.*` players; show now-playing metadata and transport controls in the Shell bar; bind XF86 media keys (play/pause/next/prev) to the active player and volume/brightness keys to SVC/audio/backlight. Acceptance: media keys control the active player; the bar shows the current track and can pause/skip.
+- **SVC-13 — Secret Service / keyring.** Provide `org.freedesktop.secrets` (collections/items, encrypted store, unlock tied to login). Implementing the full spec is large; recommended first step is to bundle/run `gnome-keyring-daemon` (or a minimal compatible store) so libsecret-based apps work, then evaluate a native implementation. Acceptance: an app storing/reading a secret via libsecret succeeds; the store unlocks at login.
+- **SVC-14 — udisks2 client + Files integration.** System bus `org.freedesktop.UDisks2`. Enumerate block devices/filesystems; mount/unmount/eject; surface removable volumes in the Files sidebar "places"; optional auto-mount on insert. Acceptance: insert a USB stick → it appears in Files → open → unmount/eject safely.
+- **SVC-15 — Toolkit theming bridge.** Drive external GTK/Qt appearance: expose color-scheme/accent/cursor/font via the portal Settings interface (SVC-4) and provide an XSettings/gsettings fallback where needed, so toolkit apps match the desktop and follow dark-mode. Acceptance: switching the desktop to dark mode flips a GTK app and a Qt app to dark; cursor theme/size and default font propagate.
 
 Validation:
 
-- Deterministic tests cover output selector, scale config, keybindings, config fallback, screenshot policy/regions/paths/PNG writing, frame geometry, snap/resize geometry, minimized focus restoration, fullscreen restore state, popup geometry, layer-shell zones, and surface input regions.
-- Manual target-hardware traces now cover Firefox stability, fullscreen video restore, mpv/video pacing, compositor CPU, hardware overlay/scanout decisions, DP-1 terminal rendering, DP-1 HiDPI resize/flicker checks, dock context menus, clipboard/primary selection, and text drag/drop in the tested paths.
-- Full visual acceptance still requires target hardware; GPU/Wayland tests may not run in headless CI. SHM buffer-damage optimization still needs a real SHM partial-damage client before it can be counted as performance-validated.
+- Deterministic: D-Bus call/signal/property/export round trips against a test bus; logind inhibitor/sleep-signal logic; notifications daemon spec messages; SNI watcher registration/host; portal request/response shapes; NetworkManager/BlueZ/UPower/udisks state mapping from fixtures.
+- Manual hardware: libseat unprivileged launch + VT switch; lid/power-key/suspend; `notify-send` and real app notifications; tray-using apps; `pkexec` prompt; Wi-Fi connect; Bluetooth pair; battery events; media keys; portal file dialog + screen share in a browser; USB mount/eject; dark-mode propagation.
 
 Deferred:
 
-- Session wrapper, auto-start, auto-restart, login, lock, logout, suspend/reboot UI.
-- Multi-output desktop layout. The wlroots comparison added single-output layout foundations, but enabling a real multi-output desktop remains deferred.
-- DPMS/panel power-off and richer power management.
-- XWayland.
+- Full Secret Service native implementation if bundling gnome-keyring initially.
+- GeoClue/location, online-accounts, color-calibration management, and printing-service integration (CUPS) beyond what the Editor/PDF print abstraction needs.
+
+---
 
 ## P1 Shell
 
 Current implementation:
 
 - `lambda-shell` creates layer-shell dock, command launcher, and dock menu surfaces.
-- Shell IPC uses request IDs and structured parse/serialization helpers.
-- Shell exits cleanly when the Window Manager IPC is unavailable or disconnects.
+- Shell IPC uses request IDs and structured parse/serialization helpers; Shell exits cleanly when the Window Manager IPC is unavailable.
 - Shared app registry discovers local Lambda executables and installed `.desktop` entries, with app-id aliases and launch resolution shared by Shell and Window Manager.
-- Dock pins load from Shell config; running unpinned apps appear; dock click launches, focuses, or restores; dock context menu supports new window, pin/unpin, and quit where wired.
+- Dock pins load from Shell config; running unpinned apps appear; dock click launches/focuses/restores; dock context menu supports new window, pin/unpin, and quit where wired.
 - Icon theme lookup is used by dock and launcher with Material glyph fallback.
-- Docklet status rendering shows real values when present and unavailable/unknown values honestly. The current Window Manager snapshot still reports system providers as unknown.
+- Docklet status rendering shows real values when present and unavailable/unknown honestly; system providers currently report unknown.
 - Quick-status popup exists, but provider controls are disabled/unavailable.
 - Notification and clipboard-history models/config/policies exist and are tested, but live UI is not implemented.
-- Advanced launcher provider models for apps, windows, Settings panels, Shell actions, empty states, error states, and ranking exist; production launcher still renders and activates dock/app `DockItem` results.
+- Advanced launcher provider models exist; production launcher still renders/activates dock/app results.
 - Shell config is generated, parsed, hot-reloaded, and covers appearance, dock, quick settings, notifications, clipboard history, and launcher policy.
 
 Open gate:
 
-- Wire the production launcher to the richer provider model and activation path for apps, windows, Settings panels, Shell actions, empty states, and errors.
-- Add launcher ranking to the live launcher path.
-- Implement live notification receive API/service boundary, banners, notification center/history, grouping, dismissal, clear-all, actions where supported, and do-not-disturb behavior.
-- Implement clipboard-history capture/service boundary, picker UI, selected-entry paste, clear, size/history limits, primary-selection policy, and memory-only-by-default persistence policy.
-- Add real Shell-owned status providers where available: network/Wi-Fi, Bluetooth, audio/volume, battery/power, brightness, do-not-disturb.
-- Add quick settings controls for providers that can actually be controlled.
-- Add status provider links into Settings for deeper configuration.
+- Wire the production launcher to the richer provider model and activation path (apps, windows, Settings panels, Shell actions, empty/error states); add ranking to the live launcher.
+- Implement live notifications **on top of SVC-6**: banners, center/history, grouping, dismissal, clear-all, actions, DND.
+- Implement clipboard history capture/picker/paste/clear with memory-only-by-default persistence; back out-of-band capture with **WM-17 (data-control)** where external sources matter.
+- Add real Shell-owned status providers **on top of SVC backends**: network/Wi-Fi (SVC-9), Bluetooth (SVC-10), audio/volume (PipeWire/`wpctl`, already partial), battery/power (SVC-11 + sysfs), brightness (backlight via logind/udev policy), do-not-disturb.
+- Add quick-settings controls for providers that can actually be controlled; add per-row Settings links.
+- **New (gap analysis):** add the system-tray host UI consuming SVC-7; a power/session menu (lock/logout/suspend/restart/shutdown) consuming SVC-3 + WM-11; media-key handling + now-playing via SVC-12; a volume/brightness OSD; and the lock-screen front-end (the lock UI rendered by `lambda-lock` using WM-11 + PAM).
+- Confirm/add a wallpaper surface (layer-shell background) and an alt-tab/window switcher (consuming WM-15).
 - Complete manual validation with Lambda apps and selected external Wayland apps.
 
 Deferred:
 
-- Full freedesktop notification spec parity.
-- Full system tray/status-notifier support.
+- Full freedesktop notification spec parity beyond SVC-6's covered set.
 - Multi-output Shell layout beyond preserving clean models.
 - Files/recent-documents launcher providers.
+- Workspaces switcher — pending the workspaces product decision.
 
 ### Shell Status And Quick Settings Detail
 
-Status and quick settings are Shell-owned. The Window Manager may include snapshot fields for compatibility, but it must not become the audio, network, Bluetooth, battery, brightness, notification, clipboard, or quick-settings backend.
+Status and quick settings are Shell-owned. The Window Manager may include snapshot fields for compatibility, but it must not become the audio, network, Bluetooth, battery, brightness, notification, clipboard, or quick-settings backend. The backends themselves live in System Services (SVC-*); the Shell consumes them.
 
 Provider model requirements:
 
 - Providers expose typed snapshots with availability: unavailable, read-only, or writable.
 - Visible state must be real or explicitly unavailable; never show fake connected, charged, unmuted, or active values.
-- Provider failures must not freeze Shell.
-- Slow providers should update independently so one missing backend does not block docklets or quick settings.
+- Provider failures must not freeze Shell; slow providers update independently.
 - Shell config controls quick-settings order through `quick_settings.modules`.
 
-Provider backends:
+Provider backends (now mapped to SVC-*):
 
-- Clock: honor `dock.clock_format`, update conservatively, and avoid redraws when formatted text is unchanged.
-- Battery/power: read `/sys/class/power_supply` first; optionally use UPower later for richer state. Show absent battery as unavailable. Show percentage and charging/discharging/full only from real state. Battery is initially read-only; power mode waits for a real backend.
-- Brightness: read `/sys/class/backlight`; show unavailable when absent; show read-only when writable access or privileged backend is missing. Enable a slider only with a real write path such as logind/udev policy or a small privileged helper.
-- Audio: use PipeWire/WirePlumber APIs, with `wpctl` as an optional first fallback. Read default sink volume and mute state. Add volume slider and mute toggle only when control is real. Microphone mute and output picker can come later.
-- Network/Wi-Fi: use NetworkManager D-Bus. Show unavailable when NetworkManager or usable interfaces are absent. Distinguish wired, Wi-Fi, disconnected, connecting, connected, and SSID. First useful control is Wi-Fi enable/disable; connection selection/password entry belongs in Settings.
-- Bluetooth: use BlueZ D-Bus. Show unavailable when BlueZ/adapters are absent. Show powered state and connected device count/name. Toggle adapter power only when supported; pairing/device management belongs in Settings.
-- Notifications: provide docklet affordance/count/DND state, banners, notification center/history, dismissal, clear-all, timeout/history/previews policy, and later freedesktop notification receive path.
-- Clipboard history: provide docklet affordance, picker, selected-entry paste or write-back-to-clipboard, clear history, max entries, max text bytes, persistence policy, and primary-selection policy. Live clipboard observation is still missing.
+- Clock: honor `dock.clock_format`, update conservatively, avoid redraws when text is unchanged.
+- Battery/power: SVC-11 (UPower) for events; `/sys/class/power_supply` as the fallback already implemented. Read-only until a power-mode backend exists.
+- Brightness: `/sys/class/backlight`; enable the slider only with a real write path (logind/udev policy or a small privileged helper).
+- Audio: PipeWire/WirePlumber (the `wpctl`/`pactl` subprocess path is the current fallback); add volume slider + mute when control is real; mic mute/output picker later.
+- Network/Wi-Fi: SVC-9 (NetworkManager). First control is Wi-Fi enable/disable + connect; full management in Settings.
+- Bluetooth: SVC-10 (BlueZ). Toggle adapter power; pairing/device management in Settings.
+- Notifications: SVC-6 + Shell UI.
+- Clipboard history: Shell model + optional WM-17 for external sources.
 
-Docklet UI requirements:
+Docklet, quick-settings, Shell-actions, and testing requirements: as previously specified (network/Wi-Fi, Bluetooth, volume, battery, notifications, clipboard, clock docklets; quick-settings header + controls + per-row Settings links; `open-settings:*` and `toggle-dnd` actions; snapshot/icon/ordering/availability/clock/sysfs/quick-settings/DND/clipboard tests; manual checks across battery/no-battery, PipeWire, internal/external brightness, NetworkManager and BlueZ states, notification center, and clipboard privacy). Add manual checks for the tray host (real tray apps), the power/session menu (lock/suspend/logout), media keys, and the lock front-end.
 
-- Support at least network/Wi-Fi, Bluetooth, volume, battery, notifications, clipboard, and clock.
-- Each status item should be individually clickable where it has a detail surface.
-- Icons should be driven by typed provider state.
-- Unavailable items must be disabled or hidden by policy, not shown as active.
-
-Quick settings UI requirements:
-
-- Include a header with title and Settings button.
-- Include Wi-Fi, Bluetooth, volume/mute, brightness, battery/power, and do-not-disturb controls when configured.
-- Keep read-only and unavailable controls visibly disabled.
-- Add per-row Settings links for deeper pages: network, sound, Bluetooth, display, notifications, clipboard.
-- Keep long-form setup out of quick settings.
-
-Shell actions:
-
-- `open-settings:network`
-- `open-settings:sound`
-- `open-settings:bluetooth`
-- `open-settings:display`
-- `open-settings:notifications`
-- `open-settings:clipboard`
-- `toggle-dnd`
-
-Status testing:
-
-- Provider snapshot normalization.
-- Icon selection for Wi-Fi, Bluetooth, volume, battery, notifications, and clipboard.
-- Module ordering from Shell config.
-- Unavailable/read-only/writable control state.
-- Clock formatting.
-- Sysfs battery and brightness fixture parsing.
-- Quick settings rows from provider snapshots.
-- Notification DND behavior.
-- Clipboard policy behavior.
-- Manual checks on battery-backed and no-battery machines, PipeWire/WirePlumber volume/mute, internal-panel brightness and external-only monitor, NetworkManager states, BlueZ absent/present/off/on/connected states, notification center interactions, and clipboard privacy/clear behavior.
+---
 
 ## P2 Settings
 
 Current implementation:
 
-- `lambda-settings` opens as a system-titlebar Lambda app.
-- It reads and writes Window Manager and Shell owner config files directly.
-- It generates owner configs with defaults when missing.
-- Schema metadata exists for displayed settings.
-- Writes are atomic and validated; unknown keys are preserved where practical.
-- Appearance edits real Window Manager background/wallpaper/glass and Shell icon/reduced-motion config.
-- Display edits selected output and scale config.
-- Input edits keyboard layout/repeat and close-window shortcuts.
-- Windows edits animations, hardware cursor, cursor theme/size, idle blank timeout, and screenshot shortcuts.
-- Files edits `lambda-files` preferences for hidden files, default view, sorting, grid icon size, and Trash visibility.
-- Dock & Panel edits Shell dock and quick-settings values.
-- Notifications edits Shell notification config.
-- Launcher & Clipboard edits Shell launcher and clipboard-history config.
-- About/System shows real or explicitly unavailable values.
-- Save/revert/reset/error UX exists; restart-required rows and save-status messaging are visible.
-- The app uses card-backed settings groups, stable responsive setting rows, a calmer system footer, framework theme tokens, and navigation organized around user intent.
-- `LAMBDA_DEBUG_LAYOUT=1` validation is usable for Settings after removing measurement-time flex-grow debug noise.
-- The detailed UX plan lives in [lambda-settings-ux-plan.md](lambda-settings-ux-plan.md).
+- `lambda-settings` opens as a system-titlebar Lambda app; reads/writes Window Manager and Shell owner config files directly; generates owner configs with defaults; schema metadata exists; writes are atomic and validated; unknown keys preserved where practical.
+- Appearance edits real background/wallpaper/glass and Shell icon/reduced-motion config; Display edits selected output and scale; Input edits keyboard layout/repeat and close-window shortcuts; Windows edits animations, hardware cursor, cursor theme/size, idle blank timeout, screenshot shortcuts; Files edits hidden files/default view/sorting/grid icon size/Trash visibility; Dock & Panel edits Shell dock/quick-settings; Notifications edits Shell notification config; Launcher & Clipboard edits Shell launcher/clipboard config; About/System shows real or explicitly unavailable values.
+- Save/revert/reset/error UX exists; card-backed groups, responsive rows, framework theme tokens; detailed UX plan in [lambda-settings-ux-plan.md](lambda-settings-ux-plan.md).
 
 Open gate:
 
-- Ensure hot-reloadable changes apply live where the owning process supports them.
-- Keep apply-mode labels accurate: `Applies after Save` versus `Restart required`.
-- Avoid claiming unavailable system providers are live.
-- Add Settings UI later for Terminal preferences, MIME/default-app editing, and shared-service settings after those backends exist.
+- Ensure hot-reloadable changes apply live where the owning process supports them; keep apply-mode labels accurate; avoid claiming unavailable system providers are live.
+- Add Settings UI for Terminal preferences, MIME/default-app editing, and shared-service settings after those backends exist.
+- **New (gap analysis):** once SVC-9/SVC-10 land, add full Network (saved networks, VPN, password entry) and Bluetooth (pairing/device management) pages. Once WM-16 lands, make the Display page drive real output configuration (modes/scale/position/transform, multi-output arrangement) via the output-management protocol. Add a Lock/Power/Idle page (idle-to-lock/dim/sleep timeouts wired to WM-13/WM-14/SVC-3) and a Default Applications page (MIME/open-with) once the shared MIME service exists.
 
-Validation:
-
-- Targeted Settings tests pass for schema, validation, dirty/revert/reset, Window Manager, Shell, and Files config round trips, unknown key preservation, atomic write failure, owner config file helpers, shortcut conflict detection, wallpaper path normalization, theme discovery, and system info fixtures.
-- Manual Settings validation has covered launch, scrolling, compact layout, Appearance, Files, Display, Input, Windows, Dock & Panel, Notifications, Launcher & Clipboard, About/System, save/revert/reset, invalid values, restart-required rows, and owner-config persistence.
+Validation: as previously specified (schema, validation, dirty/revert/reset, WM/Shell/Files round trips, unknown-key preservation, atomic-write failure, shortcut conflicts, wallpaper normalization, theme discovery, system-info fixtures; manual coverage of all pages). Add: display-output apply/revert via WM-16; network/Bluetooth pages against SVC-9/10; lock/power/idle timeout wiring.
 
 Deferred:
 
-- Full network manager, Bluetooth pairing, audio mixer, notification daemon/center, privacy/portal permissions, users/accounts, package/update manager, multi-output layout editor, and Files open-with/default-app UI.
+- Users/accounts, package/update manager, privacy/portal permission editor (until the portal backend exposes a permission store), printing configuration.
+
+---
 
 ## P3 Files
 
 Current implementation:
 
 - `lambda-files` opens as an integrated-titlebar Lambda app with glass background.
-- Live UI supports sidebar places, breadcrumbs, back/forward/up, grid/list view, hidden-file toggle, pointer/keyboard multi-select, range select, select all, clear selection, activation, create folder/file, copy/cut/paste, duplicate, trash-first delete, reveal, default open, context menus, and periodic refresh.
-- Preferences persist for hidden files and view mode.
-- Clipboard uses internal copy/cut state plus `text/uri-list` text for compatible clients.
-- Default file open uses shared app registry plus MIME/default-app data rather than direct `xdg-open` file launching.
-- Icon theme lookup is used for file/folder/MIME icons with fallback.
-- Model layer has path normalization, navigation history, breadcrumb generation, stable sort by name/kind/size/modified time, current-folder search/filtering, directory refresh diffs, selection preservation, rename validation, copy/move/duplicate operations, trash metadata, restore helpers, conflict decisions, operation progress/failure/cancel state, safe undo helpers, MIME/default-app fixtures, icon lookup, and preference load/save.
+- Live UI supports sidebar places, breadcrumbs, back/forward/up, grid/list view, hidden-file toggle, multi-select/range/select-all/clear, activation, create folder/file, copy/cut/paste, duplicate, trash-first delete, reveal, default open, context menus, and periodic refresh.
+- Preferences persist for hidden files and view mode; clipboard uses internal copy/cut state plus `text/uri-list`; default open uses the shared app registry + MIME/default-app data; icon theme lookup with fallback.
+- Model layer has path normalization, navigation history, breadcrumbs, stable sort, search/filtering, refresh diffs, selection preservation, rename validation, copy/move/duplicate, trash metadata, restore helpers, conflict decisions, progress/failure/cancel state, safe undo helpers, MIME/default-app fixtures, icon lookup, and preference load/save.
 
 Open gate:
 
-- Add direct text path entry.
-- Add rename UI.
-- Add Trash view/restore UI or explicitly defer restore while keeping delete trash-first.
-- Add undo UI for supported safe operations.
-- Add operation progress/cancel UX and partial-failure reporting beyond simple error text.
-- Add conflict prompts for keep both, replace, skip, and cancel.
-- Add current-folder search UI.
-- Add visible sort controls for name/kind/size/modified time and direction.
-- Add explicit open-with chooser UI.
-- Replace polling refresh with native watcher integration where practical.
-- Add Lambda-level file drag source/target widgets before advertising drag/drop.
+- Add direct text path entry; rename UI; Trash view/restore UI (or explicitly defer restore while keeping delete trash-first); undo UI; operation progress/cancel UX + partial-failure reporting; conflict prompts (keep both/replace/skip/cancel); current-folder search UI; visible sort controls; explicit open-with chooser UI; native watcher integration; Lambda-level file drag source/target before advertising DnD.
+- **New (gap analysis):** removable-media support via SVC-14 — show mounted/removable volumes in places, mount on open, and unmount/eject safely; auto-mount on insert is optional and policy-gated.
 
-Validation:
-
-- Targeted Files tests pass for model, operations, trash, selection, preferences, open-with fixtures, MIME/default-app parsing, URI-list clipboard, icon fallback, and grid layout.
+Validation: as previously specified (model, operations, trash, selection, preferences, open-with fixtures, MIME parsing, URI-list clipboard, icon fallback, grid layout). Add: removable-volume enumerate/mount/unmount against SVC-14 fixtures; manual USB insert/open/eject.
 
 Deferred:
 
-- Advanced default-app editing, thumbnails, mounted volumes/removable devices, tabs, split panes, indexed search, network shares, archive browsing, full document viewer, and full text editor.
+- Advanced default-app editing, thumbnails, tabs, split panes, indexed search, network shares, archive browsing (see ARC-* for a standalone archive manager), full document viewer (see PDF-*), and full text editor.
+
+---
 
 ## P4 Terminal
 
 Current implementation:
 
-- `lambda-terminal` uses `forkpty`, libvterm, UTF-8 mode, alternate screen, nonblocking pty reads/writes, event-loop wake thread, row damage, row/layout caching, resize through `TIOCSWINSZ`, terminal title updates, and child cleanup.
-- Live UI supports text input, key encoding helpers, resize, black glass/solid background config, foreground/background colors, bold/italic/underline/reverse/strikethrough rendering, cursor, live scrollback viewport with wheel and `Shift+PageUp`/`Shift+PageDown`, scrollback-aware selection/copy, desktop clipboard copy/paste, bracketed paste policy, and profile/preferences persistence.
-- `TerminalCore` covers deterministic input encoding, application cursor/keypad, focus-event encoding, SGR mouse encoding helper, mouse-to-cell mapping, resize calculation, Unicode width helpers, color/attribute resolution, preferences/profiles, scrollback model, selection reconstruction, search helper, URL detection, app identity, and browser command planning.
-- `main.cpp` only creates the app/window/profile background and installs the terminal view; `TerminalSession.cpp` still owns live pty/session/rendering/UI behavior.
+- `lambda-terminal` uses `forkpty`, libvterm, UTF-8 mode, alternate screen, nonblocking pty I/O, event-loop wake thread, row damage, row/layout caching, resize via `TIOCSWINSZ`, title updates, and child cleanup.
+- Live UI supports text input, key encoding, resize, glass/solid background, colors, bold/italic/underline/reverse/strikethrough, cursor, scrollback viewport (wheel + `Shift+PageUp/Down`), scrollback-aware selection/copy, clipboard copy/paste, bracketed paste, and profile/preferences persistence.
+- `TerminalCore` covers input encoding, application cursor/keypad, focus encoding, SGR mouse helper, mouse-to-cell mapping, resize calc, Unicode width helpers, color/attribute resolution, preferences/profiles, scrollback model, selection reconstruction, search helper, URL detection, app identity, and browser command planning.
 
 Open gate:
 
-- Add live search UI with query entry, match highlight, next/previous, close behavior, and scrollback search.
-- Wire terminal-app mouse reporting in `TerminalSession` for SGR/basic button/motion/wheel modes while preserving normal selection when reporting is off.
-- Improve live Unicode/grapheme handling beyond `VTermScreenCell::chars[0]`, especially combining marks and complex emoji sequences.
-- Add primary selection support or explicitly defer it in the user-facing UI.
-- Add OSC 52 policy/support if desired.
-- Add URL opening UI and policy.
-- Continue splitting live pty/session/model/renderer/UI into testable components.
-- Add cursor shape/color scheme preferences if framework rendering supports them.
+- Add live search UI (query, match highlight, next/prev, close, scrollback search); wire mouse reporting (SGR/basic/motion/wheel) while preserving selection when off; improve Unicode/grapheme handling (combining marks, complex emoji); add primary selection support or explicitly defer it in the UI; OSC 52 policy; URL opening UI/policy; continue splitting pty/session/model/renderer/UI; cursor shape/color-scheme preferences if rendering supports them.
 
-Validation:
-
-- Targeted Terminal tests pass for core model, input, scrollback, selection, Unicode helpers, color, resize, config, preferences, and pty smoke behavior.
+Validation: as previously specified (core model, input, scrollback, selection, Unicode helpers, color, resize, config, preferences, pty smoke).
 
 Deferred:
 
-- Tabs, split panes, terminal multiplexing, SSH connection manager, and serial terminal UI.
+- Tabs, split panes, multiplexing, SSH connection manager, serial terminal UI.
 
-## P5 Shared Services And Missing Core Apps
+---
 
-These remain backlog items, not separate specs.
+## P6 Shared Services And Missing Core Apps
 
-Shared desktop services:
+Shared desktop services are now specified under **P0.5 System Services (SVC-1…SVC-15)**. The shared-service backlog items below map to SVC-* and to the shared MIME/default-app/open-with and icon/thumbnail services:
 
-- App registry service boundaries and permission model.
-- Shared icon-theme provider and cache.
-- Shared MIME/default-app/open-with service.
-- Status provider service model for Shell and Settings.
-- Notification backend/service boundary.
-- Clipboard-history backend/service boundary.
-- Portal direction for screenshot/screencast/file chooser and untrusted clients.
-- Secrets/keyring.
+- App registry service boundaries and permission model — exists (shared registry); formalize boundaries.
+- Shared icon-theme provider and cache — exists; extend with thumbnailing.
+- Shared MIME/default-app/open-with service — needed (consumed by Files, Editor, image/PDF viewers); define a single service so all apps resolve defaults consistently.
+- Status provider service model — Shell SH-6/SH-7 on SVC-9/10/11/12 + audio/brightness.
+- Notification backend — SVC-6. Clipboard-history backend — Shell model + WM-17.
+- Portal direction (file chooser/screenshot/screencast/untrusted clients) — SVC-4/SVC-5 + WM-12.
+- Secrets/keyring — SVC-13.
+- Thumbnailing service (new) — generate/cache thumbnails for Files and the image viewer (freedesktop thumbnail spec).
 
-Editor current implementation:
+### Editor (`lambda-editor`)
 
-- `lambda-editor` is a compact single-document app with document/file helpers plus the live app view in `apps/lambda-editor/main.cpp`.
-- Current UI has a toolbar for New, Open, Save, Save As, Undo, Redo, Cut, Copy, Paste, Find, Replace, Go To Line, Word Wrap, Zoom Out, and Zoom In; toolbar buttons use shared tooltip hooks.
-- Current file I/O uses the Lambda open/save dialog path, tracks document path/display name/dirty state, updates the window title with an unsaved marker, and supports command-line file open.
-- Current editing behavior includes controlled selection state, multi-level editor undo/redo, Ctrl-style file/edit/find/zoom shortcuts, Ctrl+A handling in `TextInput`, cut/copy/paste enabled states, a scrolling multiline editor viewport, word-wrap toggling, font-size zoom, find/replace/go-to-line panels, and status text with character count and current line.
-- Current validation covers editor command helpers, Linux modifier text-input filtering, controlled `TextInput` Ctrl+A/edit-selection behavior, and scoped autofocus request behavior. Live compositor validation is still required for panel autofocus, toolbar tooltips, and visual layout.
+Editor current implementation, open gate, tabs/recovery, printing/page-setup, spellcheck/Notepad parity, and deferred items are as previously specified (ED-1…ED-8): a compact single-document app with toolbar (New/Open/Save/Save As/Undo/Redo/Cut/Copy/Paste/Find/Replace/Go To Line/Word Wrap/Zoom), Lambda open/save dialog path, dirty tracking, and command-line open. The open gate covers data-loss prompts on new/open/close/quit/tab-close; explicit handling of missing/permission/large/invalid/encoding/newline cases; BOM/UTF-16/CRLF/LF/final-newline preservation; fuller status bar; persisted zoom; Time/Date/Print/Page Setup actions; richer find/replace; editor context menu; document navigation keys; large-file guardrails; a full menu bar (File/Edit/Format/View/Help); Files open-with wiring; and splitting `main.cpp`. Tabs/session-restore, print/page-setup abstractions, and spellcheck (Hunspell or system) follow. Rich text/Markdown/syntax-highlighting/AI remain deferred.
 
-Editor open gate:
+- **New (gap analysis):** Editor print/page-setup should share a desktop-wide print abstraction with the PDF viewer (PDF-*); spellcheck should expose a shared service if other apps want it later.
 
-- Prompt before data loss on new, open, close-window, quit, and tab-close flows.
-- Handle missing files, directory paths, permission errors, large files, invalid text, encoding, and newline policy explicitly.
-- Preserve or intentionally convert UTF-8 BOM, UTF-16 LE/BE, CRLF, LF, and final-newline state; show the effective format in the status bar where useful.
-- Add fuller status-bar fields for column, selection, encoding, newline mode, and zoom, plus status bar visibility controls if they remain desired.
-- Add restore-default zoom and persisted editor font-size settings. Do not reintroduce Editor toolbar/menu actions for font family selection unless the product decision changes.
-- Add remaining editor actions and enabled states for Time/Date, Print, and Page Setup. Delete and Select All should remain basic `TextInput` behavior rather than Editor toolbar actions.
-- Extend find UI with previous match, match case, wrap-around behavior, and visible match feedback.
-- Extend replace UI with clearer replace-next behavior and visible match feedback.
-- Add time/date insertion.
-- Add a context menu for the editor surface with editing, find/replace, and spellcheck actions as they become available.
-- Add PageUp/PageDown, Ctrl/Home/End-style document navigation, platform-correct modifiers where needed, and caret visibility while typing or navigating.
-- Add large-file performance guardrails so typing, selection, find, and layout do not copy or relayout the full buffer unnecessarily.
-- Add a full menu bar through `Application::setMenuBar`: File, Edit, Format, View, and Help.
-- Add File menu entries for New, New Window, Open, Save, Save As, Page Setup, Print, and Exit.
-- Add Edit menu entries for Undo, Redo, Cut, Copy, Paste, Find, Find Next, Find Previous, Replace, Go To, and Time/Date.
-- Add Format menu entries for Word Wrap.
-- Add View menu entries for Zoom In, Zoom Out, Restore Default Zoom, and Status Bar if status-bar visibility remains desired.
-- Add Help/About entry for Lambda Editor.
-- Keep shortcut behavior aligned with current product direction: Ctrl-style editor shortcuts, including Ctrl+Shift+C/V for terminal copy/paste only.
-- Add Files/open-with integration so text files launch `lambda-editor` with the selected path and sensible MIME/default-app behavior.
-- Split `main.cpp` into document model, file I/O, editor view, menu/action wiring, settings, and tests.
+### Missing core apps (specs)
 
-Editor tabs and recovery:
+Detailed below in rough daily-driver priority. Each is a Lambda app built on the v5 UI runtime, integrated with the shared app registry, MIME/open-with, icon/thumbnail, and (where relevant) portal/print services.
 
-- Add a tab model with multiple documents per window.
-- Add new tab, close tab, next/previous tab, dirty tab indicators, and keyboard shortcuts.
-- Add tab reorder/drag-out behavior only after the framework supports the required interactions.
-- Restore previously open tabs and unsaved tab content on launch.
-- Keep session restore separate from real file save: restored unsaved edits must not modify files until the user saves.
-- Add a setting for opening files in new tabs versus new windows.
+- **IMG-* — Image viewer (replace the `lambda-preview` stub).** Current `lambda-preview` is ~232 lines: open-by-typed-path with basic zoom. Build a real viewer:
+  - Open from Files/open-with and CLI argument; **folder navigation** (next/previous within the directory, in the Files sort order).
+  - Formats: stb_image (PNG/JPG/GIF/BMP/etc.) plus SVG via the framework `flux::Svg`; later libheif/libavif/libraw for HEIC/AVIF/RAW.
+  - View: fit / fill / 100% / free zoom + pan; **honor EXIF orientation**; rotate/flip; fullscreen and a simple slideshow.
+  - Actions: copy-to-clipboard, set-as-wallpaper (via Settings/Shell), delete-to-trash via the Files/trash service.
+  - Acceptance: double-clicking an image in Files opens it; arrow keys move through the folder; rotated photos display upright; common formats load; fit/zoom/pan feel right.
+- **SHOT-* — Screenshot tool front-end.** A UI on top of the compositor's existing capture (and WM-12 / the portal Screenshot once present):
+  - Modes: full output, active window, region (with the compositor region overlay); optional delay.
+  - Post-capture: annotate (arrow/box/text/highlight/blur), copy-to-clipboard, and save to XDG Pictures/Screenshots with sane filenames.
+  - Integrate with the portal Screenshot interface so app-initiated screenshots route here.
+  - Acceptance: a keybind captures a region; the result can be annotated, copied, and saved; an app's portal screenshot request shows this UI.
+- **PDF-* — PDF/document viewer.** Render via a library (poppler-cpp or mupdf): page navigation, zoom/fit modes, search with match navigation, thumbnail/outline sidebar, open-with from Files, and printing via the shared print abstraction (with Editor). Acceptance: opening a PDF from Files renders it; search/zoom/fit/thumbnails work; print produces correct output.
+- **ARC-* — Archive manager.** List/extract/create via libarchive (zip, tar.gz/xz/zst; optional 7z): browse archive contents, extract-here/extract-to, compress selection, with Files context-menu integration ("Extract here", "Compress…"). Acceptance: extract and create a zip and a tar.zst from Files; browse an archive's contents.
+- **CALC-* — Calculator.** Basic + scientific modes, keyboard input, and a short history. Small effort; expected on any desktop. Acceptance: arithmetic and scientific operations with keyboard and history.
+- **MON-* — System monitor.** Process list (from `/proc`), CPU/memory/network/disk usage, sort/filter, and kill/renice (signals; privileged kill via SVC-8 polkit). Acceptance: see and sort processes, view resource graphs, and end a process (with auth where required).
+- **MED-* — Media player.** Audio/video via a backend (libmpv or GStreamer): playlist, transport, subtitle/track selection, hardware decode (VA-API), and **MPRIS publish** so the Shell/media keys control it (SVC-12). Acceptance: plays common audio/video; transport works; the Shell shows now-playing and media keys control it.
 
-Editor printing and page setup:
+### Browser, mail, calendar (external, plumbing-gated)
 
-- Add platform print and page-setup abstractions.
-- Support Notepad-style page setup for header, footer, margins, orientation, and paper options where the platform exposes them.
-- Use filename and page-number defaults for printed header/footer unless Lambda chooses a simpler product policy.
+These remain mature external Wayland apps unless Lambda explicitly decides to own them. The real requirement is that they **run and integrate**:
 
-Editor spellcheck and modern Notepad parity:
+- Firefox/Chromium and Thunderbird run Wayland-native today; the gate is the portal **FileChooser** (SVC-4) for file dialogs, the **ScreenCast** portal (SVC-5 + WM-12) for screen sharing, **Settings** portal (SVC-15) for dark-mode/theme, **notifications** (SVC-6), and — for the long tail of apps without Wayland builds — **XWayland** (WM-20).
+- Acceptance: a browser can open/save files via the Lambda chooser, share its screen in a video call, follow dark-mode, and notify; an X11-only app runs under XWayland with working clipboard/DnD.
 
-- Add spellcheck integration through system spell APIs or a bundled engine such as Hunspell.
-- Render misspelling diagnostics in the text editor, including red squiggles or an equivalent accessible underline.
-- Add suggestions, ignore-once/ignore-all, add-to-dictionary, and context-menu correction actions.
-- Add autocorrect and per-file-type spellcheck defaults; keep spellcheck off by default for logs and code-like files.
-- Treat AI write/rewrite/summarize, lightweight formatting, and tables as stretch goals, not part of the daily-driver editor gate.
+### Workspaces / Touch / IME (product decisions)
 
-Editor deferred:
+- **Workspaces / virtual desktops:** not planned. If accepted, implement `ext-workspace-v1` (compositor) + a Shell switcher + keybindings; otherwise document that Lambda v1 ships without workspaces.
+- **Touch:** WM-19 if touch hardware is a target.
+- **IME / international input:** `text-input-v3` + `input-method-v2` + `virtual-keyboard` (compositor) + an input-method app, if non-Latin input or an on-screen keyboard is a target. Currently out of scope.
 
-- Rich text editing, Markdown rendering mode, syntax highlighting, project/workspace sidebar, collaboration, cloud sync, and AI features.
-
-Document/PDF viewer:
-
-- PDF rendering.
-- Page navigation.
-- Zoom and fit modes.
-- Search.
-- Thumbnail/sidebar navigation.
-- Files/open-with integration.
-
-Optional later apps:
-
-- Archive manager.
-- Image viewer.
-- Media player.
-- System monitor.
-- Browser.
-- Mail.
-- Calendar.
-- Calculator.
+---
 
 ## Validation Model
 
 - Unit/model tests for deterministic behavior.
-- Manual hardware/app smoke tests for compositor, Shell, and real Wayland clients.
+- Manual hardware/app smoke tests for compositor, Shell, System Services, and real Wayland clients.
 - Real-app validation with Lambda apps plus mature Wayland clients such as Firefox, GTK apps, Qt apps, and `foot`.
 - Visual/glass/animation behavior requires target-machine manual validation until screenshot/render regression coverage exists.
 - Do not mark a gate complete solely because model helpers exist; live UI and user workflow must be wired where the gate is user-facing.
+- **System Services and protocol gates require real-bus and real-protocol validation:** test against the actual session/system bus and real clients (`notify-send`, a tray app, `pkexec`, NetworkManager, BlueZ, `grim`/`slurp`/OBS, a browser's portal flows, `wlr-randr`/kanshi, `loginctl lock-session`, suspend/resume), not just model fixtures.
 
-Manual validation coverage inherited from the old readiness specs:
+Manual validation coverage inherited from the old readiness specs (Window Manager, Shell, Settings, Files, Terminal, Editor) is unchanged; see prior sections. Additions:
 
-- Window Manager: build/unit checks, TTY launch, Shell launch, protocol smoke, Lambda apps, browser/GTK/Qt/foot real-app matrix, screenshots, fullscreen/restore, video/mpv pacing, hardware overlay/scanout traces, config reload/restart matrix, idle CPU, and compositor crash/disconnect behavior.
-- Shell: build/unit checks, launch/failure behavior, app registry discovery, dock launch/focus/restore, launcher keyboard behavior, docklet status, quick settings, notification workflows, clipboard-history workflows, config reload, and Lambda/external app validation.
-- Settings: build/unit checks, launch, Appearance, Display, Input, Windows, Dock & Panel, Notifications, Launcher & Clipboard, About/System, save/revert/reset, invalid values, restart-required rows, compact layout, and owner-config persistence.
-- Files: build/unit checks, launch, browsing places/root/outside-home/permission-denied/large/hidden/external-change cases, selection, safe operations, trash, clipboard/DnD behavior, open-with behavior, grid/list/sort/search behavior, and preference persistence.
-- Terminal: build/unit checks, launch, shell workflows, full-screen apps, scrollback, selection/clipboard, key input, Unicode/color/attributes, resize/performance traces, and preferences.
-- Editor: build/unit checks, launch empty document, command-line file open, native open/save/save-as, dirty prompts, missing/permission-denied/large/invalid-encoding files, newline/encoding preservation, undo/redo, selection/clipboard, find/replace, go-to-line, word wrap, zoom, font/status-bar preferences, tabs/session restore when implemented, print/page setup when implemented, Files/open-with launch, and keyboard/menu/context-menu parity.
+- System Services: libseat unprivileged launch + VT switching; logind suspend/lid/power-key + lock-on-sleep; notifications daemon with real apps; tray host with real tray apps; polkit prompt; Wi-Fi connect; Bluetooth pair; battery events; media keys + now-playing; portal file dialog and screen share in a browser; USB mount/eject; dark-mode propagation to GTK/Qt apps.
+- Compositor protocol/power: session-lock (lock/unlock/crash-stays-locked); DPMS power-off/restore; `grim`/`slurp`/`wf-recorder`/OBS capture; gammastep; `wlr-randr`/kanshi output config; idle-notify-driven auto-lock/dim/blank; (if scheduled) XWayland real-app matrix.
 
 Useful targeted checks:
 
@@ -521,6 +451,11 @@ Useful targeted checks:
 ./build/lambda_tests --test-case="Terminal*"
 ./build/lambda_tests --test-case="screenshot*"
 ./build/lambda_tests --test-case="surface*"
+# new (as workstreams land):
+./build/lambda_tests --test-case="*DBus*"
+./build/lambda_tests --test-case="*SessionLock*"
+./build/lambda_tests --test-case="*Portal*"
+./build/lambda_tests --test-case="*OutputManagement*"
 ```
 
 `ctest --test-dir build --output-on-failure` may require a live Wayland display and Vulkan device depending on the environment.
@@ -533,31 +468,22 @@ Lambda v5:
 - `MountRoot`, `MountContext`, `Signal`, `Computed`, `Effect`, `Scope`, `Bindable`, `For`, `Show`, and `Switch` are implemented.
 - Framework docs live in the focused Lambda v5 reference docs.
 
+Framework review (2026-06-13) findings addressed:
+
+- Subtree-visual-bounds caching, Vulkan prepared-recorder deferred destruction, `setBounds` position-dirty, `PointerMove` handler-copy safety, hit-test inverse fast-path + cached-bounds early reject, and an effect-flush iteration guard landed with regression tests; `-Wall -Wextra` enabled by default. See `docs/framework-review-20260613.md`.
+
 Compositor structural cleanup:
 
-- Wayland globals split into `apps/lambda-window-manager/Compositor/Wayland/Globals/`.
-- `WaylandServer` uses a pimpl.
-- Runtime split into `CompositorRenderFrame`, `CompositorConfigWatch`, `Presenter`, and related modules.
-- Window/input logic split into `FocusStack`, `PointerRouter`, `InteractiveMoveResize`, `KeyboardShortcuts`, and `LayerShellInput`.
-- Resize tracing unified under `lambda::detail::resizeTrace`.
-- Protocol codegen consolidated through `cmake/LambdaWaylandProtocols.cmake`.
+- Wayland globals split into `apps/lambda-window-manager/Compositor/Wayland/Globals/`; `WaylandServer` uses a pimpl; runtime split into `CompositorRenderFrame`, `CompositorConfigWatch`, `Presenter`, and related modules; window/input logic split into `FocusStack`, `PointerRouter`, `InteractiveMoveResize`, `KeyboardShortcuts`, and `LayerShellInput`; resize tracing unified; protocol codegen consolidated through `cmake/LambdaWaylandProtocols.cmake`.
 
 Compositor and Shell framework work:
 
-- Layer-shell chrome and compositor-backed background effects exist.
-- Shared Shell IPC module exists.
-- Shell preview and production rendering use shared paths where practical.
-- Subsurface hit testing, popup geometry, layer-shell zones, output selector, screenshot logic, and compositor state helpers have deterministic tests.
-- Firefox-oriented xdg-popup and inert-resource lifecycle fixes landed after real crash traces.
-- Fullscreen restore now preserves prior maximized/snapped/normal window state, and Shell panels leave/return around fullscreen.
-- KMS frame pacing now uses a queued compositor presentation path with video overlay/scanout decisions traced for skipped-frame analysis.
-- Hardware cursor motion is decoupled from full scene redraws.
-- Explicit sync advertisement is disabled/removed until there is a demonstrated benefit and a correct client-buffer lifecycle.
-- Wayland buffer damage is propagated into committed snapshots and used for partial cached-image updates on the SHM path.
+- Layer-shell chrome and compositor-backed background effects; shared Shell IPC module; shared preview/production rendering; deterministic tests for subsurface hit testing, popup geometry, layer-shell zones, output selector, screenshot logic, and compositor state helpers; Firefox-oriented xdg-popup/inert-resource lifecycle fixes; fullscreen restore preserving prior window state with panel leave/return; KMS queued presentation with overlay/scanout decisions; hardware-cursor motion decoupled from full redraws; explicit-sync disabled until justified; SHM buffer-damage partial updates.
 
 Documentation cleanup:
 
-- Old Lambda readiness specs and Shell mockup/status plans were consolidated into this roadmap on 2026-05-26.
+- Old Lambda readiness specs and Shell mockup/status plans consolidated into this roadmap on 2026-05-26.
+- The 2026-06-14 daily-driver gap analysis was folded into Product Decisions, the Daily-Driver Gate, P0.5 System Services, WM-11…WM-21, and the P6 missing-app specs.
 - `compositor.md` remains an architecture/history reference, not the active backlog.
 
 ## Update Rules
@@ -566,3 +492,4 @@ Documentation cleanup:
 - When implementation lands, update the relevant `Current implementation`, `Open gate`, and `Validation` bullets in the same change.
 - Keep user/run instructions in [compositor-user-guide.md](compositor-user-guide.md), not here.
 - Keep architecture/history notes in [compositor.md](compositor.md), not here, unless they affect active roadmap decisions.
+- When a System Services or compositor-protocol workstream (SVC-*, WM-11…WM-21) lands, record the real-client validation that proved it (the daemon/protocol is not "done" until a real third-party client exercises it).
