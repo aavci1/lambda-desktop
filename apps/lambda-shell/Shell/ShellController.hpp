@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -18,10 +19,12 @@
 namespace lambda_shell {
 
 enum class AudioControlAction;
+struct ShellSystemStatusWatchers;
 
 class ShellController {
 public:
   ShellController(lambda::Application& app, ShellModel& model);
+  ~ShellController();
 
   bool connectIpc();
   void setConfigReloadSource(std::filesystem::path path,
@@ -50,6 +53,7 @@ private:
   void handleIpcLine(std::string_view line);
   void checkShellConfigReload();
   [[nodiscard]] bool refreshSystemStatus();
+  void setupSystemStatusWatchers();
   void performAudioControlAsync(AudioControlAction action);
   void performNetworkControlAsync(DockStatusAction action);
   void performBluetoothControlAsync(DockStatusAction action);
@@ -99,6 +103,7 @@ private:
   std::uint64_t systemStatusTimerId_ = 0;
   std::uint64_t configReloadTimerId_ = 0;
   std::uint64_t nextRequestId_ = 1;
+  std::unique_ptr<ShellSystemStatusWatchers> systemStatusWatchers_;
   std::filesystem::path configPath_;
   std::optional<std::filesystem::file_time_type> configLastWrite_;
   std::vector<AppRegistryEntry> appRegistry_;

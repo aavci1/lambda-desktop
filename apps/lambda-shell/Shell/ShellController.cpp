@@ -19,6 +19,7 @@
 #include <Lambda/System/Logind.hpp>
 #include <Lambda/System/MPRIS.hpp>
 #include <Lambda/System/NetworkManager.hpp>
+#include <Lambda/System/UPower.hpp>
 #include <Lambda/UI/Events.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
 #include <Lambda/UI/VisualTokens.hpp>
@@ -32,6 +33,7 @@
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#include <utility>
 
 namespace lambda_shell {
 
@@ -95,6 +97,17 @@ LayerShellOptions visibleMenuLayer(char const* nameSpace) {
 }
 
 } // namespace
+
+struct ShellSystemStatusWatchers {
+  ShellSystemStatusWatchers(lambda::Application& app, std::function<void()> onPowerChanged)
+      : upower(lambda::system::UPowerClient::connectSystem()),
+        upowerPump(app, upower.bus()),
+        upowerDisplayChanged(upower.watchDisplayDeviceChanged(std::move(onPowerChanged))) {}
+
+  lambda::system::UPowerClient upower;
+  lambda::dbus::BusEventPump upowerPump;
+  lambda::dbus::Slot upowerDisplayChanged;
+};
 
 lambda::WindowConfig dockWindowConfig(int width,
                                       int itemSize,
@@ -239,6 +252,8 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
     }
   });
 }
+
+ShellController::~ShellController() = default;
 
 void ShellController::setConfigReloadSource(std::filesystem::path path,
                                             std::vector<AppRegistryEntry> apps,
@@ -440,6 +455,7 @@ void ShellController::createProductionWindows() {
   (void)refreshSystemStatus();
   clockTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{1}, *dockHandle_);
   systemStatusTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{5}, *dockHandle_);
+  setupSystemStatusWatchers();
 
   auto& dockMenu = app_.createWindow<lambda::Window>(dockMenuWindowConfig());
   dockMenu.setBackground(lambda::WindowBackground::transparent());
@@ -537,6 +553,16 @@ bool ShellController::refreshSystemStatus() {
   requestDockRedraw();
   if (previewHandle_) requestLauncherRedraw();
   return true;
+}
+
+void ShellController::setupSystemStatusWatchers() {
+  if (systemStatusWatchers_) return;
+  try {
+    systemStatusWatchers_ = std::make_unique<ShellSystemStatusWatchers>(app_, [this] {
+      app_.eventQueue().post(ShellStatusCommandCompleted{.changed = true});
+    });
+  } catch (...) {
+  }
 }
 
 void ShellController::activateLauncherItem(DockItem const& item) {
