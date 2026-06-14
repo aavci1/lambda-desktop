@@ -70,6 +70,8 @@ void throwIfFailed(int result, std::string const& operation, sd_bus_error const*
 }
 
 void appendValue(sd_bus_message* message, BasicValue const& value);
+void appendVariantDictionary(sd_bus_message* message, VariantDictionary const& value);
+VariantDictionary readVariantDictionaryFrom(sd_bus_message* message);
 
 void appendStringArray(sd_bus_message* message, StringArray const& value) {
   throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, "s"),
@@ -153,6 +155,9 @@ void appendValue(sd_bus_message* message, BasicValue const& value) {
           return 0;
         } else if constexpr (std::is_same_v<T, EmptyVariantDictionary>) {
           appendEmptyVariantDictionary(message);
+          return 0;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<VariantDictionary>>) {
+          appendVariantDictionary(message, v ? *v : VariantDictionary{});
           return 0;
         } else if constexpr (std::is_same_v<T, UnixFd>) {
           int const fd = v.get();
@@ -325,6 +330,9 @@ BasicValue readValueFromSignature(sd_bus_message* message, std::string_view sign
   if (signature == "ay") {
     return readByteArrayFrom(message);
   }
+  if (signature == "a{sv}") {
+    return std::make_shared<VariantDictionary>(readVariantDictionaryFrom(message));
+  }
   if (signature == "(ddd)") {
     return readRgbColorFrom(message);
   }
@@ -417,7 +425,8 @@ std::optional<BasicValue> readOptionalVariantFrom(sd_bus_message* message) {
   bool const supported = signature == "b" || signature == "y" || signature == "i" ||
                          signature == "u" || signature == "x" || signature == "t" ||
                          signature == "d" || signature == "s" || signature == "o" ||
-                         signature == "as" || signature == "ay" || signature == "(ddd)";
+                         signature == "as" || signature == "ay" || signature == "a{sv}" ||
+                         signature == "(ddd)";
   if (!supported) {
     throwIfFailed(sd_bus_message_skip(message, "v"), "skip unsupported D-Bus variant");
     return std::nullopt;
@@ -756,6 +765,8 @@ std::string signatureFor(BasicValue const& value) {
         } else if constexpr (std::is_same_v<T, RgbColor>) {
           return "(ddd)";
         } else if constexpr (std::is_same_v<T, EmptyVariantDictionary>) {
+          return "a{sv}";
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<VariantDictionary>>) {
           return "a{sv}";
         } else if constexpr (std::is_same_v<T, UnixFd>) {
           return "h";

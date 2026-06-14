@@ -168,6 +168,27 @@ gdbus call --system \
   --method org.freedesktop.DBus.ObjectManager.GetManagedObjects
 ```
 
+## Media Status
+
+MPRIS media-player state is discovered from session-bus names with the `org.mpris.MediaPlayer2.` prefix. For development, confirm a player is visible with:
+
+```sh
+gdbus call --session \
+  --dest org.freedesktop.DBus \
+  --object-path /org/freedesktop/DBus \
+  --method org.freedesktop.DBus.ListNames
+```
+
+If a player name is present, inspect the player interface with:
+
+```sh
+gdbus call --session \
+  --dest org.mpris.MediaPlayer2.<player> \
+  --object-path /org/mpris/MediaPlayer2 \
+  --method org.freedesktop.DBus.Properties.Get \
+  org.mpris.MediaPlayer2.Player PlaybackStatus
+```
+
 ## Power Status
 
 Shell battery status prefers UPower when reading the live system and falls back to `/sys/class/power_supply` when UPower is unavailable. For development, confirm the system service is visible with:

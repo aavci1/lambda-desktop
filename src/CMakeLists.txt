@@ -3,6 +3,7 @@ set(LAMBDA_CORE_SOURCES
   System/BlueZ.cpp
   System/DBus.cpp
   System/Logind.cpp
+  System/MPRIS.cpp
   System/NetworkManager.cpp
   System/Notifications.cpp
   System/PortalSettings.cpp

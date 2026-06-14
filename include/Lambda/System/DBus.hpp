@@ -29,6 +29,8 @@ namespace detail {
 struct BackendAccess;
 }
 
+struct VariantDictionary;
+
 enum class BusType {
   Session,
   System,
@@ -99,7 +101,8 @@ private:
 using BasicValue = std::variant<bool, std::uint8_t, std::int32_t, std::uint32_t,
                                 std::int64_t, std::uint64_t, double, std::string,
                                 ObjectPath, ObjectPathArray, StringArray, ByteArray,
-                                RgbColor, EmptyVariantDictionary, UnixFd>;
+                                RgbColor, EmptyVariantDictionary,
+                                std::shared_ptr<VariantDictionary>, UnixFd>;
 
 struct VariantValue {
   BasicValue value;

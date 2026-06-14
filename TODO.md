@@ -25,6 +25,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-026 | Feature | Complete SVC-11 UPower power-status integration | N/A | P0.5 |
 | TODO-027 | Feature | Complete SVC-9 NetworkManager connectivity integration | N/A | P0.5 |
 | TODO-028 | Feature | Complete SVC-10 BlueZ Bluetooth integration | N/A | P0.5 |
+| TODO-029 | Feature | Complete SVC-12 MPRIS media integration | N/A | P0.5 |
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -156,12 +157,14 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add `Properties.GetAll`, `a{sv}` reply reading, and unique-name lookup for StatusNotifierWatcher initialization and path-only item registration.
 - [x] [Auto] Add NetworkManager D-Bus value shapes: object-path arrays, byte arrays, byte scalars, and fixture coverage through the first NetworkManager client.
 - [x] [Auto] Add BlueZ ObjectManager D-Bus shape support for managed-object dictionaries (`a{oa{sa{sv}}}`) and fixture coverage through the first BlueZ client.
+- [x] [Auto] Add nested `a{sv}` variant-property support for MPRIS metadata and fixture coverage through the first MPRIS client.
 - [ ] [Auto] Add async method calls and pending-call cancellation.
 - [ ] [Auto] Add broader generic type support needed by remaining portals and services: arbitrary arrays beyond the service-specific shapes already in tree, arbitrary dictionaries, richer nested variants, and request option maps.
 - [ ] [Auto] Add object introspection and first-class `PropertiesChanged` helpers.
 - [x] [Auto] Add deterministic fixture tests for the first UPower client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first NetworkManager client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first BlueZ client that consumes `lambda::dbus`.
+- [x] [Auto] Add deterministic fixture tests for the first MPRIS client that consumes `lambda::dbus`.
 - [ ] [Auto] Add deterministic fixture tests for the remaining first service clients that consume `lambda::dbus` (udisks2).
 - [ ] [Auto + Manual] Wire D-Bus fd pumping into the compositor/service runtime paths that will host SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
 
@@ -260,3 +263,13 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Implement adapter power toggle, discovery, pairing-agent, pair/unpair, trust/untrust, connect/disconnect, and forget-device flows.
 - [ ] [Auto + Manual] Build the Settings Bluetooth page for pairing, device management, and adapter details.
 - [ ] [Manual] Validate against the real system bus: adapter power on/off, device pair/connect/disconnect, no-adapter fallback, and Bluetooth controller removal all report truthfully in the Shell docklet.
+
+## TODO-029: Complete SVC-12 MPRIS media integration
+
+- [x] [Auto] Add a basic `lambda::system::MPRISClient` on top of `lambda::dbus` for session-bus player discovery, root `Identity`/`DesktopEntry`, player `PlaybackStatus`/`Metadata`/`Volume`/`Position`/capability properties, transport methods, and volume writes.
+- [x] [Auto] Add deterministic fake-bus coverage for player discovery, metadata parsing, status formatting, `PlayPause`, `Next`, and volume property writes.
+- [ ] [Auto + Manual] Wire MPRIS `PropertiesChanged`, `Seeked`, and name-owner changes into Shell so now-playing status updates live.
+- [ ] [Auto + Manual] Add Shell now-playing UI and media-key routing for play/pause, next, previous, stop, seek, and volume where supported.
+- [ ] [Auto] Implement player selection policy for multiple players, including active/playing precedence, stale-player pruning, and per-player capability gating.
+- [ ] [Auto] Add richer metadata handling: art URL/image cache, track length/position progress, album/artist lists, desktop-entry icon lookup, and TrackList support where present.
+- [ ] [Manual] Validate against real MPRIS players such as browser media, VLC, Spotify, or mpv: player appears, metadata updates, media keys control the expected player, and unsupported controls stay disabled.
