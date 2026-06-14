@@ -8,6 +8,8 @@
 #include <chrono>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 #include <unistd.h>
 
 namespace {
@@ -127,6 +129,7 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   CHECK(xml.find("<method name=\"Echo\"/>") != std::string::npos);
   CHECK(xml.find("<method name=\"GetWriteFd\"/>") != std::string::npos);
   CHECK(xml.find("<property name=\"Mode\" type=\"s\" access=\"readwrite\"/>") != std::string::npos);
+  CHECK(xml.find("<signal name=\"PropertiesChanged\">") != std::string::npos);
 
   auto echoReply = client.call(lambda::dbus::MethodCall{
       .destination = serviceName,
@@ -185,6 +188,30 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   service.emitSignal("/org/lambda/DBusTest", "org.lambda.DBusTest", "Changed", {std::string("done")});
   service.flush();
   CHECK(pumpUntil(client, [&] { return signalPayload == "done"; }, std::chrono::milliseconds(500)));
+
+  lambda::dbus::PropertiesChanged propertiesChanged;
+  auto propertiesChangedSlot = client.matchSignal(
+      lambda::dbus::SignalMatch{
+          .sender = serviceName,
+          .path = "/org/lambda/DBusTest",
+          .interface = "org.freedesktop.DBus.Properties",
+          .member = "PropertiesChanged",
+      },
+      [&propertiesChanged](lambda::dbus::Message& message) {
+        propertiesChanged = lambda::dbus::readPropertiesChanged(message);
+      });
+  lambda::dbus::VariantDictionary changedProperties;
+  changedProperties.values["Mode"] = std::string("changed");
+  service.emitPropertiesChanged("/org/lambda/DBusTest",
+                                "org.lambda.DBusTest",
+                                std::move(changedProperties),
+                                lambda::dbus::StringArray{{"LegacyMode"}});
+  service.flush();
+  CHECK(pumpUntil(client,
+                  [&] { return propertiesChanged.interface == "org.lambda.DBusTest"; },
+                  std::chrono::milliseconds(500)));
+  CHECK(std::get<std::string>(propertiesChanged.changed.values["Mode"]) == "changed");
+  CHECK(propertiesChanged.invalidated.values == std::vector<std::string>{"LegacyMode"});
 
   running = false;
   serviceThread.join();

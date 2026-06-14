@@ -116,6 +116,12 @@ struct VariantDictionary {
   std::map<std::string, BasicValue> values;
 };
 
+struct PropertiesChanged {
+  std::string interface;
+  VariantDictionary changed;
+  StringArray invalidated;
+};
+
 struct NamespacedVariantDictionary {
   std::map<std::string, std::map<std::string, BasicValue>> values;
 };
@@ -130,7 +136,10 @@ using ReplyValue = std::variant<BasicValue,
                                 NamespacedVariantDictionary,
                                 ManagedObjectDictionary>;
 
+class Message;
+
 [[nodiscard]] std::string signatureFor(BasicValue const& value);
+[[nodiscard]] PropertiesChanged readPropertiesChanged(Message& message);
 
 struct MethodCall {
   std::string destination;
@@ -278,6 +287,10 @@ public:
   Slot exportObject(std::string const& path, ObjectDefinition definition);
   void emitSignal(std::string const& path, std::string const& interface,
                   std::string const& member, std::vector<ReplyValue> const& arguments = {});
+  void emitPropertiesChanged(std::string const& path,
+                             std::string const& interface,
+                             VariantDictionary changed,
+                             StringArray invalidated = {});
 
   [[nodiscard]] int eventFileDescriptor() const;
   [[nodiscard]] int eventMask() const;

@@ -53,11 +53,10 @@ dbus::Slot UPowerClient::watchDisplayDeviceChanged(std::function<void()> handler
           .member = "PropertiesChanged",
       },
       [handler = std::move(handler)](dbus::Message& message) mutable {
-        if (message.readString() != UPowerClient::deviceInterfaceName) {
+        auto const changed = dbus::readPropertiesChanged(message);
+        if (changed.interface != UPowerClient::deviceInterfaceName) {
           return;
         }
-        message.skip("a{sv}");
-        message.skip("as");
         if (handler) {
           handler();
         }

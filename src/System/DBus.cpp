@@ -658,6 +658,11 @@ std::string introspectionXml(ExportState const& state) {
       "      <arg name=\"property_name\" type=\"s\" direction=\"in\"/>\n"
       "      <arg name=\"value\" type=\"v\" direction=\"in\"/>\n"
       "    </method>\n"
+      "    <signal name=\"PropertiesChanged\">\n"
+      "      <arg name=\"interface_name\" type=\"s\"/>\n"
+      "      <arg name=\"changed_properties\" type=\"a{sv}\"/>\n"
+      "      <arg name=\"invalidated_properties\" type=\"as\"/>\n"
+      "    </signal>\n"
       "  </interface>\n";
 
   for (auto const& interface : interfaces) {
@@ -910,6 +915,19 @@ MethodReply MethodReply::error(std::string name, std::string message) {
   reply.errorName = std::move(name);
   reply.errorMessage = std::move(message);
   return reply;
+}
+
+PropertiesChanged readPropertiesChanged(Message& message) {
+#if LAMBDA_HAS_DBUS
+  PropertiesChanged changed;
+  changed.interface = message.readString();
+  changed.changed = message.readVariantDictionary();
+  changed.invalidated = message.readStringArray();
+  return changed;
+#else
+  (void)message;
+  throw Error(-ENOTSUP, "read D-Bus PropertiesChanged signal", "D-Bus support is not available in this build");
+#endif
 }
 
 UnixFd::UnixFd(int fd) noexcept : fd_(fd) {}
@@ -1459,6 +1477,20 @@ void Bus::emitSignal(std::string const& path, std::string const& interface,
   (void)arguments;
   throw Error(-ENOTSUP, "emit D-Bus signal", "D-Bus support is not available in this build");
 #endif
+}
+
+void Bus::emitPropertiesChanged(std::string const& path,
+                                std::string const& interface,
+                                VariantDictionary changed,
+                                StringArray invalidated) {
+  emitSignal(path,
+             "org.freedesktop.DBus.Properties",
+             "PropertiesChanged",
+             {
+                 BasicValue(std::string(interface)),
+                 std::move(changed),
+                 BasicValue(std::move(invalidated)),
+             });
 }
 
 int Bus::eventFileDescriptor() const {
