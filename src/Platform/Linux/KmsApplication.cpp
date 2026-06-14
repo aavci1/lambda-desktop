@@ -438,7 +438,7 @@ KmsApplication::~KmsApplication() {
   restoreConsole();
   uninstallSignalHandlers();
   debugLog("releasing input devices");
-  if (input_) libinput_unref(input_);
+  destroyInput();
   if (udevMonitor_) udev_monitor_unref(udevMonitor_);
   if (udev_) udev_unref(udev_);
   if (drmFd_ >= 0) {
@@ -583,6 +583,9 @@ void KmsApplication::handleSeatEnabled() {
   seatEnabled_ = true;
   seatDisablePending_ = false;
   debugLog("libseat enabled seat=%s", seatName_.empty() ? "(unknown)" : seatName_.c_str());
+  if (inputInitialized_ && !rebuildInputForSeatEnable()) {
+    std::fprintf(stderr, "lambda-window-manager: failed to reopen input devices after seat enable\n");
+  }
   acquireDrmMasterForVt(false);
 }
 
@@ -656,7 +659,10 @@ std::vector<KmsConnector> KmsApplication::scanConnectors() const {
 }
 
 void KmsApplication::initializeInput() {
-  udev_ = udev_new();
+  inputInitialized_ = true;
+  inputDeviceCount_ = 0;
+  inputSuspendedForVt_ = false;
+  if (!udev_) udev_ = udev_new();
   if (!udev_) throw std::runtime_error("udev_new failed");
   input_ = libinput_udev_create_context(&kLibinputInterface, this, udev_);
   if (!input_) throw std::runtime_error("libinput_udev_create_context failed");
@@ -697,6 +703,35 @@ void KmsApplication::initializeInput() {
                  "Grant access to /dev/input/event* or run under a seat manager.\n");
     std::fflush(stderr);
   }
+}
+
+void KmsApplication::destroyInput() {
+  if (input_) {
+    libinput_unref(input_);
+    input_ = nullptr;
+  }
+  inputDeviceCount_ = 0;
+  inputSuspendedForVt_ = false;
+  rawPressedButtons_.clear();
+  rawPressedKeys_.clear();
+  pressedButtons_ = 0;
+}
+
+bool KmsApplication::rebuildInputForSeatEnable() {
+  if (!seat_ || !seatEnabled_) return false;
+  debugLog("reopening libseat-managed input devices after seat enable");
+  releaseRawInputState(static_cast<std::uint32_t>(std::max<std::int64_t>(0, monotonicMillis())));
+  destroyInput();
+  try {
+    initializeInput();
+    return inputDeviceCount_ > 0;
+  } catch (std::exception const& error) {
+    std::fprintf(stderr, "lambda-window-manager: input reopen failed after seat enable: %s\n", error.what());
+  } catch (...) {
+    std::fprintf(stderr, "lambda-window-manager: input reopen failed after seat enable\n");
+  }
+  destroyInput();
+  return false;
 }
 
 void KmsApplication::initializeDrmMonitor() {

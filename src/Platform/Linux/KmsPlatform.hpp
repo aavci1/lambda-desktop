@@ -100,6 +100,8 @@ private:
   bool openFirstDisplayCard();
   void enumerateConnectors();
   void initializeInput();
+  void destroyInput();
+  bool rebuildInputForSeatEnable();
   void initializeSeat();
   void closeSeat();
   void dispatchSeatEvents();
@@ -164,6 +166,7 @@ private:
   bool drmMaster_ = false;
   bool seatEnabled_ = false;
   bool seatDisablePending_ = false;
+  bool inputInitialized_ = false;
   bool consoleInitialized_ = false;
   bool terminalConfigured_ = false;
   bool vtProcessMode_ = false;
