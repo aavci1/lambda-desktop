@@ -50,6 +50,10 @@ struct RuntimeTargetSnapshot {
   Reactive::Signal<bool> pressSignal;
   Reactive::Signal<bool> focusSignal;
   Reactive::Signal<bool> keyboardFocusSignal;
+  std::vector<Reactive::Signal<bool>> hoverSignals;
+  std::vector<Reactive::Signal<bool>> pressSignals;
+  std::vector<Reactive::Signal<bool>> focusSignals;
+  std::vector<Reactive::Signal<bool>> keyboardFocusSignals;
   bool windowDragRegion = false;
   WindowResizeEdge windowResizeEdge = WindowResizeEdge::None;
 };
@@ -406,6 +410,10 @@ RuntimeTargetSnapshot snapshot(scenegraph::SceneNode const* node,
     target.pressSignal = interaction->pressSignal;
     target.focusSignal = interaction->focusSignal;
     target.keyboardFocusSignal = interaction->keyboardFocusSignal;
+    target.hoverSignals = interaction->hoverSignals;
+    target.pressSignals = interaction->pressSignals;
+    target.focusSignals = interaction->focusSignals;
+    target.keyboardFocusSignals = interaction->keyboardFocusSignals;
     target.windowDragRegion = interaction->windowDragRegion;
     target.windowResizeEdge = interaction->windowResizeEdge;
   }
@@ -506,18 +514,28 @@ void writeSignal(Reactive::Signal<bool> const& signal, bool active) {
   }
 }
 
+void writeSignals(std::vector<Reactive::Signal<bool>> const& signals, bool active) {
+  for (auto const& signal : signals) {
+    writeSignal(signal, active);
+  }
+}
+
 void setHoverActive(RuntimeTargetSnapshot const& target, bool active) {
   writeSignal(target.hoverSignal, active);
+  writeSignals(target.hoverSignals, active);
 }
 
 void setPressActive(RuntimeTargetSnapshot const& target, bool active) {
   writeSignal(target.pressSignal, active);
+  writeSignals(target.pressSignals, active);
 }
 
 void setFocusActive(RuntimeTargetSnapshot const& target, bool active,
                     FocusInputKind kind = FocusInputKind::Pointer) {
   writeSignal(target.focusSignal, active);
   writeSignal(target.keyboardFocusSignal, active && kind == FocusInputKind::Keyboard);
+  writeSignals(target.focusSignals, active);
+  writeSignals(target.keyboardFocusSignals, active && kind == FocusInputKind::Keyboard);
 }
 
 void updateCursorForHit(RuntimeInputState& input, Window& window, PointerHitSnapshot const& hit) {

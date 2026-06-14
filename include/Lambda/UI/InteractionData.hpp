@@ -16,6 +16,7 @@
 #include <Lambda/UI/WindowChrome.hpp>
 
 #include <string>
+#include <vector>
 
 namespace lambda {
 
@@ -42,6 +43,10 @@ struct InteractionData : public scenegraph::Interaction {
   Reactive::Signal<bool> pressSignal;
   Reactive::Signal<bool> focusSignal;
   Reactive::Signal<bool> keyboardFocusSignal;
+  std::vector<Reactive::Signal<bool>> hoverSignals;
+  std::vector<Reactive::Signal<bool>> pressSignals;
+  std::vector<Reactive::Signal<bool>> focusSignals;
+  std::vector<Reactive::Signal<bool>> keyboardFocusSignals;
 
   [[nodiscard]] ComponentKey const& stableTargetKey() const noexcept override {
     return stableTargetKey_;
@@ -58,6 +63,8 @@ struct InteractionData : public scenegraph::Interaction {
            !onTapWithModifiers &&
            hoverSignal.disposed() && pressSignal.disposed() &&
            focusSignal.disposed() && keyboardFocusSignal.disposed() &&
+           hoverSignals.empty() && pressSignals.empty() &&
+           focusSignals.empty() && keyboardFocusSignals.empty() &&
            !focusable_.isReactive() && !focusable_.evaluate() &&
            !cursor.isReactive() && cursor.evaluate() == Cursor::Inherit &&
            !windowDragRegion && windowResizeEdge == WindowResizeEdge::None;

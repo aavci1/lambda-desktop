@@ -71,10 +71,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 ## TODO-014: Tooltips are not showing
 
 - [ ] [Manual] Tooltips are not showing at all when running the tooltip demo, even though they previously worked at least on macOS.
-- [ ] [Auto + Manual] Fix the shared `Tooltip`/`useTooltip` implementation rather than adding local tooltip popover behavior per app or demo.
-- [ ] [Auto + Manual] Verify the tooltip demo shows tooltips after hover delay for buttons, icons, toggles, and placement examples.
-- [ ] [Auto + Manual] Verify Editor toolbar buttons use the same real tooltip implementation and show their labels on hover.
-- [ ] [Auto] Add automated coverage where practical for tooltip state/lifecycle behavior, including hover enter, hover exit, timer cancellation, and avoiding stale tooltip popovers after the target unmounts.
+- [x] [Auto] Fixed the shared interaction-signal propagation used by `Tooltip`/`useTooltip` rather than adding local tooltip popover behavior per app or demo.
+- [ ] [Manual] Verify the tooltip demo shows tooltips after hover delay for buttons, icons, toggles, and placement examples.
+- [ ] [Manual] Verify Editor toolbar buttons use the same real tooltip implementation and show their labels on hover.
+- [x] [Auto] Added automated coverage for tooltip hover enter, delayed presentation, child-component hover propagation, and hover-exit dismissal.
 
 ## TODO-015: Add a cross-window command registry and command palette
 

@@ -99,6 +99,16 @@ inline InteractionSignalBundle const* currentInteractionSignals() {
   return stack.empty() ? nullptr : stack.back();
 }
 
+inline std::vector<InteractionSignalBundle const*> currentInteractionSignalChain() {
+  std::vector<InteractionSignalBundle const*> chain;
+  for (InteractionSignalBundle const* signals : interactionSignalMountStack()) {
+    if (signals) {
+      chain.push_back(signals);
+    }
+  }
+  return chain;
+}
+
 inline ComponentKey const* currentInteractionScopeKey() {
   auto& stack = interactionScopeKeyMountStack();
   return stack.empty() ? nullptr : stack.back();

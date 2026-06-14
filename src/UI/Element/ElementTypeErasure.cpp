@@ -456,7 +456,15 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     interaction->cursor = modifiers.cursor;
     interaction->windowDragRegion = modifiers.windowDragRegion;
     interaction->windowResizeEdge = modifiers.windowResizeEdge;
-    if (detail::InteractionSignalBundle const* signals = detail::currentInteractionSignals()) {
+    auto signalChain = detail::currentInteractionSignalChain();
+    if (!signalChain.empty()) {
+      for (detail::InteractionSignalBundle const* signals : signalChain) {
+        interaction->hoverSignals.push_back(signals->hover);
+        interaction->pressSignals.push_back(signals->press);
+        interaction->focusSignals.push_back(signals->focus);
+        interaction->keyboardFocusSignals.push_back(signals->keyboardFocus);
+      }
+      detail::InteractionSignalBundle const* signals = signalChain.back();
       interaction->hoverSignal = signals->hover;
       interaction->pressSignal = signals->press;
       interaction->focusSignal = signals->focus;

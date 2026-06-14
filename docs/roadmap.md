@@ -1,6 +1,6 @@
 # Lambda and Lambda roadmap
 
-**Last updated:** 2026-06-14 (started SVC-1 D-Bus capability with exported-object introspection and `PropertiesChanged` helpers, SVC-2 libseat KMS device access, SVC-3 logind client basics with active-session discovery and Shell launcher power actions, SVC-4 portal Settings backend basics, SVC-6 notification service basics, SVC-7 StatusNotifierWatcher basics, SVC-9 NetworkManager status/toggle basics with Shell manager/device/AP event refresh, SVC-10 BlueZ status/toggle basics with Shell property/ObjectManager event refresh, SVC-11 UPower basics with Shell display-device/manager event refresh, SVC-12 MPRIS basics with Shell docklet/control integration and event refresh, SVC-14 UDisks2 basics with Files mounted-volume sidebar/event refresh, and Files local Preview defaults for supported image MIME types; integrated daily-driver gap analysis: new System Services workstream SVC-*, compositor protocol/power gates WM-11…WM-21, missing-app specs, reprioritized gate)
+**Last updated:** 2026-06-14 (started SVC-1 D-Bus capability with exported-object introspection and `PropertiesChanged` helpers, SVC-2 libseat KMS device access, SVC-3 logind client basics with active-session discovery and Shell launcher power actions, SVC-4 portal Settings backend basics, SVC-6 notification service basics, SVC-7 StatusNotifierWatcher basics, SVC-9 NetworkManager status/toggle basics with Shell manager/device/AP event refresh, SVC-10 BlueZ status/toggle basics with Shell property/ObjectManager event refresh, SVC-11 UPower basics with Shell display-device/manager event refresh, SVC-12 MPRIS basics with Shell docklet/control integration and event refresh, SVC-14 UDisks2 basics with Files mounted-volume sidebar/event refresh, Files local Preview defaults for supported image MIME types, and shared tooltip hover propagation through nested child components; integrated daily-driver gap analysis: new System Services workstream SVC-*, compositor protocol/power gates WM-11…WM-21, missing-app specs, reprioritized gate)
 **Status:** Source of truth for current project status, Lambda desktop readiness, active backlog, and archived roadmap notes.
 
 ## Purpose
@@ -70,7 +70,7 @@ These revise the decisions above. They are recommendations for the owner to acce
 
 | Area | Current status |
 | --- | --- |
-| Lambda v5 UI runtime | Shipped. Retained mount, reactive graph, `Bindable` modifiers, `For`/`Show`/`Switch`. |
+| Lambda v5 UI runtime | Shipped. Retained mount, reactive graph, `Bindable` modifiers, `For`/`Show`/`Switch`; shared hover/press/focus signals now propagate through nested child components so `useTooltip` can wrap controls. |
 | App platforms | macOS Metal, Linux Wayland Vulkan, Linux KMS Vulkan. |
 | Examples | Demo and Lambda app targets build through CMake when examples are enabled. |
 | Window Manager | Core compositor is usable for dogfooding. Open: titlebar/content frame coherence, wlroots backlog, real-app validation, polish, **and the daily-driver protocol/power gates (session-lock, screen-capture, idle-notify, DPMS, foreign-toplevel, output-management) — not yet started.** |

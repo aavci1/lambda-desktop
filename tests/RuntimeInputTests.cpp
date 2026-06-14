@@ -14,6 +14,7 @@
 #include <Lambda/SceneGraph/SceneInteraction.hpp>
 #include <Lambda/UI/Hooks.hpp>
 #include <Lambda/UI/Overlay.hpp>
+#include <Lambda/UI/Views/Button.hpp>
 #include <Lambda/UI/Views/HStack.hpp>
 #include <Lambda/UI/Views/Popover.hpp>
 #include <Lambda/UI/Views/PopoverCalloutShape.hpp>
@@ -22,6 +23,7 @@
 #include <Lambda/UI/Views/Select.hpp>
 #include <Lambda/UI/Views/Show.hpp>
 #include <Lambda/UI/Views/TextInput.hpp>
+#include <Lambda/UI/Views/Tooltip.hpp>
 #include <Lambda/UI/Views/VStack.hpp>
 
 #include <cstdlib>
@@ -510,6 +512,20 @@ struct HoverPopoverProbeRoot {
         .onPointerExit([hidePopover] {
           hidePopover();
         });
+  }
+};
+
+struct NestedButtonTooltipProbeRoot {
+  lambda::Element body() const {
+    lambda::useTooltip(lambda::TooltipConfig{
+        .text = "Nested button tooltip",
+        .placement = lambda::PopoverPlacement::Below,
+        .delayMs = 1,
+    });
+    return lambda::Element{lambda::Button{
+        .label = "Hover",
+        .variant = lambda::ButtonVariant::Secondary,
+    }}.size(80.f, 36.f);
   }
 };
 
@@ -1152,6 +1168,29 @@ TEST_CASE("hover popovers keep the exact hover anchor instead of tracking compon
   CHECK(entry->config.anchor->width == doctest::Approx(20.f));
   CHECK(entry->config.anchor->height == doctest::Approx(20.f));
   CHECK_FALSE(entry->config.anchorTrackComponentKey.has_value());
+}
+
+TEST_CASE("tooltips observe hover on nested child components") {
+  RuntimeHarness harness;
+  harness.setRoot(NestedButtonTooltipProbeRoot{});
+
+  harness.pointerMove({10.f, 10.f});
+  CHECK(harness.window.overlayManager().top() == nullptr);
+
+  harness.app.eventQueue().post(lambda::TimerEvent{.timerId = 1});
+  harness.app.eventQueue().dispatch();
+
+  lambda::OverlayEntry const* entry = harness.window.overlayManager().top();
+  REQUIRE(entry != nullptr);
+  CHECK(entry->config.debugName == "tooltip");
+  REQUIRE(entry->config.anchor.has_value());
+  CHECK(entry->config.anchor->x == doctest::Approx(0.f));
+  CHECK(entry->config.anchor->y == doctest::Approx(0.f));
+  CHECK(entry->config.anchor->width == doctest::Approx(80.f));
+  CHECK(entry->config.anchor->height == doctest::Approx(36.f));
+
+  harness.pointerMove({120.f, 90.f});
+  CHECK(harness.window.overlayManager().top() == nullptr);
 }
 
 TEST_CASE("tracked overlay anchors follow moved trigger nodes") {
