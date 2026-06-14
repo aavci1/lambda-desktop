@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <iterator>
 #include <string_view>
 #include <utility>
 
@@ -30,6 +31,42 @@ bool offStatus(std::string_view value) {
 bool stoppedMediaStatus(std::string_view value) {
   std::string const text = lowerAscii(value);
   return offStatus(value) || text == "stopped";
+}
+
+bool containsAsciiInsensitive(std::string_view haystack, std::string_view needle) {
+  if (needle.empty()) return true;
+  return lowerAscii(haystack).find(lowerAscii(needle)) != std::string::npos;
+}
+
+struct LauncherShellAction {
+  char const* id;
+  char const* label;
+  char const* icon;
+  char const* keywords;
+};
+
+std::vector<DockItem> launcherShellActions(std::string_view query) {
+  if (query.empty()) return {};
+
+  LauncherShellAction const actions[] = {
+      {"shell.suspend", "Suspend", "sleep", "sleep standby power"},
+      {"shell.hibernate", "Hibernate", "sleep", "sleep suspend power"},
+      {"shell.reboot", "Restart", "restart", "reboot power"},
+      {"shell.power-off", "Power Off", "power", "shutdown turn off"},
+  };
+
+  std::vector<DockItem> results;
+  for (auto const& action : actions) {
+    std::string const searchable = std::string(action.label) + " " + action.id + " " + action.keywords;
+    if (!containsAsciiInsensitive(searchable, query)) continue;
+    DockItem item;
+    item.id = action.id;
+    item.kind = "shell-action";
+    item.label = action.label;
+    item.icon = action.icon;
+    results.push_back(std::move(item));
+  }
+  return results;
 }
 
 DockletStatusItem unavailableItem(std::string id, lambda::IconName icon) {
@@ -188,6 +225,10 @@ std::vector<DockItem> launcherResults(std::vector<DockItem> const& items, std::s
       results.push_back(item);
     }
   }
+  auto actions = launcherShellActions(query);
+  results.insert(results.end(),
+                 std::make_move_iterator(actions.begin()),
+                 std::make_move_iterator(actions.end()));
   return results;
 }
 

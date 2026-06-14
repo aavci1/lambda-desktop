@@ -72,6 +72,9 @@ lambda::IconName dockIconName(DockItem const& item) {
   if (shellAppIdMatches("browser", key)) return lambda::IconName::Globe;
   if (shellAppIdMatches("terminal", key)) return lambda::IconName::Terminal;
   if (shellAppIdMatches("settings", key)) return lambda::IconName::Tune;
+  if (key == "sleep") return lambda::IconName::Bedtime;
+  if (key == "restart") return lambda::IconName::RestartAlt;
+  if (key == "power") return lambda::IconName::PowerSettingsNew;
   if (key == "calendar") return lambda::IconName::CalendarToday;
   if (key == "mail") return lambda::IconName::Mail;
   if (key == "music") return lambda::IconName::LibraryMusic;

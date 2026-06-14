@@ -108,6 +108,45 @@ TEST_CASE("Shell model launcher query editing is cursor aware") {
   CHECK(model.queryCursor() == 11);
 }
 
+TEST_CASE("Shell model launcher exposes queried power actions") {
+  lambda_shell::ShellModel model;
+  model.resetDockItems();
+  model.openLauncher();
+
+  auto containsAction = [&](std::string const& id) {
+    auto const& results = model.launcherResults();
+    return std::find_if(results.begin(), results.end(), [&](lambda_shell::DockItem const& item) {
+      return item.kind == "shell-action" && item.id == id;
+    });
+  };
+
+  CHECK(containsAction("shell.suspend") == model.launcherResults().end());
+
+  model.setQuery("suspend");
+  auto suspend = containsAction("shell.suspend");
+  REQUIRE(suspend != model.launcherResults().end());
+  CHECK(suspend->label == "Suspend");
+  CHECK(suspend->icon == "sleep");
+
+  model.setQuery("hibernate");
+  auto hibernate = containsAction("shell.hibernate");
+  REQUIRE(hibernate != model.launcherResults().end());
+  CHECK(hibernate->label == "Hibernate");
+  CHECK(hibernate->icon == "sleep");
+
+  model.setQuery("shutdown");
+  auto powerOff = containsAction("shell.power-off");
+  REQUIRE(powerOff != model.launcherResults().end());
+  CHECK(powerOff->label == "Power Off");
+  CHECK(powerOff->icon == "power");
+
+  model.setQuery("reboot");
+  auto reboot = containsAction("shell.reboot");
+  REQUIRE(reboot != model.launcherResults().end());
+  CHECK(reboot->label == "Restart");
+  CHECK(reboot->icon == "restart");
+}
+
 TEST_CASE("Shell model applies snapshots to dock and title while status remains shell owned") {
   lambda_shell::ShellModel model;
   model.resetDockItems();

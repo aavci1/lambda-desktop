@@ -187,8 +187,9 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add a basic `lambda::system::LogindClient` on top of `lambda::dbus` for `Suspend`, `Hibernate`, `PowerOff`, `Reboot`, fd-based `Inhibit`, `PrepareForSleep`, and session `Lock`/`Unlock` signals.
 - [x] [Auto] Add deterministic fake-bus coverage for logind power calls, inhibitor fd plumbing, sleep signal delivery, and session lock/unlock signal delivery.
 - [x] [Auto] Discover the active logind session path through `GetSessionByPID` instead of requiring callers to provide it manually, and add current-session lock/unlock watcher helpers.
+- [x] [Auto] Add search-driven Shell launcher actions for `Suspend`, `Hibernate`, `Reboot`, and `PowerOff` using `LogindClient`.
 - [ ] [Auto + Manual] Wire logind session `Lock`/`Unlock` and `PrepareForSleep` into the lock app / Shell lock flow, including lock-before-sleep behavior.
-- [ ] [Auto + Manual] Wire `Suspend`, `Hibernate`, `PowerOff`, and `Reboot` into the Shell power/session menu.
+- [ ] [Auto + Manual] Expand the Shell power/session menu beyond search-driven launcher actions, including lock/logout entries, confirmations, policy/error states, and manual validation.
 - [ ] [Auto + Manual] Hold delay inhibitors for `handle-power-key`, `handle-lid-switch`, and `handle-suspend-key`, then release them at the correct point in the lock/suspend flow.
 - [ ] [Auto + Manual] Honor logind `IdleAction` together with WM-13 idle-notify and WM-14 DPMS behavior.
 - [ ] [Manual] Validate against the real system bus: `loginctl lock-session` locks, suspend/resume returns to the lock screen, lid close suspends after locking, and the power key opens the Shell power menu.

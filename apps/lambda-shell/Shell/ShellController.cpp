@@ -16,6 +16,7 @@
 
 #include <Lambda/Core/Color.hpp>
 #include <Lambda/System/BlueZ.hpp>
+#include <Lambda/System/Logind.hpp>
 #include <Lambda/System/MPRIS.hpp>
 #include <Lambda/System/NetworkManager.hpp>
 #include <Lambda/UI/Events.hpp>
@@ -27,6 +28,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <thread>
@@ -252,11 +254,7 @@ void ShellController::setConfigReloadSource(std::filesystem::path path,
 
 std::function<void(DockItem const&)> ShellController::makeActivateCallback() {
   return [this](DockItem const& item) {
-    if (dockMenuOpen_) closeDockMenu();
-    model_.activateItem(item, [this](std::string const& line) { ipc_.sendLine(line); }, nextRequestId());
-    if (model_.launcherOpen()) {
-      closeLauncher();
-    }
+    activateLauncherItem(item);
   };
 }
 
@@ -541,6 +539,18 @@ bool ShellController::refreshSystemStatus() {
   return true;
 }
 
+void ShellController::activateLauncherItem(DockItem const& item) {
+  if (dockMenuOpen_) closeDockMenu();
+  if (item.kind == "shell-action") {
+    performShellActionAsync(item.id);
+  } else {
+    model_.activateItem(item, [this](std::string const& line) { ipc_.sendLine(line); }, nextRequestId());
+  }
+  if (model_.launcherOpen()) {
+    closeLauncher();
+  }
+}
+
 void ShellController::performAudioControlAsync(AudioControlAction action) {
   std::thread([this, action] {
     bool const changed = controlAudioVolume(action);
@@ -617,6 +627,30 @@ void ShellController::performMediaControlAsync(DockStatusAction action) {
     } catch (...) {
     }
     app_.eventQueue().post(ShellStatusCommandCompleted{.changed = changed});
+  }).detach();
+}
+
+void ShellController::performShellActionAsync(std::string actionId) {
+  std::thread([actionId = std::move(actionId)] {
+    try {
+      auto client = lambda::system::LogindClient::connectSystem();
+      if (actionId == "shell.suspend") {
+        client.suspend(true);
+      } else if (actionId == "shell.hibernate") {
+        client.hibernate(true);
+      } else if (actionId == "shell.reboot") {
+        client.reboot(true);
+      } else if (actionId == "shell.power-off") {
+        client.powerOff(true);
+      }
+    } catch (std::exception const& error) {
+      std::fprintf(stderr,
+                   "lambda-shell: shell action %s failed: %s\n",
+                   actionId.c_str(),
+                   error.what());
+    } catch (...) {
+      std::fprintf(stderr, "lambda-shell: shell action %s failed\n", actionId.c_str());
+    }
   }).detach();
 }
 
@@ -955,10 +989,7 @@ void ShellController::handleLauncherKey(lambda::InputEvent const& event) {
       auto const results = model_.launcherResults();
       if (!results.empty()) {
         int const index = std::clamp(model_.highlighted(), 0, static_cast<int>(results.size()) - 1);
-        model_.activateItem(results[static_cast<std::size_t>(index)],
-                            [this](std::string const& line) { ipc_.sendLine(line); },
-                            nextRequestId());
-        closeLauncher();
+        activateLauncherItem(results[static_cast<std::size_t>(index)]);
       }
       return;
     }

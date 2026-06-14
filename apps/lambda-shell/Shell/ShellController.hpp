@@ -54,8 +54,10 @@ private:
   void performNetworkControlAsync(DockStatusAction action);
   void performBluetoothControlAsync(DockStatusAction action);
   void performMediaControlAsync(DockStatusAction action);
+  void performShellActionAsync(std::string actionId);
   void queueVolumeAdjustment(int steps);
   void runVolumeAdjustmentWorker();
+  void activateLauncherItem(DockItem const& item);
   void syncLauncherWindow();
   void openDockMenu(DockItem const& item);
   void syncDockMenuOverlay();
