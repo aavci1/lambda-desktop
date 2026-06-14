@@ -1,5 +1,6 @@
 #include "Shell/ShellSystemStatus.hpp"
 
+#include <Lambda/System/NetworkManager.hpp>
 #include <Lambda/System/UPower.hpp>
 
 #include "Shell/ShellAudioControl.hpp"
@@ -75,7 +76,23 @@ bool interfaceUp(std::filesystem::path const& interfacePath) {
   return readText(interfacePath / "carrier").value_or("") == "1";
 }
 
+bool populateNetworkManagerStatus(SystemStatus& status) {
+  try {
+    auto client = lambda::system::NetworkManagerClient::connectSystem();
+    auto const snapshot = client.readSnapshot();
+    status.network = lambda::system::formatNetworkStatus(snapshot);
+    status.wifi = lambda::system::formatWifiStatus(snapshot);
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
 void populateNetworkStatus(std::filesystem::path const& sysRoot, SystemStatus& status) {
+  if (sysRoot == "/sys" && populateNetworkManagerStatus(status)) {
+    return;
+  }
+
   bool anyInterface = false;
   bool anyConnected = false;
   bool anyWireless = false;

@@ -80,6 +80,26 @@ void appendStringArray(sd_bus_message* message, StringArray const& value) {
   throwIfFailed(sd_bus_message_close_container(message), "close D-Bus string array");
 }
 
+void appendObjectPathArray(sd_bus_message* message, ObjectPathArray const& value) {
+  throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, "o"),
+                "open D-Bus object path array");
+  for (auto const& item : value.values) {
+    throwIfFailed(sd_bus_message_append_basic(message, 'o', item.value.c_str()),
+                  "append D-Bus object path array item");
+  }
+  throwIfFailed(sd_bus_message_close_container(message), "close D-Bus object path array");
+}
+
+void appendByteArray(sd_bus_message* message, ByteArray const& value) {
+  throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, "y"),
+                "open D-Bus byte array");
+  for (auto const byte : value.values) {
+    std::uint8_t const raw = byte;
+    throwIfFailed(sd_bus_message_append_basic(message, 'y', &raw), "append D-Bus byte array item");
+  }
+  throwIfFailed(sd_bus_message_close_container(message), "close D-Bus byte array");
+}
+
 void appendRgbColor(sd_bus_message* message, RgbColor const& value) {
   throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_STRUCT, "ddd"),
                 "open D-Bus RGB tuple");
@@ -102,6 +122,8 @@ void appendValue(sd_bus_message* message, BasicValue const& value) {
         if constexpr (std::is_same_v<T, bool>) {
           int const raw = v ? 1 : 0;
           return sd_bus_message_append_basic(message, 'b', &raw);
+        } else if constexpr (std::is_same_v<T, std::uint8_t>) {
+          return sd_bus_message_append_basic(message, 'y', &v);
         } else if constexpr (std::is_same_v<T, std::int32_t>) {
           return sd_bus_message_append_basic(message, 'i', &v);
         } else if constexpr (std::is_same_v<T, std::uint32_t>) {
@@ -116,8 +138,14 @@ void appendValue(sd_bus_message* message, BasicValue const& value) {
           return sd_bus_message_append_basic(message, 's', v.c_str());
         } else if constexpr (std::is_same_v<T, ObjectPath>) {
           return sd_bus_message_append_basic(message, 'o', v.value.c_str());
+        } else if constexpr (std::is_same_v<T, ObjectPathArray>) {
+          appendObjectPathArray(message, v);
+          return 0;
         } else if constexpr (std::is_same_v<T, StringArray>) {
           appendStringArray(message, v);
+          return 0;
+        } else if constexpr (std::is_same_v<T, ByteArray>) {
+          appendByteArray(message, v);
           return 0;
         } else if constexpr (std::is_same_v<T, RgbColor>) {
           appendRgbColor(message, v);
@@ -210,6 +238,33 @@ StringArray readStringArrayFrom(sd_bus_message* message) {
   return array;
 }
 
+ObjectPathArray readObjectPathArrayFrom(sd_bus_message* message) {
+  ObjectPathArray array;
+  throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_ARRAY, "o"),
+                "enter D-Bus object path array");
+  while (sd_bus_message_at_end(message, 0) == 0) {
+    char const* item = nullptr;
+    throwIfFailed(sd_bus_message_read_basic(message, 'o', &item),
+                  "read D-Bus object path array item");
+    array.values.push_back(ObjectPath{item ? item : ""});
+  }
+  throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus object path array");
+  return array;
+}
+
+ByteArray readByteArrayFrom(sd_bus_message* message) {
+  ByteArray array;
+  throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_ARRAY, "y"),
+                "enter D-Bus byte array");
+  while (sd_bus_message_at_end(message, 0) == 0) {
+    std::uint8_t item = 0;
+    throwIfFailed(sd_bus_message_read_basic(message, 'y', &item), "read D-Bus byte array item");
+    array.values.push_back(item);
+  }
+  throwIfFailed(sd_bus_message_exit_container(message), "exit D-Bus byte array");
+  return array;
+}
+
 RgbColor readRgbColorFrom(sd_bus_message* message) {
   RgbColor color;
   throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_STRUCT, "ddd"),
@@ -225,6 +280,12 @@ BasicValue readValueFromSignature(sd_bus_message* message, std::string_view sign
   if (signature == "as") {
     return readStringArrayFrom(message);
   }
+  if (signature == "ao") {
+    return readObjectPathArrayFrom(message);
+  }
+  if (signature == "ay") {
+    return readByteArrayFrom(message);
+  }
   if (signature == "(ddd)") {
     return readRgbColorFrom(message);
   }
@@ -236,6 +297,11 @@ BasicValue readValueFromSignature(sd_bus_message* message, std::string_view sign
     int raw = 0;
     throwIfFailed(sd_bus_message_read_basic(message, 'b', &raw), "read D-Bus bool");
     return raw != 0;
+  }
+  case 'y': {
+    std::uint8_t value = 0;
+    throwIfFailed(sd_bus_message_read_basic(message, 'y', &value), "read D-Bus byte");
+    return value;
   }
   case 'i': {
     std::int32_t value = 0;
@@ -557,6 +623,8 @@ std::string signatureFor(BasicValue const& value) {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, bool>) {
           return "b";
+        } else if constexpr (std::is_same_v<T, std::uint8_t>) {
+          return "y";
         } else if constexpr (std::is_same_v<T, std::int32_t>) {
           return "i";
         } else if constexpr (std::is_same_v<T, std::uint32_t>) {
@@ -571,8 +639,12 @@ std::string signatureFor(BasicValue const& value) {
           return "s";
         } else if constexpr (std::is_same_v<T, ObjectPath>) {
           return "o";
+        } else if constexpr (std::is_same_v<T, ObjectPathArray>) {
+          return "ao";
         } else if constexpr (std::is_same_v<T, StringArray>) {
           return "as";
+        } else if constexpr (std::is_same_v<T, ByteArray>) {
+          return "ay";
         } else if constexpr (std::is_same_v<T, RgbColor>) {
           return "(ddd)";
         } else if constexpr (std::is_same_v<T, EmptyVariantDictionary>) {
@@ -757,6 +829,10 @@ double Message::readDouble() {
   return std::get<double>(readBasic("d"));
 }
 
+std::uint8_t Message::readByte() {
+  return std::get<std::uint8_t>(readBasic("y"));
+}
+
 std::string Message::readString() {
   return std::get<std::string>(readBasic("s"));
 }
@@ -765,8 +841,16 @@ ObjectPath Message::readObjectPath() {
   return std::get<ObjectPath>(readBasic("o"));
 }
 
+ObjectPathArray Message::readObjectPathArray() {
+  return std::get<ObjectPathArray>(readBasic("ao"));
+}
+
 StringArray Message::readStringArray() {
   return std::get<StringArray>(readBasic("as"));
+}
+
+ByteArray Message::readByteArray() {
+  return std::get<ByteArray>(readBasic("ay"));
 }
 
 RgbColor Message::readRgbColor() {

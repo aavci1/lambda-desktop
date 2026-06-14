@@ -23,6 +23,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-024 | Feature | Complete SVC-6 notifications daemon and Shell UI | N/A | P0.5 |
 | TODO-025 | Feature | Complete SVC-7 StatusNotifierWatcher and tray host | N/A | P0.5 |
 | TODO-026 | Feature | Complete SVC-11 UPower power-status integration | N/A | P0.5 |
+| TODO-027 | Feature | Complete SVC-9 NetworkManager connectivity integration | N/A | P0.5 |
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -152,11 +153,13 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add the first richer D-Bus shapes needed by SVC-4 Settings: string arrays, RGB tuples, variant replies/signals, and the `a{sa{sv}}` namespaced variant dictionary.
 - [x] [Auto] Add notification-service D-Bus helpers for empty `a{sv}` hints dictionaries and explicit skipping of currently ignored dictionaries.
 - [x] [Auto] Add `Properties.GetAll`, `a{sv}` reply reading, and unique-name lookup for StatusNotifierWatcher initialization and path-only item registration.
+- [x] [Auto] Add NetworkManager D-Bus value shapes: object-path arrays, byte arrays, byte scalars, and fixture coverage through the first NetworkManager client.
 - [ ] [Auto] Add async method calls and pending-call cancellation.
-- [ ] [Auto] Add broader generic type support needed by remaining portals and services: object-path arrays, arbitrary arrays, arbitrary dictionaries, richer nested variants, and request option maps.
+- [ ] [Auto] Add broader generic type support needed by remaining portals and services: arbitrary arrays beyond the service-specific shapes already in tree, arbitrary dictionaries, richer nested variants, and request option maps.
 - [ ] [Auto] Add object introspection and first-class `PropertiesChanged` helpers.
 - [x] [Auto] Add deterministic fixture tests for the first UPower client that consumes `lambda::dbus`.
-- [ ] [Auto] Add deterministic fixture tests for the remaining first service clients that consume `lambda::dbus` (NetworkManager, BlueZ, udisks2).
+- [x] [Auto] Add deterministic fixture tests for the first NetworkManager client that consumes `lambda::dbus`.
+- [ ] [Auto] Add deterministic fixture tests for the remaining first service clients that consume `lambda::dbus` (BlueZ, udisks2).
 - [ ] [Auto + Manual] Wire D-Bus fd pumping into the compositor/service runtime paths that will host SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
 
 ## TODO-021: Complete SVC-2 libseat seat/session integration
@@ -232,3 +235,14 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Expose richer UPower state in Shell status models: charging/discharging/full/empty, on-AC/on-battery, warning level, time-to-empty/full, and icon-name hints.
 - [ ] [Auto + Manual] Add quick-settings/power UI affordances once policy controls exist, while keeping read-only status truthful until then.
 - [ ] [Manual] Validate against the real system bus: AC plug/unplug and battery percentage changes update the Shell docklet, and systems without batteries still report unavailable truthfully.
+
+## TODO-027: Complete SVC-9 NetworkManager connectivity integration
+
+- [x] [Auto] Add a basic `lambda::system::NetworkManagerClient` on top of `lambda::dbus` for `GetDevices`, manager `State`/`NetworkingEnabled`/`WirelessEnabled`/`WirelessHardwareEnabled`, device `Interface`/`DeviceType`/`State`, wireless `ActiveAccessPoint`, access-point `Ssid`/`Strength`, and a `WirelessEnabled` setter.
+- [x] [Auto] Add deterministic fake-bus coverage for device enumeration, connected Wi-Fi SSID/signal formatting, connecting/off mapping, and Wi-Fi toggle property writes.
+- [x] [Auto] Make Shell network/Wi-Fi status prefer NetworkManager on the real `/sys` path and preserve the existing sysfs fallback when NetworkManager is unavailable or tests use a fixture sysroot.
+- [ ] [Auto + Manual] Wire NetworkManager state, device, and access-point signals into Shell so network/Wi-Fi status updates without waiting for the polling timer.
+- [ ] [Auto] Enumerate visible access points, saved connections, active connections, metered state, connectivity state, and VPN state for Shell quick settings and Settings.
+- [ ] [Auto + Manual] Implement Wi-Fi connect/disconnect flows, including a secrets path for password-protected networks.
+- [ ] [Auto + Manual] Build the Settings network page for saved networks, VPNs, and detailed adapter/IP state.
+- [ ] [Manual] Validate against the real system bus: Ethernet, Wi-Fi connect/disconnect, Wi-Fi enable/disable, captive/limited connectivity, and no-NetworkManager fallback all report truthfully in the Shell docklet.

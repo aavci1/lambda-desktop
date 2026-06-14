@@ -23,7 +23,7 @@ Graphics and text dependencies:
 sudo pacman -S --needed \
   wayland wayland-protocols libxkbcommon \
   vulkan-headers vulkan-icd-loader vulkan-tools glslang \
-  mesa libdrm libinput libseat systemd-libs xdg-desktop-portal libnotify upower \
+  mesa libdrm libinput libseat systemd-libs xdg-desktop-portal libnotify networkmanager upower \
   freetype2 fontconfig harfbuzz zlib
 ```
 
@@ -141,6 +141,18 @@ gdbus call --session \
   --object-path /StatusNotifierWatcher \
   --method org.freedesktop.DBus.Properties.Get \
   org.kde.StatusNotifierWatcher ProtocolVersion
+```
+
+## Network Status
+
+Shell network and Wi-Fi status prefer NetworkManager when reading the live system and fall back to `/sys/class/net` when NetworkManager is unavailable. For development, confirm the system service is visible with:
+
+```sh
+nmcli general status
+gdbus call --system \
+  --dest org.freedesktop.NetworkManager \
+  --object-path /org/freedesktop/NetworkManager \
+  --method org.freedesktop.NetworkManager.GetDevices
 ```
 
 ## Power Status

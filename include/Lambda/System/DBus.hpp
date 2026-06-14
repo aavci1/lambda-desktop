@@ -52,8 +52,16 @@ struct ObjectPath {
   std::string value;
 };
 
+struct ObjectPathArray {
+  std::vector<ObjectPath> values;
+};
+
 struct StringArray {
   std::vector<std::string> values;
+};
+
+struct ByteArray {
+  std::vector<std::uint8_t> values;
 };
 
 struct RgbColor {
@@ -88,8 +96,9 @@ private:
   int fd_ = -1;
 };
 
-using BasicValue = std::variant<bool, std::int32_t, std::uint32_t, std::int64_t,
-                                std::uint64_t, double, std::string, ObjectPath, StringArray,
+using BasicValue = std::variant<bool, std::uint8_t, std::int32_t, std::uint32_t,
+                                std::int64_t, std::uint64_t, double, std::string,
+                                ObjectPath, ObjectPathArray, StringArray, ByteArray,
                                 RgbColor, EmptyVariantDictionary, UnixFd>;
 
 struct VariantValue {
@@ -148,9 +157,12 @@ public:
   [[nodiscard]] std::int64_t readInt64();
   [[nodiscard]] std::uint64_t readUint64();
   [[nodiscard]] double readDouble();
+  [[nodiscard]] std::uint8_t readByte();
   [[nodiscard]] std::string readString();
   [[nodiscard]] ObjectPath readObjectPath();
+  [[nodiscard]] ObjectPathArray readObjectPathArray();
   [[nodiscard]] StringArray readStringArray();
+  [[nodiscard]] ByteArray readByteArray();
   [[nodiscard]] RgbColor readRgbColor();
   [[nodiscard]] UnixFd readUnixFd();
   [[nodiscard]] BasicValue readBasic(std::string_view signature);
