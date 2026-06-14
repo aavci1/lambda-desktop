@@ -1270,7 +1270,18 @@ void KmsApplication::handlePendingTerminateSignal() {
 }
 
 void KmsApplication::releaseDrmMasterForVt(bool acknowledge) {
-  if (!vtForeground_) return;
+  auto acknowledgeRelease = [&] {
+    if (ttyFd_ >= 0 && acknowledge && vtProcessMode_) {
+      if (ioctl(ttyFd_, VT_RELDISP, 1) != 0) {
+        debugLog("VT_RELDISP release failed: %s", std::strerror(errno));
+      }
+    }
+  };
+
+  if (!vtForeground_) {
+    acknowledgeRelease();
+    return;
+  }
   vtForeground_ = false;
   debugLog("releasing DRM master for VT switch");
   suspendInputForVtSwitch();
@@ -1281,15 +1292,15 @@ void KmsApplication::releaseDrmMasterForVt(bool acknowledge) {
     if (drmDropMaster(drmFd_) != 0) debugLog("drmDropMaster failed: %s", std::strerror(errno));
     drmMaster_ = false;
   }
-  if (ttyFd_ >= 0 && acknowledge && vtProcessMode_) {
-    if (ioctl(ttyFd_, VT_RELDISP, 1) != 0) {
-      debugLog("VT_RELDISP release failed: %s", std::strerror(errno));
-    }
-  }
+  acknowledgeRelease();
 }
 
 void KmsApplication::acquireDrmMasterForVt(bool acknowledge) {
-  if (vtForeground_) return;
+  if (vtForeground_) {
+    vtAcquireAckPending_ = ttyFd_ >= 0 && acknowledge && vtProcessMode_;
+    acknowledgePendingVtAcquire();
+    return;
+  }
   debugLog("reacquiring DRM master after VT switch");
   if (drmFd_ >= 0 && !drmMaster_) {
     for (int attempt = 0; attempt < 10 && !drmMaster_; ++attempt) {
@@ -1348,6 +1359,43 @@ void KmsApplication::handlePendingVtSignal() {
   } else if (signal == SIGUSR2) {
     acquireDrmMasterForVt(true);
   }
+}
+
+bool KmsApplication::switchSession(int session) {
+  if (session <= 0) {
+    errno = EINVAL;
+    return false;
+  }
+
+  if (ourVt_ > 0 && session == ourVt_) {
+    debugLog("ignoring request to switch to current VT%d", session);
+    return true;
+  }
+
+  if (seat_) {
+    if (libseat_switch_session(seat_, session) == 0) {
+      debugLog("requested libseat session switch to VT%d", session);
+      return true;
+    }
+    int const seatErrno = errno;
+    debugLog("libseat_switch_session(%d) failed: %s", session, std::strerror(seatErrno));
+    errno = seatErrno;
+    return false;
+  }
+
+  if (ttyFd_ >= 0) {
+    if (ioctl(ttyFd_, VT_ACTIVATE, session) == 0) {
+      debugLog("requested kernel VT switch to VT%d", session);
+      return true;
+    }
+    int const vtErrno = errno;
+    debugLog("VT_ACTIVATE(%d) failed: %s", session, std::strerror(vtErrno));
+    errno = vtErrno;
+    return false;
+  }
+
+  errno = ENODEV;
+  return false;
 }
 
 void KmsApplication::pollActiveVt() {

@@ -17,6 +17,7 @@
 #include "Compositor/Diagnostics/CrashLog.hpp"
 #include "Compositor/Diagnostics/CpuTrace.hpp"
 #include "Compositor/Input/KmsInputBridge.hpp"
+#include "Compositor/Input/VtSwitchShortcut.hpp"
 #include "Compositor/Presenter.hpp"
 #include "Compositor/PresentationLoop.hpp"
 #include "Compositor/Surface/SurfaceRenderer.hpp"
@@ -28,6 +29,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -1091,9 +1093,20 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                    "set LAMBDA_COMPOSITOR_ENABLE_HARDWARE_CURSOR_MOTION_FAST_PATH=1 to enable\n");
     }
 
+    VtSwitchShortcutState vtSwitchShortcut;
     device->setInputHandler([&](lambda::platform::KmsInputEvent const& event) {
       try {
         inputActivityThisLoop = true;
+        VtSwitchShortcutResult const vtSwitch = handleVtSwitchShortcut(vtSwitchShortcut, event);
+        if (vtSwitch.targetSession) {
+          if (!device->switchSession(*vtSwitch.targetSession)) {
+            std::fprintf(stderr,
+                         "lambda-window-manager: failed to switch to VT%d: %s\n",
+                         *vtSwitch.targetSession,
+                         std::strerror(errno));
+          }
+        }
+        if (vtSwitch.consume) return;
         if (idleBlanked) {
           inputRenderRequiredThisLoop = true;
           return;
