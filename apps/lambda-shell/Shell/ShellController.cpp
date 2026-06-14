@@ -15,7 +15,9 @@
 #include <Lambda/UI/WindowUI.hpp>
 
 #include <Lambda/Core/Color.hpp>
+#include <Lambda/System/BlueZ.hpp>
 #include <Lambda/System/MPRIS.hpp>
+#include <Lambda/System/NetworkManager.hpp>
 #include <Lambda/UI/Events.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
 #include <Lambda/UI/VisualTokens.hpp>
@@ -44,7 +46,7 @@ struct ShellAudioCommandCompleted {
   bool changed = false;
 };
 
-struct ShellMediaCommandCompleted {
+struct ShellStatusCommandCompleted {
   bool changed = false;
 };
 
@@ -227,7 +229,7 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
     }
   });
 
-  app_.eventQueue().on<ShellMediaCommandCompleted>([this](ShellMediaCommandCompleted const& event) {
+  app_.eventQueue().on<ShellStatusCommandCompleted>([this](ShellStatusCommandCompleted const& event) {
     if (event.changed) {
       (void)refreshSystemStatus();
     } else {
@@ -266,6 +268,14 @@ std::function<void(DockItem const&)> ShellController::makeShowDockMenuCallback()
 
 std::function<void(std::string const&, DockStatusAction)> ShellController::makeStatusActionCallback() {
   return [this](std::string const& id, DockStatusAction action) {
+    if (id == "network") {
+      performNetworkControlAsync(action);
+      return;
+    }
+    if (id == "bluetooth") {
+      performBluetoothControlAsync(action);
+      return;
+    }
     if (id == "media") {
       performMediaControlAsync(action);
       return;
@@ -538,6 +548,49 @@ void ShellController::performAudioControlAsync(AudioControlAction action) {
   }).detach();
 }
 
+void ShellController::performNetworkControlAsync(DockStatusAction action) {
+  if (action != DockStatusAction::Primary) return;
+
+  std::thread([this] {
+    bool changed = false;
+    try {
+      auto client = lambda::system::NetworkManagerClient::connectSystem();
+      auto const snapshot = client.readSnapshot();
+      if (snapshot.wirelessHardwareEnabled) {
+        client.setWirelessEnabled(!snapshot.wirelessEnabled);
+        changed = true;
+      }
+    } catch (...) {
+    }
+    app_.eventQueue().post(ShellStatusCommandCompleted{.changed = changed});
+  }).detach();
+}
+
+void ShellController::performBluetoothControlAsync(DockStatusAction action) {
+  if (action != DockStatusAction::Primary) return;
+
+  std::thread([this] {
+    bool changed = false;
+    try {
+      auto client = lambda::system::BlueZClient::connectSystem();
+      auto const snapshot = client.readSnapshot();
+      bool const anyPowered = std::any_of(snapshot.adapters.begin(),
+                                         snapshot.adapters.end(),
+                                         [](auto const& adapter) {
+                                           return adapter.powered;
+                                         });
+      bool const nextPowered = !anyPowered;
+      for (auto const& adapter : snapshot.adapters) {
+        if (adapter.path.empty()) continue;
+        client.setAdapterPowered(adapter.path, nextPowered);
+        changed = true;
+      }
+    } catch (...) {
+    }
+    app_.eventQueue().post(ShellStatusCommandCompleted{.changed = changed});
+  }).detach();
+}
+
 void ShellController::performMediaControlAsync(DockStatusAction action) {
   std::thread([this, action] {
     bool changed = false;
@@ -563,7 +616,7 @@ void ShellController::performMediaControlAsync(DockStatusAction action) {
       }
     } catch (...) {
     }
-    app_.eventQueue().post(ShellMediaCommandCompleted{.changed = changed});
+    app_.eventQueue().post(ShellStatusCommandCompleted{.changed = changed});
   }).detach();
 }
 

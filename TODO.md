@@ -249,9 +249,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add a basic `lambda::system::NetworkManagerClient` on top of `lambda::dbus` for `GetDevices`, manager `State`/`NetworkingEnabled`/`WirelessEnabled`/`WirelessHardwareEnabled`, device `Interface`/`DeviceType`/`State`, wireless `ActiveAccessPoint`, access-point `Ssid`/`Strength`, and a `WirelessEnabled` setter.
 - [x] [Auto] Add deterministic fake-bus coverage for device enumeration, connected Wi-Fi SSID/signal formatting, connecting/off mapping, and Wi-Fi toggle property writes.
 - [x] [Auto] Make Shell network/Wi-Fi status prefer NetworkManager on the real `/sys` path and preserve the existing sysfs fallback when NetworkManager is unavailable or tests use a fixture sysroot.
+- [x] [Auto] Route the Shell network docklet primary action to NetworkManager `WirelessEnabled` toggling when Wi-Fi hardware is available.
 - [ ] [Auto + Manual] Wire NetworkManager state, device, and access-point signals into Shell so network/Wi-Fi status updates without waiting for the polling timer.
 - [ ] [Auto] Enumerate visible access points, saved connections, active connections, metered state, connectivity state, and VPN state for Shell quick settings and Settings.
-- [ ] [Auto + Manual] Implement Wi-Fi connect/disconnect flows, including a secrets path for password-protected networks.
+- [ ] [Auto + Manual] Implement Wi-Fi access-point connect/disconnect flows, including a secrets path for password-protected networks.
 - [ ] [Auto + Manual] Build the Settings network page for saved networks, VPNs, and detailed adapter/IP state.
 - [ ] [Manual] Validate against the real system bus: Ethernet, Wi-Fi connect/disconnect, Wi-Fi enable/disable, captive/limited connectivity, and no-NetworkManager fallback all report truthfully in the Shell docklet.
 
@@ -260,9 +261,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add a basic `lambda::system::BlueZClient` on top of `lambda::dbus` for ObjectManager `GetManagedObjects`, adapter `Address`/`Alias`/`Powered`/`Discovering`, device `Address`/`Alias`/`Name`/`Adapter`/`Paired`/`Connected`, and an adapter `Powered` setter.
 - [x] [Auto] Add deterministic fake-bus coverage for adapter/device enumeration, connected-device status formatting, off/on/unavailable mapping, adapter power writes, and unsupported ObjectManager property skipping.
 - [x] [Auto] Make Shell Bluetooth status prefer BlueZ on the real `/sys` path and preserve the existing rfkill/sysfs fallback when BlueZ is unavailable or tests use a fixture sysroot.
+- [x] [Auto] Route the Shell Bluetooth docklet primary action to toggle all known BlueZ adapters powered on/off.
 - [ ] [Auto + Manual] Wire BlueZ ObjectManager, adapter, and device signals into Shell so Bluetooth status updates without waiting for the polling timer.
 - [ ] [Auto] Enumerate adapters and devices with richer state: discoverable/discovering, trusted/blocked, paired/unpaired, battery where exposed, icon/class/category, and connection errors.
-- [ ] [Auto + Manual] Implement adapter power toggle, discovery, pairing-agent, pair/unpair, trust/untrust, connect/disconnect, and forget-device flows.
+- [ ] [Auto + Manual] Expand Bluetooth controls with discovery, pairing-agent, pair/unpair, trust/untrust, connect/disconnect, per-adapter handling, and forget-device flows.
 - [ ] [Auto + Manual] Build the Settings Bluetooth page for pairing, device management, and adapter details.
 - [ ] [Manual] Validate against the real system bus: adapter power on/off, device pair/connect/disconnect, no-adapter fallback, and Bluetooth controller removal all report truthfully in the Shell docklet.
 

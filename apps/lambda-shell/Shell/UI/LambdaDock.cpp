@@ -509,8 +509,8 @@ Element statusIconGrid(Reactive::Bindable<SystemStatus> system,
 
   std::vector<Element> icons;
   icons.reserve(kDockStatusItemCount);
-  icons.push_back(statusDockletIcon("network", IconName::WifiOff, system, itemSize));
-  icons.push_back(statusDockletIcon("bluetooth", IconName::BluetoothDisabled, system, itemSize));
+  icons.push_back(statusDockletIcon("network", IconName::WifiOff, system, itemSize, onStatusAction));
+  icons.push_back(statusDockletIcon("bluetooth", IconName::BluetoothDisabled, system, itemSize, onStatusAction));
   icons.push_back(statusDockletIcon("volume", IconName::VolumeOff, system, itemSize, onStatusAction));
   icons.push_back(statusDockletIcon("battery", IconName::BatteryUnknown, system, itemSize));
   icons.push_back(fixedStatusIcon(IconName::NotificationsOff, false, itemSize));
