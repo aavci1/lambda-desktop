@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace lambda::system {
@@ -215,6 +216,26 @@ void MPRISClient::callPlayerMethod(std::string const& serviceName, std::string c
       .member = member,
       .arguments = {},
   });
+}
+
+std::optional<std::string> activeMPRISPlayerService(
+    std::vector<MPRISPlayerSnapshot> const& players) {
+  auto const select = [&](std::string_view status) -> std::optional<std::string> {
+    auto const found = std::find_if(players.begin(), players.end(), [&](auto const& player) {
+      return !player.serviceName.empty() && player.canControl && player.playbackStatus == status;
+    });
+    if (found == players.end()) return std::nullopt;
+    return found->serviceName;
+  };
+
+  if (auto playing = select("Playing")) return playing;
+  if (auto paused = select("Paused")) return paused;
+
+  auto const controllable = std::find_if(players.begin(), players.end(), [](auto const& player) {
+    return !player.serviceName.empty() && player.canControl;
+  });
+  if (controllable != players.end()) return controllable->serviceName;
+  return std::nullopt;
 }
 
 std::string formatMPRISStatus(std::vector<MPRISPlayerSnapshot> const& players) {

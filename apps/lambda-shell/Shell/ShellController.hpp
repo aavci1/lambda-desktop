@@ -51,6 +51,7 @@ private:
   void checkShellConfigReload();
   [[nodiscard]] bool refreshSystemStatus();
   void performAudioControlAsync(AudioControlAction action);
+  void performMediaControlAsync(DockStatusAction action);
   void queueVolumeAdjustment(int steps);
   void runVolumeAdjustmentWorker();
   void syncLauncherWindow();

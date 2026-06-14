@@ -2,11 +2,12 @@
 
 /// \file Lambda/System/MPRIS.hpp
 ///
-/// Minimal MPRIS client used by future Shell now-playing and media-key providers.
+/// Minimal MPRIS client used by Shell now-playing and media-key providers.
 
 #include <Lambda/System/DBus.hpp>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -83,6 +84,8 @@ private:
   dbus::Bus bus_;
 };
 
+[[nodiscard]] std::optional<std::string> activeMPRISPlayerService(
+    std::vector<MPRISPlayerSnapshot> const& players);
 [[nodiscard]] std::string formatMPRISStatus(std::vector<MPRISPlayerSnapshot> const& players);
 
 } // namespace lambda::system

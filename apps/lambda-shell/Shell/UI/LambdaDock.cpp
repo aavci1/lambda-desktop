@@ -514,7 +514,7 @@ Element statusIconGrid(Reactive::Bindable<SystemStatus> system,
   icons.push_back(statusDockletIcon("volume", IconName::VolumeOff, system, itemSize, onStatusAction));
   icons.push_back(statusDockletIcon("battery", IconName::BatteryUnknown, system, itemSize));
   icons.push_back(fixedStatusIcon(IconName::NotificationsOff, false, itemSize));
-  icons.push_back(fixedStatusIcon(IconName::ContentPasteOff, false, itemSize));
+  icons.push_back(statusDockletIcon("media", IconName::MusicOff, system, itemSize, onStatusAction));
 
   if (dockUsesSingleRowDocklets(itemSize)) {
     return HStack{

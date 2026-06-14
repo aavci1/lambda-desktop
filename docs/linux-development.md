@@ -170,7 +170,7 @@ gdbus call --system \
 
 ## Media Status
 
-MPRIS media-player state is discovered from session-bus names with the `org.mpris.MediaPlayer2.` prefix. For development, confirm a player is visible with:
+MPRIS media-player state is discovered from session-bus names with the `org.mpris.MediaPlayer2.` prefix. Shell reads this on the live system path for its media docklet; fixture-backed status tests keep media unavailable so they do not depend on the user's session bus. For development, confirm a player is visible with:
 
 ```sh
 gdbus call --session \

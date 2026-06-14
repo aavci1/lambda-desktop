@@ -132,9 +132,11 @@ TEST_CASE("Shell model applies snapshots to dock and title while status remains 
       .bluetooth = "off",
       .volume = "55%",
       .battery = "88%",
+      .media = "Lambda Artist - Test Song",
   }));
   CHECK(model.systemStatus().network == "online");
   CHECK(model.systemStatus().wifi == "Lambda");
+  CHECK(model.systemStatus().media == "Lambda Artist - Test Song");
 
   bool filesFocused = false;
   bool terminalRunning = false;

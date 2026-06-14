@@ -28,6 +28,7 @@ struct ShellSystemStatusSnapshot {
   std::string bluetooth;
   std::string volume;
   std::string battery;
+  std::string media;
 
   bool operator==(ShellSystemStatusSnapshot const&) const = default;
 };

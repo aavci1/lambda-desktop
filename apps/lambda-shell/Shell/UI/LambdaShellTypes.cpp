@@ -27,6 +27,11 @@ bool offStatus(std::string_view value) {
   return text == "off" || text == "disabled" || text == "muted" || text == "0%" || text == "0";
 }
 
+bool stoppedMediaStatus(std::string_view value) {
+  std::string const text = lowerAscii(value);
+  return offStatus(value) || text == "stopped";
+}
+
 DockletStatusItem unavailableItem(std::string id, lambda::IconName icon) {
   DockletStatusItem item;
   item.id = std::move(id);
@@ -232,7 +237,7 @@ bool launcherPointerInsideContent(int width,
 
 std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status) {
   std::vector<DockletStatusItem> items;
-  items.reserve(4);
+  items.reserve(5);
 
   if (!unavailableStatus(status.wifi)) {
     DockletStatusItem item;
@@ -285,6 +290,18 @@ std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status) {
     item.label = offStatus(status.battery) ? std::string{} : status.battery;
     item.availability = StatusAvailability::Available;
     item.active = !offStatus(status.battery);
+    items.push_back(std::move(item));
+  }
+
+  if (unavailableStatus(status.media)) {
+    items.push_back(unavailableItem("media", lambda::IconName::MusicOff));
+  } else {
+    DockletStatusItem item;
+    item.id = "media";
+    item.icon = stoppedMediaStatus(status.media) ? lambda::IconName::MusicOff : lambda::IconName::MusicNote;
+    item.label = stoppedMediaStatus(status.media) ? std::string{} : status.media;
+    item.availability = StatusAvailability::Available;
+    item.active = !stoppedMediaStatus(status.media);
     items.push_back(std::move(item));
   }
 

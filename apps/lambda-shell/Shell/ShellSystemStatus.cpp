@@ -1,6 +1,7 @@
 #include "Shell/ShellSystemStatus.hpp"
 
 #include <Lambda/System/BlueZ.hpp>
+#include <Lambda/System/MPRIS.hpp>
 #include <Lambda/System/NetworkManager.hpp>
 #include <Lambda/System/UPower.hpp>
 
@@ -178,6 +179,17 @@ std::string readVolumeStatus(AudioControlContext const& audioContext) {
   return std::to_string(std::max(0, state.percent)) + "%";
 }
 
+std::string readMediaStatus(std::filesystem::path const& sysRoot) {
+  if (sysRoot != "/sys") return "unavailable";
+
+  try {
+    auto client = lambda::system::MPRISClient::connectSession();
+    return lambda::system::formatMPRISStatus(client.readPlayers());
+  } catch (...) {
+    return "unavailable";
+  }
+}
+
 } // namespace
 
 SystemStatus readShellSystemStatus(std::filesystem::path sysRoot) {
@@ -191,6 +203,7 @@ SystemStatus readShellSystemStatus(std::filesystem::path sysRoot,
   status.bluetooth = readBluetoothStatus(sysRoot);
   status.volume = readVolumeStatus(audioContext);
   status.battery = readBatteryStatus(sysRoot);
+  status.media = readMediaStatus(sysRoot);
   return status;
 }
 

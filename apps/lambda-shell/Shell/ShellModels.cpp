@@ -596,6 +596,8 @@ std::vector<ShellStatusModuleState> shellStatusModules(ShellSystemStatusSnapshot
       modules.push_back(make(id, "Volume", snapshot.volume));
     } else if (id == "battery" || id == "power") {
       modules.push_back(make(id, "Battery", snapshot.battery));
+    } else if (id == "media" || id == "now-playing") {
+      modules.push_back(make(id, "Media", snapshot.media));
     } else if (id == "notifications") {
       modules.push_back({
           .id = id,

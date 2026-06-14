@@ -136,6 +136,7 @@ struct SystemStatus {
   std::string bluetooth = "unknown";
   std::string volume = "unknown";
   std::string battery = "unknown";
+  std::string media = "unknown";
 
   bool operator==(SystemStatus const& other) const = default;
 };

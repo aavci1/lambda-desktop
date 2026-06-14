@@ -15,6 +15,7 @@
 #include <Lambda/UI/WindowUI.hpp>
 
 #include <Lambda/Core/Color.hpp>
+#include <Lambda/System/MPRIS.hpp>
 #include <Lambda/UI/Events.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
 #include <Lambda/UI/VisualTokens.hpp>
@@ -40,6 +41,10 @@ inline constexpr int kDockVolumeStepPercent = 5;
 inline constexpr auto kDockVolumeCoalesceDelay = std::chrono::milliseconds{28};
 
 struct ShellAudioCommandCompleted {
+  bool changed = false;
+};
+
+struct ShellMediaCommandCompleted {
   bool changed = false;
 };
 
@@ -221,6 +226,14 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
       requestDockRedraw();
     }
   });
+
+  app_.eventQueue().on<ShellMediaCommandCompleted>([this](ShellMediaCommandCompleted const& event) {
+    if (event.changed) {
+      (void)refreshSystemStatus();
+    } else {
+      requestDockRedraw();
+    }
+  });
 }
 
 void ShellController::setConfigReloadSource(std::filesystem::path path,
@@ -253,6 +266,10 @@ std::function<void(DockItem const&)> ShellController::makeShowDockMenuCallback()
 
 std::function<void(std::string const&, DockStatusAction)> ShellController::makeStatusActionCallback() {
   return [this](std::string const& id, DockStatusAction action) {
+    if (id == "media") {
+      performMediaControlAsync(action);
+      return;
+    }
     if (id != "volume") return;
 
     switch (action) {
@@ -518,6 +535,35 @@ void ShellController::performAudioControlAsync(AudioControlAction action) {
   std::thread([this, action] {
     bool const changed = controlAudioVolume(action);
     app_.eventQueue().post(ShellAudioCommandCompleted{.changed = changed});
+  }).detach();
+}
+
+void ShellController::performMediaControlAsync(DockStatusAction action) {
+  std::thread([this, action] {
+    bool changed = false;
+    try {
+      auto client = lambda::system::MPRISClient::connectSession();
+      auto player = lambda::system::activeMPRISPlayerService(client.readPlayers());
+      if (player) {
+        switch (action) {
+        case DockStatusAction::Primary:
+          client.playPause(*player);
+          changed = true;
+          break;
+        case DockStatusAction::Secondary:
+        case DockStatusAction::ScrollUp:
+          client.next(*player);
+          changed = true;
+          break;
+        case DockStatusAction::ScrollDown:
+          client.previous(*player);
+          changed = true;
+          break;
+        }
+      }
+    } catch (...) {
+    }
+    app_.eventQueue().post(ShellMediaCommandCompleted{.changed = changed});
   }).detach();
 }
 

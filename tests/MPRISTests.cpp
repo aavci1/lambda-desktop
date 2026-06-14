@@ -46,6 +46,30 @@ TEST_CASE("MPRIS support is compile-time declared") {
   CHECK((LAMBDA_HAS_DBUS == 0 || LAMBDA_HAS_DBUS == 1));
 }
 
+TEST_CASE("MPRIS active player selection prefers controllable playing players") {
+  lambda::system::MPRISPlayerSnapshot paused{
+      .serviceName = "org.mpris.MediaPlayer2.paused",
+      .playbackStatus = "Paused",
+      .canControl = true,
+  };
+  lambda::system::MPRISPlayerSnapshot uncontrolledPlaying{
+      .serviceName = "org.mpris.MediaPlayer2.uncontrolled",
+      .playbackStatus = "Playing",
+      .canControl = false,
+  };
+  lambda::system::MPRISPlayerSnapshot playing{
+      .serviceName = "org.mpris.MediaPlayer2.playing",
+      .playbackStatus = "Playing",
+      .canControl = true,
+  };
+
+  CHECK(lambda::system::activeMPRISPlayerService({paused, uncontrolledPlaying, playing}) ==
+        "org.mpris.MediaPlayer2.playing");
+  CHECK(lambda::system::activeMPRISPlayerService({paused, uncontrolledPlaying}) ==
+        "org.mpris.MediaPlayer2.paused");
+  CHECK_FALSE(lambda::system::activeMPRISPlayerService({uncontrolledPlaying}).has_value());
+}
+
 #if LAMBDA_HAS_DBUS
 
 TEST_CASE("MPRISClient discovers players reads metadata and sends controls") {
@@ -191,6 +215,7 @@ TEST_CASE("MPRISClient discovers players reads metadata and sends controls") {
   CHECK(player.positionUsec == 4000000);
   CHECK(player.volume == doctest::Approx(0.8));
   CHECK(player.canControl);
+  CHECK(lambda::system::activeMPRISPlayerService({player}) == serviceName);
   CHECK(lambda::system::formatMPRISStatus({player}) == "Lambda Artist - Test Song");
 
   client.playPause(serviceName);
@@ -198,6 +223,11 @@ TEST_CASE("MPRISClient discovers players reads metadata and sends controls") {
   player = client.readPlayer(serviceName);
   CHECK(player.playbackStatus == "Paused");
   CHECK(lambda::system::formatMPRISStatus({player}) == "paused: Lambda Artist - Test Song");
+  CHECK(lambda::system::activeMPRISPlayerService({player}) == serviceName);
+
+  auto uncontrolled = player;
+  uncontrolled.canControl = false;
+  CHECK_FALSE(lambda::system::activeMPRISPlayerService({uncontrolled}).has_value());
 
   client.next(serviceName);
   CHECK(nextCalls == 1);

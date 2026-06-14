@@ -49,6 +49,7 @@ TEST_CASE("Shell system status reads docklet data without compositor snapshots")
   CHECK(status.bluetooth == "on");
   CHECK(status.volume == "unavailable");
   CHECK(status.battery == "88%");
+  CHECK(status.media == "unavailable");
 
   std::filesystem::remove_all(root);
 }
@@ -66,6 +67,7 @@ TEST_CASE("Shell system status reports unavailable or off states from shell prov
   CHECK(status.wifi == "unavailable");
   CHECK(status.bluetooth == "off");
   CHECK(status.battery == "unavailable");
+  CHECK(status.media == "unavailable");
 
   std::filesystem::remove_all(root);
 }
@@ -84,6 +86,7 @@ TEST_CASE("Shell system status reports audio state from injected backend") {
   auto status = lambda_shell::readShellSystemStatus(root, audio);
 
   CHECK(status.volume == "64%");
+  CHECK(status.media == "unavailable");
 
   std::filesystem::remove_all(root);
 }

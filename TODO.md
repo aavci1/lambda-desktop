@@ -270,8 +270,9 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 - [x] [Auto] Add a basic `lambda::system::MPRISClient` on top of `lambda::dbus` for session-bus player discovery, root `Identity`/`DesktopEntry`, player `PlaybackStatus`/`Metadata`/`Volume`/`Position`/capability properties, transport methods, and volume writes.
 - [x] [Auto] Add deterministic fake-bus coverage for player discovery, metadata parsing, status formatting, `PlayPause`, `Next`, and volume property writes.
+- [x] [Auto] Make Shell system status read live MPRIS now-playing state, expose a media docklet, and route docklet play/pause/next/previous actions to the active controllable player while preserving deterministic unavailable status for fixture sysroots.
 - [ ] [Auto + Manual] Wire MPRIS `PropertiesChanged`, `Seeked`, and name-owner changes into Shell so now-playing status updates live.
-- [ ] [Auto + Manual] Add Shell now-playing UI and media-key routing for play/pause, next, previous, stop, seek, and volume where supported.
+- [ ] [Auto + Manual] Expand Shell now-playing UI and media-key routing for play/pause, next, previous, stop, seek, and volume where supported.
 - [ ] [Auto] Implement player selection policy for multiple players, including active/playing precedence, stale-player pruning, and per-player capability gating.
 - [ ] [Auto] Add richer metadata handling: art URL/image cache, track length/position progress, album/artist lists, desktop-entry icon lookup, and TrackList support where present.
 - [ ] [Manual] Validate against real MPRIS players such as browser media, VLC, Spotify, or mpv: player appears, metadata updates, media keys control the expected player, and unsupported controls stay disabled.
