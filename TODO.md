@@ -192,8 +192,9 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Discover the active logind session path through `GetSessionByPID` instead of requiring callers to provide it manually, and add current-session lock/unlock watcher helpers.
 - [x] [Auto] Add search-driven Shell launcher actions for `Suspend`, `Hibernate`, `Reboot`, and `PowerOff` using `LogindClient`.
 - [x] [Auto] Add current-session `Lock` and `Terminate` calls to `LogindClient`, expose Shell launcher actions for Lock and Log Out, and cover them with private-bus and Shell model tests.
+- [x] [Auto] Add a visible Shell session docklet/menu for Lock, Log Out, Suspend, Hibernate, Restart, and Power Off, wired through the existing logind action path.
 - [ ] [Auto + Manual] Wire logind session `Lock`/`Unlock` and `PrepareForSleep` into the lock app / Shell lock flow, including lock-before-sleep behavior.
-- [ ] [Auto + Manual] Expand the Shell power/session menu beyond search-driven launcher actions, including a dedicated visible menu surface, confirmations, policy/error states, and manual validation.
+- [ ] [Auto + Manual] Add confirmations, policy/error states, and manual validation for Shell power/session actions.
 - [ ] [Auto + Manual] Hold delay inhibitors for `handle-power-key`, `handle-lid-switch`, and `handle-suspend-key`, then release them at the correct point in the lock/suspend flow.
 - [ ] [Auto + Manual] Honor logind `IdleAction` together with WM-13 idle-notify and WM-14 DPMS behavior.
 - [ ] [Manual] Validate against the real system bus: `loginctl lock-session` locks, suspend/resume returns to the lock screen, lid close suspends after locking, and the power key opens the Shell power menu.

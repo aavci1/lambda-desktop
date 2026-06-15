@@ -66,6 +66,9 @@ private:
   void openDockMenu(DockItem const& item);
   void syncDockMenuOverlay();
   void closeDockMenu();
+  void openSessionMenu();
+  void syncSessionMenuOverlay();
+  void closeSessionMenu();
   void handleLauncherKey(lambda::InputEvent const& event);
   std::uint64_t nextRequestId();
 
@@ -93,6 +96,7 @@ private:
   bool launcherModalClaimed_ = false;
   bool lastLauncherOpen_ = false;
   bool dockMenuOpen_ = false;
+  bool sessionMenuOpen_ = false;
   std::optional<DockItem> dockMenuItem_;
   float dockMenuOverlayWidth_ = 1.f;
   float dockMenuOverlayHeight_ = 1.f;

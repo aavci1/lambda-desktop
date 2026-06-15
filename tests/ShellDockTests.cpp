@@ -281,3 +281,36 @@ TEST_CASE("LambdaDock full-width layout reserves space before status docklets") 
   CHECK(statusSeparator.position().x >
         appSection.position().x + appSection.size().width + static_cast<float>(lambda_shell::kDockGap));
 }
+
+TEST_CASE("LambdaSessionMenu mounts all power and session actions") {
+  int invoked = 0;
+  std::string lastAction;
+  lambda_shell::SessionMenuProps props{
+      .surfaceWidth = static_cast<float>(lambda_shell::kSessionMenuSurfaceWidth),
+      .surfaceHeight = static_cast<float>(lambda_shell::kSessionMenuSurfaceHeight),
+      .menuX = 12.f,
+      .menuY = 8.f,
+      .onAction = [&](std::string const& action) {
+        ++invoked;
+        lastAction = action;
+      },
+      .onDismiss = [] {},
+  };
+
+  FakeTextSystem textSystem;
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<lambda_shell::LambdaSessionMenu>>(
+          std::in_place, lambda_shell::LambdaSessionMenu{props}),
+      textSystem,
+      testEnvironment(),
+      lambda::Size{static_cast<float>(lambda_shell::kSessionMenuSurfaceWidth),
+                   static_cast<float>(lambda_shell::kSessionMenuSurfaceHeight)},
+  };
+
+  root.mount(sceneGraph);
+  CHECK(sceneGraph.root().size().width == doctest::Approx(static_cast<float>(lambda_shell::kSessionMenuSurfaceWidth)));
+  CHECK(sceneGraph.root().size().height == doctest::Approx(static_cast<float>(lambda_shell::kSessionMenuSurfaceHeight)));
+  CHECK(invoked == 0);
+  CHECK(lastAction.empty());
+}

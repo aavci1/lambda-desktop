@@ -238,6 +238,9 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
       if (changed && dockMenuOpen_) {
         syncDockMenuOverlay();
       }
+      if (changed && sessionMenuOpen_) {
+        syncSessionMenuOverlay();
+      }
     }
   });
 
@@ -322,6 +325,12 @@ std::function<void(DockItem const&)> ShellController::makeShowDockMenuCallback()
 
 std::function<void(std::string const&, DockStatusAction)> ShellController::makeStatusActionCallback() {
   return [this](std::string const& id, DockStatusAction action) {
+    if (id == "session") {
+      if (action == DockStatusAction::Primary || action == DockStatusAction::Secondary) {
+        openSessionMenu();
+      }
+      return;
+    }
     if (id == "network") {
       performNetworkControlAsync(action);
       return;
@@ -456,6 +465,9 @@ void ShellController::applyShellConfigToModel() {
   }
   if (dockItemSizeChanged && dockMenuOpen_) {
     syncDockMenuOverlay();
+  }
+  if (dockItemSizeChanged && sessionMenuOpen_) {
+    syncSessionMenuOverlay();
   }
   requestDockRedraw();
   if (model_.launcherOpen()) requestLauncherRedraw();
@@ -636,6 +648,7 @@ void ShellController::setupSystemStatusWatchers() {
 
 void ShellController::activateLauncherItem(DockItem const& item) {
   if (dockMenuOpen_) closeDockMenu();
+  if (sessionMenuOpen_) closeSessionMenu();
   if (item.kind == "shell-action") {
     performShellActionAsync(item.id);
   } else {
@@ -889,6 +902,7 @@ void ShellController::openDockMenu(DockItem const& item) {
   }
 
   closeLauncher();
+  if (sessionMenuOpen_) closeSessionMenu();
 
   std::vector<DockItem> const& items = model_.dockItems();
   auto found = std::find_if(items.begin(), items.end(), [&](DockItem const& candidate) {
@@ -981,6 +995,106 @@ void ShellController::closeDockMenu() {
   dockMenuOpen_ = false;
   dockMenuItem_.reset();
   LayerShellOptions menuLayer = hiddenMenuLayer("lambda.dock-menu");
+  if (dockMenuWindow_) {
+    dockMenuWindow_->setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
+    dockMenuWindow_->resize({1.f, 1.f});
+    dockMenuWindow_->setLayerShellOptions(menuLayer);
+  }
+  requestDockMenuRedraw();
+}
+
+void ShellController::openSessionMenu() {
+  if (!dockMenuWindow_) {
+    return;
+  }
+
+  closeLauncher();
+  if (dockMenuOpen_) closeDockMenu();
+
+  sessionMenuOpen_ = true;
+  syncSessionMenuOverlay();
+}
+
+void ShellController::syncSessionMenuOverlay() {
+  if (!dockMenuWindow_ || !sessionMenuOpen_) {
+    return;
+  }
+
+  std::vector<DockItem> const& items = model_.dockItems();
+  int const itemSize = model_.dockItemSize();
+  float const statusWidth = static_cast<float>(dockStatusGridWidth(itemSize));
+  float const clockWidth = static_cast<float>(std::max(kDockClockMinWidth, model_.dockClockWidth()));
+  float const appWidth = static_cast<float>(dockItemsWidth(items, itemSize));
+  float const separatorWidth = static_cast<float>(kDockSeparatorWidth);
+  int const currentDockWidth = dockWidth(items, model_.dockClockWidth(), itemSize);
+  float const outputWidth = std::max({dockMenuOverlayWidth_, static_cast<float>(currentDockWidth),
+                                      static_cast<float>(kSessionMenuSurfaceWidth)});
+  int const dockBottomGap = std::clamp(shellConfig_.dockBottomGap, 0, 64);
+  int const dockSurfaceH = dockHeight(itemSize);
+  float const outputHeight = std::max(dockMenuOverlayHeight_,
+                                      static_cast<float>(dockBottomGap + dockSurfaceH + kDockMenuGap +
+                                                         kSessionMenuSurfaceHeight));
+
+  float statusCenter = 0.f;
+  if (shellConfig_.dockFullWidth) {
+    statusCenter = outputWidth - clockWidth - static_cast<float>(kDockGap) - separatorWidth -
+                   static_cast<float>(kDockGap) - statusWidth * 0.5f;
+  } else {
+    float const dockLeft = std::max(0.f, (outputWidth - static_cast<float>(currentDockWidth)) * 0.5f);
+    float statusLeft = dockLeft + static_cast<float>(kDockPaddingX);
+    if (appWidth > 0.f) {
+      statusLeft += appWidth + static_cast<float>(kDockGap);
+    }
+    statusLeft += separatorWidth + static_cast<float>(kDockGap);
+    statusCenter = statusLeft + statusWidth * 0.5f;
+  }
+
+  int const menuLeft = static_cast<int>(std::lround(
+      std::clamp(statusCenter - static_cast<float>(kSessionMenuSurfaceWidth) * 0.5f,
+                 0.f,
+                 std::max(0.f, outputWidth - static_cast<float>(kSessionMenuSurfaceWidth)))));
+  int const menuTop = static_cast<int>(std::lround(
+      std::clamp(outputHeight - static_cast<float>(dockBottomGap + dockSurfaceH + kDockMenuGap +
+                                                   kSessionMenuSurfaceHeight),
+                 0.f,
+                 std::max(0.f, outputHeight - static_cast<float>(kSessionMenuSurfaceHeight)))));
+
+  LayerShellOptions menuLayer = visibleMenuLayer("lambda.session-menu");
+  menuLayer.backgroundBlur = true;
+  menuLayer.backgroundEffectRegion = LayerShellBackgroundEffectRegion{
+      .x = menuLeft + kDockMenuSurfaceInset,
+      .y = menuTop + kDockMenuSurfaceInset,
+      .width = kSessionMenuCalloutWidth,
+      .height = kSessionMenuCalloutHeight,
+      .shape = LayerShellBackgroundEffectShape::Callout,
+      .calloutPlacement = LayerShellCalloutPlacement::Above,
+      .arrowWidth = PopoverCalloutShape::kArrowW,
+      .arrowHeight = PopoverCalloutShape::kArrowH,
+  };
+  menuLayer.chrome.style = LayerShellChromeStyle::BlurPanelBorder;
+  menuLayer.chrome.cornerRadius = CornerRadius{14.f};
+  dockMenuWindow_->setView(ShellSessionMenuView{
+      outputWidth,
+      outputHeight,
+      static_cast<float>(menuLeft),
+      static_cast<float>(menuTop),
+      [this](std::string const& actionId) {
+        closeSessionMenu();
+        performShellActionAsync(actionId);
+      },
+      [this] { closeSessionMenu(); },
+  });
+  dockMenuWindow_->setLayerShellOptions(menuLayer);
+  dockMenuWindow_->resize({0.f, 0.f});
+  requestDockMenuRedraw();
+}
+
+void ShellController::closeSessionMenu() {
+  if (!sessionMenuOpen_ && !dockMenuWindow_) {
+    return;
+  }
+  sessionMenuOpen_ = false;
+  LayerShellOptions menuLayer = hiddenMenuLayer("lambda.session-menu");
   if (dockMenuWindow_) {
     dockMenuWindow_->setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
     dockMenuWindow_->resize({1.f, 1.f});

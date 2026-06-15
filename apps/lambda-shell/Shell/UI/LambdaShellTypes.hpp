@@ -29,9 +29,9 @@ inline constexpr float kDockClockTimeFontWeight = 680.f;
 inline constexpr float kDockClockSingleRowFontWeight = 640.f;
 inline constexpr float kDockClockLeadingPaddingX = 4.f;
 inline constexpr float kDockClockTrailingPaddingX = 8.f;
-inline constexpr int kDockStatusColumns = 3;
+inline constexpr int kDockStatusColumns = 4;
 inline constexpr int kDockStatusRows = 2;
-inline constexpr int kDockStatusItemCount = 6;
+inline constexpr int kDockStatusItemCount = 7;
 inline constexpr int kDockStatusCell = 22;
 inline constexpr int kDockStatusIconSize = 18;
 inline constexpr int kDockStatusGridGap = 4;
@@ -59,6 +59,13 @@ inline constexpr int kDockMenuCalloutHeight =
     kDockMenuContentHeight + kDockMenuPadding * 2 + kDockMenuArrowHeight;
 inline constexpr int kDockMenuSurfaceWidth = kDockMenuCalloutWidth + kDockMenuSurfaceInset * 2;
 inline constexpr int kDockMenuSurfaceHeight = kDockMenuCalloutHeight + kDockMenuSurfaceInset * 2;
+inline constexpr int kSessionMenuContentWidth = 190;
+inline constexpr int kSessionMenuContentHeight = 206;
+inline constexpr int kSessionMenuCalloutWidth = kSessionMenuContentWidth + kDockMenuPadding * 2;
+inline constexpr int kSessionMenuCalloutHeight =
+    kSessionMenuContentHeight + kDockMenuPadding * 2 + kDockMenuArrowHeight;
+inline constexpr int kSessionMenuSurfaceWidth = kSessionMenuCalloutWidth + kDockMenuSurfaceInset * 2;
+inline constexpr int kSessionMenuSurfaceHeight = kSessionMenuCalloutHeight + kDockMenuSurfaceInset * 2;
 
 struct DockItem {
   std::string id;
@@ -191,6 +198,15 @@ struct DockMenuProps {
   std::function<void(DockItem const&)> onNewWindow;
   std::function<void(DockItem const&)> onTogglePinned;
   std::function<void(DockItem const&)> onQuitItem;
+  std::function<void()> onDismiss;
+};
+
+struct SessionMenuProps {
+  float surfaceWidth = static_cast<float>(kSessionMenuSurfaceWidth);
+  float surfaceHeight = static_cast<float>(kSessionMenuSurfaceHeight);
+  float menuX = 0.f;
+  float menuY = 0.f;
+  std::function<void(std::string const&)> onAction;
   std::function<void()> onDismiss;
 };
 

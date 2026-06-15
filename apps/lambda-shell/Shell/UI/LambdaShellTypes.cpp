@@ -348,6 +348,13 @@ std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status) {
     items.push_back(std::move(item));
   }
 
+  DockletStatusItem session;
+  session.id = "session";
+  session.icon = lambda::IconName::PowerSettingsNew;
+  session.availability = StatusAvailability::Available;
+  session.active = true;
+  items.push_back(std::move(session));
+
   return items;
 }
 

@@ -18,4 +18,10 @@ struct LambdaDockMenu {
   lambda::Element body() const;
 };
 
+struct LambdaSessionMenu {
+  SessionMenuProps props;
+
+  lambda::Element body() const;
+};
+
 } // namespace lambda_shell

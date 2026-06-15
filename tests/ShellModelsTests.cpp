@@ -286,13 +286,15 @@ TEST_CASE("Shell status modules classify available unknown and unavailable value
 
 TEST_CASE("Shell docklet status items expose real and unavailable states") {
   auto unavailable = lambda_shell::dockletStatusItems({});
-  REQUIRE(unavailable.size() == 5);
+  REQUIRE(unavailable.size() == 6);
   CHECK(unavailable[0].id == "network");
   CHECK(unavailable[0].availability == lambda_shell::StatusAvailability::Unavailable);
   CHECK(unavailable[1].id == "bluetooth");
   CHECK(unavailable[1].availability == lambda_shell::StatusAvailability::Unavailable);
   CHECK(unavailable[4].id == "media");
   CHECK(unavailable[4].availability == lambda_shell::StatusAvailability::Unavailable);
+  CHECK(unavailable[5].id == "session");
+  CHECK(unavailable[5].availability == lambda_shell::StatusAvailability::Available);
 
   lambda_shell::SystemStatus status{
       .network = "online",
@@ -303,7 +305,7 @@ TEST_CASE("Shell docklet status items expose real and unavailable states") {
       .media = "Lambda Artist - Test Song",
   };
   auto items = lambda_shell::dockletStatusItems(status);
-  REQUIRE(items.size() == 5);
+  REQUIRE(items.size() == 6);
   CHECK(items[0].id == "network");
   CHECK(items[0].label == "Lambda");
   CHECK(items[0].availability == lambda_shell::StatusAvailability::Available);
@@ -317,6 +319,9 @@ TEST_CASE("Shell docklet status items expose real and unavailable states") {
   CHECK(items[4].label == "Lambda Artist - Test Song");
   CHECK(items[4].availability == lambda_shell::StatusAvailability::Available);
   CHECK(items[4].active);
+  CHECK(items[5].id == "session");
+  CHECK(items[5].icon == lambda::IconName::PowerSettingsNew);
+  CHECK(items[5].availability == lambda_shell::StatusAvailability::Available);
 }
 
 TEST_CASE("Shell snapshot parser handles reordered fields and escaped strings") {

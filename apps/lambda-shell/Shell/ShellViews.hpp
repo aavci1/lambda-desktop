@@ -72,6 +72,26 @@ struct ShellDockMenuView {
   }
 };
 
+struct ShellSessionMenuView {
+  float surfaceWidth = static_cast<float>(kSessionMenuSurfaceWidth);
+  float surfaceHeight = static_cast<float>(kSessionMenuSurfaceHeight);
+  float menuX = 0.f;
+  float menuY = 0.f;
+  std::function<void(std::string const&)> onAction;
+  std::function<void()> onDismiss;
+
+  lambda::Element body() const {
+    return lambda::Element{LambdaSessionMenu{SessionMenuProps{
+        .surfaceWidth = surfaceWidth,
+        .surfaceHeight = surfaceHeight,
+        .menuX = menuX,
+        .menuY = menuY,
+        .onAction = onAction,
+        .onDismiss = onDismiss,
+    }}};
+  }
+};
+
 struct ShellLauncherView {
   ShellModel& model;
   std::function<void(DockItem const&)> onActivateResult;

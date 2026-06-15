@@ -250,12 +250,15 @@ struct DockLayoutFrame {
 struct DockMenuRow {
   std::string label;
   bool enabled = true;
+  float contentWidth = static_cast<float>(kDockMenuContentWidth);
   std::function<void()> action;
 
   Element body() const {
     Reactive::Signal<bool> hovered = useHover();
     Reactive::Signal<bool> pressed = usePress();
     Color const textColor = enabled ? VisualTokens::primaryText : Color{70.f / 255.f, 86.f / 255.f, 110.f / 255.f, 0.38f};
+    float const rowWidth = std::max(1.f, contentWidth);
+    float const textWidth = std::max(1.f, rowWidth - 24.f);
     Reactive::Bindable<Color> const fill{[enabled = enabled, hovered, pressed] {
       if (!enabled) {
         return Color(0.f, 0.f, 0.f, 0.001f);
@@ -274,7 +277,7 @@ struct DockMenuRow {
         .verticalAlignment = Alignment::Stretch,
         .children = children(
             Rectangle{}
-                .size(static_cast<float>(kDockMenuContentWidth), 32.f)
+                .size(rowWidth, 32.f)
                 .cornerRadius(8.f)
                 .fill(fill),
             Text{
@@ -283,8 +286,8 @@ struct DockMenuRow {
                 .color = textColor,
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .verticalAlignment = VerticalAlignment::Center,
-            }.size(152.f, 32.f).position(12.f, 0.f)),
-    }.size(static_cast<float>(kDockMenuContentWidth), 32.f);
+            }.size(textWidth, 32.f).position(12.f, 0.f)),
+    }.size(rowWidth, 32.f);
     if (enabled && action) {
       row = std::move(row).cursor(Cursor::Hand).onTap(action);
     }
@@ -292,19 +295,23 @@ struct DockMenuRow {
   }
 };
 
-Element dockMenuRow(std::string label, bool enabled, std::function<void()> action) {
-  return Element{DockMenuRow{std::move(label), enabled, std::move(action)}};
+Element dockMenuRow(std::string label,
+                    bool enabled,
+                    std::function<void()> action,
+                    float contentWidth = static_cast<float>(kDockMenuContentWidth)) {
+  return Element{DockMenuRow{std::move(label), enabled, contentWidth, std::move(action)}};
 }
 
-Element dockMenuSeparator() {
+Element dockMenuSeparator(float contentWidth = static_cast<float>(kDockMenuContentWidth)) {
+  float const separatorWidth = std::max(1.f, contentWidth - 24.f);
   return ZStack{
       .horizontalAlignment = Alignment::Stretch,
       .verticalAlignment = Alignment::Center,
       .children = children(Rectangle{}
-                               .size(static_cast<float>(kDockMenuContentWidth - 24), 1.f)
+                               .size(separatorWidth, 1.f)
                                .position(12.f, 3.f)
                                .fill(FillStyle::solid(VisualTokens::separator))),
-  }.size(static_cast<float>(kDockMenuContentWidth), 7.f);
+  }.size(std::max(1.f, contentWidth), 7.f);
 }
 
 Element dockItemMenu(DockItem item,
@@ -334,6 +341,39 @@ Element dockItemMenu(DockItem item,
       .alignment = Alignment::Stretch,
       .children = std::move(rows),
   }.size(static_cast<float>(kDockMenuContentWidth), static_cast<float>(kDockMenuContentHeight));
+}
+
+Element sessionMenuRow(std::string label,
+                       std::string actionId,
+                       std::function<void()> hidePopover,
+                       std::function<void(std::string const&)> onAction) {
+  return dockMenuRow(std::move(label),
+                     static_cast<bool>(onAction),
+                     [actionId = std::move(actionId),
+                      hidePopover = std::move(hidePopover),
+                      onAction = std::move(onAction)] {
+                       hidePopover();
+                       if (onAction) onAction(actionId);
+                     },
+                     static_cast<float>(kSessionMenuContentWidth));
+}
+
+Element sessionActionMenu(std::function<void()> hidePopover,
+                          std::function<void(std::string const&)> onAction) {
+  std::vector<Element> rows;
+  rows.push_back(sessionMenuRow("Lock", "shell.lock", hidePopover, onAction));
+  rows.push_back(sessionMenuRow("Log Out", "shell.logout", hidePopover, onAction));
+  rows.push_back(dockMenuSeparator(static_cast<float>(kSessionMenuContentWidth)));
+  rows.push_back(sessionMenuRow("Suspend", "shell.suspend", hidePopover, onAction));
+  rows.push_back(sessionMenuRow("Hibernate", "shell.hibernate", hidePopover, onAction));
+  rows.push_back(dockMenuSeparator(static_cast<float>(kSessionMenuContentWidth)));
+  rows.push_back(sessionMenuRow("Restart", "shell.reboot", hidePopover, onAction));
+  rows.push_back(sessionMenuRow("Power Off", "shell.power-off", hidePopover, onAction));
+  return VStack{
+      .spacing = 0.f,
+      .alignment = Alignment::Stretch,
+      .children = std::move(rows),
+  }.size(static_cast<float>(kSessionMenuContentWidth), static_cast<float>(kSessionMenuContentHeight));
 }
 
 Element dockIconAt(Reactive::Signal<std::size_t> indexSignal,
@@ -512,6 +552,7 @@ Element statusIconGrid(Reactive::Bindable<SystemStatus> system,
   icons.push_back(statusDockletIcon("network", IconName::WifiOff, system, itemSize, onStatusAction));
   icons.push_back(statusDockletIcon("bluetooth", IconName::BluetoothDisabled, system, itemSize, onStatusAction));
   icons.push_back(statusDockletIcon("volume", IconName::VolumeOff, system, itemSize, onStatusAction));
+  icons.push_back(statusDockletIcon("session", IconName::PowerSettingsNew, system, itemSize, onStatusAction));
   icons.push_back(statusDockletIcon("battery", IconName::BatteryUnknown, system, itemSize));
   icons.push_back(fixedStatusIcon(IconName::NotificationsOff, false, itemSize));
   icons.push_back(statusDockletIcon("media", IconName::MusicOff, system, itemSize, onStatusAction));
@@ -527,16 +568,20 @@ Element statusIconGrid(Reactive::Bindable<SystemStatus> system,
 
   std::vector<Element> rows;
   rows.reserve(kDockStatusRows);
-  rows.push_back(HStack{
-      .spacing = gap,
-      .alignment = Alignment::Center,
-      .children = children(std::move(icons[0]), std::move(icons[1]), std::move(icons[2])),
-  });
-  rows.push_back(HStack{
-      .spacing = gap,
-      .alignment = Alignment::Center,
-      .children = children(std::move(icons[3]), std::move(icons[4]), std::move(icons[5])),
-  });
+  int const columns = dockStatusGridColumns(itemSize);
+  for (std::size_t first = 0; first < icons.size(); first += static_cast<std::size_t>(columns)) {
+    std::vector<Element> rowChildren;
+    std::size_t const last = std::min(icons.size(), first + static_cast<std::size_t>(columns));
+    rowChildren.reserve(last - first);
+    for (std::size_t index = first; index < last; ++index) {
+      rowChildren.push_back(std::move(icons[index]));
+    }
+    rows.push_back(HStack{
+        .spacing = gap,
+        .alignment = Alignment::Center,
+        .children = std::move(rowChildren),
+    });
+  }
   return VStack{
              .spacing = gap,
              .alignment = Alignment::Center,
@@ -724,6 +769,36 @@ Element LambdaDockMenu::body() const {
       .borderColor = Colors::transparent,
       .borderWidth = 0.f,
       .maxSize = Size{static_cast<float>(kDockMenuContentWidth), static_cast<float>(kDockMenuContentHeight)},
+      .content = std::move(content),
+  }};
+  return ZStack{
+      .horizontalAlignment = Alignment::Start,
+      .verticalAlignment = Alignment::Start,
+      .children = children(
+          std::move(backdrop),
+          std::move(callout).position(props.menuX + static_cast<float>(kDockMenuSurfaceInset),
+                                      props.menuY + static_cast<float>(kDockMenuSurfaceInset))),
+  }.size(std::max(1.f, props.surfaceWidth), std::max(1.f, props.surfaceHeight));
+}
+
+Element LambdaSessionMenu::body() const {
+  Element content = sessionActionMenu(props.onDismiss ? props.onDismiss : [] {}, props.onAction);
+  Element backdrop = Rectangle{}
+      .size(std::max(1.f, props.surfaceWidth), std::max(1.f, props.surfaceHeight))
+      .fill(Colors::transparent);
+  if (props.onDismiss) {
+    backdrop = std::move(backdrop).onTap(props.onDismiss);
+  }
+
+  Element callout = Element{PopoverCalloutShape{
+      .placement = PopoverPlacement::Above,
+      .arrow = true,
+      .padding = static_cast<float>(kDockMenuPadding),
+      .cornerRadius = CornerRadius{14.f},
+      .backgroundColor = Colors::transparent,
+      .borderColor = Colors::transparent,
+      .borderWidth = 0.f,
+      .maxSize = Size{static_cast<float>(kSessionMenuContentWidth), static_cast<float>(kSessionMenuContentHeight)},
       .content = std::move(content),
   }};
   return ZStack{
