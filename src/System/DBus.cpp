@@ -354,6 +354,9 @@ void appendValue(sd_bus_message* message, BasicValue const& value) {
           }
           appendStructValue(message, *v);
           return 0;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<VariantValue>>) {
+          appendVariant(message, v ? v->value : BasicValue(std::string()));
+          return 0;
         } else if constexpr (std::is_same_v<T, std::shared_ptr<VariantDictionary>>) {
           appendVariantDictionary(message, v ? *v : VariantDictionary{});
           return 0;
@@ -1211,6 +1214,8 @@ std::string signatureFor(BasicValue const& value) {
             throw Error(-EINVAL, "resolve D-Bus signature", "struct value is empty");
           }
           return structSignatureFor(*v);
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<VariantValue>>) {
+          return "v";
         } else if constexpr (std::is_same_v<T, std::shared_ptr<VariantDictionary>>) {
           return "a{sv}";
         } else if constexpr (std::is_same_v<T, UnixFd>) {

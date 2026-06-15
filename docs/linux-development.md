@@ -24,7 +24,7 @@ sudo pacman -S --needed \
   wayland wayland-protocols libxkbcommon \
   vulkan-headers vulkan-icd-loader vulkan-tools glslang \
   mesa libdrm libinput libseat systemd-libs xdg-desktop-portal libnotify \
-  networkmanager bluez bluez-utils upower udisks2 \
+  networkmanager bluez bluez-utils upower udisks2 libsecret \
   freetype2 fontconfig harfbuzz zlib
 ```
 
@@ -164,6 +164,23 @@ XDG_SESSION_ID="${XDG_SESSION_ID:-$(loginctl show-user "$USER" -p Display --valu
 ```
 
 In a complete Lambda session this process should be started automatically before privileged Shell or Settings actions are exposed.
+
+## Secret Service
+
+The Linux build includes `lambda-secrets`, a basic in-memory `org.freedesktop.secrets` session-bus daemon. It supports the plain Secret Service session handshake, a default collection and alias, item create/search/get/replace/delete flows, and item label/attribute properties so libsecret-style development flows can run inside a Lambda session.
+
+This is not a production keyring yet. Secrets are not encrypted or persisted, lock/unlock is currently a no-op, prompt objects are not implemented, and login unlock still needs to be designed.
+
+Development smoke without installing:
+
+```sh
+./build/apps/lambda-secrets/lambda-secrets
+gdbus call --session \
+  --dest org.freedesktop.secrets \
+  --object-path /org/freedesktop/secrets \
+  --method org.freedesktop.Secret.Service.ReadAlias \
+  default
+```
 
 ## Network Status
 

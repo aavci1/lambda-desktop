@@ -32,6 +32,7 @@ struct BackendAccess;
 struct ArrayValue;
 struct DictionaryValue;
 struct StructValue;
+struct VariantValue;
 struct VariantDictionary;
 
 enum class BusType {
@@ -112,6 +113,7 @@ using BasicValue = std::variant<bool, std::uint8_t, std::int32_t, std::uint32_t,
                                 std::shared_ptr<ArrayValue>,
                                 std::shared_ptr<DictionaryValue>,
                                 std::shared_ptr<StructValue>,
+                                std::shared_ptr<VariantValue>,
                                 std::shared_ptr<VariantDictionary>,
                                 UnixFd>;
 

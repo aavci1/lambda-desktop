@@ -28,6 +28,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-029 | Feature | Complete SVC-12 MPRIS media integration | N/A | P0.5 |
 | TODO-030 | Feature | Complete SVC-14 udisks2 removable-volume integration | N/A | P0.5 |
 | TODO-031 | Feature | Complete SVC-8 polkit authentication agent | N/A | P0.5 |
+| TODO-032 | Feature | Complete SVC-13 Secret Service/keyring integration | N/A | P0.5 |
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -256,6 +257,19 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Authenticate identities through `polkit-agent-helper-1`/PAM and report success with `AuthenticationAgentResponse2`/`AuthenticationAgentResponse3`.
 - [ ] [Auto + Manual] Wire agent startup into the Lambda session lifecycle and handle duplicate-agent/fallback behavior cleanly.
 - [ ] [Manual] Validate `pkexec` and representative privileged actions: the dialog appears, success grants authorization, bad passwords fail, cancel returns a polkit cancelled error, and shutdown/restart flows still behave correctly.
+
+## TODO-032: Complete SVC-13 Secret Service/keyring integration
+
+- [x] [Auto] Add a Linux `lambda-secrets` session-bus daemon with D-Bus activation metadata for `org.freedesktop.secrets`.
+- [x] [Auto] Add reusable Secret Service D-Bus value helpers and generic D-Bus variant method-call arguments.
+- [x] [Auto] Export a basic `org.freedesktop.Secret.Service` with plain `OpenSession`, default alias, collection discovery, item search, unlock no-op, lock no-op, and `GetSecrets`.
+- [x] [Auto] Export a default `org.freedesktop.Secret.Collection` plus default alias path with item creation/search and collection properties.
+- [x] [Auto] Export `org.freedesktop.Secret.Item` objects with label, attributes, timestamps, `GetSecret`, `SetSecret`, and delete support.
+- [x] [Auto] Add deterministic private-bus coverage for opening a plain session, resolving the default alias, creating/searching/retrieving/replacing/deleting an item, and reading item properties.
+- [ ] [Auto + Manual] Add encrypted persistent storage for collections/items and an unlock path tied to login or a Lambda unlock prompt.
+- [ ] [Auto + Manual] Implement real lock/unlock state, prompt objects, session cleanup on disconnect, and stricter Secret Service error behavior.
+- [ ] [Auto + Manual] Validate with libsecret/SecretStorage clients and representative apps that store/read credentials.
+- [ ] [Manual] Decide whether this native daemon remains the production keyring or whether Lambda should run/bundle an external provider such as `gnome-keyring-daemon` for the full spec.
 
 ## TODO-026: Complete SVC-11 UPower power-status integration
 

@@ -68,6 +68,7 @@ set(_lambda_test_sources
   ShellModelTests.cpp
   ShellModelsTests.cpp
   ShellSystemStatusTests.cpp
+  SecretsTests.cpp
   SvgPathTests.cpp
   ${PROJECT_SOURCE_DIR}/apps/lambda-terminal/TerminalCore.cpp
   TerminalCoreTests.cpp
