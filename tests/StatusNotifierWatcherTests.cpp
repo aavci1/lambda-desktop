@@ -207,4 +207,59 @@ TEST_CASE("StatusNotifierWatcherService registers hosts and items") {
         lambda::system::StatusNotifierWatcherService::defaultItemObjectPath);
 }
 
+TEST_CASE("StatusNotifierWatcherClient reads and watches registered items") {
+  auto privateBus = startPrivateBus();
+  if (!privateBus) {
+    MESSAGE("Skipping StatusNotifierWatcher client test because a private bus could not be started");
+    return;
+  }
+
+  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambda::system::StatusNotifierWatcherService::serviceName);
+
+  lambda::system::StatusNotifierWatcherService watcher(serviceBus);
+  auto objectSlot = watcher.exportObject();
+  auto ownerSlot = watcher.watchNameOwners();
+
+  std::atomic<bool> running = true;
+  std::thread serviceThread([&] {
+    while (running.load()) {
+      pollBus(serviceBus, 25);
+    }
+  });
+  ScopeExit stopServiceThread([&] {
+    running = false;
+    if (serviceThread.joinable()) {
+      serviceThread.join();
+    }
+  });
+
+  auto client = lambda::system::StatusNotifierWatcherClient(
+      lambda::dbus::Bus::openAddress(privateBus->address));
+  client.registerHost("org.freedesktop.StatusNotifierHost.lambda-test-client");
+  CHECK(watcher.isHostRegistered());
+
+  int refreshes = 0;
+  auto watch = client.watchItems([&] {
+    ++refreshes;
+  });
+
+  std::string const itemName = "org.freedesktop.StatusNotifierItem.lambda-test-client";
+  auto itemBus = lambda::dbus::Bus::openAddress(privateBus->address);
+  itemBus.requestName(itemName);
+  auto itemReply = itemBus.call(lambda::dbus::MethodCall{
+      .destination = lambda::system::StatusNotifierWatcherService::serviceName,
+      .path = lambda::system::StatusNotifierWatcherService::objectPath,
+      .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+      .member = "RegisterStatusNotifierItem",
+      .arguments = {itemName},
+  });
+  CHECK(itemReply.valid());
+  serviceBus.flush();
+  CHECK(pumpUntil(client.bus(), [&] { return refreshes > 0; }, std::chrono::milliseconds(500)));
+
+  auto items = client.registeredItems();
+  CHECK(contains(items, itemName));
+}
+
 #endif

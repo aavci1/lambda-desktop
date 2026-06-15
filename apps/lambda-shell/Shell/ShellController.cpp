@@ -20,6 +20,7 @@
 #include <Lambda/System/MPRIS.hpp>
 #include <Lambda/System/NetworkManager.hpp>
 #include <Lambda/System/Notifications.hpp>
+#include <Lambda/System/StatusNotifierWatcher.hpp>
 #include <Lambda/System/UPower.hpp>
 #include <Lambda/UI/Events.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
@@ -68,6 +69,10 @@ struct ShellNotificationClosed {
   std::uint32_t id = 0;
 };
 
+struct ShellTrayItemsChanged {
+  std::vector<std::string> services;
+};
+
 std::optional<std::filesystem::file_time_type> configLastWriteTime(std::filesystem::path const& path) {
   if (path.empty()) return std::nullopt;
   std::error_code ec;
@@ -98,6 +103,30 @@ std::vector<NotificationActionEntry> shellNotificationActions(
 
 float notificationBannerHeight(Notification const& notification) {
   return notification.actions.empty() ? kNotificationBannerBaseHeight : kNotificationBannerActionHeight;
+}
+
+std::string trayLabelForService(std::string const& service) {
+  if (service.empty() || service.front() == ':') return "Tray Item";
+  std::size_t const slash = service.find('/');
+  std::string label = slash == std::string::npos ? service : service.substr(0, slash);
+  if (auto const pos = label.rfind('.'); pos != std::string::npos && pos + 1u < label.size()) {
+    label = label.substr(pos + 1u);
+  }
+  return label.empty() ? std::string("Tray Item") : label;
+}
+
+std::vector<TrayStatusItem> trayStatusItemsFromServices(std::vector<std::string> const& services) {
+  std::vector<TrayStatusItem> items;
+  items.reserve(services.size());
+  for (auto const& service : services) {
+    if (service.empty()) continue;
+    items.push_back(TrayStatusItem{
+        .id = service,
+        .label = trayLabelForService(service),
+        .icon = lambda::IconName::Widgets,
+    });
+  }
+  return items;
 }
 
 LayerShellOptions layerBase(LayerShellLayer layer, char const* nameSpace) {
@@ -195,6 +224,32 @@ struct ShellNotificationWatcher {
   lambda::dbus::BusEventPump pump;
   lambda::dbus::Slot posted;
   lambda::dbus::Slot closed;
+};
+
+struct ShellTrayStatusWatcher {
+  ShellTrayStatusWatcher(lambda::Application& app, std::function<void(std::vector<std::string>)> onItemsChanged)
+      : watcher(lambda::system::StatusNotifierWatcherClient::connectSession()),
+        pump(app, watcher.bus()) {
+    watcher.registerHost("org.freedesktop.StatusNotifierHost.lambda-shell");
+    auto refresh = [this, onItemsChanged] {
+      if (!onItemsChanged) {
+        return;
+      }
+      try {
+        onItemsChanged(watcher.registeredItems());
+      } catch (std::exception const& error) {
+        std::fprintf(stderr, "lambda-shell: tray status refresh failed: %s\n", error.what());
+      } catch (...) {
+        std::fprintf(stderr, "lambda-shell: tray status refresh failed\n");
+      }
+    };
+    changed = watcher.watchItems(refresh);
+    refresh();
+  }
+
+  lambda::system::StatusNotifierWatcherClient watcher;
+  lambda::dbus::BusEventPump pump;
+  lambda::system::StatusNotifierItemsWatch changed;
 };
 
 struct ShellSystemStatusWatchers {
@@ -405,6 +460,10 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
     if (notificationCenter_.dismiss(event.id)) {
       syncNotificationWindow();
     }
+  });
+
+  app_.eventQueue().on<ShellTrayItemsChanged>([this](ShellTrayItemsChanged const& event) {
+    updateTrayItems(event.services);
   });
 }
 
@@ -622,6 +681,7 @@ void ShellController::createProductionWindows() {
   clockTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{1}, *dockHandle_);
   systemStatusTimerId_ = app_.scheduleRepeatingTimer(std::chrono::seconds{5}, *dockHandle_);
   setupSystemStatusWatchers();
+  setupTrayStatusWatcher();
 
   auto& dockMenu = app_.createWindow<lambda::Window>(dockMenuWindowConfig());
   dockMenu.setBackground(lambda::WindowBackground::transparent());
@@ -725,7 +785,9 @@ void ShellController::requestNotificationRedraw() {
 }
 
 bool ShellController::refreshSystemStatus() {
-  if (!model_.setSystemStatus(readShellSystemStatus())) {
+  SystemStatus status = readShellSystemStatus();
+  status.trayItems = trayItems_;
+  if (!model_.setSystemStatus(std::move(status))) {
     return false;
   }
   requestDockRedraw();
@@ -768,6 +830,38 @@ void ShellController::setupSystemStatusWatchers() {
       systemStatusWatchers_->media = std::make_unique<ShellMediaStatusWatcher>(app_, std::move(refreshStatus));
     } catch (...) {
     }
+  }
+}
+
+void ShellController::setupTrayStatusWatcher() {
+  if (trayStatusWatcher_) {
+    return;
+  }
+
+  try {
+    trayStatusWatcher_ = std::make_unique<ShellTrayStatusWatcher>(
+        app_,
+        [this](std::vector<std::string> services) {
+          app_.eventQueue().post(ShellTrayItemsChanged{.services = std::move(services)});
+        });
+  } catch (std::exception const& error) {
+    std::fprintf(stderr, "lambda-shell: tray status watcher unavailable: %s\n", error.what());
+  } catch (...) {
+    std::fprintf(stderr, "lambda-shell: tray status watcher unavailable\n");
+  }
+}
+
+void ShellController::updateTrayItems(std::vector<std::string> services) {
+  auto nextItems = trayStatusItemsFromServices(services);
+  if (nextItems == trayItems_) {
+    return;
+  }
+  trayItems_ = std::move(nextItems);
+  SystemStatus status = model_.systemStatus();
+  status.trayItems = trayItems_;
+  if (model_.setSystemStatus(std::move(status))) {
+    requestDockRedraw();
+    if (previewHandle_) requestLauncherRedraw();
   }
 }
 

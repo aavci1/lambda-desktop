@@ -536,6 +536,20 @@ Element statusDockletIcon(std::string id,
                     std::move(onStatusAction));
 }
 
+Element trayStatusIcon(std::size_t slot,
+                       Reactive::Bindable<SystemStatus> system,
+                       int itemSize) {
+  return statusIcon(Reactive::Bindable<IconName>{[slot, system] {
+                      auto const status = system.evaluate();
+                      if (slot < status.trayItems.size()) return status.trayItems[slot].icon;
+                      return IconName::Widgets;
+                    }},
+                    Reactive::Bindable<bool>{[slot, system] {
+                      return slot < system.evaluate().trayItems.size();
+                    }},
+                    itemSize);
+}
+
 Element fixedStatusIcon(IconName iconName, bool available, int itemSize) {
   return statusIcon(Reactive::Bindable<IconName>{iconName}, Reactive::Bindable<bool>{available}, itemSize);
 }
@@ -554,7 +568,8 @@ Element statusIconGrid(Reactive::Bindable<SystemStatus> system,
   icons.push_back(statusDockletIcon("volume", IconName::VolumeOff, system, itemSize, onStatusAction));
   icons.push_back(statusDockletIcon("session", IconName::PowerSettingsNew, system, itemSize, onStatusAction));
   icons.push_back(statusDockletIcon("battery", IconName::BatteryUnknown, system, itemSize));
-  icons.push_back(fixedStatusIcon(IconName::NotificationsOff, false, itemSize));
+  icons.push_back(trayStatusIcon(0, system, itemSize));
+  icons.push_back(trayStatusIcon(1, system, itemSize));
   icons.push_back(statusDockletIcon("media", IconName::MusicOff, system, itemSize, onStatusAction));
 
   if (dockUsesSingleRowDocklets(itemSize)) {

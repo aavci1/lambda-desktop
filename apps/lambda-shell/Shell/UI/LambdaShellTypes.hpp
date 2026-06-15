@@ -31,7 +31,7 @@ inline constexpr float kDockClockLeadingPaddingX = 4.f;
 inline constexpr float kDockClockTrailingPaddingX = 8.f;
 inline constexpr int kDockStatusColumns = 4;
 inline constexpr int kDockStatusRows = 2;
-inline constexpr int kDockStatusItemCount = 7;
+inline constexpr int kDockStatusItemCount = 8;
 inline constexpr int kDockStatusCell = 22;
 inline constexpr int kDockStatusIconSize = 18;
 inline constexpr int kDockStatusGridGap = 4;
@@ -137,6 +137,14 @@ bool launcherPointerInsideContent(int width,
                                   double x,
                                   double y);
 
+struct TrayStatusItem {
+  std::string id;
+  std::string label;
+  lambda::IconName icon = lambda::IconName::Widgets;
+
+  bool operator==(TrayStatusItem const& other) const = default;
+};
+
 struct SystemStatus {
   std::string network = "unknown";
   std::string wifi = "unknown";
@@ -144,6 +152,7 @@ struct SystemStatus {
   std::string volume = "unknown";
   std::string battery = "unknown";
   std::string media = "unknown";
+  std::vector<TrayStatusItem> trayItems;
 
   bool operator==(SystemStatus const& other) const = default;
 };

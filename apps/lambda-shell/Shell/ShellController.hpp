@@ -21,6 +21,7 @@ namespace lambda_shell {
 enum class AudioControlAction;
 struct ShellSystemStatusWatchers;
 struct ShellNotificationWatcher;
+struct ShellTrayStatusWatcher;
 
 class ShellController {
 public:
@@ -57,6 +58,8 @@ private:
   [[nodiscard]] bool refreshSystemStatus();
   void setupSystemStatusWatchers();
   void setupNotificationWatcher();
+  void setupTrayStatusWatcher();
+  void updateTrayItems(std::vector<std::string> services);
   void updateNotificationPolicy();
   void syncNotificationWindow();
   void scheduleNotificationTimeout(Notification const& notification);
@@ -124,6 +127,8 @@ private:
   std::uint64_t nextRequestId_ = 1;
   std::unique_ptr<ShellSystemStatusWatchers> systemStatusWatchers_;
   std::unique_ptr<ShellNotificationWatcher> notificationWatcher_;
+  std::unique_ptr<ShellTrayStatusWatcher> trayStatusWatcher_;
+  std::vector<TrayStatusItem> trayItems_;
   NotificationCenterModel notificationCenter_;
   std::filesystem::path configPath_;
   std::optional<std::filesystem::file_time_type> configLastWrite_;

@@ -1,6 +1,7 @@
 #include <Lambda/System/StatusNotifierWatcher.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace lambda::system {
@@ -218,6 +219,62 @@ void StatusNotifierWatcherService::emitItemUnregistered(std::string const& servi
 
 void StatusNotifierWatcherService::emitHostRegistered() const {
   bus_->emitSignal(objectPath, interfaceName, "StatusNotifierHostRegistered");
+}
+
+StatusNotifierWatcherClient::StatusNotifierWatcherClient(dbus::Bus bus) : bus_(std::move(bus)) {}
+
+StatusNotifierWatcherClient StatusNotifierWatcherClient::connectSession() {
+  return StatusNotifierWatcherClient(dbus::Bus::open(dbus::BusType::Session));
+}
+
+void StatusNotifierWatcherClient::registerHost(std::string serviceName) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = StatusNotifierWatcherService::serviceName,
+      .path = StatusNotifierWatcherService::objectPath,
+      .interface = StatusNotifierWatcherService::interfaceName,
+      .member = "RegisterStatusNotifierHost",
+      .arguments = {std::move(serviceName)},
+  });
+}
+
+std::vector<std::string> StatusNotifierWatcherClient::registeredItems() {
+  return std::get<dbus::StringArray>(bus_.getProperty(dbus::PropertyAddress{
+                                                          .destination = StatusNotifierWatcherService::serviceName,
+                                                          .path = StatusNotifierWatcherService::objectPath,
+                                                          .interface = StatusNotifierWatcherService::interfaceName,
+                                                          .name = "RegisteredStatusNotifierItems",
+                                                      },
+                                                      "as"))
+      .values;
+}
+
+StatusNotifierItemsWatch StatusNotifierWatcherClient::watchItems(std::function<void()> handler) {
+  auto sharedHandler = std::make_shared<std::function<void()>>(std::move(handler));
+  auto notify = [sharedHandler](dbus::Message&) {
+    if (sharedHandler && *sharedHandler) {
+      (*sharedHandler)();
+    }
+  };
+  return StatusNotifierItemsWatch{
+      .itemRegistered =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = StatusNotifierWatcherService::serviceName,
+                  .path = StatusNotifierWatcherService::objectPath,
+                  .interface = StatusNotifierWatcherService::interfaceName,
+                  .member = "StatusNotifierItemRegistered",
+              },
+              notify),
+      .itemUnregistered =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = StatusNotifierWatcherService::serviceName,
+                  .path = StatusNotifierWatcherService::objectPath,
+                  .interface = StatusNotifierWatcherService::interfaceName,
+                  .member = "StatusNotifierItemUnregistered",
+              },
+              notify),
+  };
 }
 
 } // namespace lambda::system

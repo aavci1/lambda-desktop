@@ -7,6 +7,7 @@
 #include <Lambda/System/DBus.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -65,6 +66,28 @@ private:
   dbus::Bus* bus_ = nullptr;
   std::vector<StatusNotifierItemRegistration> items_;
   std::vector<std::string> hosts_;
+};
+
+struct StatusNotifierItemsWatch {
+  dbus::Slot itemRegistered;
+  dbus::Slot itemUnregistered;
+};
+
+class StatusNotifierWatcherClient {
+public:
+  explicit StatusNotifierWatcherClient(dbus::Bus bus);
+
+  [[nodiscard]] static StatusNotifierWatcherClient connectSession();
+
+  [[nodiscard]] dbus::Bus& bus() noexcept { return bus_; }
+  [[nodiscard]] dbus::Bus const& bus() const noexcept { return bus_; }
+
+  void registerHost(std::string serviceName);
+  [[nodiscard]] std::vector<std::string> registeredItems();
+  [[nodiscard]] StatusNotifierItemsWatch watchItems(std::function<void()> handler);
+
+private:
+  dbus::Bus bus_;
 };
 
 } // namespace lambda::system

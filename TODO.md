@@ -237,7 +237,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Support path-only item registration by using the caller's unique bus name, and remove registered items/hosts when their bus name loses ownership.
 - [x] [Auto] Add deterministic private-bus coverage for host/item registration, properties, `Properties.GetAll`, registration signals, owner-loss removal, and path-only item registration.
 - [x] [Auto] Smoke the built `lambda-status-notifier-watcher` process on a private session bus and verify a `ProtocolVersion` property query through `gdbus`.
-- [ ] [Auto + Manual] Wire Shell's tray host UI to the watcher and render registered status item icons in the bar.
+- [x] [Auto] Add a Shell-side StatusNotifierWatcher client that registers a host, reads registered item services, and watches item register/unregister signals.
+- [x] [Auto] Wire Shell's dock status area to the watcher and render basic live tray item glyphs for registered services.
 - [ ] [Auto] Read StatusNotifierItem properties for category, title, status, icon names, icon pixmaps, overlay/attention icons, tooltip, menu object path, and item updates.
 - [ ] [Auto + Manual] Implement `com.canonical.dbusmenu` menu hosting and item `Activate`, `ContextMenu`, `SecondaryActivate`, and `Scroll` actions.
 - [ ] [Auto + Manual] Handle item property/signal changes live without freezing Shell when a tray item misbehaves or disappears.
