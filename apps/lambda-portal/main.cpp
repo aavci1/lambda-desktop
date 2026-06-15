@@ -27,7 +27,7 @@ int main() {
 
     lambda::system::PortalSettingsService settings(
         bus,
-        lambda::system::PortalSettingsService::stateFromEnvironment());
+        lambda::system::PortalSettingsService::stateFromShellConfig());
     auto settingsSlot = settings.exportObject();
 
     std::cerr << "lambda-portal: exported " << lambda::system::PortalSettingsService::interfaceName

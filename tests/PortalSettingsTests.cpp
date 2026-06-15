@@ -6,6 +6,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <unistd.h>
@@ -16,10 +18,45 @@ using lambda::testing::dbus::pollBus;
 using lambda::testing::dbus::pumpUntil;
 using lambda::testing::dbus::startPrivateBus;
 
+std::filesystem::path tempRoot(char const* name) {
+  auto path = std::filesystem::temp_directory_path() /
+              (std::string(name) + "-" + std::to_string(static_cast<unsigned long long>(getpid())));
+  std::filesystem::remove_all(path);
+  std::filesystem::create_directories(path);
+  return path;
+}
+
 } // namespace
 
 TEST_CASE("Portal Settings support is compile-time declared") {
   CHECK((LAMBDA_HAS_DBUS == 0 || LAMBDA_HAS_DBUS == 1));
+}
+
+TEST_CASE("PortalSettingsService reads Shell-owned appearance config") {
+  auto root = tempRoot("lambda-portal-shell-config-test");
+  auto configPath = root / "lambda-shell" / "config.toml";
+  std::filesystem::create_directories(configPath.parent_path());
+  {
+    std::ofstream out(configPath);
+    out << R"(
+[appearance]
+color_scheme = "prefer-light"
+accent_color = "#336699"
+high_contrast = true
+reduced_motion = true
+)";
+  }
+
+  auto state = lambda::system::PortalSettingsService::stateFromShellConfig(configPath);
+  CHECK(state.colorScheme == lambda::system::PortalColorScheme::PreferLight);
+  REQUIRE(state.accentColor.has_value());
+  CHECK(state.accentColor->red == doctest::Approx(0x33 / 255.0));
+  CHECK(state.accentColor->green == doctest::Approx(0x66 / 255.0));
+  CHECK(state.accentColor->blue == doctest::Approx(0x99 / 255.0));
+  CHECK(state.highContrast);
+  CHECK(state.reducedMotion);
+
+  std::filesystem::remove_all(root);
 }
 
 #if LAMBDA_HAS_DBUS

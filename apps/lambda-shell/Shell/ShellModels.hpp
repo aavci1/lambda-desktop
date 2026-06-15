@@ -191,6 +191,9 @@ struct DockMaterialConfig {
 struct ShellConfig {
   std::string iconTheme;
   std::string symbolicIconTheme;
+  std::string colorScheme = "no-preference";
+  lambda::Color accentColor = lambda::Color::rgb(0, 122, 255);
+  bool highContrast = false;
   bool reducedMotion = false;
 
   std::string dockPosition = "bottom";

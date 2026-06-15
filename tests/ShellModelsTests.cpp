@@ -378,6 +378,9 @@ TEST_CASE("Shell config parses defaults and invalid fallback") {
   CHECK(defaults.dockMaterial.opacity == doctest::Approx(1.f));
   CHECK(defaults.dockMaterial.baseColor.a == doctest::Approx(97.f / 255.f));
   CHECK(defaults.dockMaterial.tintColor.a == doctest::Approx(6.f / 255.f));
+  CHECK(defaults.colorScheme == "no-preference");
+  CHECK(defaults.accentColor.g == doctest::Approx(122.f / 255.f));
+  CHECK_FALSE(defaults.highContrast);
   CHECK(defaults.dockClockFormat == "%a %d %b, %H:%M");
   CHECK(defaults.clipboardHistoryEnabled);
   CHECK(defaults.clipboardHistoryMaxEntries == 100);
@@ -387,6 +390,9 @@ TEST_CASE("Shell config parses defaults and invalid fallback") {
   auto parsed = lambda_shell::parseShellConfig(R"(
 [appearance]
 icon_theme = "Adwaita"
+color_scheme = "prefer-dark"
+accent_color = "#336699"
+high_contrast = true
 reduced_motion = true
 [dock]
 pinned = ["lambda-terminal", "lambda-files"]
@@ -419,6 +425,11 @@ empty_query = "apps"
 max_results = 4
 )");
   CHECK(parsed.iconTheme == "Adwaita");
+  CHECK(parsed.colorScheme == "prefer-dark");
+  CHECK(parsed.accentColor.r == doctest::Approx(0x33 / 255.f));
+  CHECK(parsed.accentColor.g == doctest::Approx(0x66 / 255.f));
+  CHECK(parsed.accentColor.b == doctest::Approx(0x99 / 255.f));
+  CHECK(parsed.highContrast);
   CHECK(parsed.dockItemSize == 36);
   CHECK(parsed.reducedMotion);
   CHECK(parsed.dockPinned == std::vector<std::string>{"lambda-terminal", "lambda-files"});
@@ -450,6 +461,8 @@ max_results = 4
 
   auto fallback = lambda_shell::parseShellConfig(R"(
 [appearance]
+color_scheme = "sepia"
+accent_color = "blue"
 [dock]
 pinned = []
 position = "floating"
@@ -479,6 +492,8 @@ TEST_CASE("Shell config accepts TOML literal string values emitted by settings")
 [appearance]
 icon_theme = 'Lambda'
 symbolic_icon_theme = 'same'
+color_scheme = 'prefer-light'
+accent_color = '#112233'
 [dock]
 position = 'left'
 pinned = ['lambda-terminal', 'lambda-settings']
@@ -491,6 +506,8 @@ empty_query = 'apps'
 
   CHECK(parsed.iconTheme == "Lambda");
   CHECK(parsed.symbolicIconTheme == "same");
+  CHECK(parsed.colorScheme == "prefer-light");
+  CHECK(parsed.accentColor.b == doctest::Approx(0x33 / 255.f));
   CHECK(parsed.dockPosition == "left");
   CHECK(parsed.dockPinned == std::vector<std::string>{"lambda-terminal", "lambda-settings"});
   CHECK(parsed.dockClockFormat == "%H:%M");

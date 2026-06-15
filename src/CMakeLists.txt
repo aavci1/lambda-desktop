@@ -366,7 +366,7 @@ elseif(LAMBDA_PLATFORM_LINUX_KMS)
     ${CMAKE_DL_LIBS})
 endif()
 
-target_link_libraries(lambda PRIVATE libtess2)
+target_link_libraries(lambda PRIVATE libtess2 tomlplusplus::tomlplusplus)
 
 install(TARGETS lambda
   EXPORT LambdaTargets

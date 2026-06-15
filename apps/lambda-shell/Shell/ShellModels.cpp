@@ -32,6 +32,10 @@ bool containsCaseInsensitive(std::string_view haystack, std::string_view needle)
   return lowerAscii(haystack).find(lowerAscii(needle)) != std::string::npos;
 }
 
+bool validColorScheme(std::string_view value) {
+  return value == "no-preference" || value == "prefer-dark" || value == "prefer-light";
+}
+
 std::string acronym(std::string_view text) {
   std::string out;
   bool atWord = true;
@@ -684,6 +688,11 @@ ShellConfig parseShellConfig(std::string_view tomlText) {
   if (auto* appearance = root["appearance"].as_table()) {
     if (auto value = readTomlString(*appearance, "icon_theme")) config.iconTheme = *value;
     if (auto value = readTomlString(*appearance, "symbolic_icon_theme")) config.symbolicIconTheme = *value;
+    if (auto value = readTomlString(*appearance, "color_scheme"); value && validColorScheme(*value)) {
+      config.colorScheme = *value;
+    }
+    if (auto value = readTomlColor(*appearance, "accent_color")) config.accentColor = *value;
+    if (auto value = readTomlBool(*appearance, "high_contrast")) config.highContrast = *value;
     if (auto value = readTomlBool(*appearance, "reduced_motion")) config.reducedMotion = *value;
   }
 
@@ -769,6 +778,9 @@ std::string writeShellConfigToml(ShellConfig const& config) {
   out << "[appearance]\n";
   out << "icon_theme = " << tomlQuote(config.iconTheme) << "\n";
   out << "symbolic_icon_theme = " << tomlQuote(config.symbolicIconTheme) << "\n";
+  out << "color_scheme = " << tomlQuote(validColorScheme(config.colorScheme) ? config.colorScheme : "no-preference") << "\n";
+  out << "accent_color = " << tomlColor(config.accentColor) << "\n";
+  out << "high_contrast = " << (config.highContrast ? "true" : "false") << "\n";
   out << "reduced_motion = " << (config.reducedMotion ? "true" : "false") << "\n\n";
 
   out << "[dock]\n";

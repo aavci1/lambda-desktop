@@ -206,7 +206,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Expose `org.freedesktop.appearance` values for `color-scheme`, `accent-color`, `contrast`, and `reduced-motion`; for now these default from `LAMBDA_PORTAL_COLOR_SCHEME`, `LAMBDA_PORTAL_ACCENT_COLOR`, `LAMBDA_PORTAL_HIGH_CONTRAST`, and `LAMBDA_PORTAL_REDUCED_MOTION`.
 - [x] [Auto] Add deterministic private-bus coverage for portal Settings methods, property, namespaced dictionary response, RGB tuple variant, and `SettingChanged` signal.
 - [x] [Auto] Smoke the built `lambda-portal` process on a private session bus and verify a Settings `Read` call through `gdbus`.
-- [ ] [Auto + Manual] Wire Settings/Shell-owned appearance preferences into `lambda-portal` instead of relying on environment variables.
+- [x] [Auto] Add Shell/Settings-owned appearance preferences for color scheme, accent color, high contrast, and reduced motion, and make `lambda-portal` prefer that Shell config for `org.freedesktop.appearance` values while keeping environment variables as a missing-config development fallback.
 - [ ] [Manual] Install or stage `lambda-portal` with `xdg-desktop-portal`, set `XDG_CURRENT_DESKTOP=Lambda`, and verify a real GTK/Qt app reads the color-scheme/accent through the frontend portal.
 - [ ] [Auto + Manual] Implement the FileChooser portal backend for Open/Save using a Lambda file-chooser surface backed by `lambda-files` components.
 - [ ] [Auto + Manual] Implement OpenURI, Inhibit, Account, and Notification portal backends; route portal Notification requests through the SVC-6 daemon.

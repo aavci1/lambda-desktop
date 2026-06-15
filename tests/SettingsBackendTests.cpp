@@ -180,6 +180,9 @@ TEST_CASE("Settings Shell config round trip preserves unknown keys") {
 unknown_root = "keep"
 [appearance]
 icon_theme = "Adwaita"
+color_scheme = "prefer-dark"
+accent_color = "#336699"
+high_contrast = true
 unknown_appearance = "keep"
 [dock]
 pinned = ["lambda-files", "lambda-terminal"]
@@ -206,6 +209,9 @@ max_results = 12
 )";
   auto loaded = lambda_settings::loadShellSettings(input);
   CHECK(loaded.values.at("appearance.icon_theme") == "Adwaita");
+  CHECK(loaded.values.at("appearance.color_scheme") == "prefer-dark");
+  CHECK(loaded.values.at("appearance.accent_color") == "#336699");
+  CHECK(loaded.values.at("appearance.high_contrast") == "true");
   CHECK(loaded.values.at("dock.pinned") == "lambda-files,lambda-terminal");
   CHECK(loaded.values.at("dock.bottom_gap") == "6");
   CHECK(loaded.values.at("dock.full_width") == "true");
@@ -223,6 +229,9 @@ max_results = 12
 
   std::string output = lambda_settings::writeShellSettings(input, {
       {"appearance.icon_theme", "Lambda"},
+      {"appearance.color_scheme", "prefer-light"},
+      {"appearance.accent_color", "#007aff"},
+      {"appearance.high_contrast", "false"},
       {"dock.pinned", "lambda-terminal,lambda-settings"},
       {"dock.item_size", "40"},
       {"dock.full_width", "true"},
@@ -244,6 +253,9 @@ max_results = 12
   CHECK(output.find("unknown_root") != std::string::npos);
   CHECK(output.find("unknown_appearance") != std::string::npos);
   CHECK(output.find("Lambda") != std::string::npos);
+  CHECK(output.find("prefer-light") != std::string::npos);
+  CHECK(output.find("#007aff") != std::string::npos);
+  CHECK(output.find("high_contrast = false") != std::string::npos);
   CHECK(output.find("lambda-settings") != std::string::npos);
   CHECK(output.find("item_size = 40") != std::string::npos);
   CHECK(output.find("full_width = true") != std::string::npos);

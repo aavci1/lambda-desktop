@@ -107,12 +107,18 @@ The Linux build includes `lambda-portal`, a session-bus backend for the first La
 Development smoke without installing:
 
 ```sh
-LAMBDA_PORTAL_COLOR_SCHEME=dark \
-LAMBDA_PORTAL_ACCENT_COLOR=0.25,0.5,0.75 \
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/lambda-shell"
+cat > "${XDG_CONFIG_HOME:-$HOME/.config}/lambda-shell/config.toml" <<'EOF'
+[appearance]
+color_scheme = "prefer-dark"
+accent_color = "#4080bf"
+high_contrast = false
+reduced_motion = false
+EOF
 ./build/apps/lambda-portal/lambda-portal
 ```
 
-For installed portal selection, run a session with `XDG_CURRENT_DESKTOP=Lambda` and install the generated D-Bus service plus `lambda.portal` metadata alongside `xdg-desktop-portal`. Until Settings owns these preferences, the environment variables above control the advertised appearance values.
+For installed portal selection, run a session with `XDG_CURRENT_DESKTOP=Lambda` and install the generated D-Bus service plus `lambda.portal` metadata alongside `xdg-desktop-portal`. `lambda-portal` reads the Shell appearance config path (`LAMBDA_SHELL_CONFIG`, then `$XDG_CONFIG_HOME/lambda-shell/config.toml`, then `$HOME/.config/lambda-shell/config.toml`) for `appearance.color_scheme`, `appearance.accent_color`, `appearance.high_contrast`, and `appearance.reduced_motion`; `LAMBDA_PORTAL_COLOR_SCHEME`, `LAMBDA_PORTAL_ACCENT_COLOR`, `LAMBDA_PORTAL_HIGH_CONTRAST`, and `LAMBDA_PORTAL_REDUCED_MOTION` remain development fallbacks when no config value is present.
 
 ## Notifications Daemon
 

@@ -172,6 +172,9 @@ void setShellTomlValue(toml::table& table, std::string const& key, std::string c
 
   if (key == "appearance.icon_theme") setString("appearance", "icon_theme");
   else if (key == "appearance.symbolic_icon_theme") setString("appearance", "symbolic_icon_theme");
+  else if (key == "appearance.color_scheme") setString("appearance", "color_scheme");
+  else if (key == "appearance.accent_color") setString("appearance", "accent_color");
+  else if (key == "appearance.high_contrast") setBool("appearance", "high_contrast");
   else if (key == "appearance.reduced_motion") setBool("appearance", "reduced_motion");
   else if (key == "dock.position") setString("dock", "position");
   else if (key == "dock.auto_hide") setBool("dock", "auto_hide");
@@ -342,6 +345,13 @@ std::vector<SettingSchema> shellSettingsSchema() {
        .applyMode = ApplyMode::HotReload},
       {.id = "appearance.symbolic_icon_theme", .label = "Symbolic icon theme", .type = SettingType::String,
        .applyMode = ApplyMode::HotReload},
+      {.id = "appearance.color_scheme", .label = "Color scheme", .type = SettingType::Enum,
+       .applyMode = ApplyMode::HotReload, .enumValues = {"no-preference", "prefer-dark", "prefer-light"},
+       .defaultValue = "no-preference"},
+      {.id = "appearance.accent_color", .label = "Accent color", .type = SettingType::Color,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "#007aff"},
+      {.id = "appearance.high_contrast", .label = "High contrast", .type = SettingType::Boolean,
+       .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
       {.id = "appearance.reduced_motion", .label = "Reduced motion", .type = SettingType::Boolean,
        .applyMode = ApplyMode::HotReload, .defaultValue = "false"},
       {.id = "dock.position", .label = "Dock position", .type = SettingType::Enum,
@@ -584,6 +594,9 @@ SettingsDocument loadShellSettings(std::string_view tomlText) {
   if (auto* appearance = table["appearance"].as_table()) {
     setIf("appearance.icon_theme", tomlString(*appearance, "icon_theme"));
     setIf("appearance.symbolic_icon_theme", tomlString(*appearance, "symbolic_icon_theme"));
+    setIf("appearance.color_scheme", tomlString(*appearance, "color_scheme"));
+    setIf("appearance.accent_color", tomlString(*appearance, "accent_color"));
+    setIf("appearance.high_contrast", tomlBool(*appearance, "high_contrast"));
     setIf("appearance.reduced_motion", tomlBool(*appearance, "reduced_motion"));
   }
   if (auto* dock = table["dock"].as_table()) {

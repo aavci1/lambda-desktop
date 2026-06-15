@@ -6,6 +6,7 @@
 
 #include <Lambda/System/DBus.hpp>
 
+#include <filesystem>
 #include <optional>
 
 namespace lambda::system {
@@ -50,6 +51,8 @@ public:
   void emitChanged(std::string const& key) const;
 
   [[nodiscard]] static PortalSettingsState stateFromEnvironment();
+  [[nodiscard]] static PortalSettingsState stateFromShellConfig(std::filesystem::path path = {});
+  [[nodiscard]] static std::filesystem::path shellConfigPathFromEnvironment();
 
 private:
   [[nodiscard]] std::map<std::string, dbus::BasicValue> appearanceSettings() const;
