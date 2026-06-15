@@ -94,6 +94,7 @@ void postTextInput(LambdaMetalView* view, std::string text);
   metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
   metalLayer.framebufferOnly = NO;
   metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
+  metalLayer.contentsGravity = kCAGravityTopLeft;
   metalLayer.opaque = NO;
   metalLayer.backgroundColor = [[NSColor clearColor] CGColor];
   // Match MetalCanvas in-flight limit; helps avoid main-thread stalls on nextDrawable during live resize.
@@ -118,6 +119,7 @@ void postTextInput(LambdaMetalView* view, std::string text);
     self.wantsLayer = YES;
     self.layer.opaque = NO;
     self.layer.backgroundColor = [[NSColor clearColor] CGColor];
+    self.layerContentsPlacement = NSViewLayerContentsPlacementTopLeft;
     self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
     [self updateDrawableSize];
   }
@@ -179,7 +181,11 @@ void postTextInput(LambdaMetalView* view, std::string text);
   CGSize bounds = self.bounds.size;
   CGFloat w = (std::max)(bounds.width * scale, static_cast<CGFloat>(1.0));
   CGFloat h = (std::max)(bounds.height * scale, static_cast<CGFloat>(1.0));
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  metalLayer.contentsGravity = kCAGravityTopLeft;
   metalLayer.drawableSize = CGSizeMake(w, h);
+  [CATransaction commit];
 }
 
 - (BOOL)acceptsFirstResponder {
