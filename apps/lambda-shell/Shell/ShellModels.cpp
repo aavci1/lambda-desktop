@@ -278,7 +278,8 @@ std::uint64_t NotificationCenterModel::add(std::string appId, std::string title,
 std::uint64_t NotificationCenterModel::upsert(std::uint64_t id,
                                               std::string appId,
                                               std::string title,
-                                              std::string body) {
+                                              std::string body,
+                                              std::int32_t expireTimeoutMs) {
   if (id == 0) {
     return add(std::move(appId), std::move(title), std::move(body));
   }
@@ -294,7 +295,8 @@ std::uint64_t NotificationCenterModel::upsert(std::uint64_t id,
                         Notification{.id = id,
                                      .appId = std::move(appId),
                                      .title = std::move(title),
-                                     .body = std::move(body)});
+                                     .body = std::move(body),
+                                     .expireTimeoutMs = expireTimeoutMs});
   nextId_ = std::max(nextId_, id + 1u);
   trimHistory();
   return id;
@@ -703,6 +705,23 @@ ClipboardHistoryPolicy clipboardHistoryPolicy(ShellConfig const& config) {
       .maxTextBytes = config.clipboardHistoryMaxTextBytes,
       .recordPrimarySelection = config.clipboardHistoryRecordPrimarySelection,
   };
+}
+
+std::optional<std::chrono::milliseconds> notificationBannerTimeout(ShellConfig const& config,
+                                                                   Notification const& notification) {
+  if (config.notificationBannerTimeoutSeconds == 0 || notification.expireTimeoutMs == 0) {
+    return std::nullopt;
+  }
+
+  auto timeout = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::seconds(std::max(0, config.notificationBannerTimeoutSeconds)));
+  if (notification.expireTimeoutMs > 0) {
+    timeout = std::min(timeout, std::chrono::milliseconds(notification.expireTimeoutMs));
+  }
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return std::nullopt;
+  }
+  return timeout;
 }
 
 ShellConfig parseShellConfig(std::string_view tomlText) {

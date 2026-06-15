@@ -224,7 +224,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Enforce Shell notification enabled/disabled, DND, and history-limit config for the live banner model.
 - [ ] [Auto + Manual] Add the full Shell notification-center UI with history inspection, dismissal, and clear-all controls.
 - [ ] [Auto + Manual] Route action button clicks from Shell UI back to `ActionInvoked`.
-- [ ] [Auto + Manual] Enforce banner timeout and preview-visibility config.
+- [x] [Auto] Enforce banner timeout and preview-visibility config for the live Shell banner.
 - [ ] [Auto + Manual] Implement timeout expiry, grouping, persistence policy, and clear-all behavior against the service history.
 - [ ] [Auto] Parse the common notification hints that affect presentation, including urgency, category, desktop-entry, image/icon data, transient, and sound suppression.
 - [ ] [Auto + Manual] Route the SVC-4 portal Notification backend through this service.

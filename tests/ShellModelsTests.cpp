@@ -3,6 +3,7 @@
 
 #include <doctest/doctest.h>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -188,21 +189,44 @@ TEST_CASE("Shell notification model groups dismisses clears and honors DND") {
 
 TEST_CASE("Shell notification model upserts daemon ids and refreshes visibility") {
   lambda_shell::NotificationCenterModel notifications{3};
-  CHECK(notifications.upsert(42, "notify-send", "First", "Body") == 42);
+  CHECK(notifications.upsert(42, "notify-send", "First", "Body", 2500) == 42);
   CHECK(notifications.add("files", "Done", "Copied") == 43);
 
   auto visible = notifications.visible();
   REQUIRE(visible.size() == 2);
   CHECK(visible[0].id == 43);
   CHECK(visible[1].id == 42);
+  CHECK(visible[1].expireTimeoutMs == 2500);
 
   CHECK(notifications.dismiss(42));
-  CHECK(notifications.upsert(42, "notify-send", "Updated", "New body") == 42);
+  CHECK(notifications.upsert(42, "notify-send", "Updated", "New body", 4000) == 42);
   visible = notifications.visible();
   REQUIRE(visible.size() == 2);
   CHECK(visible[0].id == 42);
   CHECK(visible[0].title == "Updated");
+  CHECK(visible[0].expireTimeoutMs == 4000);
   CHECK_FALSE(visible[0].dismissed);
+}
+
+TEST_CASE("Shell notification banner timeout honors app and Shell persistence policy") {
+  lambda_shell::ShellConfig config = lambda_shell::defaultShellConfig();
+  config.notificationBannerTimeoutSeconds = 6;
+
+  lambda_shell::Notification defaultExpiry{.id = 1, .expireTimeoutMs = -1};
+  auto timeout = lambda_shell::notificationBannerTimeout(config, defaultExpiry);
+  REQUIRE(timeout);
+  CHECK(*timeout == std::chrono::seconds(6));
+
+  lambda_shell::Notification appShorter{.id = 2, .expireTimeoutMs = 1500};
+  timeout = lambda_shell::notificationBannerTimeout(config, appShorter);
+  REQUIRE(timeout);
+  CHECK(*timeout == std::chrono::milliseconds(1500));
+
+  lambda_shell::Notification persistentByApp{.id = 3, .expireTimeoutMs = 0};
+  CHECK_FALSE(lambda_shell::notificationBannerTimeout(config, persistentByApp));
+
+  config.notificationBannerTimeoutSeconds = 0;
+  CHECK_FALSE(lambda_shell::notificationBannerTimeout(config, defaultExpiry));
 }
 
 TEST_CASE("Shell clipboard history dedupes respects limits and disabled state") {

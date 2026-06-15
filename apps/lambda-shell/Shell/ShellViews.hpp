@@ -103,6 +103,7 @@ struct ShellNotificationBannerView {
   Notification notification;
   float width = 360.f;
   float height = 96.f;
+  bool showPreview = true;
   std::function<void(std::uint64_t)> onDismiss;
 
   lambda::Element body() const {
@@ -136,7 +137,7 @@ struct ShellNotificationBannerView {
         .wrapping = lambda::TextWrapping::NoWrap,
         .maxLines = 1,
     }.size(textWidth, 22.f).position(contentX, 28.f));
-    if (!notification.body.empty()) {
+    if (showPreview && !notification.body.empty()) {
       layers.push_back(lambda::Text{
           .text = notification.body,
           .font = lambda::Font{.family = "", .size = 13.f, .weight = 460.f},

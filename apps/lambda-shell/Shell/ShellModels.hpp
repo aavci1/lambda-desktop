@@ -4,8 +4,10 @@
 
 #include <Lambda/Core/Color.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -149,6 +151,7 @@ struct Notification {
   std::string appId;
   std::string title;
   std::string body;
+  std::int32_t expireTimeoutMs = -1;
   bool dismissed = false;
 
   bool operator==(Notification const&) const = default;
@@ -260,7 +263,11 @@ public:
   explicit NotificationCenterModel(std::size_t historyLimit = 50);
 
   std::uint64_t add(std::string appId, std::string title, std::string body);
-  std::uint64_t upsert(std::uint64_t id, std::string appId, std::string title, std::string body);
+  std::uint64_t upsert(std::uint64_t id,
+                       std::string appId,
+                       std::string title,
+                       std::string body,
+                       std::int32_t expireTimeoutMs = -1);
   bool dismiss(std::uint64_t id);
   void clearAll();
   void setDoNotDisturb(bool enabled) noexcept { doNotDisturb_ = enabled; }
@@ -326,6 +333,8 @@ private:
 [[nodiscard]] ShellDesktopSnapshot parseShellSnapshot(std::string_view json);
 [[nodiscard]] ShellConfig defaultShellConfig();
 [[nodiscard]] ClipboardHistoryPolicy clipboardHistoryPolicy(ShellConfig const& config);
+[[nodiscard]] std::optional<std::chrono::milliseconds> notificationBannerTimeout(ShellConfig const& config,
+                                                                                 Notification const& notification);
 [[nodiscard]] ShellConfig parseShellConfig(std::string_view tomlText);
 [[nodiscard]] std::string writeShellConfigToml(ShellConfig const& config);
 [[nodiscard]] std::filesystem::path shellConfigPath();

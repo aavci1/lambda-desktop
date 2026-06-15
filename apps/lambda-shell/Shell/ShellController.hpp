@@ -59,6 +59,8 @@ private:
   void setupNotificationWatcher();
   void updateNotificationPolicy();
   void syncNotificationWindow();
+  void scheduleNotificationTimeout(Notification const& notification);
+  void cancelNotificationTimeout();
   void handleNotificationDismiss(std::uint64_t id);
   void closeNotificationAsync(std::uint32_t id);
   void performAudioControlAsync(AudioControlAction action);
@@ -115,6 +117,8 @@ private:
   std::uint64_t clockTimerId_ = 0;
   std::uint64_t systemStatusTimerId_ = 0;
   std::uint64_t configReloadTimerId_ = 0;
+  std::uint64_t notificationTimeoutTimerId_ = 0;
+  std::uint64_t notificationTimeoutNotificationId_ = 0;
   std::uint64_t nextRequestId_ = 1;
   std::unique_ptr<ShellSystemStatusWatchers> systemStatusWatchers_;
   std::unique_ptr<ShellNotificationWatcher> notificationWatcher_;

@@ -323,6 +323,14 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
       (void)refreshSystemStatus();
       return;
     }
+    if (notificationTimeoutTimerId_ != 0 && event.timerId == notificationTimeoutTimerId_) {
+      std::uint64_t const notificationId = notificationTimeoutNotificationId_;
+      cancelNotificationTimeout();
+      if (notificationCenter_.dismiss(notificationId)) {
+        syncNotificationWindow();
+      }
+      return;
+    }
     if (configReloadTimerId_ != 0 && event.timerId == configReloadTimerId_) {
       checkShellConfigReload();
     }
@@ -363,7 +371,7 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
 
   app_.eventQueue().on<ShellNotificationPosted>([this](ShellNotificationPosted const& event) {
     auto const& posted = event.notification;
-    notificationCenter_.upsert(posted.id, posted.appName, posted.summary, posted.body);
+    notificationCenter_.upsert(posted.id, posted.appName, posted.summary, posted.body, posted.expireTimeoutMs);
     syncNotificationWindow();
   });
 
@@ -771,6 +779,7 @@ void ShellController::syncNotificationWindow() {
 
   auto visible = notificationCenter_.visible();
   if (visible.empty()) {
+    cancelNotificationTimeout();
     notificationWindow_->setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
     notificationWindow_->setLayerShellOptions(hiddenNotificationLayer());
     notificationWindow_->resize({1.f, 1.f});
@@ -783,11 +792,33 @@ void ShellController::syncNotificationWindow() {
       .notification = notification,
       .width = kNotificationBannerWidth,
       .height = kNotificationBannerHeight,
+      .showPreview = shellConfig_.notificationShowPreviews,
       .onDismiss = [this](std::uint64_t id) { handleNotificationDismiss(id); },
   });
   notificationWindow_->setLayerShellOptions(visibleNotificationLayer());
   notificationWindow_->resize({kNotificationBannerWidth, kNotificationBannerHeight});
+  scheduleNotificationTimeout(notification);
   requestNotificationRedraw();
+}
+
+void ShellController::scheduleNotificationTimeout(Notification const& notification) {
+  cancelNotificationTimeout();
+  auto const timeout = notificationBannerTimeout(shellConfig_, notification);
+  if (!timeout) {
+    return;
+  }
+  notificationTimeoutNotificationId_ = notification.id;
+  notificationTimeoutTimerId_ = app_.scheduleRepeatingTimer(*timeout, notificationHandle_.value_or(0));
+}
+
+void ShellController::cancelNotificationTimeout() {
+  if (notificationTimeoutTimerId_ == 0) {
+    notificationTimeoutNotificationId_ = 0;
+    return;
+  }
+  app_.cancelTimer(notificationTimeoutTimerId_);
+  notificationTimeoutTimerId_ = 0;
+  notificationTimeoutNotificationId_ = 0;
 }
 
 void ShellController::handleNotificationDismiss(std::uint64_t id) {
