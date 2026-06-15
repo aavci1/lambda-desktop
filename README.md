@@ -6,7 +6,19 @@ The v5 UI runtime mounts each view tree once, owns reactive state in scopes, and
 
 ## Build
 
-Requirements: **CMake 3.25+**. macOS builds need **Xcode command-line tools** (`xcrun metal` and `xxd`). Linux Wayland builds need `wayland-client`, `wayland-cursor`, `wayland-protocols`, `xkbcommon`, `vulkan`, `freetype2`, `fontconfig`, `harfbuzz`, `zlib`, and `glslangValidator`. Linux KMS builds need `libdrm`, `libinput`, `libudev`, `xkbcommon`, `vulkan`, `freetype2`, `fontconfig`, `harfbuzz`, `zlib`, and `glslangValidator`.
+Requirements: **CMake 3.25+**.
+
+macOS builds need **full Xcode selected as the active developer directory**, because Lambda compiles and embeds Metal shaders with `xcrun -sdk macosx metal`, `xcrun -sdk macosx metallib`, and `xxd`. Xcode Command Line Tools alone may configure a C++ compiler but still omit the Metal shader compiler. Install Xcode, then run:
+
+```bash
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
+xcodebuild -downloadComponent MetalToolchain
+xcrun -sdk macosx -find metal
+xcrun -sdk macosx -find metallib
+```
+
+Linux Wayland builds need `wayland-client`, `wayland-cursor`, `wayland-protocols`, `xkbcommon`, `vulkan`, `freetype2`, `fontconfig`, `harfbuzz`, `zlib`, and `glslangValidator`. Linux KMS builds need `libdrm`, `libinput`, `libudev`, `xkbcommon`, `vulkan`, `freetype2`, `fontconfig`, `harfbuzz`, `zlib`, and `glslangValidator`.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLAMBDA_BUILD_TESTS=ON -DLAMBDA_BUILD_DEMOS=ON

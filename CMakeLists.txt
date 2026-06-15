@@ -52,6 +52,72 @@ endif()
 if(LAMBDA_PLATFORM_MACOS)
   enable_language(OBJC)
   enable_language(OBJCXX)
+
+  find_program(LAMBDA_XCRUN_EXECUTABLE xcrun)
+  if(NOT LAMBDA_XCRUN_EXECUTABLE)
+    message(FATAL_ERROR
+      "Lambda macOS builds require xcrun. Install Xcode from the App Store or Apple Developer, "
+      "then select it with: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer")
+  endif()
+
+  execute_process(
+    COMMAND ${LAMBDA_XCRUN_EXECUTABLE} -sdk macosx -find metal
+    RESULT_VARIABLE LAMBDA_METAL_FIND_RESULT
+    OUTPUT_VARIABLE LAMBDA_METAL_FIND_OUTPUT
+    ERROR_VARIABLE LAMBDA_METAL_FIND_ERROR
+  )
+  if(NOT LAMBDA_METAL_FIND_RESULT EQUAL 0)
+    string(STRIP "${LAMBDA_METAL_FIND_OUTPUT}" LAMBDA_METAL_FIND_OUTPUT)
+    string(STRIP "${LAMBDA_METAL_FIND_ERROR}" LAMBDA_METAL_FIND_ERROR)
+    message(FATAL_ERROR
+      "Lambda macOS builds require the Metal shader compiler (`xcrun -sdk macosx metal`). "
+      "Install full Xcode, not only the Command Line Tools, then run: "
+      "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer\n"
+      "If Xcode was just installed or updated, accept the license with: "
+      "sudo xcodebuild -license accept\n"
+      "xcrun output: ${LAMBDA_METAL_FIND_OUTPUT}${LAMBDA_METAL_FIND_ERROR}")
+  endif()
+
+  execute_process(
+    COMMAND ${LAMBDA_XCRUN_EXECUTABLE} -sdk macosx metal --help
+    RESULT_VARIABLE LAMBDA_METAL_HELP_RESULT
+    OUTPUT_VARIABLE LAMBDA_METAL_HELP_OUTPUT
+    ERROR_VARIABLE LAMBDA_METAL_HELP_ERROR
+  )
+  if(LAMBDA_METAL_HELP_OUTPUT MATCHES "missing Metal Toolchain" OR
+      LAMBDA_METAL_HELP_ERROR MATCHES "missing Metal Toolchain")
+    message(FATAL_ERROR
+      "Lambda macOS builds require Xcode's optional Metal Toolchain component. "
+      "Install it with: xcodebuild -downloadComponent MetalToolchain\n"
+      "xcrun output: ${LAMBDA_METAL_HELP_OUTPUT}${LAMBDA_METAL_HELP_ERROR}")
+  endif()
+
+  execute_process(
+    COMMAND ${LAMBDA_XCRUN_EXECUTABLE} -sdk macosx -find metallib
+    RESULT_VARIABLE LAMBDA_METALLIB_FIND_RESULT
+    OUTPUT_VARIABLE LAMBDA_METALLIB_FIND_OUTPUT
+    ERROR_VARIABLE LAMBDA_METALLIB_FIND_ERROR
+  )
+  if(NOT LAMBDA_METALLIB_FIND_RESULT EQUAL 0)
+    string(STRIP "${LAMBDA_METALLIB_FIND_OUTPUT}" LAMBDA_METALLIB_FIND_OUTPUT)
+    string(STRIP "${LAMBDA_METALLIB_FIND_ERROR}" LAMBDA_METALLIB_FIND_ERROR)
+    message(FATAL_ERROR
+      "Lambda macOS builds require the Metal library tool (`xcrun -sdk macosx metallib`). "
+      "Install full Xcode, not only the Command Line Tools, then run: "
+      "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer\n"
+      "If Xcode was just installed or updated, accept the license with: "
+      "sudo xcodebuild -license accept\n"
+      "If this Xcode install is missing optional Metal tools, install them with: "
+      "xcodebuild -downloadComponent MetalToolchain\n"
+      "xcrun output: ${LAMBDA_METALLIB_FIND_OUTPUT}${LAMBDA_METALLIB_FIND_ERROR}")
+  endif()
+
+  find_program(LAMBDA_XXD_EXECUTABLE xxd)
+  if(NOT LAMBDA_XXD_EXECUTABLE)
+    message(FATAL_ERROR
+      "Lambda macOS builds require xxd to embed the compiled Metal shader library. "
+      "Install Xcode or Vim/xxd and make sure xxd is on PATH.")
+  endif()
 endif()
 
 FetchContent_Declare(libtess2
