@@ -79,6 +79,13 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
               },
               lambda::dbus::ExportedMethod{
                   .interface = "org.lambda.DBusTest",
+                  .member = "Fail",
+                  .handler = [](lambda::dbus::Message&) {
+                    return lambda::dbus::MethodReply::error("org.lambda.DBusTest.Failed", "expected failure");
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = "org.lambda.DBusTest",
                   .member = "GetWriteFd",
                   .handler = [&fdPipe](lambda::dbus::Message&) {
                     return lambda::dbus::MethodReply{
@@ -127,6 +134,7 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   CHECK(xml.find("<interface name=\"org.freedesktop.DBus.Properties\">") != std::string::npos);
   CHECK(xml.find("<interface name=\"org.lambda.DBusTest\">") != std::string::npos);
   CHECK(xml.find("<method name=\"Echo\"/>") != std::string::npos);
+  CHECK(xml.find("<method name=\"Fail\"/>") != std::string::npos);
   CHECK(xml.find("<method name=\"GetWriteFd\"/>") != std::string::npos);
   CHECK(xml.find("<property name=\"Mode\" type=\"s\" access=\"readwrite\"/>") != std::string::npos);
   CHECK(xml.find("<signal name=\"PropertiesChanged\">") != std::string::npos);
@@ -139,6 +147,65 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
       .arguments = {std::string("hello")},
   });
   CHECK(echoReply.readString() == "hello");
+
+  std::string asyncPayload;
+  bool asyncDone = false;
+  auto pendingEcho = client.callAsync(lambda::dbus::MethodCall{
+                                         .destination = serviceName,
+                                         .path = "/org/lambda/DBusTest",
+                                         .interface = "org.lambda.DBusTest",
+                                         .member = "Echo",
+                                         .arguments = {std::string("async")},
+                                     },
+                                     [&](lambda::dbus::AsyncMethodReply reply) {
+                                       CHECK(reply.ok());
+                                       asyncPayload = reply.message.readString();
+                                       asyncDone = true;
+                                     });
+  CHECK(pendingEcho.valid());
+  CHECK(pumpUntil(client, [&] { return asyncDone; }, std::chrono::milliseconds(500)));
+  CHECK(asyncPayload == "async");
+
+  bool asyncErrorDone = false;
+  std::string asyncErrorName;
+  std::string asyncErrorMessage;
+  auto pendingError = client.callAsync(lambda::dbus::MethodCall{
+                                          .destination = serviceName,
+                                          .path = "/org/lambda/DBusTest",
+                                          .interface = "org.lambda.DBusTest",
+                                          .member = "Fail",
+                                      },
+                                      [&](lambda::dbus::AsyncMethodReply reply) {
+                                        CHECK_FALSE(reply.ok());
+                                        CHECK(reply.message.valid());
+                                        asyncErrorName = reply.errorName.value_or("");
+                                        asyncErrorMessage = reply.errorMessage.value_or("");
+                                        asyncErrorDone = true;
+                                      });
+  CHECK(pendingError.valid());
+  CHECK(pumpUntil(client, [&] { return asyncErrorDone; }, std::chrono::milliseconds(500)));
+  CHECK(asyncErrorName == "org.lambda.DBusTest.Failed");
+  CHECK(asyncErrorMessage == "expected failure");
+
+  bool canceledCallbackCalled = false;
+  auto canceled = client.callAsync(lambda::dbus::MethodCall{
+                                      .destination = serviceName,
+                                      .path = "/org/lambda/DBusTest",
+                                      .interface = "org.lambda.DBusTest",
+                                      .member = "Echo",
+                                      .arguments = {std::string("cancel")},
+                                  },
+                                  [&](lambda::dbus::AsyncMethodReply) {
+                                    canceledCallbackCalled = true;
+                                  });
+  CHECK(canceled.valid());
+  canceled.cancel();
+  CHECK_FALSE(canceled.valid());
+  auto const cancelDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(150);
+  while (std::chrono::steady_clock::now() < cancelDeadline) {
+    pollBus(client, 10);
+  }
+  CHECK_FALSE(canceledCallbackCalled);
 
   auto fdReply = client.call(lambda::dbus::MethodCall{
       .destination = serviceName,

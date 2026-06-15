@@ -162,7 +162,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add byte-array-array (`aay`) support for UDisks2 mount points and fixture coverage through the first UDisks2 client.
 - [x] [Auto] Add basic `org.freedesktop.DBus.Introspectable.Introspect` XML for exported objects, including standard interfaces, exported method names, and property signatures/access.
 - [x] [Auto] Add first-class `PropertiesChanged` emit/read helpers for exported objects and service clients, and switch an existing client watcher to the typed reader.
-- [ ] [Auto] Add async method calls and pending-call cancellation.
+- [x] [Auto] Add async method calls and pending-call cancellation with private-bus coverage for success, method-error, and canceled replies.
 - [ ] [Auto] Add broader generic type support needed by remaining portals and services: arbitrary arrays beyond the service-specific shapes already in tree, arbitrary dictionaries, richer nested variants, and request option maps.
 - [x] [Auto] Add deterministic fixture tests for the first UPower client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first NetworkManager client that consumes `lambda::dbus`.

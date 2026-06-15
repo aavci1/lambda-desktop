@@ -209,6 +209,15 @@ private:
   bool owning_ = true;
 };
 
+struct AsyncMethodReply {
+  Message message;
+  std::optional<std::string> errorName;
+  std::optional<std::string> errorMessage;
+  int errorCode = 0;
+
+  [[nodiscard]] bool ok() const noexcept { return message.valid() && !errorName; }
+};
+
 struct SignalMatch {
   std::optional<std::string> sender;
   std::optional<std::string> path;
@@ -265,6 +274,28 @@ private:
   void* native_ = nullptr;
 };
 
+class PendingCall {
+public:
+  PendingCall();
+  ~PendingCall();
+
+  PendingCall(PendingCall const&) = delete;
+  PendingCall& operator=(PendingCall const&) = delete;
+  PendingCall(PendingCall&& other) noexcept;
+  PendingCall& operator=(PendingCall&& other) noexcept;
+
+  [[nodiscard]] bool valid() const noexcept { return native_ != nullptr; }
+  void cancel() noexcept;
+
+private:
+  friend class Bus;
+  explicit PendingCall(void* native);
+
+  void reset() noexcept;
+
+  void* native_ = nullptr;
+};
+
 class Bus {
 public:
   Bus();
@@ -281,6 +312,7 @@ public:
   [[nodiscard]] std::string uniqueName() const;
   void requestName(std::string const& name, std::uint64_t flags = 0);
   [[nodiscard]] Message call(MethodCall const& call);
+  [[nodiscard]] PendingCall callAsync(MethodCall const& call, std::function<void(AsyncMethodReply)> handler);
   [[nodiscard]] BasicValue getProperty(PropertyAddress const& property, std::string_view signature);
   void setProperty(PropertyAddress const& property, BasicValue const& value);
   Slot matchSignal(SignalMatch const& match, std::function<void(Message&)> handler);

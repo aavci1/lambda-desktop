@@ -582,6 +582,44 @@ void destroySignalState(void* userdata) {
   delete static_cast<SignalState*>(userdata);
 }
 
+struct AsyncCallState {
+  std::function<void(AsyncMethodReply)> handler;
+};
+
+int asyncCallThunk(sd_bus_message* message, void* userdata, sd_bus_error* error) {
+  auto* state = static_cast<AsyncCallState*>(userdata);
+  if (!state || !state->handler) {
+    return 0;
+  }
+
+  AsyncMethodReply reply;
+  if (error && sd_bus_error_is_set(error)) {
+    reply.errorName = error->name ? error->name : "";
+    reply.errorMessage = error->message ? error->message : "";
+    reply.errorCode = -sd_bus_error_get_errno(error);
+  } else if (message) {
+    reply.message = detail::BackendAccess::wrapMessage(sd_bus_message_ref(message), true);
+    if (sd_bus_message_is_method_error(message, nullptr) > 0) {
+      sd_bus_error const* messageError = sd_bus_message_get_error(message);
+      if (messageError && sd_bus_error_is_set(messageError)) {
+        reply.errorName = messageError->name ? messageError->name : "";
+        reply.errorMessage = messageError->message ? messageError->message : "";
+        reply.errorCode = -sd_bus_error_get_errno(messageError);
+      }
+    }
+  }
+
+  try {
+    state->handler(std::move(reply));
+  } catch (...) {
+  }
+  return 0;
+}
+
+void destroyAsyncCallState(void* userdata) {
+  delete static_cast<AsyncCallState*>(userdata);
+}
+
 struct ExportState {
   ObjectDefinition definition;
 };
@@ -1234,6 +1272,38 @@ void Slot::reset() noexcept {
   native_ = nullptr;
 }
 
+PendingCall::PendingCall() = default;
+
+PendingCall::PendingCall(void* native) : native_(native) {}
+
+PendingCall::~PendingCall() {
+  reset();
+}
+
+PendingCall::PendingCall(PendingCall&& other) noexcept : native_(std::exchange(other.native_, nullptr)) {}
+
+PendingCall& PendingCall::operator=(PendingCall&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
+  reset();
+  native_ = std::exchange(other.native_, nullptr);
+  return *this;
+}
+
+void PendingCall::cancel() noexcept {
+  reset();
+}
+
+void PendingCall::reset() noexcept {
+#if LAMBDA_HAS_DBUS
+  if (native_) {
+    sd_bus_slot_unref(static_cast<sd_bus_slot*>(native_));
+  }
+#endif
+  native_ = nullptr;
+}
+
 struct Bus::Impl {
 #if LAMBDA_HAS_DBUS
   explicit Impl(sd_bus* busIn) : bus(busIn) {}
@@ -1360,6 +1430,48 @@ Message Bus::call(MethodCall const& call) {
 #else
   (void)call;
   throw Error(-ENOTSUP, "call D-Bus method", "D-Bus support is not available in this build");
+#endif
+}
+
+PendingCall Bus::callAsync(MethodCall const& call, std::function<void(AsyncMethodReply)> handler) {
+#if LAMBDA_HAS_DBUS
+  sd_bus_message* rawCall = nullptr;
+  throwIfFailed(sd_bus_message_new_method_call(impl().bus,
+                                               &rawCall,
+                                               call.destination.c_str(),
+                                               call.path.c_str(),
+                                               call.interface.c_str(),
+                                               call.member.c_str()),
+                "create async D-Bus method call");
+  Message callMessage(rawCall, true);
+  for (auto const& argument : call.arguments) {
+    appendValue(rawCall, argument);
+  }
+
+  auto* state = new AsyncCallState{.handler = std::move(handler)};
+  sd_bus_slot* slot = nullptr;
+  int const result = sd_bus_call_async(impl().bus,
+                                       &slot,
+                                       rawCall,
+                                       asyncCallThunk,
+                                       state,
+                                       call.timeoutUsec);
+  if (result < 0) {
+    delete state;
+    throwIfFailed(result, "call async D-Bus method " + call.interface + "." + call.member);
+  }
+  int const destroyCallbackResult = sd_bus_slot_set_destroy_callback(slot, destroyAsyncCallState);
+  if (destroyCallbackResult < 0) {
+    sd_bus_slot_unref(slot);
+    delete state;
+    throwIfFailed(destroyCallbackResult,
+                  "set async D-Bus method destroy callback " + call.interface + "." + call.member);
+  }
+  return PendingCall(slot);
+#else
+  (void)call;
+  (void)handler;
+  throw Error(-ENOTSUP, "call async D-Bus method", "D-Bus support is not available in this build");
 #endif
 }
 
