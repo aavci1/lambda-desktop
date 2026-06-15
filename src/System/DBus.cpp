@@ -70,8 +70,121 @@ void throwIfFailed(int result, std::string const& operation, sd_bus_error const*
 }
 
 void appendValue(sd_bus_message* message, BasicValue const& value);
+void appendValueWithSignature(sd_bus_message* message, BasicValue const& value, std::string_view signature);
+void appendVariant(sd_bus_message* message, BasicValue const& value);
 void appendVariantDictionary(sd_bus_message* message, VariantDictionary const& value);
+BasicValue readValueFromSignature(sd_bus_message* message, std::string_view signature);
+BasicValue readVariantFrom(sd_bus_message* message, std::string_view expectedSignature);
 VariantDictionary readVariantDictionaryFrom(sd_bus_message* message);
+
+[[nodiscard]] bool isBasicValueSignature(char type) noexcept {
+  switch (type) {
+  case 'b':
+  case 'y':
+  case 'i':
+  case 'u':
+  case 'x':
+  case 't':
+  case 'd':
+  case 's':
+  case 'o':
+  case 'h':
+    return true;
+  default:
+    return false;
+  }
+}
+
+[[nodiscard]] bool isVariantSignature(char type) noexcept {
+  return type == 'v';
+}
+
+[[nodiscard]] std::size_t signatureElementEnd(std::string_view signature, std::size_t offset) {
+  if (offset >= signature.size()) {
+    throw Error(-EINVAL, "parse D-Bus signature", "unexpected end of signature");
+  }
+
+  char const type = signature[offset];
+  if (type == 'a') {
+    return signatureElementEnd(signature, offset + 1);
+  }
+  if (type == '(') {
+    std::size_t cursor = offset + 1;
+    while (cursor < signature.size() && signature[cursor] != ')') {
+      cursor = signatureElementEnd(signature, cursor);
+    }
+    if (cursor >= signature.size() || signature[cursor] != ')') {
+      throw Error(-EINVAL, "parse D-Bus signature", "unterminated struct signature");
+    }
+    return cursor + 1;
+  }
+  if (type == '{') {
+    std::size_t cursor = signatureElementEnd(signature, offset + 1);
+    cursor = signatureElementEnd(signature, cursor);
+    if (cursor >= signature.size() || signature[cursor] != '}') {
+      throw Error(-EINVAL, "parse D-Bus signature", "unterminated dictionary-entry signature");
+    }
+    return cursor + 1;
+  }
+  if (isBasicValueSignature(type) || isVariantSignature(type)) {
+    return offset + 1;
+  }
+
+  throw Error(-EINVAL, "parse D-Bus signature", "unsupported D-Bus signature element");
+}
+
+[[nodiscard]] std::vector<std::string> splitSignatureElements(std::string_view signature) {
+  std::vector<std::string> elements;
+  std::size_t cursor = 0;
+  while (cursor < signature.size()) {
+    std::size_t const end = signatureElementEnd(signature, cursor);
+    elements.emplace_back(signature.substr(cursor, end - cursor));
+    cursor = end;
+  }
+  return elements;
+}
+
+[[nodiscard]] bool isCompleteSignature(std::string_view signature) {
+  try {
+    return !signature.empty() && signatureElementEnd(signature, 0) == signature.size();
+  } catch (...) {
+    return false;
+  }
+}
+
+[[nodiscard]] std::string structContentsSignature(std::string_view signature) {
+  if (signature.size() >= 2 && signature.front() == '(' && signature.back() == ')' &&
+      isCompleteSignature(signature)) {
+    return std::string(signature.substr(1, signature.size() - 2));
+  }
+  return std::string(signature);
+}
+
+[[nodiscard]] std::string structSignatureFor(StructValue const& value) {
+  return "(" + structContentsSignature(value.signature) + ")";
+}
+
+[[nodiscard]] bool canReadSignature(std::string_view signature) {
+  if (!isCompleteSignature(signature)) return false;
+  if (signature.size() == 1) {
+    return isBasicValueSignature(signature.front()) || isVariantSignature(signature.front());
+  }
+  if (signature.front() == 'a') {
+    if (signature.size() >= 4 && signature[1] == '{' && signature.back() == '}') {
+      auto const entries = splitSignatureElements(signature.substr(2, signature.size() - 3));
+      return entries.size() == 2 && entries[0].size() == 1 &&
+             isBasicValueSignature(entries[0].front()) && canReadSignature(entries[1]);
+    }
+    return canReadSignature(signature.substr(1));
+  }
+  if (signature.front() == '(' && signature.back() == ')') {
+    for (auto const& field : splitSignatureElements(signature.substr(1, signature.size() - 2))) {
+      if (!canReadSignature(field)) return false;
+    }
+    return true;
+  }
+  return false;
+}
 
 void appendStringArray(sd_bus_message* message, StringArray const& value) {
   throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, "s"),
@@ -127,6 +240,51 @@ void appendEmptyVariantDictionary(sd_bus_message* message) {
   throwIfFailed(sd_bus_message_close_container(message), "close empty D-Bus variant dictionary");
 }
 
+void appendArrayValue(sd_bus_message* message, ArrayValue const& value) {
+  if (value.elementSignature.empty() || !isCompleteSignature(value.elementSignature)) {
+    throw Error(-EINVAL, "append D-Bus array", "array element signature is invalid");
+  }
+  throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, value.elementSignature.c_str()),
+                "open generic D-Bus array");
+  for (auto const& item : value.values) {
+    appendValueWithSignature(message, item, value.elementSignature);
+  }
+  throwIfFailed(sd_bus_message_close_container(message), "close generic D-Bus array");
+}
+
+void appendDictionaryValue(sd_bus_message* message, DictionaryValue const& value) {
+  if (value.keySignature.size() != 1 || !isBasicValueSignature(value.keySignature.front()) ||
+      value.valueSignature.empty() || !isCompleteSignature(value.valueSignature)) {
+    throw Error(-EINVAL, "append D-Bus dictionary", "dictionary signature is invalid");
+  }
+  std::string const entrySignature = value.keySignature + value.valueSignature;
+  std::string const arraySignature = "{" + entrySignature + "}";
+  throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_ARRAY, arraySignature.c_str()),
+                "open generic D-Bus dictionary");
+  for (auto const& entry : value.entries) {
+    throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_DICT_ENTRY, entrySignature.c_str()),
+                  "open generic D-Bus dictionary entry");
+    appendValueWithSignature(message, entry.key, value.keySignature);
+    appendValueWithSignature(message, entry.value, value.valueSignature);
+    throwIfFailed(sd_bus_message_close_container(message), "close generic D-Bus dictionary entry");
+  }
+  throwIfFailed(sd_bus_message_close_container(message), "close generic D-Bus dictionary");
+}
+
+void appendStructValue(sd_bus_message* message, StructValue const& value) {
+  std::string const contents = structContentsSignature(value.signature);
+  auto const fields = splitSignatureElements(contents);
+  if (fields.size() != value.fields.size()) {
+    throw Error(-EINVAL, "append D-Bus struct", "field count does not match struct signature");
+  }
+  throwIfFailed(sd_bus_message_open_container(message, SD_BUS_TYPE_STRUCT, contents.c_str()),
+                "open generic D-Bus struct");
+  for (std::size_t i = 0; i < fields.size(); ++i) {
+    appendValueWithSignature(message, value.fields[i], fields[i]);
+  }
+  throwIfFailed(sd_bus_message_close_container(message), "close generic D-Bus struct");
+}
+
 void appendValue(sd_bus_message* message, BasicValue const& value) {
   int result = std::visit(
       [message](auto const& v) -> int {
@@ -168,6 +326,31 @@ void appendValue(sd_bus_message* message, BasicValue const& value) {
         } else if constexpr (std::is_same_v<T, EmptyVariantDictionary>) {
           appendEmptyVariantDictionary(message);
           return 0;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<ArrayValue>>) {
+          if (v) {
+            appendArrayValue(message, *v);
+          } else {
+            ArrayValue emptyVariantArray;
+            emptyVariantArray.elementSignature = "v";
+            appendArrayValue(message, emptyVariantArray);
+          }
+          return 0;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<DictionaryValue>>) {
+          if (v) {
+            appendDictionaryValue(message, *v);
+          } else {
+            DictionaryValue emptyVariantDictionary;
+            emptyVariantDictionary.keySignature = "s";
+            emptyVariantDictionary.valueSignature = "v";
+            appendDictionaryValue(message, emptyVariantDictionary);
+          }
+          return 0;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<StructValue>>) {
+          if (!v) {
+            throw Error(-EINVAL, "append D-Bus struct", "struct value is empty");
+          }
+          appendStructValue(message, *v);
+          return 0;
         } else if constexpr (std::is_same_v<T, std::shared_ptr<VariantDictionary>>) {
           appendVariantDictionary(message, v ? *v : VariantDictionary{});
           return 0;
@@ -178,6 +361,20 @@ void appendValue(sd_bus_message* message, BasicValue const& value) {
       },
       value);
   throwIfFailed(result, "append D-Bus value");
+}
+
+void appendValueWithSignature(sd_bus_message* message, BasicValue const& value, std::string_view signature) {
+  if (signature == "v") {
+    appendVariant(message, value);
+    return;
+  }
+  std::string const actual = signatureFor(value);
+  if (actual != signature) {
+    throw Error(-EINVAL,
+                "append D-Bus value",
+                "value signature " + actual + " does not match expected " + std::string(signature));
+  }
+  appendValue(message, value);
 }
 
 void appendVariant(sd_bus_message* message, BasicValue const& value) {
@@ -343,6 +540,61 @@ RgbColor readRgbColorFrom(sd_bus_message* message) {
   return color;
 }
 
+std::shared_ptr<ArrayValue> readArrayValueFrom(sd_bus_message* message, std::string_view elementSignature) {
+  if (elementSignature.empty() || !isCompleteSignature(elementSignature)) {
+    throw Error(-EINVAL, "read D-Bus array", "array element signature is invalid");
+  }
+  auto array = std::make_shared<ArrayValue>();
+  array->elementSignature = std::string(elementSignature);
+  throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_ARRAY, array->elementSignature.c_str()),
+                "enter generic D-Bus array");
+  while (sd_bus_message_at_end(message, 0) == 0) {
+    array->values.push_back(readValueFromSignature(message, elementSignature));
+  }
+  throwIfFailed(sd_bus_message_exit_container(message), "exit generic D-Bus array");
+  return array;
+}
+
+std::shared_ptr<DictionaryValue> readDictionaryValueFrom(sd_bus_message* message,
+                                                         std::string_view keySignature,
+                                                         std::string_view valueSignature) {
+  if (keySignature.size() != 1 || !isBasicValueSignature(keySignature.front()) ||
+      valueSignature.empty() || !isCompleteSignature(valueSignature)) {
+    throw Error(-EINVAL, "read D-Bus dictionary", "dictionary signature is invalid");
+  }
+  auto dictionary = std::make_shared<DictionaryValue>();
+  dictionary->keySignature = std::string(keySignature);
+  dictionary->valueSignature = std::string(valueSignature);
+  std::string const entrySignature = dictionary->keySignature + dictionary->valueSignature;
+  std::string const arraySignature = "{" + entrySignature + "}";
+  throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_ARRAY, arraySignature.c_str()),
+                "enter generic D-Bus dictionary");
+  while (sd_bus_message_at_end(message, 0) == 0) {
+    throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_DICT_ENTRY, entrySignature.c_str()),
+                  "enter generic D-Bus dictionary entry");
+    dictionary->entries.push_back(DictionaryEntry{
+        .key = readValueFromSignature(message, dictionary->keySignature),
+        .value = readValueFromSignature(message, dictionary->valueSignature),
+    });
+    throwIfFailed(sd_bus_message_exit_container(message), "exit generic D-Bus dictionary entry");
+  }
+  throwIfFailed(sd_bus_message_exit_container(message), "exit generic D-Bus dictionary");
+  return dictionary;
+}
+
+std::shared_ptr<StructValue> readStructValueFrom(sd_bus_message* message, std::string_view contents) {
+  auto const fields = splitSignatureElements(contents);
+  auto structure = std::make_shared<StructValue>();
+  structure->signature = std::string(contents);
+  throwIfFailed(sd_bus_message_enter_container(message, SD_BUS_TYPE_STRUCT, structure->signature.c_str()),
+                "enter generic D-Bus struct");
+  for (auto const& fieldSignature : fields) {
+    structure->fields.push_back(readValueFromSignature(message, fieldSignature));
+  }
+  throwIfFailed(sd_bus_message_exit_container(message), "exit generic D-Bus struct");
+  return structure;
+}
+
 BasicValue readValueFromSignature(sd_bus_message* message, std::string_view signature) {
   if (signature == "as") {
     return readStringArrayFrom(message);
@@ -361,6 +613,22 @@ BasicValue readValueFromSignature(sd_bus_message* message, std::string_view sign
   }
   if (signature == "(ddd)") {
     return readRgbColorFrom(message);
+  }
+  if (signature == "v") {
+    return readVariantFrom(message, {});
+  }
+  if (signature.size() >= 4 && signature.starts_with("a{") && signature.ends_with("}")) {
+    auto const entries = splitSignatureElements(signature.substr(2, signature.size() - 3));
+    if (entries.size() != 2) {
+      throw Error(-EINVAL, "read D-Bus dictionary", "dictionary signature is invalid");
+    }
+    return readDictionaryValueFrom(message, entries[0], entries[1]);
+  }
+  if (signature.size() > 1 && signature.front() == 'a') {
+    return readArrayValueFrom(message, signature.substr(1));
+  }
+  if (signature.size() >= 2 && signature.front() == '(' && signature.back() == ')') {
+    return readStructValueFrom(message, signature.substr(1, signature.size() - 2));
   }
   if (signature.size() != 1) {
     throw Error(-EINVAL, "read D-Bus value", "unsupported D-Bus signature");
@@ -448,12 +716,7 @@ std::optional<BasicValue> readOptionalVariantFrom(sd_bus_message* message) {
   }
 
   std::string_view signature(contents);
-  bool const supported = signature == "b" || signature == "y" || signature == "i" ||
-                         signature == "u" || signature == "x" || signature == "t" ||
-                         signature == "d" || signature == "s" || signature == "o" ||
-                         signature == "as" || signature == "ay" || signature == "aay" ||
-                         signature == "a{sv}" || signature == "(ddd)";
-  if (!supported) {
+  if (!canReadSignature(signature)) {
     throwIfFailed(sd_bus_message_skip(message, "v"), "skip unsupported D-Bus variant");
     return std::nullopt;
   }
@@ -935,6 +1198,16 @@ std::string signatureFor(BasicValue const& value) {
           return "(ddd)";
         } else if constexpr (std::is_same_v<T, EmptyVariantDictionary>) {
           return "a{sv}";
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<ArrayValue>>) {
+          return "a" + (v ? v->elementSignature : std::string("v"));
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<DictionaryValue>>) {
+          if (!v) return "a{sv}";
+          return "a{" + v->keySignature + v->valueSignature + "}";
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<StructValue>>) {
+          if (!v) {
+            throw Error(-EINVAL, "resolve D-Bus signature", "struct value is empty");
+          }
+          return structSignatureFor(*v);
         } else if constexpr (std::is_same_v<T, std::shared_ptr<VariantDictionary>>) {
           return "a{sv}";
         } else if constexpr (std::is_same_v<T, UnixFd>) {

@@ -42,6 +42,28 @@ struct TestPipe {
   }
 };
 
+std::shared_ptr<lambda::dbus::ArrayValue> arrayValue(std::string elementSignature,
+                                                     std::vector<lambda::dbus::BasicValue> values) {
+  return std::make_shared<lambda::dbus::ArrayValue>(
+      lambda::dbus::ArrayValue{.elementSignature = std::move(elementSignature), .values = std::move(values)});
+}
+
+std::shared_ptr<lambda::dbus::StructValue> structValue(std::string signature,
+                                                       std::vector<lambda::dbus::BasicValue> fields) {
+  return std::make_shared<lambda::dbus::StructValue>(
+      lambda::dbus::StructValue{.signature = std::move(signature), .fields = std::move(fields)});
+}
+
+std::shared_ptr<lambda::dbus::DictionaryValue>
+dictionaryValue(std::string keySignature,
+                std::string valueSignature,
+                std::vector<lambda::dbus::DictionaryEntry> entries) {
+  return std::make_shared<lambda::dbus::DictionaryValue>(
+      lambda::dbus::DictionaryValue{.keySignature = std::move(keySignature),
+                                    .valueSignature = std::move(valueSignature),
+                                    .entries = std::move(entries)});
+}
+
 } // namespace
 
 TEST_CASE("DBus support is compile-time declared") {
@@ -64,6 +86,7 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   service.requestName(serviceName);
 
   std::string storedMode = "ready";
+  std::optional<lambda::dbus::VariantDictionary> observedOptions;
   TestPipe fdPipe;
   REQUIRE(fdPipe.open());
   auto objectSlot = service.exportObject(
@@ -82,6 +105,18 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
                   .member = "Fail",
                   .handler = [](lambda::dbus::Message&) {
                     return lambda::dbus::MethodReply::error("org.lambda.DBusTest.Failed", "expected failure");
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = "org.lambda.DBusTest",
+                  .member = "RoundTripOptions",
+                  .handler = [&observedOptions](lambda::dbus::Message& message) {
+                    auto options = message.readVariantDictionary();
+                    observedOptions = options;
+                    return lambda::dbus::MethodReply{
+                        .values = {lambda::dbus::BasicValue(std::make_shared<lambda::dbus::VariantDictionary>(
+                            std::move(options)))},
+                    };
                   },
               },
               lambda::dbus::ExportedMethod{
@@ -135,6 +170,7 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   CHECK(xml.find("<interface name=\"org.lambda.DBusTest\">") != std::string::npos);
   CHECK(xml.find("<method name=\"Echo\"/>") != std::string::npos);
   CHECK(xml.find("<method name=\"Fail\"/>") != std::string::npos);
+  CHECK(xml.find("<method name=\"RoundTripOptions\"/>") != std::string::npos);
   CHECK(xml.find("<method name=\"GetWriteFd\"/>") != std::string::npos);
   CHECK(xml.find("<property name=\"Mode\" type=\"s\" access=\"readwrite\"/>") != std::string::npos);
   CHECK(xml.find("<signal name=\"PropertiesChanged\">") != std::string::npos);
@@ -206,6 +242,78 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
     pollBus(client, 10);
   }
   CHECK_FALSE(canceledCallbackCalled);
+
+  lambda::dbus::VariantDictionary nestedOptions;
+  nestedOptions.values["token"] = std::string("nested-token");
+  lambda::dbus::VariantDictionary requestOptions;
+  requestOptions.values["modal"] = true;
+  requestOptions.values["metadata"] = std::make_shared<lambda::dbus::VariantDictionary>(nestedOptions);
+  requestOptions.values["labels"] = dictionaryValue(
+      "s",
+      "s",
+      {
+          lambda::dbus::DictionaryEntry{.key = std::string("open"), .value = std::string("Open")},
+          lambda::dbus::DictionaryEntry{.key = std::string("cancel"), .value = std::string("Cancel")},
+      });
+  auto filterRules = arrayValue("(us)",
+                                {structValue("us",
+                                             {std::uint32_t(0),
+                                              std::string("*.txt")})});
+  requestOptions.values["current_filter"] =
+      structValue("sa(us)", {std::string("Text files"), filterRules});
+  auto choiceItems = arrayValue("(ss)",
+                                {structValue("ss", {std::string("utf8"), std::string("UTF-8")}),
+                                 structValue("ss", {std::string("latin1"), std::string("Latin-1")})});
+  requestOptions.values["choices"] =
+      arrayValue("(ssa(ss)s)",
+                 {structValue("ssa(ss)s",
+                              {std::string("encoding"),
+                               std::string("Encoding"),
+                               choiceItems,
+                               std::string("utf8")})});
+  auto optionReply = client.call(lambda::dbus::MethodCall{
+      .destination = serviceName,
+      .path = "/org/lambda/DBusTest",
+      .interface = "org.lambda.DBusTest",
+      .member = "RoundTripOptions",
+      .arguments = {std::make_shared<lambda::dbus::VariantDictionary>(requestOptions)},
+  });
+  auto roundTrippedOptions = optionReply.readVariantDictionary();
+  REQUIRE(observedOptions);
+  CHECK(std::get<bool>(observedOptions->values["modal"]));
+  auto const observedNested =
+      std::get<std::shared_ptr<lambda::dbus::VariantDictionary>>(observedOptions->values["metadata"]);
+  REQUIRE(observedNested);
+  CHECK(std::get<std::string>(observedNested->values["token"]) == "nested-token");
+  auto const roundTrippedLabels =
+      std::get<std::shared_ptr<lambda::dbus::DictionaryValue>>(roundTrippedOptions.values["labels"]);
+  REQUIRE(roundTrippedLabels);
+  CHECK(lambda::dbus::signatureFor(lambda::dbus::BasicValue(roundTrippedLabels)) == "a{ss}");
+  CHECK(roundTrippedLabels->entries.size() == 2);
+  CHECK(std::get<std::string>(roundTrippedLabels->entries[0].key) == "open");
+  CHECK(std::get<std::string>(roundTrippedLabels->entries[0].value) == "Open");
+  auto const roundTrippedFilter =
+      std::get<std::shared_ptr<lambda::dbus::StructValue>>(roundTrippedOptions.values["current_filter"]);
+  REQUIRE(roundTrippedFilter);
+  CHECK(lambda::dbus::signatureFor(lambda::dbus::BasicValue(roundTrippedFilter)) == "(sa(us))");
+  REQUIRE(roundTrippedFilter->fields.size() == 2);
+  CHECK(std::get<std::string>(roundTrippedFilter->fields[0]) == "Text files");
+  auto const roundTrippedRules =
+      std::get<std::shared_ptr<lambda::dbus::ArrayValue>>(roundTrippedFilter->fields[1]);
+  REQUIRE(roundTrippedRules);
+  CHECK(roundTrippedRules->elementSignature == "(us)");
+  REQUIRE(roundTrippedRules->values.size() == 1);
+  auto const roundTrippedChoices =
+      std::get<std::shared_ptr<lambda::dbus::ArrayValue>>(roundTrippedOptions.values["choices"]);
+  REQUIRE(roundTrippedChoices);
+  CHECK(roundTrippedChoices->elementSignature == "(ssa(ss)s)");
+  REQUIRE(roundTrippedChoices->values.size() == 1);
+  auto const roundTrippedChoice =
+      std::get<std::shared_ptr<lambda::dbus::StructValue>>(roundTrippedChoices->values[0]);
+  REQUIRE(roundTrippedChoice);
+  REQUIRE(roundTrippedChoice->fields.size() == 4);
+  CHECK(std::get<std::string>(roundTrippedChoice->fields[0]) == "encoding");
+  CHECK(std::get<std::string>(roundTrippedChoice->fields[3]) == "utf8");
 
   auto fdReply = client.call(lambda::dbus::MethodCall{
       .destination = serviceName,

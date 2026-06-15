@@ -29,6 +29,9 @@ namespace detail {
 struct BackendAccess;
 }
 
+struct ArrayValue;
+struct DictionaryValue;
+struct StructValue;
 struct VariantDictionary;
 
 enum class BusType {
@@ -106,7 +109,32 @@ using BasicValue = std::variant<bool, std::uint8_t, std::int32_t, std::uint32_t,
                                 std::int64_t, std::uint64_t, double, std::string,
                                 ObjectPath, ObjectPathArray, StringArray, ByteArray,
                                 ByteArrayArray, RgbColor, EmptyVariantDictionary,
-                                std::shared_ptr<VariantDictionary>, UnixFd>;
+                                std::shared_ptr<ArrayValue>,
+                                std::shared_ptr<DictionaryValue>,
+                                std::shared_ptr<StructValue>,
+                                std::shared_ptr<VariantDictionary>,
+                                UnixFd>;
+
+struct ArrayValue {
+  std::string elementSignature;
+  std::vector<BasicValue> values;
+};
+
+struct DictionaryEntry {
+  BasicValue key;
+  BasicValue value;
+};
+
+struct DictionaryValue {
+  std::string keySignature;
+  std::string valueSignature;
+  std::vector<DictionaryEntry> entries;
+};
+
+struct StructValue {
+  std::string signature;
+  std::vector<BasicValue> fields;
+};
 
 struct VariantValue {
   BasicValue value;
