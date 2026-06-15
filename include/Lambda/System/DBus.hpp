@@ -355,6 +355,7 @@ public:
   [[nodiscard]] int eventFileDescriptor() const;
   [[nodiscard]] int eventMask() const;
   [[nodiscard]] int processPending();
+  [[nodiscard]] int waitAndProcess(int timeoutMs);
   void flush();
 
 private:

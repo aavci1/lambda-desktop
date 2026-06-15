@@ -7,10 +7,8 @@
 #include <cstdlib>
 #include <functional>
 #include <optional>
-#include <poll.h>
 #include <signal.h>
 #include <string>
-#include <thread>
 #include <unistd.h>
 #include <utility>
 
@@ -87,17 +85,7 @@ inline std::optional<PrivateBus> startPrivateBus() {
 }
 
 inline void pollBus(lambda::dbus::Bus& bus, int timeoutMs) {
-  pollfd fd{
-      .fd = bus.eventFileDescriptor(),
-      .events = static_cast<short>(bus.eventMask()),
-      .revents = 0,
-  };
-  if (fd.fd >= 0) {
-    (void)poll(&fd, 1, timeoutMs);
-  } else {
-    std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));
-  }
-  (void)bus.processPending();
+  (void)bus.waitAndProcess(timeoutMs);
 }
 
 inline bool pumpUntil(lambda::dbus::Bus& bus,

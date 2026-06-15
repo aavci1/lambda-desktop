@@ -2,13 +2,10 @@
 #include <Lambda/System/Notifications.hpp>
 
 #include <atomic>
-#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
-#include <poll.h>
-#include <thread>
 
 namespace {
 
@@ -39,20 +36,6 @@ bool dndFromEnvironment() {
   return raw[0] == '1' || raw[0] == 't' || raw[0] == 'T' || raw[0] == 'y' || raw[0] == 'Y';
 }
 
-void waitForBus(lambda::dbus::Bus& bus, int timeoutMs) {
-  pollfd fd{
-      .fd = bus.eventFileDescriptor(),
-      .events = static_cast<short>(bus.eventMask()),
-      .revents = 0,
-  };
-  if (fd.fd >= 0) {
-    (void)poll(&fd, 1, timeoutMs);
-  } else {
-    std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));
-  }
-  (void)bus.processPending();
-}
-
 } // namespace
 
 int main() {
@@ -73,7 +56,7 @@ int main() {
               << " on " << lambda::system::NotificationsService::objectPath << "\n";
 
     while (gRunning.load()) {
-      waitForBus(bus, 1000);
+      (void)bus.waitAndProcess(1000);
     }
     bus.flush();
     return 0;

@@ -2,10 +2,13 @@
 
 #include <Lambda/UI/Application.hpp>
 
+#include <chrono>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
 #include <optional>
+#include <poll.h>
+#include <thread>
 #include <type_traits>
 #include <utility>
 #include <unistd.h>
@@ -1907,6 +1910,30 @@ int Bus::processPending() {
   }
 #else
   throw Error(-ENOTSUP, "process D-Bus events", "D-Bus support is not available in this build");
+#endif
+}
+
+int Bus::waitAndProcess(int timeoutMs) {
+#if LAMBDA_HAS_DBUS
+  int const fd = eventFileDescriptor();
+  if (fd >= 0) {
+    int const events = eventMask();
+    throwIfFailed(events, "query D-Bus event mask");
+    pollfd pollFd{
+        .fd = fd,
+        .events = static_cast<short>(events),
+        .revents = 0,
+    };
+    int const result = poll(&pollFd, 1, timeoutMs);
+    if (result < 0 && errno != EINTR) {
+      throw Error(-errno, "wait for D-Bus events", errorText(errno));
+    }
+  } else if (timeoutMs > 0) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));
+  }
+  return processPending();
+#else
+  throw Error(-ENOTSUP, "wait for D-Bus events", "D-Bus support is not available in this build");
 #endif
 }
 

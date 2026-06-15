@@ -169,7 +169,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add deterministic fixture tests for the first BlueZ client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first MPRIS client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first UDisks2 client that consumes `lambda::dbus`.
-- [ ] [Auto + Manual] Wire D-Bus fd pumping into the compositor/service runtime paths that will host SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
+- [x] [Auto] Add a shared `Bus::waitAndProcess` fd-pumping helper and switch first-party service daemons plus private-bus fixtures to it.
+- [ ] [Auto + Manual] Wire remaining D-Bus fd pumping into compositor runtime paths that will host SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
 
 ## TODO-021: Complete SVC-2 libseat seat/session integration
 

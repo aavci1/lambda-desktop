@@ -2,12 +2,9 @@
 #include <Lambda/System/PortalSettings.hpp>
 
 #include <atomic>
-#include <chrono>
 #include <csignal>
 #include <exception>
 #include <iostream>
-#include <poll.h>
-#include <thread>
 
 namespace {
 
@@ -15,20 +12,6 @@ std::atomic<bool> gRunning = true;
 
 void handleSignal(int) {
   gRunning = false;
-}
-
-void waitForBus(lambda::dbus::Bus& bus, int timeoutMs) {
-  pollfd fd{
-      .fd = bus.eventFileDescriptor(),
-      .events = static_cast<short>(bus.eventMask()),
-      .revents = 0,
-  };
-  if (fd.fd >= 0) {
-    (void)poll(&fd, 1, timeoutMs);
-  } else {
-    std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));
-  }
-  (void)bus.processPending();
 }
 
 } // namespace
@@ -51,7 +34,7 @@ int main() {
               << " on " << lambda::system::PortalSettingsService::objectPath << "\n";
 
     while (gRunning.load()) {
-      waitForBus(bus, 1000);
+      (void)bus.waitAndProcess(1000);
     }
     bus.flush();
     return 0;
