@@ -733,6 +733,10 @@ void ShellController::performShellActionAsync(std::string actionId) {
         client.suspend(true);
       } else if (actionId == "shell.hibernate") {
         client.hibernate(true);
+      } else if (actionId == "shell.lock") {
+        client.lockCurrentSession();
+      } else if (actionId == "shell.logout") {
+        client.terminateCurrentSession();
       } else if (actionId == "shell.reboot") {
         client.reboot(true);
       } else if (actionId == "shell.power-off") {

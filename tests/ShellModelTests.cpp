@@ -122,6 +122,18 @@ TEST_CASE("Shell model launcher exposes queried power actions") {
 
   CHECK(containsAction("shell.suspend") == model.launcherResults().end());
 
+  model.setQuery("lock");
+  auto lock = containsAction("shell.lock");
+  REQUIRE(lock != model.launcherResults().end());
+  CHECK(lock->label == "Lock");
+  CHECK(lock->icon == "lock");
+
+  model.setQuery("logout");
+  auto logout = containsAction("shell.logout");
+  REQUIRE(logout != model.launcherResults().end());
+  CHECK(logout->label == "Log Out");
+  CHECK(logout->icon == "logout");
+
   model.setQuery("suspend");
   auto suspend = containsAction("shell.suspend");
   REQUIRE(suspend != model.launcherResults().end());

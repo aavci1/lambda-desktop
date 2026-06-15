@@ -49,6 +49,8 @@ std::vector<DockItem> launcherShellActions(std::string_view query) {
   if (query.empty()) return {};
 
   LauncherShellAction const actions[] = {
+      {"shell.lock", "Lock", "lock", "screen secure session"},
+      {"shell.logout", "Log Out", "logout", "sign out session exit"},
       {"shell.suspend", "Suspend", "sleep", "sleep standby power"},
       {"shell.hibernate", "Hibernate", "sleep", "sleep suspend power"},
       {"shell.reboot", "Restart", "restart", "reboot power"},

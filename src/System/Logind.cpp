@@ -39,6 +39,14 @@ void LogindClient::reboot(bool interactive) {
   callManagerPowerMethod("Reboot", interactive);
 }
 
+void LogindClient::lockCurrentSession() {
+  callCurrentSessionMethod("Lock");
+}
+
+void LogindClient::terminateCurrentSession() {
+  callCurrentSessionMethod("Terminate");
+}
+
 InhibitorLock LogindClient::inhibit(std::string what, std::string who, std::string why, std::string mode) {
   dbus::Message reply = bus_.call(dbus::MethodCall{
       .destination = kLogin1Service,
@@ -105,6 +113,16 @@ void LogindClient::callManagerPowerMethod(std::string const& member, bool intera
       .interface = kManagerInterface,
       .member = member,
       .arguments = {interactive},
+  });
+}
+
+void LogindClient::callCurrentSessionMethod(std::string const& member) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = kLogin1Service,
+      .path = currentSessionPath(),
+      .interface = kSessionInterface,
+      .member = member,
+      .arguments = {},
   });
 }
 

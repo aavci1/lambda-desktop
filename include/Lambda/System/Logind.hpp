@@ -43,6 +43,8 @@ public:
   void hibernate(bool interactive = true);
   void powerOff(bool interactive = true);
   void reboot(bool interactive = true);
+  void lockCurrentSession();
+  void terminateCurrentSession();
 
   [[nodiscard]] InhibitorLock inhibit(std::string what,
                                       std::string who,
@@ -61,6 +63,7 @@ public:
 
 private:
   void callManagerPowerMethod(std::string const& member, bool interactive);
+  void callCurrentSessionMethod(std::string const& member);
   [[nodiscard]] dbus::Slot watchSessionSignal(std::string const& sessionPath,
                                               std::string const& member,
                                               std::function<void()> handler);

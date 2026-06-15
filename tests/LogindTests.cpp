@@ -91,6 +91,7 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
 
   std::mutex recordsMutex;
   std::vector<PowerCall> powerCalls;
+  std::vector<std::string> sessionCalls;
   std::vector<InhibitRequest> inhibitRequests;
   std::vector<std::uint32_t> sessionPathRequests;
 
@@ -162,6 +163,30 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
               },
           },
       });
+  auto sessionObjectSlot = service.exportObject(
+      kSessionPath,
+      lambda::dbus::ObjectDefinition{
+          .methods = {
+              lambda::dbus::ExportedMethod{
+                  .interface = kSessionInterface,
+                  .member = "Lock",
+                  .handler = [&](lambda::dbus::Message&) {
+                    std::lock_guard guard(recordsMutex);
+                    sessionCalls.push_back("Lock");
+                    return lambda::dbus::MethodReply{};
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = kSessionInterface,
+                  .member = "Terminate",
+                  .handler = [&](lambda::dbus::Message&) {
+                    std::lock_guard guard(recordsMutex);
+                    sessionCalls.push_back("Terminate");
+                    return lambda::dbus::MethodReply{};
+                  },
+              },
+          },
+      });
 
   std::atomic<bool> running = true;
   std::thread serviceThread([&] {
@@ -218,11 +243,18 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
 
   CHECK(client.sessionPathForPid(4242) == kSessionPath);
   CHECK(client.currentSessionPath() == kSessionPath);
+  client.lockCurrentSession();
+  client.terminateCurrentSession();
   {
     std::lock_guard guard(recordsMutex);
-    REQUIRE(sessionPathRequests.size() == 2);
+    REQUIRE(sessionPathRequests.size() == 4);
     CHECK(sessionPathRequests[0] == 4242);
     CHECK(sessionPathRequests[1] == static_cast<std::uint32_t>(getpid()));
+    CHECK(sessionPathRequests[2] == static_cast<std::uint32_t>(getpid()));
+    CHECK(sessionPathRequests[3] == static_cast<std::uint32_t>(getpid()));
+    REQUIRE(sessionCalls.size() == 2);
+    CHECK(sessionCalls[0] == "Lock");
+    CHECK(sessionCalls[1] == "Terminate");
   }
 
   bool preparingForSleep = false;
