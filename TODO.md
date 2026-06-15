@@ -177,7 +177,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Open a libseat seat at KMS startup when available, poll/dispatch the libseat fd, and keep direct-open fallback for environments where libseat is unavailable or cannot open a specific device.
 - [x] [Auto] Open DRM cards and libinput evdev devices through `libseat_open_device`, track returned device IDs, and close them through `libseat_close_device`.
 - [x] [Auto] Route `enable_seat`/`disable_seat` callbacks through the existing DRM-master release/reacquire and libinput suspend/resume path.
-- [x] [Auto] Reopen libseat-managed input devices on `enable_seat` by rebuilding the libinput context so keyboard/mouse fds are reacquired through `libseat_open_device`.
+- [x] [Auto] Reopen libseat-managed input devices on `enable_seat` by rebuilding the libinput context so keyboard/mouse fds are reacquired through `libseat_open_device`; teardown now removes path-added libinput devices and drains pending device events so a failed reopen cannot trip libinput's device-listener assertion.
 - [ ] [Auto + Manual] Reopen the libseat-managed DRM device on `enable_seat` instead of relying on the still-valid fd; this requires an atomic-presenter/GBM teardown and recreation path because the presenter currently caches the DRM fd and resources.
 - [x] [Auto] Implement `libseat_switch_session` support for explicit Ctrl-Alt-F<n> and Alt-Left/Right VT/session switching, with a kernel `VT_ACTIVATE` fallback when libseat is unavailable.
 - [ ] [Manual] Validate `lambda-window-manager` starts as an unprivileged user inside a logind session with no manual `/dev/dri` or `/dev/input` permissions.

@@ -679,6 +679,9 @@ void KmsApplication::initializeInput() {
   if (inputDeviceCount_ > 0) return;
 
   debugLog("udev seat0 reported no input devices; falling back to /dev/input/event*");
+  discardPendingInputEvents(true);
+  libinput_suspend(input_);
+  discardPendingInputEvents(true);
   libinput_unref(input_);
   input_ = libinput_path_create_context(&kLibinputInterface, this);
   if (!input_) throw std::runtime_error("libinput_path_create_context failed");
@@ -691,6 +694,7 @@ void KmsApplication::initializeInput() {
       libinput_device* device = libinput_path_add_device(input_, entry.path().c_str());
       if (device) {
         debugLog("added input path %s", entry.path().c_str());
+        pathInputDevices_.push_back(libinput_device_ref(device));
         libinput_device_unref(device);
       } else {
         debugLog("libinput rejected input path %s", entry.path().c_str());
@@ -709,8 +713,21 @@ void KmsApplication::initializeInput() {
 
 void KmsApplication::destroyInput() {
   if (input_) {
+    discardPendingInputEvents(true);
+    for (libinput_device* device : pathInputDevices_) {
+      libinput_path_remove_device(device);
+    }
+    discardPendingInputEvents(true);
+    libinput_suspend(input_);
+    discardPendingInputEvents(true);
+    for (libinput_device* device : pathInputDevices_) {
+      libinput_device_unref(device);
+    }
+    pathInputDevices_.clear();
     libinput_unref(input_);
     input_ = nullptr;
+  } else {
+    pathInputDevices_.clear();
   }
   inputDeviceCount_ = 0;
   inputSuspendedForVt_ = false;
@@ -726,7 +743,7 @@ bool KmsApplication::rebuildInputForSeatEnable() {
   destroyInput();
   try {
     initializeInput();
-    return inputDeviceCount_ > 0;
+    if (inputDeviceCount_ > 0) return true;
   } catch (std::exception const& error) {
     std::fprintf(stderr, "lambda-window-manager: input reopen failed after seat enable: %s\n", error.what());
   } catch (...) {

@@ -147,6 +147,7 @@ private:
   udev_monitor* udevMonitor_ = nullptr;
   int udevMonitorFd_ = -1;
   libinput* input_ = nullptr;
+  std::vector<libinput_device*> pathInputDevices_;
   int inputDeviceCount_ = 0;
   std::vector<KmsConnector> connectors_;
   std::vector<KmsWindow*> windows_;
