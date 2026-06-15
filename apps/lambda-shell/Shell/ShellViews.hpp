@@ -105,6 +105,7 @@ struct ShellNotificationBannerView {
   float height = 96.f;
   bool showPreview = true;
   std::function<void(std::uint64_t)> onDismiss;
+  std::function<void(std::uint64_t, std::string const&)> onAction;
 
   lambda::Element body() const {
     float const surfaceWidth = std::max(1.f, width);
@@ -137,6 +138,7 @@ struct ShellNotificationBannerView {
         .wrapping = lambda::TextWrapping::NoWrap,
         .maxLines = 1,
     }.size(textWidth, 22.f).position(contentX, 28.f));
+    float const actionRowHeight = (!notification.actions.empty() && onAction) ? 36.f : 0.f;
     if (showPreview && !notification.body.empty()) {
       layers.push_back(lambda::Text{
           .text = notification.body,
@@ -146,7 +148,36 @@ struct ShellNotificationBannerView {
           .verticalAlignment = lambda::VerticalAlignment::Top,
           .wrapping = lambda::TextWrapping::Wrap,
           .maxLines = 2,
-      }.size(std::max(1.f, surfaceWidth - 32.f), 36.f).position(contentX, 54.f));
+      }.size(std::max(1.f, surfaceWidth - 32.f), std::max(18.f, 36.f - actionRowHeight * 0.45f))
+          .position(contentX, 54.f));
+    }
+
+    if (!notification.actions.empty() && onAction) {
+      std::size_t const actionCount = std::min<std::size_t>(2u, notification.actions.size());
+      float const gap = 8.f;
+      float const rowWidth = std::max(1.f, surfaceWidth - 32.f);
+      float const buttonWidth = std::max(1.f, (rowWidth - gap * static_cast<float>(actionCount - 1u)) /
+                                               static_cast<float>(actionCount));
+      float const buttonY = surfaceHeight - 38.f;
+      for (std::size_t index = 0; index < actionCount; ++index) {
+        auto const action = notification.actions[index];
+        layers.push_back(lambda::Element{lambda::Button{
+                             .label = action.label.empty() ? action.key : action.label,
+                             .variant = lambda::ButtonVariant::Secondary,
+                             .style = lambda::Button::Style{
+                                 .font = lambda::Font{.family = "", .size = 12.f, .weight = 620.f},
+                                 .paddingH = 8.f,
+                                 .paddingV = 5.f,
+                                 .cornerRadius = 8.f,
+                                 .accentColor = lambda::VisualTokens::accent,
+                             },
+                             .onTap = [callback = onAction, id = notification.id, key = action.key] {
+                               callback(id, key);
+                             },
+                         }}
+                             .size(buttonWidth, 28.f)
+                             .position(contentX + static_cast<float>(index) * (buttonWidth + gap), buttonY));
+      }
     }
 
     if (onDismiss) {

@@ -146,12 +146,20 @@ struct LauncherAction {
   bool operator==(LauncherAction const&) const = default;
 };
 
+struct NotificationActionEntry {
+  std::string key;
+  std::string label;
+
+  bool operator==(NotificationActionEntry const&) const = default;
+};
+
 struct Notification {
   std::uint64_t id = 0;
   std::string appId;
   std::string title;
   std::string body;
   std::int32_t expireTimeoutMs = -1;
+  std::vector<NotificationActionEntry> actions;
   bool dismissed = false;
 
   bool operator==(Notification const&) const = default;
@@ -267,7 +275,8 @@ public:
                        std::string appId,
                        std::string title,
                        std::string body,
-                       std::int32_t expireTimeoutMs = -1);
+                       std::int32_t expireTimeoutMs = -1,
+                       std::vector<NotificationActionEntry> actions = {});
   bool dismiss(std::uint64_t id);
   void clearAll();
   void setDoNotDisturb(bool enabled) noexcept { doNotDisturb_ = enabled; }

@@ -62,7 +62,9 @@ private:
   void scheduleNotificationTimeout(Notification const& notification);
   void cancelNotificationTimeout();
   void handleNotificationDismiss(std::uint64_t id);
+  void handleNotificationAction(std::uint64_t id, std::string actionKey);
   void closeNotificationAsync(std::uint32_t id);
+  void invokeNotificationActionAsync(std::uint32_t id, std::string actionKey);
   void performAudioControlAsync(AudioControlAction action);
   void performNetworkControlAsync(DockStatusAction action);
   void performBluetoothControlAsync(DockStatusAction action);

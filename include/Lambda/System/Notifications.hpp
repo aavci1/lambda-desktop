@@ -34,8 +34,8 @@ struct NotificationRecord {
   std::string appIcon;
   std::string summary;
   std::string body;
-  std::vector<NotificationAction> actions;
   std::int32_t expireTimeoutMs = -1;
+  std::vector<NotificationAction> actions;
   bool closed = false;
   NotificationCloseReason closeReason = NotificationCloseReason::Undefined;
 
@@ -48,6 +48,7 @@ struct NotificationPosted {
   std::string appIcon;
   std::string summary;
   std::string body;
+  std::vector<NotificationAction> actions;
   std::int32_t expireTimeoutMs = -1;
 
   bool operator==(NotificationPosted const&) const = default;
@@ -60,6 +61,7 @@ public:
   static constexpr char const* interfaceName = "org.freedesktop.Notifications";
   static constexpr char const* monitorInterfaceName = "org.lambda.Notifications";
   static constexpr char const* postedSignalName = "NotificationPosted";
+  static constexpr char const* invokeActionMethodName = "InvokeAction";
 
   explicit NotificationsService(dbus::Bus& bus, std::size_t historyLimit = 100);
 
@@ -109,6 +111,7 @@ public:
   [[nodiscard]] dbus::Slot watchPosted(std::function<void(NotificationPosted)> handler);
   [[nodiscard]] dbus::Slot watchClosed(std::function<void(std::uint32_t, NotificationCloseReason)> handler);
   void closeNotification(std::uint32_t id);
+  void invokeAction(std::uint32_t id, std::string actionKey);
 
 private:
   dbus::Bus bus_;

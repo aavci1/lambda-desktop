@@ -22,6 +22,19 @@ std::vector<NotificationAction> parseActions(dbus::StringArray const& rawActions
   return actions;
 }
 
+dbus::StringArray encodeActions(std::vector<NotificationAction> const& actions) {
+  dbus::StringArray encoded;
+  encoded.values.reserve(actions.size() * 2u);
+  for (auto const& action : actions) {
+    if (action.key.empty()) {
+      continue;
+    }
+    encoded.values.push_back(action.key);
+    encoded.values.push_back(action.label);
+  }
+  return encoded;
+}
+
 } // namespace
 
 NotificationsService::NotificationsService(dbus::Bus& bus, std::size_t historyLimit)
@@ -92,6 +105,19 @@ dbus::Slot NotificationsService::exportObject() {
                     return dbus::MethodReply{};
                   },
               },
+              dbus::ExportedMethod{
+                  .interface = monitorInterfaceName,
+                  .member = invokeActionMethodName,
+                  .handler = [this](dbus::Message& message) {
+                    std::uint32_t const id = message.readUint32();
+                    std::string actionKey = message.readString();
+                    if (!invokeAction(id, std::move(actionKey))) {
+                      return dbus::MethodReply::error("org.lambda.Notifications.Error.ActionUnavailable",
+                                                      "Unknown notification action");
+                    }
+                    return dbus::MethodReply{};
+                  },
+              },
           },
           .properties = {},
       });
@@ -127,8 +153,8 @@ std::uint32_t NotificationsService::notify(std::string appName,
                             .appIcon = std::move(appIcon),
                             .summary = std::move(summary),
                             .body = std::move(body),
-                            .actions = parseActions(actions),
                             .expireTimeoutMs = expireTimeoutMs,
+                            .actions = parseActions(actions),
                         });
   trimHistory();
   emitPosted(notifications_.front());
@@ -202,7 +228,8 @@ void NotificationsService::emitPosted(NotificationRecord const& record) const {
                     record.appIcon,
                     record.summary,
                     record.body,
-                    record.expireTimeoutMs});
+                    record.expireTimeoutMs,
+                    encodeActions(record.actions)});
 }
 
 void NotificationsService::emitActionInvoked(std::uint32_t id, std::string const& actionKey) const {
@@ -237,6 +264,7 @@ dbus::Slot NotificationsClient::watchPosted(std::function<void(NotificationPoste
         posted.summary = message.readString();
         posted.body = message.readString();
         posted.expireTimeoutMs = message.readInt32();
+        posted.actions = parseActions(message.readStringArray());
         if (handler) {
           handler(std::move(posted));
         }
@@ -267,6 +295,16 @@ void NotificationsClient::closeNotification(std::uint32_t id) {
       .interface = NotificationsService::interfaceName,
       .member = "CloseNotification",
       .arguments = {id},
+  });
+}
+
+void NotificationsClient::invokeAction(std::uint32_t id, std::string actionKey) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = NotificationsService::serviceName,
+      .path = NotificationsService::objectPath,
+      .interface = NotificationsService::monitorInterfaceName,
+      .member = NotificationsService::invokeActionMethodName,
+      .arguments = {id, std::move(actionKey)},
   });
 }
 

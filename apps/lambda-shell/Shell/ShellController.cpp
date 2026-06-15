@@ -48,7 +48,8 @@ using namespace lambda::keys;
 inline constexpr int kDockMenuGap = 10;
 inline constexpr int kDockVolumeStepPercent = 5;
 inline constexpr float kNotificationBannerWidth = 360.f;
-inline constexpr float kNotificationBannerHeight = 96.f;
+inline constexpr float kNotificationBannerBaseHeight = 96.f;
+inline constexpr float kNotificationBannerActionHeight = 128.f;
 inline constexpr auto kDockVolumeCoalesceDelay = std::chrono::milliseconds{28};
 
 struct ShellAudioCommandCompleted {
@@ -77,6 +78,26 @@ std::optional<std::filesystem::file_time_type> configLastWriteTime(std::filesyst
 
 bool appIdsMatch(std::string_view a, std::string_view b) {
   return shellAppIdMatches(a, b) || shellAppIdMatches(b, a);
+}
+
+std::vector<NotificationActionEntry> shellNotificationActions(
+    std::vector<lambda::system::NotificationAction> const& actions) {
+  std::vector<NotificationActionEntry> output;
+  output.reserve(actions.size());
+  for (auto const& action : actions) {
+    if (action.key.empty()) {
+      continue;
+    }
+    output.push_back(NotificationActionEntry{
+        .key = action.key,
+        .label = action.label.empty() ? action.key : action.label,
+    });
+  }
+  return output;
+}
+
+float notificationBannerHeight(Notification const& notification) {
+  return notification.actions.empty() ? kNotificationBannerBaseHeight : kNotificationBannerActionHeight;
 }
 
 LayerShellOptions layerBase(LayerShellLayer layer, char const* nameSpace) {
@@ -371,7 +392,12 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
 
   app_.eventQueue().on<ShellNotificationPosted>([this](ShellNotificationPosted const& event) {
     auto const& posted = event.notification;
-    notificationCenter_.upsert(posted.id, posted.appName, posted.summary, posted.body, posted.expireTimeoutMs);
+    notificationCenter_.upsert(posted.id,
+                               posted.appName,
+                               posted.summary,
+                               posted.body,
+                               posted.expireTimeoutMs,
+                               shellNotificationActions(posted.actions));
     syncNotificationWindow();
   });
 
@@ -788,15 +814,19 @@ void ShellController::syncNotificationWindow() {
   }
 
   Notification const notification = visible.front();
+  float const bannerHeight = notificationBannerHeight(notification);
   notificationWindow_->setView(ShellNotificationBannerView{
       .notification = notification,
       .width = kNotificationBannerWidth,
-      .height = kNotificationBannerHeight,
+      .height = bannerHeight,
       .showPreview = shellConfig_.notificationShowPreviews,
       .onDismiss = [this](std::uint64_t id) { handleNotificationDismiss(id); },
+      .onAction = [this](std::uint64_t id, std::string const& actionKey) {
+        handleNotificationAction(id, actionKey);
+      },
   });
   notificationWindow_->setLayerShellOptions(visibleNotificationLayer());
-  notificationWindow_->resize({kNotificationBannerWidth, kNotificationBannerHeight});
+  notificationWindow_->resize({kNotificationBannerWidth, bannerHeight});
   scheduleNotificationTimeout(notification);
   requestNotificationRedraw();
 }
@@ -830,6 +860,15 @@ void ShellController::handleNotificationDismiss(std::uint64_t id) {
   }
 }
 
+void ShellController::handleNotificationAction(std::uint64_t id, std::string actionKey) {
+  if (actionKey.empty()) {
+    return;
+  }
+  if (id <= static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
+    invokeNotificationActionAsync(static_cast<std::uint32_t>(id), std::move(actionKey));
+  }
+}
+
 void ShellController::closeNotificationAsync(std::uint32_t id) {
   std::thread([id] {
     try {
@@ -839,6 +878,23 @@ void ShellController::closeNotificationAsync(std::uint32_t id) {
       std::fprintf(stderr, "lambda-shell: failed to close notification %u: %s\n", id, error.what());
     } catch (...) {
       std::fprintf(stderr, "lambda-shell: failed to close notification %u\n", id);
+    }
+  }).detach();
+}
+
+void ShellController::invokeNotificationActionAsync(std::uint32_t id, std::string actionKey) {
+  std::thread([id, actionKey = std::move(actionKey)] {
+    try {
+      auto client = lambda::system::NotificationsClient::connectSession();
+      client.invokeAction(id, actionKey);
+    } catch (std::exception const& error) {
+      std::fprintf(stderr,
+                   "lambda-shell: failed to invoke notification action %u:%s: %s\n",
+                   id,
+                   actionKey.c_str(),
+                   error.what());
+    } catch (...) {
+      std::fprintf(stderr, "lambda-shell: failed to invoke notification action %u:%s\n", id, actionKey.c_str());
     }
   }).detach();
 }

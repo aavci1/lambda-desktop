@@ -223,7 +223,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Route basic Shell banner dismissals to `CloseNotification` and hide visible banner state when `NotificationClosed` arrives over D-Bus.
 - [x] [Auto] Enforce Shell notification enabled/disabled, DND, and history-limit config for the live banner model.
 - [ ] [Auto + Manual] Add the full Shell notification-center UI with history inspection, dismissal, and clear-all controls.
-- [ ] [Auto + Manual] Route action button clicks from Shell UI back to `ActionInvoked`.
+- [x] [Auto] Route basic Shell banner action button clicks back to the daemon so it emits `ActionInvoked`.
 - [x] [Auto] Enforce banner timeout and preview-visibility config for the live Shell banner.
 - [ ] [Auto + Manual] Implement timeout expiry, grouping, persistence policy, and clear-all behavior against the service history.
 - [ ] [Auto] Parse the common notification hints that affect presentation, including urgency, category, desktop-entry, image/icon data, transient, and sound suppression.

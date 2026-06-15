@@ -279,7 +279,8 @@ std::uint64_t NotificationCenterModel::upsert(std::uint64_t id,
                                               std::string appId,
                                               std::string title,
                                               std::string body,
-                                              std::int32_t expireTimeoutMs) {
+                                              std::int32_t expireTimeoutMs,
+                                              std::vector<NotificationActionEntry> actions) {
   if (id == 0) {
     return add(std::move(appId), std::move(title), std::move(body));
   }
@@ -296,7 +297,8 @@ std::uint64_t NotificationCenterModel::upsert(std::uint64_t id,
                                      .appId = std::move(appId),
                                      .title = std::move(title),
                                      .body = std::move(body),
-                                     .expireTimeoutMs = expireTimeoutMs});
+                                     .expireTimeoutMs = expireTimeoutMs,
+                                     .actions = std::move(actions)});
   nextId_ = std::max(nextId_, id + 1u);
   trimHistory();
   return id;

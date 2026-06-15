@@ -189,7 +189,12 @@ TEST_CASE("Shell notification model groups dismisses clears and honors DND") {
 
 TEST_CASE("Shell notification model upserts daemon ids and refreshes visibility") {
   lambda_shell::NotificationCenterModel notifications{3};
-  CHECK(notifications.upsert(42, "notify-send", "First", "Body", 2500) == 42);
+  CHECK(notifications.upsert(42,
+                             "notify-send",
+                             "First",
+                             "Body",
+                             2500,
+                             {lambda_shell::NotificationActionEntry{.key = "default", .label = "Open"}}) == 42);
   CHECK(notifications.add("files", "Done", "Copied") == 43);
 
   auto visible = notifications.visible();
@@ -197,14 +202,21 @@ TEST_CASE("Shell notification model upserts daemon ids and refreshes visibility"
   CHECK(visible[0].id == 43);
   CHECK(visible[1].id == 42);
   CHECK(visible[1].expireTimeoutMs == 2500);
+  CHECK(visible[1].actions == std::vector<lambda_shell::NotificationActionEntry>{{.key = "default", .label = "Open"}});
 
   CHECK(notifications.dismiss(42));
-  CHECK(notifications.upsert(42, "notify-send", "Updated", "New body", 4000) == 42);
+  CHECK(notifications.upsert(42,
+                             "notify-send",
+                             "Updated",
+                             "New body",
+                             4000,
+                             {lambda_shell::NotificationActionEntry{.key = "retry", .label = "Retry"}}) == 42);
   visible = notifications.visible();
   REQUIRE(visible.size() == 2);
   CHECK(visible[0].id == 42);
   CHECK(visible[0].title == "Updated");
   CHECK(visible[0].expireTimeoutMs == 4000);
+  CHECK(visible[0].actions == std::vector<lambda_shell::NotificationActionEntry>{{.key = "retry", .label = "Retry"}});
   CHECK_FALSE(visible[0].dismissed);
 }
 

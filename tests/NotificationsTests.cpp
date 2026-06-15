@@ -94,13 +94,28 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
           .member = lambda::system::NotificationsService::postedSignalName,
       },
       [&](lambda::dbus::Message& message) {
+        std::uint32_t const id = message.readUint32();
+        std::string appName = message.readString();
+        std::string appIcon = message.readString();
+        std::string summary = message.readString();
+        std::string body = message.readString();
+        std::int32_t const expireTimeoutMs = message.readInt32();
+        std::vector<lambda::system::NotificationAction> actions;
+        auto rawActions = message.readStringArray();
+        for (std::size_t i = 0; i + 1u < rawActions.values.size(); i += 2u) {
+          actions.push_back(lambda::system::NotificationAction{
+              .key = rawActions.values[i],
+              .label = rawActions.values[i + 1u],
+          });
+        }
         postedSignals.push_back(lambda::system::NotificationPosted{
-            .id = message.readUint32(),
-            .appName = message.readString(),
-            .appIcon = message.readString(),
-            .summary = message.readString(),
-            .body = message.readString(),
-            .expireTimeoutMs = message.readInt32(),
+            .id = id,
+            .appName = std::move(appName),
+            .appIcon = std::move(appIcon),
+            .summary = std::move(summary),
+            .body = std::move(body),
+            .actions = std::move(actions),
+            .expireTimeoutMs = expireTimeoutMs,
         });
       });
 
@@ -137,6 +152,8 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   CHECK(postedSignals.back().summary == "Build complete");
   CHECK(postedSignals.back().body == "Tests passed");
   CHECK(postedSignals.back().expireTimeoutMs == 5000);
+  CHECK(postedSignals.back().actions == std::vector<lambda::system::NotificationAction>{{.key = "default",
+                                                                                         .label = "Open"}});
 
   auto replaceReply = client.call(lambda::dbus::MethodCall{
       .destination = lambda::system::NotificationsService::serviceName,
@@ -215,6 +232,21 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
       });
 
   CHECK(service.invokeAction(actionId, "default"));
+  serviceBus.flush();
+  CHECK(pumpUntil(client,
+                  [&] { return invokedId == actionId && invokedAction == "default"; },
+                  std::chrono::milliseconds(500)));
+
+  invokedId = 0;
+  invokedAction.clear();
+  auto privateActionReply = client.call(lambda::dbus::MethodCall{
+      .destination = lambda::system::NotificationsService::serviceName,
+      .path = lambda::system::NotificationsService::objectPath,
+      .interface = lambda::system::NotificationsService::monitorInterfaceName,
+      .member = lambda::system::NotificationsService::invokeActionMethodName,
+      .arguments = {actionId, std::string("default")},
+  });
+  CHECK(privateActionReply.valid());
   serviceBus.flush();
   CHECK(pumpUntil(client,
                   [&] { return invokedId == actionId && invokedAction == "default"; },
