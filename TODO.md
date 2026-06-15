@@ -27,6 +27,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 | TODO-028 | Feature | Complete SVC-10 BlueZ Bluetooth integration | N/A | P0.5 |
 | TODO-029 | Feature | Complete SVC-12 MPRIS media integration | N/A | P0.5 |
 | TODO-030 | Feature | Complete SVC-14 udisks2 removable-volume integration | N/A | P0.5 |
+| TODO-031 | Feature | Complete SVC-8 polkit authentication agent | N/A | P0.5 |
 
 ## TODO-006: Window close animation is inconsistent across window types
 
@@ -243,6 +244,18 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Implement `com.canonical.dbusmenu` menu hosting and item `Activate`, `ContextMenu`, `SecondaryActivate`, and `Scroll` actions.
 - [ ] [Auto + Manual] Handle item property/signal changes live without freezing Shell when a tray item misbehaves or disappears.
 - [ ] [Manual] Validate Steam/Discord/Telegram/nm-applet-style tray icons appear, update, activate, and show menus.
+
+## TODO-031: Complete SVC-8 polkit authentication agent
+
+- [x] [Auto] Add a Linux `lambda-polkit-agent` system-bus process target.
+- [x] [Auto] Add reusable `lambda::system` polkit subject helpers for documented `unix-session` and `unix-process` D-Bus shapes.
+- [x] [Auto] Export `org.freedesktop.PolicyKit1.AuthenticationAgent` with `BeginAuthentication` and `CancelAuthentication` handlers.
+- [x] [Auto] Register and unregister the exported agent object with `org.freedesktop.PolicyKit1.Authority`.
+- [x] [Auto] Add deterministic private-bus coverage for subject serialization, authority registration/unregistration, `BeginAuthentication` parsing, and cancellation.
+- [ ] [Auto + Manual] Present a Lambda authentication dialog from `BeginAuthentication` and keep the D-Bus method pending until the user completes or cancels authentication.
+- [ ] [Auto + Manual] Authenticate identities through `polkit-agent-helper-1`/PAM and report success with `AuthenticationAgentResponse2`/`AuthenticationAgentResponse3`.
+- [ ] [Auto + Manual] Wire agent startup into the Lambda session lifecycle and handle duplicate-agent/fallback behavior cleanly.
+- [ ] [Manual] Validate `pkexec` and representative privileged actions: the dialog appears, success grants authorization, bad passwords fail, cancel returns a polkit cancelled error, and shutdown/restart flows still behave correctly.
 
 ## TODO-026: Complete SVC-11 UPower power-status integration
 

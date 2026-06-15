@@ -39,6 +39,7 @@ set(_lambda_test_sources
   NotificationsTests.cpp
   main.cpp
   PathFlattenerTests.cpp
+  PolkitAgentTests.cpp
   PortalSettingsTests.cpp
   SceneGraphTests.cpp
   ParagraphCacheTests.cpp

@@ -6,6 +6,7 @@ set(LAMBDA_CORE_SOURCES
   System/MPRIS.cpp
   System/NetworkManager.cpp
   System/Notifications.cpp
+  System/PolkitAgent.cpp
   System/PortalSettings.cpp
   System/StatusNotifierWatcher.cpp
   System/UDisks2.cpp

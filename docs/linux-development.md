@@ -150,6 +150,21 @@ gdbus call --session \
   org.kde.StatusNotifierWatcher ProtocolVersion
 ```
 
+## Polkit Authentication Agent
+
+The Linux build includes `lambda-polkit-agent`, a basic system-bus authentication-agent process for polkit. It exports `org.freedesktop.PolicyKit1.AuthenticationAgent`, registers that object with `org.freedesktop.PolicyKit1.Authority` for the current session when `XDG_SESSION_ID` is available, and falls back to a documented current-process subject otherwise.
+
+This slice proves registration and request routing only. `BeginAuthentication` currently parses the request and returns `org.freedesktop.PolicyKit1.Error.Cancelled` so privileged callers fail quickly instead of hanging; the Lambda dialog and `polkit-agent-helper-1`/PAM authentication path still need to be implemented before `pkexec` can succeed.
+
+Development smoke:
+
+```sh
+XDG_SESSION_ID="${XDG_SESSION_ID:-$(loginctl show-user "$USER" -p Display --value 2>/dev/null || true)}" \
+  ./build/apps/lambda-polkit-agent/lambda-polkit-agent
+```
+
+In a complete Lambda session this process should be started automatically before privileged Shell or Settings actions are exposed.
+
 ## Network Status
 
 Shell network and Wi-Fi status prefer NetworkManager when reading the live system and fall back to `/sys/class/net` when NetworkManager is unavailable. For development, confirm the system service is visible with:
