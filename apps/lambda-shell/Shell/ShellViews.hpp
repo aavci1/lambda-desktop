@@ -1,14 +1,21 @@
 #pragma once
 
 #include "Shell/ShellModel.hpp"
+#include "Shell/ShellModels.hpp"
 #include "Shell/UI/LambdaCommandLauncher.hpp"
 #include "Shell/UI/LambdaDock.hpp"
 
+#include <Lambda/Graphics/TextLayoutOptions.hpp>
 #include <Lambda/UI/Element.hpp>
+#include <Lambda/UI/IconName.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
+#include <Lambda/UI/VisualTokens.hpp>
 #include <Lambda/UI/Views/Views.hpp>
 
+#include <algorithm>
 #include <functional>
+#include <string>
+#include <vector>
 
 namespace lambda_shell {
 
@@ -89,6 +96,76 @@ struct ShellSessionMenuView {
         .onAction = onAction,
         .onDismiss = onDismiss,
     }}};
+  }
+};
+
+struct ShellNotificationBannerView {
+  Notification notification;
+  float width = 360.f;
+  float height = 96.f;
+  std::function<void(std::uint64_t)> onDismiss;
+
+  lambda::Element body() const {
+    float const surfaceWidth = std::max(1.f, width);
+    float const surfaceHeight = std::max(1.f, height);
+    float const contentX = 16.f;
+    float const textWidth = std::max(1.f, surfaceWidth - 64.f);
+    std::string const appLabel = notification.appId.empty() ? std::string("Notification") : notification.appId;
+
+    std::vector<lambda::Element> layers;
+    layers.push_back(lambda::Rectangle{}
+                         .size(surfaceWidth, surfaceHeight)
+                         .fill(lambda::FillStyle::solid(lambda::VisualTokens::elevatedSurface))
+                         .stroke(lambda::StrokeStyle::solid(lambda::VisualTokens::border, 1.f))
+                         .cornerRadius(12.f));
+    layers.push_back(lambda::Text{
+        .text = appLabel,
+        .font = lambda::Font{.family = "", .size = 11.f, .weight = 640.f},
+        .color = lambda::VisualTokens::secondaryText,
+        .horizontalAlignment = lambda::HorizontalAlignment::Leading,
+        .verticalAlignment = lambda::VerticalAlignment::Center,
+        .wrapping = lambda::TextWrapping::NoWrap,
+        .maxLines = 1,
+    }.size(textWidth, 16.f).position(contentX, 10.f));
+    layers.push_back(lambda::Text{
+        .text = notification.title.empty() ? appLabel : notification.title,
+        .font = lambda::Font{.family = "", .size = 15.f, .weight = 680.f},
+        .color = lambda::VisualTokens::primaryText,
+        .horizontalAlignment = lambda::HorizontalAlignment::Leading,
+        .verticalAlignment = lambda::VerticalAlignment::Center,
+        .wrapping = lambda::TextWrapping::NoWrap,
+        .maxLines = 1,
+    }.size(textWidth, 22.f).position(contentX, 28.f));
+    if (!notification.body.empty()) {
+      layers.push_back(lambda::Text{
+          .text = notification.body,
+          .font = lambda::Font{.family = "", .size = 13.f, .weight = 460.f},
+          .color = lambda::VisualTokens::secondaryText,
+          .horizontalAlignment = lambda::HorizontalAlignment::Leading,
+          .verticalAlignment = lambda::VerticalAlignment::Top,
+          .wrapping = lambda::TextWrapping::Wrap,
+          .maxLines = 2,
+      }.size(std::max(1.f, surfaceWidth - 32.f), 36.f).position(contentX, 54.f));
+    }
+
+    if (onDismiss) {
+      layers.push_back(lambda::Element{lambda::IconButton{
+                           .icon = lambda::IconName::Close,
+                           .style = lambda::IconButton::Style{
+                               .size = 28.f,
+                               .weight = 560.f,
+                               .color = lambda::VisualTokens::secondaryText,
+                           },
+                           .onTap = [callback = onDismiss, id = notification.id] { callback(id); },
+                       }}
+                           .position(surfaceWidth - 40.f, 10.f));
+    }
+
+    return lambda::ZStack{
+        .horizontalAlignment = lambda::Alignment::Start,
+        .verticalAlignment = lambda::Alignment::Start,
+        .children = std::move(layers),
+    }.size(surfaceWidth, surfaceHeight);
   }
 };
 

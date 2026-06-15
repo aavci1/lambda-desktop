@@ -10,6 +10,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 #include <unistd.h>
 
 namespace {
@@ -84,6 +85,25 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   CHECK(serverReply.readString() == "1.0");
   CHECK(serverReply.readString() == "1.2");
 
+  std::vector<lambda::system::NotificationPosted> postedSignals;
+  auto postedSlot = client.matchSignal(
+      lambda::dbus::SignalMatch{
+          .sender = lambda::system::NotificationsService::serviceName,
+          .path = lambda::system::NotificationsService::objectPath,
+          .interface = lambda::system::NotificationsService::monitorInterfaceName,
+          .member = lambda::system::NotificationsService::postedSignalName,
+      },
+      [&](lambda::dbus::Message& message) {
+        postedSignals.push_back(lambda::system::NotificationPosted{
+            .id = message.readUint32(),
+            .appName = message.readString(),
+            .appIcon = message.readString(),
+            .summary = message.readString(),
+            .body = message.readString(),
+            .expireTimeoutMs = message.readInt32(),
+        });
+      });
+
   auto notifyReply = client.call(lambda::dbus::MethodCall{
       .destination = lambda::system::NotificationsService::serviceName,
       .path = lambda::system::NotificationsService::objectPath,
@@ -107,6 +127,16 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   REQUIRE(record->actions.size() == 1);
   CHECK(record->actions[0].key == "default");
   CHECK(record->actions[0].label == "Open");
+  serviceBus.flush();
+  CHECK(pumpUntil(client,
+                  [&] { return postedSignals.size() == 1 && postedSignals.back().id == id; },
+                  std::chrono::milliseconds(500)));
+  REQUIRE(postedSignals.size() == 1);
+  CHECK(postedSignals.back().appName == "notify-send");
+  CHECK(postedSignals.back().appIcon == "dialog-information");
+  CHECK(postedSignals.back().summary == "Build complete");
+  CHECK(postedSignals.back().body == "Tests passed");
+  CHECK(postedSignals.back().expireTimeoutMs == 5000);
 
   auto replaceReply = client.call(lambda::dbus::MethodCall{
       .destination = lambda::system::NotificationsService::serviceName,
@@ -127,6 +157,14 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   REQUIRE(record);
   CHECK(record->summary == "Build failed");
   CHECK(record->body == "One test failed");
+  serviceBus.flush();
+  CHECK(pumpUntil(client,
+                  [&] {
+                    return postedSignals.size() == 2 &&
+                           postedSignals.back().id == id &&
+                           postedSignals.back().summary == "Build failed";
+                  },
+                  std::chrono::milliseconds(500)));
 
   std::uint32_t closedId = 0;
   std::uint32_t closeReason = 0;

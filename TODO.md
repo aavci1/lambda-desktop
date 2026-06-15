@@ -219,9 +219,12 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Keep basic in-memory notification history with replacement support, action parsing, DND state plumbing, and close/action signal helpers.
 - [x] [Auto] Add deterministic private-bus coverage for capabilities, server information, notification creation/replacement, close signals, and action signals.
 - [x] [Auto] Smoke the built `lambda-notifications` process on a private session bus and verify a real `Notify` call through `gdbus`.
-- [ ] [Auto + Manual] Wire `lambda-notifications` into Shell's live notification banner and notification-center UI.
-- [ ] [Auto + Manual] Route action button clicks from Shell UI back to `ActionInvoked`, close/dismiss events to `NotificationClosed`, and close all visible UI when notifications are closed by D-Bus.
-- [ ] [Auto + Manual] Enforce Shell notification config, including enabled/disabled, DND, banner timeout, history limit, and preview visibility.
+- [x] [Auto] Emit a Shell-facing notification-posted D-Bus signal and wire `lambda-notifications` into a basic live Shell banner surface.
+- [x] [Auto] Route basic Shell banner dismissals to `CloseNotification` and hide visible banner state when `NotificationClosed` arrives over D-Bus.
+- [x] [Auto] Enforce Shell notification enabled/disabled, DND, and history-limit config for the live banner model.
+- [ ] [Auto + Manual] Add the full Shell notification-center UI with history inspection, dismissal, and clear-all controls.
+- [ ] [Auto + Manual] Route action button clicks from Shell UI back to `ActionInvoked`.
+- [ ] [Auto + Manual] Enforce banner timeout and preview-visibility config.
 - [ ] [Auto + Manual] Implement timeout expiry, grouping, persistence policy, and clear-all behavior against the service history.
 - [ ] [Auto] Parse the common notification hints that affect presentation, including urgency, category, desktop-entry, image/icon data, transient, and sound suppression.
 - [ ] [Auto + Manual] Route the SVC-4 portal Notification backend through this service.

@@ -260,9 +260,11 @@ public:
   explicit NotificationCenterModel(std::size_t historyLimit = 50);
 
   std::uint64_t add(std::string appId, std::string title, std::string body);
+  std::uint64_t upsert(std::uint64_t id, std::string appId, std::string title, std::string body);
   bool dismiss(std::uint64_t id);
   void clearAll();
   void setDoNotDisturb(bool enabled) noexcept { doNotDisturb_ = enabled; }
+  void setHistoryLimit(std::size_t limit);
 
   [[nodiscard]] bool doNotDisturb() const noexcept { return doNotDisturb_; }
   [[nodiscard]] std::vector<Notification> visible() const;
@@ -274,6 +276,8 @@ private:
   std::size_t historyLimit_ = 50;
   bool doNotDisturb_ = false;
   std::vector<Notification> notifications_;
+
+  void trimHistory();
 };
 
 class ClipboardHistoryModel {

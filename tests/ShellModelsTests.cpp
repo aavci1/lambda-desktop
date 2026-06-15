@@ -186,6 +186,25 @@ TEST_CASE("Shell notification model groups dismisses clears and honors DND") {
   CHECK(notifications.visible().empty());
 }
 
+TEST_CASE("Shell notification model upserts daemon ids and refreshes visibility") {
+  lambda_shell::NotificationCenterModel notifications{3};
+  CHECK(notifications.upsert(42, "notify-send", "First", "Body") == 42);
+  CHECK(notifications.add("files", "Done", "Copied") == 43);
+
+  auto visible = notifications.visible();
+  REQUIRE(visible.size() == 2);
+  CHECK(visible[0].id == 43);
+  CHECK(visible[1].id == 42);
+
+  CHECK(notifications.dismiss(42));
+  CHECK(notifications.upsert(42, "notify-send", "Updated", "New body") == 42);
+  visible = notifications.visible();
+  REQUIRE(visible.size() == 2);
+  CHECK(visible[0].id == 42);
+  CHECK(visible[0].title == "Updated");
+  CHECK_FALSE(visible[0].dismissed);
+}
+
 TEST_CASE("Shell clipboard history dedupes respects limits and disabled state") {
   lambda_shell::ClipboardHistoryModel clipboard{3};
   clipboard.addText("one");

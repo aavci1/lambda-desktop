@@ -271,12 +271,32 @@ NotificationCenterModel::NotificationCenterModel(std::size_t historyLimit)
 
 std::uint64_t NotificationCenterModel::add(std::string appId, std::string title, std::string body) {
   std::uint64_t id = nextId_++;
+  upsert(id, std::move(appId), std::move(title), std::move(body));
+  return id;
+}
+
+std::uint64_t NotificationCenterModel::upsert(std::uint64_t id,
+                                              std::string appId,
+                                              std::string title,
+                                              std::string body) {
+  if (id == 0) {
+    return add(std::move(appId), std::move(title), std::move(body));
+  }
+
+  auto existing = std::find_if(notifications_.begin(), notifications_.end(), [&](auto const& notification) {
+    return notification.id == id;
+  });
+  if (existing != notifications_.end()) {
+    notifications_.erase(existing);
+  }
+
   notifications_.insert(notifications_.begin(),
                         Notification{.id = id,
                                      .appId = std::move(appId),
                                      .title = std::move(title),
                                      .body = std::move(body)});
-  if (notifications_.size() > historyLimit_) notifications_.resize(historyLimit_);
+  nextId_ = std::max(nextId_, id + 1u);
+  trimHistory();
   return id;
 }
 
@@ -296,6 +316,11 @@ void NotificationCenterModel::clearAll() {
   }
 }
 
+void NotificationCenterModel::setHistoryLimit(std::size_t limit) {
+  historyLimit_ = std::max<std::size_t>(1u, limit);
+  trimHistory();
+}
+
 std::vector<Notification> NotificationCenterModel::visible() const {
   if (doNotDisturb_) return {};
   std::vector<Notification> output;
@@ -309,6 +334,10 @@ int NotificationCenterModel::groupCount(std::string_view appId) const {
   return static_cast<int>(std::count_if(notifications_.begin(), notifications_.end(), [&](auto const& notification) {
     return !notification.dismissed && notification.appId == appId;
   }));
+}
+
+void NotificationCenterModel::trimHistory() {
+  if (notifications_.size() > historyLimit_) notifications_.resize(historyLimit_);
 }
 
 ClipboardHistoryModel::ClipboardHistoryModel(std::size_t limit)

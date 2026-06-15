@@ -19,6 +19,7 @@
 #include <Lambda/System/Logind.hpp>
 #include <Lambda/System/MPRIS.hpp>
 #include <Lambda/System/NetworkManager.hpp>
+#include <Lambda/System/Notifications.hpp>
 #include <Lambda/System/UPower.hpp>
 #include <Lambda/UI/Events.hpp>
 #include <Lambda/UI/KeyCodes.hpp>
@@ -32,6 +33,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <thread>
 #include <utility>
@@ -45,6 +47,8 @@ using namespace lambda::keys;
 
 inline constexpr int kDockMenuGap = 10;
 inline constexpr int kDockVolumeStepPercent = 5;
+inline constexpr float kNotificationBannerWidth = 360.f;
+inline constexpr float kNotificationBannerHeight = 96.f;
 inline constexpr auto kDockVolumeCoalesceDelay = std::chrono::milliseconds{28};
 
 struct ShellAudioCommandCompleted {
@@ -53,6 +57,14 @@ struct ShellAudioCommandCompleted {
 
 struct ShellStatusCommandCompleted {
   bool changed = false;
+};
+
+struct ShellNotificationPosted {
+  lambda::system::NotificationPosted notification;
+};
+
+struct ShellNotificationClosed {
+  std::uint32_t id = 0;
 };
 
 std::optional<std::filesystem::file_time_type> configLastWriteTime(std::filesystem::path const& path) {
@@ -143,6 +155,27 @@ struct ShellMediaStatusWatcher {
   lambda::system::MPRISChangeWatch mprisChanged;
 };
 
+struct ShellNotificationWatcher {
+  ShellNotificationWatcher(lambda::Application& app,
+                           std::function<void(lambda::system::NotificationPosted)> onPosted,
+                           std::function<void(std::uint32_t)> onClosed)
+      : notifications(lambda::system::NotificationsClient::connectSession()),
+        pump(app, notifications.bus()),
+        posted(notifications.watchPosted(std::move(onPosted))),
+        closed(notifications.watchClosed([onClosed = std::move(onClosed)](
+                                             std::uint32_t id,
+                                             lambda::system::NotificationCloseReason) {
+          if (onClosed) {
+            onClosed(id);
+          }
+        })) {}
+
+  lambda::system::NotificationsClient notifications;
+  lambda::dbus::BusEventPump pump;
+  lambda::dbus::Slot posted;
+  lambda::dbus::Slot closed;
+};
+
 struct ShellSystemStatusWatchers {
   std::unique_ptr<ShellPowerStatusWatcher> power;
   std::unique_ptr<ShellNetworkStatusWatcher> network;
@@ -200,6 +233,38 @@ lambda::WindowConfig dockMenuWindowConfig() {
       .title = "Lambda Dock Menu",
       .resizable = false,
       .layerShell = layer,
+  };
+}
+
+LayerShellOptions hiddenNotificationLayer() {
+  LayerShellOptions layer = layerBase(LayerShellLayer::Overlay, "lambda.notifications");
+  layer.backgroundBlur = false;
+  layer.anchorTop = true;
+  layer.anchorRight = true;
+  layer.inputRegion = LayerShellInputRegion{};
+  return layer;
+}
+
+LayerShellOptions visibleNotificationLayer() {
+  LayerShellOptions layer = layerBase(LayerShellLayer::Overlay, "lambda.notifications");
+  layer.anchorTop = true;
+  layer.anchorRight = true;
+  layer.marginTop = 18;
+  layer.marginRight = 18;
+  layer.chrome.style = LayerShellChromeStyle::BlurPanelBorder;
+  layer.chrome.cornerRadius = CornerRadius{12.f};
+  layer.chrome.glass.baseColor = VisualTokens::elevatedSurface;
+  layer.chrome.glass.tintColor = Color{1.f, 1.f, 1.f, 0.06f};
+  layer.chrome.glass.borderColor = VisualTokens::border;
+  return layer;
+}
+
+lambda::WindowConfig notificationWindowConfig() {
+  return WindowConfig{
+      .size = {1.f, 1.f},
+      .title = "Lambda Notifications",
+      .resizable = false,
+      .layerShell = hiddenNotificationLayer(),
   };
 }
 
@@ -295,6 +360,18 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
       requestDockRedraw();
     }
   });
+
+  app_.eventQueue().on<ShellNotificationPosted>([this](ShellNotificationPosted const& event) {
+    auto const& posted = event.notification;
+    notificationCenter_.upsert(posted.id, posted.appName, posted.summary, posted.body);
+    syncNotificationWindow();
+  });
+
+  app_.eventQueue().on<ShellNotificationClosed>([this](ShellNotificationClosed const& event) {
+    if (notificationCenter_.dismiss(event.id)) {
+      syncNotificationWindow();
+    }
+  });
 }
 
 ShellController::~ShellController() = default;
@@ -306,6 +383,7 @@ void ShellController::setConfigReloadSource(std::filesystem::path path,
   appRegistry_ = std::move(apps);
   shellConfig_ = std::move(config);
   configLastWrite_ = configLastWriteTime(configPath_);
+  updateNotificationPolicy();
   if (configReloadTimerId_ == 0) {
     configReloadTimerId_ = app_.scheduleRepeatingTimer(std::chrono::milliseconds{750});
   }
@@ -469,6 +547,7 @@ void ShellController::applyShellConfigToModel() {
   if (dockItemSizeChanged && sessionMenuOpen_) {
     syncSessionMenuOverlay();
   }
+  updateNotificationPolicy();
   requestDockRedraw();
   if (model_.launcherOpen()) requestLauncherRedraw();
 }
@@ -520,6 +599,14 @@ void ShellController::createProductionWindows() {
   launcher.setBackground(lambda::WindowBackground::transparent());
   launcherWindow_ = &launcher;
   launcherHandle_ = launcher.handle();
+
+  auto& notifications = app_.createWindow<lambda::Window>(notificationWindowConfig());
+  notifications.setBackground(lambda::WindowBackground::transparent());
+  notificationWindow_ = &notifications;
+  notificationHandle_ = notifications.handle();
+  notifications.setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
+  notifications.resize({1.f, 1.f});
+  setupNotificationWatcher();
 
   mountProductionViews();
   syncLauncherWindow();
@@ -599,6 +686,10 @@ void ShellController::requestLauncherRedraw() {
   if (launcherWindow_) launcherWindow_->requestRedraw();
 }
 
+void ShellController::requestNotificationRedraw() {
+  if (notificationWindow_) notificationWindow_->requestRedraw();
+}
+
 bool ShellController::refreshSystemStatus() {
   if (!model_.setSystemStatus(readShellSystemStatus())) {
     return false;
@@ -644,6 +735,81 @@ void ShellController::setupSystemStatusWatchers() {
     } catch (...) {
     }
   }
+}
+
+void ShellController::setupNotificationWatcher() {
+  if (notificationWatcher_) {
+    return;
+  }
+
+  try {
+    notificationWatcher_ = std::make_unique<ShellNotificationWatcher>(
+        app_,
+        [this](lambda::system::NotificationPosted notification) {
+          app_.eventQueue().post(ShellNotificationPosted{.notification = std::move(notification)});
+        },
+        [this](std::uint32_t id) {
+          app_.eventQueue().post(ShellNotificationClosed{.id = id});
+        });
+  } catch (std::exception const& error) {
+    std::fprintf(stderr, "lambda-shell: notifications watcher unavailable: %s\n", error.what());
+  } catch (...) {
+    std::fprintf(stderr, "lambda-shell: notifications watcher unavailable\n");
+  }
+}
+
+void ShellController::updateNotificationPolicy() {
+  notificationCenter_.setHistoryLimit(shellConfig_.notificationHistoryLimit);
+  notificationCenter_.setDoNotDisturb(!shellConfig_.notificationsEnabled || shellConfig_.notificationsDoNotDisturb);
+  syncNotificationWindow();
+}
+
+void ShellController::syncNotificationWindow() {
+  if (!notificationWindow_) {
+    return;
+  }
+
+  auto visible = notificationCenter_.visible();
+  if (visible.empty()) {
+    notificationWindow_->setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
+    notificationWindow_->setLayerShellOptions(hiddenNotificationLayer());
+    notificationWindow_->resize({1.f, 1.f});
+    requestNotificationRedraw();
+    return;
+  }
+
+  Notification const notification = visible.front();
+  notificationWindow_->setView(ShellNotificationBannerView{
+      .notification = notification,
+      .width = kNotificationBannerWidth,
+      .height = kNotificationBannerHeight,
+      .onDismiss = [this](std::uint64_t id) { handleNotificationDismiss(id); },
+  });
+  notificationWindow_->setLayerShellOptions(visibleNotificationLayer());
+  notificationWindow_->resize({kNotificationBannerWidth, kNotificationBannerHeight});
+  requestNotificationRedraw();
+}
+
+void ShellController::handleNotificationDismiss(std::uint64_t id) {
+  if (notificationCenter_.dismiss(id)) {
+    syncNotificationWindow();
+  }
+  if (id <= static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
+    closeNotificationAsync(static_cast<std::uint32_t>(id));
+  }
+}
+
+void ShellController::closeNotificationAsync(std::uint32_t id) {
+  std::thread([id] {
+    try {
+      auto client = lambda::system::NotificationsClient::connectSession();
+      client.closeNotification(id);
+    } catch (std::exception const& error) {
+      std::fprintf(stderr, "lambda-shell: failed to close notification %u: %s\n", id, error.what());
+    } catch (...) {
+      std::fprintf(stderr, "lambda-shell: failed to close notification %u\n", id);
+    }
+  }).detach();
 }
 
 void ShellController::activateLauncherItem(DockItem const& item) {

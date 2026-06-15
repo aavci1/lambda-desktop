@@ -20,6 +20,7 @@ namespace lambda_shell {
 
 enum class AudioControlAction;
 struct ShellSystemStatusWatchers;
+struct ShellNotificationWatcher;
 
 class ShellController {
 public:
@@ -47,6 +48,7 @@ private:
   void requestDockRedraw();
   void requestDockMenuRedraw();
   void requestLauncherRedraw();
+  void requestNotificationRedraw();
   [[nodiscard]] int measureDockClockWidth();
   [[nodiscard]] bool updateDockClockWidth();
   void resizeDockWindowIfNeeded();
@@ -54,6 +56,11 @@ private:
   void checkShellConfigReload();
   [[nodiscard]] bool refreshSystemStatus();
   void setupSystemStatusWatchers();
+  void setupNotificationWatcher();
+  void updateNotificationPolicy();
+  void syncNotificationWindow();
+  void handleNotificationDismiss(std::uint64_t id);
+  void closeNotificationAsync(std::uint32_t id);
   void performAudioControlAsync(AudioControlAction action);
   void performNetworkControlAsync(DockStatusAction action);
   void performBluetoothControlAsync(DockStatusAction action);
@@ -87,10 +94,12 @@ private:
   std::optional<unsigned int> dockHandle_;
   std::optional<unsigned int> dockMenuHandle_;
   std::optional<unsigned int> launcherHandle_;
+  std::optional<unsigned int> notificationHandle_;
   std::optional<unsigned int> previewHandle_;
   lambda::Window* dockWindow_ = nullptr;
   lambda::Window* dockMenuWindow_ = nullptr;
   lambda::Window* launcherWindow_ = nullptr;
+  lambda::Window* notificationWindow_ = nullptr;
   float previewWidth_ = 960.f;
   float previewHeight_ = 620.f;
   bool launcherModalClaimed_ = false;
@@ -108,6 +117,8 @@ private:
   std::uint64_t configReloadTimerId_ = 0;
   std::uint64_t nextRequestId_ = 1;
   std::unique_ptr<ShellSystemStatusWatchers> systemStatusWatchers_;
+  std::unique_ptr<ShellNotificationWatcher> notificationWatcher_;
+  NotificationCenterModel notificationCenter_;
   std::filesystem::path configPath_;
   std::optional<std::filesystem::file_time_type> configLastWrite_;
   std::vector<AppRegistryEntry> appRegistry_;

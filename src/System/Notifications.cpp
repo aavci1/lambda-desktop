@@ -114,6 +114,7 @@ std::uint32_t NotificationsService::notify(std::string appName,
       existing->expireTimeoutMs = expireTimeoutMs;
       existing->closed = false;
       existing->closeReason = NotificationCloseReason::Undefined;
+      emitPosted(*existing);
       return existing->id;
     }
   }
@@ -130,6 +131,7 @@ std::uint32_t NotificationsService::notify(std::string appName,
                             .expireTimeoutMs = expireTimeoutMs,
                         });
   trimHistory();
+  emitPosted(notifications_.front());
   return id;
 }
 
@@ -191,6 +193,18 @@ void NotificationsService::emitClosed(std::uint32_t id, NotificationCloseReason 
                    {id, static_cast<std::uint32_t>(reason)});
 }
 
+void NotificationsService::emitPosted(NotificationRecord const& record) const {
+  bus_->emitSignal(objectPath,
+                   monitorInterfaceName,
+                   postedSignalName,
+                   {record.id,
+                    record.appName,
+                    record.appIcon,
+                    record.summary,
+                    record.body,
+                    record.expireTimeoutMs});
+}
+
 void NotificationsService::emitActionInvoked(std::uint32_t id, std::string const& actionKey) const {
   bus_->emitSignal(objectPath, interfaceName, "ActionInvoked", {id, actionKey});
 }
@@ -199,6 +213,61 @@ void NotificationsService::trimHistory() {
   if (notifications_.size() > historyLimit_) {
     notifications_.resize(historyLimit_);
   }
+}
+
+NotificationsClient::NotificationsClient(dbus::Bus bus) : bus_(std::move(bus)) {}
+
+NotificationsClient NotificationsClient::connectSession() {
+  return NotificationsClient(dbus::Bus::open(dbus::BusType::Session));
+}
+
+dbus::Slot NotificationsClient::watchPosted(std::function<void(NotificationPosted)> handler) {
+  return bus_.matchSignal(
+      dbus::SignalMatch{
+          .sender = NotificationsService::serviceName,
+          .path = NotificationsService::objectPath,
+          .interface = NotificationsService::monitorInterfaceName,
+          .member = NotificationsService::postedSignalName,
+      },
+      [handler = std::move(handler)](dbus::Message& message) mutable {
+        NotificationPosted posted;
+        posted.id = message.readUint32();
+        posted.appName = message.readString();
+        posted.appIcon = message.readString();
+        posted.summary = message.readString();
+        posted.body = message.readString();
+        posted.expireTimeoutMs = message.readInt32();
+        if (handler) {
+          handler(std::move(posted));
+        }
+      });
+}
+
+dbus::Slot NotificationsClient::watchClosed(std::function<void(std::uint32_t, NotificationCloseReason)> handler) {
+  return bus_.matchSignal(
+      dbus::SignalMatch{
+          .sender = NotificationsService::serviceName,
+          .path = NotificationsService::objectPath,
+          .interface = NotificationsService::interfaceName,
+          .member = "NotificationClosed",
+      },
+      [handler = std::move(handler)](dbus::Message& message) mutable {
+        std::uint32_t const id = message.readUint32();
+        auto const reason = static_cast<NotificationCloseReason>(message.readUint32());
+        if (handler) {
+          handler(id, reason);
+        }
+      });
+}
+
+void NotificationsClient::closeNotification(std::uint32_t id) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = NotificationsService::serviceName,
+      .path = NotificationsService::objectPath,
+      .interface = NotificationsService::interfaceName,
+      .member = "CloseNotification",
+      .arguments = {id},
+  });
 }
 
 } // namespace lambda::system

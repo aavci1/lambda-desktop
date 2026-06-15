@@ -7,6 +7,7 @@
 #include <Lambda/System/DBus.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -41,11 +42,24 @@ struct NotificationRecord {
   bool operator==(NotificationRecord const&) const = default;
 };
 
+struct NotificationPosted {
+  std::uint32_t id = 0;
+  std::string appName;
+  std::string appIcon;
+  std::string summary;
+  std::string body;
+  std::int32_t expireTimeoutMs = -1;
+
+  bool operator==(NotificationPosted const&) const = default;
+};
+
 class NotificationsService {
 public:
   static constexpr char const* serviceName = "org.freedesktop.Notifications";
   static constexpr char const* objectPath = "/org/freedesktop/Notifications";
   static constexpr char const* interfaceName = "org.freedesktop.Notifications";
+  static constexpr char const* monitorInterfaceName = "org.lambda.Notifications";
+  static constexpr char const* postedSignalName = "NotificationPosted";
 
   explicit NotificationsService(dbus::Bus& bus, std::size_t historyLimit = 100);
 
@@ -71,6 +85,7 @@ public:
 private:
   [[nodiscard]] NotificationRecord* find(std::uint32_t id);
   [[nodiscard]] NotificationRecord const* find(std::uint32_t id) const;
+  void emitPosted(NotificationRecord const& record) const;
   void emitClosed(std::uint32_t id, NotificationCloseReason reason) const;
   void emitActionInvoked(std::uint32_t id, std::string const& actionKey) const;
   void trimHistory();
@@ -80,6 +95,23 @@ private:
   std::uint32_t nextId_ = 1;
   bool doNotDisturb_ = false;
   std::vector<NotificationRecord> notifications_;
+};
+
+class NotificationsClient {
+public:
+  explicit NotificationsClient(dbus::Bus bus);
+
+  [[nodiscard]] static NotificationsClient connectSession();
+
+  [[nodiscard]] dbus::Bus& bus() noexcept { return bus_; }
+  [[nodiscard]] dbus::Bus const& bus() const noexcept { return bus_; }
+
+  [[nodiscard]] dbus::Slot watchPosted(std::function<void(NotificationPosted)> handler);
+  [[nodiscard]] dbus::Slot watchClosed(std::function<void(std::uint32_t, NotificationCloseReason)> handler);
+  void closeNotification(std::uint32_t id);
+
+private:
+  dbus::Bus bus_;
 };
 
 } // namespace lambda::system
