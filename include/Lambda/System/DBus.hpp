@@ -106,7 +106,8 @@ private:
   int fd_ = -1;
 };
 
-using BasicValue = std::variant<bool, std::uint8_t, std::int32_t, std::uint32_t,
+using BasicValue = std::variant<bool, std::uint8_t, std::int16_t, std::uint16_t,
+                                std::int32_t, std::uint32_t,
                                 std::int64_t, std::uint64_t, double, std::string,
                                 ObjectPath, ObjectPathArray, StringArray, ByteArray,
                                 ByteArrayArray, RgbColor, EmptyVariantDictionary,
@@ -206,6 +207,8 @@ public:
   [[nodiscard]] bool hasSignature(std::string_view expected) const;
 
   [[nodiscard]] bool readBool();
+  [[nodiscard]] std::int16_t readInt16();
+  [[nodiscard]] std::uint16_t readUint16();
   [[nodiscard]] std::int32_t readInt32();
   [[nodiscard]] std::uint32_t readUint32();
   [[nodiscard]] std::int64_t readInt64();

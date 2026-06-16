@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -42,6 +43,51 @@ bool boolProperty(InterfaceProperties const& properties, std::string const& name
   return false;
 }
 
+std::uint8_t byteProperty(InterfaceProperties const& properties, std::string const& name) {
+  auto const it = properties.find(name);
+  if (it == properties.end()) {
+    return 0;
+  }
+  if (auto value = std::get_if<std::uint8_t>(&it->second)) {
+    return *value;
+  }
+  return 0;
+}
+
+std::uint16_t uint16Property(InterfaceProperties const& properties, std::string const& name) {
+  auto const it = properties.find(name);
+  if (it == properties.end()) {
+    return 0;
+  }
+  if (auto value = std::get_if<std::uint16_t>(&it->second)) {
+    return *value;
+  }
+  return 0;
+}
+
+std::uint32_t uint32Property(InterfaceProperties const& properties, std::string const& name) {
+  auto const it = properties.find(name);
+  if (it == properties.end()) {
+    return 0;
+  }
+  if (auto value = std::get_if<std::uint32_t>(&it->second)) {
+    return *value;
+  }
+  return 0;
+}
+
+std::optional<std::int16_t> int16Property(InterfaceProperties const& properties,
+                                          std::string const& name) {
+  auto const it = properties.find(name);
+  if (it == properties.end()) {
+    return std::nullopt;
+  }
+  if (auto value = std::get_if<std::int16_t>(&it->second)) {
+    return *value;
+  }
+  return std::nullopt;
+}
+
 std::string objectPathProperty(InterfaceProperties const& properties, std::string const& name) {
   auto const it = properties.find(name);
   if (it == properties.end()) {
@@ -53,26 +99,81 @@ std::string objectPathProperty(InterfaceProperties const& properties, std::strin
   return {};
 }
 
+std::vector<std::string> stringArrayProperty(InterfaceProperties const& properties,
+                                             std::string const& name) {
+  auto const it = properties.find(name);
+  if (it == properties.end()) {
+    return {};
+  }
+  if (auto value = std::get_if<dbus::StringArray>(&it->second)) {
+    return value->values;
+  }
+  return {};
+}
+
 BlueZAdapterSnapshot adapterSnapshot(std::string const& path, InterfaceProperties const& properties) {
   return BlueZAdapterSnapshot{
       .path = path,
       .address = stringProperty(properties, "Address"),
+      .addressType = stringProperty(properties, "AddressType"),
+      .name = stringProperty(properties, "Name"),
       .alias = stringProperty(properties, "Alias"),
+      .modalias = stringProperty(properties, "Modalias"),
+      .powerState = stringProperty(properties, "PowerState"),
+      .deviceClass = uint32Property(properties, "Class"),
       .powered = boolProperty(properties, "Powered"),
+      .discoverable = boolProperty(properties, "Discoverable"),
+      .pairable = boolProperty(properties, "Pairable"),
+      .connectable = boolProperty(properties, "Connectable"),
       .discovering = boolProperty(properties, "Discovering"),
+      .uuids = stringArrayProperty(properties, "UUIDs"),
+      .roles = stringArrayProperty(properties, "Roles"),
   };
 }
 
-BlueZDeviceSnapshot deviceSnapshot(std::string const& path, InterfaceProperties const& properties) {
-  return BlueZDeviceSnapshot{
+BlueZDeviceSnapshot deviceSnapshot(std::string const& path,
+                                   InterfaceProperties const& properties,
+                                   InterfaceProperties const* batteryProperties) {
+  BlueZDeviceSnapshot device{
       .path = path,
       .adapterPath = objectPathProperty(properties, "Adapter"),
       .address = stringProperty(properties, "Address"),
+      .addressType = stringProperty(properties, "AddressType"),
       .alias = stringProperty(properties, "Alias"),
       .name = stringProperty(properties, "Name"),
+      .iconName = stringProperty(properties, "Icon"),
+      .modalias = stringProperty(properties, "Modalias"),
+      .deviceClass = uint32Property(properties, "Class"),
+      .appearance = uint16Property(properties, "Appearance"),
       .paired = boolProperty(properties, "Paired"),
       .connected = boolProperty(properties, "Connected"),
+      .trusted = boolProperty(properties, "Trusted"),
+      .blocked = boolProperty(properties, "Blocked"),
+      .legacyPairing = boolProperty(properties, "LegacyPairing"),
+      .servicesResolved = boolProperty(properties, "ServicesResolved"),
+      .wakeAllowed = boolProperty(properties, "WakeAllowed"),
+      .hasRssi = false,
+      .rssi = 0,
+      .hasTxPower = false,
+      .txPower = 0,
+      .batteryPercentage = -1,
+      .batterySource = {},
+      .uuids = stringArrayProperty(properties, "UUIDs"),
   };
+  if (auto rssi = int16Property(properties, "RSSI")) {
+    device.hasRssi = true;
+    device.rssi = *rssi;
+  }
+  if (auto txPower = int16Property(properties, "TxPower")) {
+    device.hasTxPower = true;
+    device.txPower = *txPower;
+  }
+  if (batteryProperties) {
+    auto const percentage = byteProperty(*batteryProperties, "Percentage");
+    device.batteryPercentage = static_cast<int>(std::min<std::uint8_t>(percentage, 100));
+    device.batterySource = stringProperty(*batteryProperties, "Source");
+  }
+  return device;
 }
 
 std::string displayName(BlueZDeviceSnapshot const& device) {
@@ -107,7 +208,10 @@ BlueZSnapshot BlueZClient::readSnapshot() {
       snapshot.adapters.push_back(adapterSnapshot(path, adapter->second));
     }
     if (auto device = interfaces.find(deviceInterfaceName); device != interfaces.end()) {
-      snapshot.devices.push_back(deviceSnapshot(path, device->second));
+      auto const battery = interfaces.find(batteryInterfaceName);
+      InterfaceProperties const* batteryProperties =
+          battery == interfaces.end() ? nullptr : &battery->second;
+      snapshot.devices.push_back(deviceSnapshot(path, device->second, batteryProperties));
     }
   }
   return snapshot;
@@ -134,12 +238,34 @@ dbus::Slot BlueZClient::watchAdapterOrDeviceChanged(std::function<void()> handle
       [handler = std::move(handler)](dbus::Message& message) mutable {
         auto const changed = dbus::readPropertiesChanged(message);
         if (changed.interface != BlueZClient::adapterInterfaceName &&
-            changed.interface != BlueZClient::deviceInterfaceName) {
+            changed.interface != BlueZClient::deviceInterfaceName &&
+            changed.interface != BlueZClient::batteryInterfaceName) {
           return;
         }
         if (handler) {
           handler();
         }
+      });
+}
+
+dbus::Slot BlueZClient::watchDeviceDisconnected(
+    std::function<void(BlueZDeviceDisconnectedEvent)> handler) {
+  return bus_.matchSignal(
+      dbus::SignalMatch{
+          .sender = serviceName,
+          .path = {},
+          .interface = deviceInterfaceName,
+          .member = "Disconnected",
+      },
+      [handler = std::move(handler)](dbus::Message& message) mutable {
+        if (!handler) {
+          return;
+        }
+        handler(BlueZDeviceDisconnectedEvent{
+            .path = message.path(),
+            .reason = message.readString(),
+            .message = message.readString(),
+        });
       });
 }
 
@@ -157,7 +283,8 @@ BlueZStatusWatch BlueZClient::watchStatusChanges(std::function<void()> handler) 
               [sharedHandler](dbus::Message& message) {
                 auto const changed = dbus::readPropertiesChanged(message);
                 if (changed.interface != BlueZClient::adapterInterfaceName &&
-                    changed.interface != BlueZClient::deviceInterfaceName) {
+                    changed.interface != BlueZClient::deviceInterfaceName &&
+                    changed.interface != BlueZClient::batteryInterfaceName) {
                   return;
                 }
                 notify(sharedHandler);
@@ -180,6 +307,17 @@ BlueZStatusWatch BlueZClient::watchStatusChanges(std::function<void()> handler) 
                   .path = objectManagerPath,
                   .interface = objectManagerInterfaceName,
                   .member = "InterfacesRemoved",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+      .deviceDisconnected =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = serviceName,
+                  .path = {},
+                  .interface = deviceInterfaceName,
+                  .member = "Disconnected",
               },
               [sharedHandler](dbus::Message&) {
                 notify(sharedHandler);

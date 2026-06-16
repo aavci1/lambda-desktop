@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <optional>
 #include <thread>
 #include <utility>
 
@@ -32,18 +33,51 @@ lambda::dbus::ManagedObjectDictionary managedObjects(bool powered, bool discover
   lambda::dbus::ManagedObjectDictionary objects;
   auto& adapter = objects.values[kAdapterPath][lambda::system::BlueZClient::adapterInterfaceName];
   adapter["Address"] = std::string("00:11:22:33:44:55");
+  adapter["AddressType"] = std::string("public");
+  adapter["Name"] = std::string("lambda-host");
   adapter["Alias"] = std::string("lambda-host");
+  adapter["Modalias"] = std::string("usb:v1D6Bp0246d0542");
+  adapter["PowerState"] = powered ? std::string("on") : std::string("off");
+  adapter["Class"] = std::uint32_t(0x001f00);
   adapter["Powered"] = powered;
+  adapter["Discoverable"] = true;
+  adapter["Pairable"] = true;
+  adapter["Connectable"] = true;
   adapter["Discovering"] = discovering;
+  adapter["UUIDs"] = lambda::dbus::StringArray{
+      .values = {"0000110a-0000-1000-8000-00805f9b34fb"},
+  };
+  adapter["Roles"] = lambda::dbus::StringArray{
+      .values = {"central", "peripheral"},
+  };
 
   auto& device = objects.values[kDevicePath][lambda::system::BlueZClient::deviceInterfaceName];
   device["Address"] = std::string("11:22:33:44:55:66");
+  device["AddressType"] = std::string("public");
   device["Alias"] = std::string("Keyboard");
   device["Name"] = std::string("Keyboard");
+  device["Icon"] = std::string("input-keyboard");
+  device["Class"] = std::uint32_t(0x000540);
+  device["Appearance"] = std::uint16_t(0x03c1);
+  device["UUIDs"] = lambda::dbus::StringArray{
+      .values = {"00001124-0000-1000-8000-00805f9b34fb"},
+  };
   device["Adapter"] = lambda::dbus::ObjectPath{kAdapterPath};
   device["Paired"] = true;
   device["Connected"] = connected;
+  device["Trusted"] = true;
+  device["Blocked"] = false;
+  device["LegacyPairing"] = false;
+  device["Modalias"] = std::string("bluetooth:v05ACp024Fd011B");
+  device["ServicesResolved"] = connected;
+  device["WakeAllowed"] = true;
+  device["RSSI"] = std::int16_t(-48);
+  device["TxPower"] = std::int16_t(6);
   device["ManufacturerData"] = lambda::dbus::EmptyVariantDictionary{};
+
+  auto& battery = objects.values[kDevicePath][lambda::system::BlueZClient::batteryInterfaceName];
+  battery["Percentage"] = std::uint8_t(73);
+  battery["Source"] = std::string("HID");
   return objects;
 }
 
@@ -121,10 +155,44 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   auto snapshot = client.readSnapshot();
   REQUIRE(snapshot.adapters.size() == 1);
   CHECK(snapshot.adapters.front().path == kAdapterPath);
+  CHECK(snapshot.adapters.front().address == "00:11:22:33:44:55");
+  CHECK(snapshot.adapters.front().addressType == "public");
+  CHECK(snapshot.adapters.front().name == "lambda-host");
+  CHECK(snapshot.adapters.front().alias == "lambda-host");
+  CHECK(snapshot.adapters.front().modalias == "usb:v1D6Bp0246d0542");
+  CHECK(snapshot.adapters.front().powerState == "on");
+  CHECK(snapshot.adapters.front().deviceClass == 0x001f00);
   CHECK(snapshot.adapters.front().powered);
+  CHECK(snapshot.adapters.front().discoverable);
+  CHECK(snapshot.adapters.front().pairable);
+  CHECK(snapshot.adapters.front().connectable);
+  CHECK_FALSE(snapshot.adapters.front().discovering);
+  CHECK(snapshot.adapters.front().uuids == std::vector<std::string>{"0000110a-0000-1000-8000-00805f9b34fb"});
+  CHECK(snapshot.adapters.front().roles == std::vector<std::string>{"central", "peripheral"});
   REQUIRE(snapshot.devices.size() == 1);
   CHECK(snapshot.devices.front().adapterPath == kAdapterPath);
+  CHECK(snapshot.devices.front().address == "11:22:33:44:55:66");
+  CHECK(snapshot.devices.front().addressType == "public");
+  CHECK(snapshot.devices.front().alias == "Keyboard");
+  CHECK(snapshot.devices.front().name == "Keyboard");
+  CHECK(snapshot.devices.front().iconName == "input-keyboard");
+  CHECK(snapshot.devices.front().deviceClass == 0x000540);
+  CHECK(snapshot.devices.front().appearance == 0x03c1);
+  CHECK(snapshot.devices.front().uuids == std::vector<std::string>{"00001124-0000-1000-8000-00805f9b34fb"});
+  CHECK(snapshot.devices.front().paired);
   CHECK(snapshot.devices.front().connected);
+  CHECK(snapshot.devices.front().trusted);
+  CHECK_FALSE(snapshot.devices.front().blocked);
+  CHECK_FALSE(snapshot.devices.front().legacyPairing);
+  CHECK(snapshot.devices.front().modalias == "bluetooth:v05ACp024Fd011B");
+  CHECK(snapshot.devices.front().servicesResolved);
+  CHECK(snapshot.devices.front().wakeAllowed);
+  CHECK(snapshot.devices.front().hasRssi);
+  CHECK(snapshot.devices.front().rssi == -48);
+  CHECK(snapshot.devices.front().hasTxPower);
+  CHECK(snapshot.devices.front().txPower == 6);
+  CHECK(snapshot.devices.front().batteryPercentage == 73);
+  CHECK(snapshot.devices.front().batterySource == "HID");
   CHECK(lambda::system::formatBluetoothStatus(snapshot) == "Keyboard");
 
   connected = false;
@@ -144,6 +212,11 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   auto statusWatch = client.watchStatusChanges([&] {
     ++statusChanges;
   });
+  std::optional<lambda::system::BlueZDeviceDisconnectedEvent> disconnectedEvent;
+  auto disconnectedSlot = client.watchDeviceDisconnected(
+      [&](lambda::system::BlueZDeviceDisconnectedEvent event) {
+        disconnectedEvent = std::move(event);
+      });
   powered = true;
   service.emitPropertiesChanged(
       kAdapterPath,
@@ -182,6 +255,31 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   CHECK(pumpUntil(client.bus(),
                   [&] { return statusChanges == 3; },
                   std::chrono::milliseconds(500)));
+
+  service.emitPropertiesChanged(
+      kDevicePath,
+      lambda::system::BlueZClient::batteryInterfaceName,
+      lambda::dbus::VariantDictionary{
+          .values = {{"Percentage", lambda::dbus::BasicValue(std::uint8_t(71))}},
+      });
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return statusChanges == 4; },
+                  std::chrono::milliseconds(500)));
+
+  service.emitSignal(kDevicePath,
+                     lambda::system::BlueZClient::deviceInterfaceName,
+                     "Disconnected",
+                     {std::string("org.bluez.Reason.Timeout"),
+                      std::string("Connection timed out")});
+  service.flush();
+  CHECK(pumpUntil(client.bus(),
+                  [&] { return disconnectedEvent.has_value() && statusChanges == 5; },
+                  std::chrono::milliseconds(500)));
+  REQUIRE(disconnectedEvent.has_value());
+  CHECK(disconnectedEvent->path == kDevicePath);
+  CHECK(disconnectedEvent->reason == "org.bluez.Reason.Timeout");
+  CHECK(disconnectedEvent->message == "Connection timed out");
 
   CHECK(lambda::system::formatBluetoothStatus(lambda::system::BlueZSnapshot{}) == "unavailable");
 }

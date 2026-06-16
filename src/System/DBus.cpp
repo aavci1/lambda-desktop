@@ -84,6 +84,8 @@ VariantDictionary readVariantDictionaryFrom(sd_bus_message* message);
   switch (type) {
   case 'b':
   case 'y':
+  case 'n':
+  case 'q':
   case 'i':
   case 'u':
   case 'x':
@@ -297,6 +299,10 @@ void appendValue(sd_bus_message* message, BasicValue const& value) {
           return sd_bus_message_append_basic(message, 'b', &raw);
         } else if constexpr (std::is_same_v<T, std::uint8_t>) {
           return sd_bus_message_append_basic(message, 'y', &v);
+        } else if constexpr (std::is_same_v<T, std::int16_t>) {
+          return sd_bus_message_append_basic(message, 'n', &v);
+        } else if constexpr (std::is_same_v<T, std::uint16_t>) {
+          return sd_bus_message_append_basic(message, 'q', &v);
         } else if constexpr (std::is_same_v<T, std::int32_t>) {
           return sd_bus_message_append_basic(message, 'i', &v);
         } else if constexpr (std::is_same_v<T, std::uint32_t>) {
@@ -648,6 +654,16 @@ BasicValue readValueFromSignature(sd_bus_message* message, std::string_view sign
   case 'y': {
     std::uint8_t value = 0;
     throwIfFailed(sd_bus_message_read_basic(message, 'y', &value), "read D-Bus byte");
+    return value;
+  }
+  case 'n': {
+    std::int16_t value = 0;
+    throwIfFailed(sd_bus_message_read_basic(message, 'n', &value), "read D-Bus int16");
+    return value;
+  }
+  case 'q': {
+    std::uint16_t value = 0;
+    throwIfFailed(sd_bus_message_read_basic(message, 'q', &value), "read D-Bus uint16");
     return value;
   }
   case 'i': {
@@ -1178,6 +1194,10 @@ std::string signatureFor(BasicValue const& value) {
           return "b";
         } else if constexpr (std::is_same_v<T, std::uint8_t>) {
           return "y";
+        } else if constexpr (std::is_same_v<T, std::int16_t>) {
+          return "n";
+        } else if constexpr (std::is_same_v<T, std::uint16_t>) {
+          return "q";
         } else if constexpr (std::is_same_v<T, std::int32_t>) {
           return "i";
         } else if constexpr (std::is_same_v<T, std::uint32_t>) {
@@ -1389,6 +1409,14 @@ bool Message::hasSignature(std::string_view expected) const {
 
 bool Message::readBool() {
   return std::get<bool>(readBasic("b"));
+}
+
+std::int16_t Message::readInt16() {
+  return std::get<std::int16_t>(readBasic("n"));
+}
+
+std::uint16_t Message::readUint16() {
+  return std::get<std::uint16_t>(readBasic("q"));
 }
 
 std::int32_t Message::readInt32() {
