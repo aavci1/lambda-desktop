@@ -87,6 +87,59 @@ std::uint64_t uint64Property(InterfaceProperties const& properties, std::string 
   return 0;
 }
 
+std::uint32_t uint32Property(InterfaceProperties const& properties, std::string const& name) {
+  auto const it = properties.find(name);
+  if (it == properties.end()) {
+    return 0;
+  }
+  if (auto value = std::get_if<std::uint32_t>(&it->second)) {
+    return *value;
+  }
+  return 0;
+}
+
+double doubleProperty(InterfaceProperties const& properties, std::string const& name) {
+  auto const it = properties.find(name);
+  if (it == properties.end()) {
+    return 0.0;
+  }
+  if (auto value = std::get_if<double>(&it->second)) {
+    return *value;
+  }
+  return 0.0;
+}
+
+std::vector<std::string> objectPathArrayProperty(InterfaceProperties const& properties,
+                                                 std::string const& name) {
+  auto const it = properties.find(name);
+  if (it == properties.end()) {
+    return {};
+  }
+  if (auto value = std::get_if<dbus::ObjectPathArray>(&it->second)) {
+    std::vector<std::string> paths;
+    paths.reserve(value->values.size());
+    for (auto const& path : value->values) {
+      if (!path.value.empty()) {
+        paths.push_back(path.value);
+      }
+    }
+    return paths;
+  }
+  return {};
+}
+
+std::vector<std::string> stringArrayProperty(InterfaceProperties const& properties,
+                                             std::string const& name) {
+  auto const it = properties.find(name);
+  if (it == properties.end()) {
+    return {};
+  }
+  if (auto value = std::get_if<dbus::StringArray>(&it->second)) {
+    return value->values;
+  }
+  return {};
+}
+
 std::vector<std::string> byteStringArrayProperty(InterfaceProperties const& properties,
                                                  std::string const& name) {
   auto const it = properties.find(name);
@@ -121,9 +174,26 @@ UDisks2DriveSnapshot driveSnapshot(std::string const& path, InterfaceProperties 
   };
 }
 
+UDisks2JobSnapshot jobSnapshot(std::string const& path, InterfaceProperties const& properties) {
+  return UDisks2JobSnapshot{
+      .path = path,
+      .operation = stringProperty(properties, "Operation"),
+      .progress = doubleProperty(properties, "Progress"),
+      .progressValid = boolProperty(properties, "ProgressValid"),
+      .cancelable = boolProperty(properties, "Cancelable"),
+      .bytes = uint64Property(properties, "Bytes"),
+      .rate = uint64Property(properties, "Rate"),
+      .startTime = uint64Property(properties, "StartTime"),
+      .expectedEndTime = uint64Property(properties, "ExpectedEndTime"),
+      .startedByUid = uint32Property(properties, "StartedByUID"),
+      .objectPaths = objectPathArrayProperty(properties, "Objects"),
+  };
+}
+
 UDisks2VolumeSnapshot volumeSnapshot(std::string const& path,
                                      InterfaceProperties const& block,
-                                     InterfaceProperties const* filesystem) {
+                                     InterfaceProperties const* filesystem,
+                                     InterfaceProperties const* encrypted) {
   UDisks2VolumeSnapshot volume;
   volume.path = path;
   volume.device = byteStringProperty(block, "Device");
@@ -133,14 +203,24 @@ UDisks2VolumeSnapshot volumeSnapshot(std::string const& path,
   volume.uuid = stringProperty(block, "IdUUID");
   volume.filesystemType = stringProperty(block, "IdType");
   volume.filesystemUsage = stringProperty(block, "IdUsage");
+  volume.cryptoBackingDevice = objectPathProperty(block, "CryptoBackingDevice");
   volume.sizeBytes = uint64Property(block, "Size");
   volume.readOnly = boolProperty(block, "ReadOnly");
   volume.hintSystem = boolProperty(block, "HintSystem");
   volume.hintIgnore = boolProperty(block, "HintIgnore");
   volume.hintAuto = boolProperty(block, "HintAuto");
+  volume.userspaceMountOptions = stringArrayProperty(block, "UserspaceMountOptions");
   volume.hasFilesystem = filesystem != nullptr;
+  volume.encrypted = encrypted != nullptr || volume.filesystemUsage == "crypto";
+  volume.cleartext = !volume.cryptoBackingDevice.empty() && volume.cryptoBackingDevice != "/";
   if (filesystem) {
     volume.mountPoints = byteStringArrayProperty(*filesystem, "MountPoints");
+  }
+  if (encrypted) {
+    volume.cleartextDevice = objectPathProperty(*encrypted, "CleartextDevice");
+    volume.encryptionType = stringProperty(*encrypted, "HintEncryptionType");
+    volume.encryptionMetadataSize = uint64Property(*encrypted, "MetadataSize");
+    volume.unlocked = !volume.cleartextDevice.empty() && volume.cleartextDevice != "/";
   }
   return volume;
 }
@@ -151,6 +231,75 @@ std::string basename(std::string const& path) {
   }
   std::filesystem::path fsPath(path);
   return fsPath.filename().string();
+}
+
+bool jobAffectsVolume(UDisks2JobSnapshot const& job, UDisks2VolumeSnapshot const& volume) {
+  return std::any_of(job.objectPaths.begin(), job.objectPaths.end(), [&](std::string const& path) {
+    return path == volume.path || path == volume.drivePath ||
+           (!volume.cleartextDevice.empty() && path == volume.cleartextDevice) ||
+           (!volume.cryptoBackingDevice.empty() && path == volume.cryptoBackingDevice);
+  });
+}
+
+std::shared_ptr<dbus::VariantDictionary> operationOptions(UDisks2MountOptions const& options,
+                                                          bool forMount,
+                                                          bool forUnmount,
+                                                          bool forUnlock) {
+  auto values = std::make_shared<dbus::VariantDictionary>();
+  if (forMount) {
+    if (!options.filesystemType.empty()) {
+      values->values["fstype"] = options.filesystemType;
+    }
+    if (!options.mountOptions.empty()) {
+      values->values["options"] = options.mountOptions;
+    }
+    if (!options.asUser.empty()) {
+      values->values["as-user"] = options.asUser;
+    }
+  }
+  if (forUnmount && options.force) {
+    values->values["force"] = true;
+  }
+  if (forUnlock && options.readOnly) {
+    values->values["read-only"] = true;
+  }
+  return values;
+}
+
+dbus::BasicValue optionsArgument(std::shared_ptr<dbus::VariantDictionary> const& options) {
+  if (!options || options->values.empty()) {
+    return dbus::EmptyVariantDictionary{};
+  }
+  return options;
+}
+
+UDisks2OperationResult success(std::string value = {}) {
+  UDisks2OperationResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+UDisks2OperationResult failure(dbus::Error const& error) {
+  UDisks2OperationResult result;
+  result.errorName = error.name();
+  result.errorMessage = error.what();
+  result.deviceBusy = result.errorName.find("DeviceBusy") != std::string::npos;
+  result.cancelled = result.errorName.find("Cancelled") != std::string::npos;
+  result.notAuthorized = result.errorName.find("NotAuthorized") != std::string::npos;
+  result.canForce = result.deviceBusy;
+  result.retryable = result.deviceBusy || result.cancelled || result.notAuthorized;
+  if (result.deviceBusy) {
+    result.userMessage = "The volume is busy. Close files using it, then retry or force unmount.";
+  } else if (result.cancelled) {
+    result.userMessage = "The operation was cancelled.";
+  } else if (result.notAuthorized) {
+    result.userMessage = "Authorization is required to complete this storage operation.";
+  } else {
+    result.userMessage = result.errorMessage.empty() ? "The storage operation failed."
+                                                     : result.errorMessage;
+  }
+  return result;
 }
 
 } // namespace
@@ -172,6 +321,9 @@ UDisks2Snapshot UDisks2Client::readSnapshot() {
       drivesByPath[path] = driveInfo;
       snapshot.drives.push_back(std::move(driveInfo));
     }
+    if (auto job = interfaces.find(jobInterfaceName); job != interfaces.end()) {
+      snapshot.jobs.push_back(jobSnapshot(path, job->second));
+    }
   }
 
   for (auto const& [path, interfaces] : objects.values) {
@@ -180,11 +332,18 @@ UDisks2Snapshot UDisks2Client::readSnapshot() {
       continue;
     }
     auto filesystem = interfaces.find(filesystemInterfaceName);
+    auto encrypted = interfaces.find(encryptedInterfaceName);
     auto volume = volumeSnapshot(path,
                                  block->second,
-                                 filesystem == interfaces.end() ? nullptr : &filesystem->second);
+                                 filesystem == interfaces.end() ? nullptr : &filesystem->second,
+                                 encrypted == interfaces.end() ? nullptr : &encrypted->second);
     if (auto drive = drivesByPath.find(volume.drivePath); drive != drivesByPath.end()) {
       volume.drive = drive->second;
+    }
+    for (auto const& job : snapshot.jobs) {
+      if (jobAffectsVolume(job, volume)) {
+        volume.jobs.push_back(job);
+      }
     }
     if (volume.userVisible()) {
       snapshot.volumes.push_back(std::move(volume));
@@ -212,7 +371,9 @@ UDisks2StatusWatch UDisks2Client::watchStatusChanges(std::function<void()> handl
                 auto const changed = dbus::readPropertiesChanged(message);
                 if (changed.interface != UDisks2Client::blockInterfaceName &&
                     changed.interface != UDisks2Client::filesystemInterfaceName &&
-                    changed.interface != UDisks2Client::driveInterfaceName) {
+                    changed.interface != UDisks2Client::driveInterfaceName &&
+                    changed.interface != UDisks2Client::encryptedInterfaceName &&
+                    changed.interface != UDisks2Client::jobInterfaceName) {
                   return;
                 }
                 notify(sharedHandler);
@@ -243,24 +404,53 @@ UDisks2StatusWatch UDisks2Client::watchStatusChanges(std::function<void()> handl
 }
 
 std::string UDisks2Client::mountFilesystem(std::string const& filesystemPath) {
+  return mountFilesystem(filesystemPath, {});
+}
+
+std::string UDisks2Client::mountFilesystem(std::string const& filesystemPath,
+                                           UDisks2MountOptions const& options) {
   dbus::Message reply = bus_.call(dbus::MethodCall{
       .destination = serviceName,
       .path = filesystemPath,
       .interface = filesystemInterfaceName,
       .member = "Mount",
-      .arguments = {dbus::EmptyVariantDictionary{}},
+      .arguments = {optionsArgument(operationOptions(options, true, false, false))},
   });
   return reply.readString();
 }
 
+UDisks2OperationResult UDisks2Client::tryMountFilesystem(std::string const& filesystemPath,
+                                                         UDisks2MountOptions const& options) {
+  try {
+    return success(mountFilesystem(filesystemPath, options));
+  } catch (dbus::Error const& error) {
+    return failure(error);
+  }
+}
+
 void UDisks2Client::unmountFilesystem(std::string const& filesystemPath) {
+  unmountFilesystem(filesystemPath, {});
+}
+
+void UDisks2Client::unmountFilesystem(std::string const& filesystemPath,
+                                      UDisks2MountOptions const& options) {
   (void)bus_.call(dbus::MethodCall{
       .destination = serviceName,
       .path = filesystemPath,
       .interface = filesystemInterfaceName,
       .member = "Unmount",
-      .arguments = {dbus::EmptyVariantDictionary{}},
+      .arguments = {optionsArgument(operationOptions(options, false, true, false))},
   });
+}
+
+UDisks2OperationResult UDisks2Client::tryUnmountFilesystem(std::string const& filesystemPath,
+                                                           UDisks2MountOptions const& options) {
+  try {
+    unmountFilesystem(filesystemPath, options);
+    return success();
+  } catch (dbus::Error const& error) {
+    return failure(error);
+  }
 }
 
 void UDisks2Client::ejectDrive(std::string const& drivePath) {
@@ -271,6 +461,76 @@ void UDisks2Client::ejectDrive(std::string const& drivePath) {
       .member = "Eject",
       .arguments = {dbus::EmptyVariantDictionary{}},
   });
+}
+
+UDisks2OperationResult UDisks2Client::tryEjectDrive(std::string const& drivePath) {
+  try {
+    ejectDrive(drivePath);
+    return success();
+  } catch (dbus::Error const& error) {
+    return failure(error);
+  }
+}
+
+std::string UDisks2Client::unlockEncrypted(std::string const& encryptedPath,
+                                           std::string const& passphrase,
+                                           UDisks2MountOptions const& options) {
+  dbus::Message reply = bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = encryptedPath,
+      .interface = encryptedInterfaceName,
+      .member = "Unlock",
+      .arguments = {passphrase, optionsArgument(operationOptions(options, false, false, true))},
+  });
+  return reply.readObjectPath().value;
+}
+
+UDisks2OperationResult UDisks2Client::tryUnlockEncrypted(std::string const& encryptedPath,
+                                                         std::string const& passphrase,
+                                                         UDisks2MountOptions const& options) {
+  try {
+    return success(unlockEncrypted(encryptedPath, passphrase, options));
+  } catch (dbus::Error const& error) {
+    return failure(error);
+  }
+}
+
+void UDisks2Client::lockEncrypted(std::string const& encryptedPath) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = encryptedPath,
+      .interface = encryptedInterfaceName,
+      .member = "Lock",
+      .arguments = {dbus::EmptyVariantDictionary{}},
+  });
+}
+
+UDisks2OperationResult UDisks2Client::tryLockEncrypted(std::string const& encryptedPath) {
+  try {
+    lockEncrypted(encryptedPath);
+    return success();
+  } catch (dbus::Error const& error) {
+    return failure(error);
+  }
+}
+
+void UDisks2Client::cancelJob(std::string const& jobPath) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = jobPath,
+      .interface = jobInterfaceName,
+      .member = "Cancel",
+      .arguments = {dbus::EmptyVariantDictionary{}},
+  });
+}
+
+UDisks2OperationResult UDisks2Client::tryCancelJob(std::string const& jobPath) {
+  try {
+    cancelJob(jobPath);
+    return success();
+  } catch (dbus::Error const& error) {
+    return failure(error);
+  }
 }
 
 dbus::ManagedObjectDictionary UDisks2Client::managedObjects() {
