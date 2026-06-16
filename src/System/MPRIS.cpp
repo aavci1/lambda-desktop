@@ -1,8 +1,11 @@
 #include <Lambda/System/MPRIS.hpp>
 
 #include <algorithm>
+#include <cctype>
+#include <iomanip>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <utility>
 
 namespace lambda::system {
@@ -46,6 +49,23 @@ std::int64_t int64Value(dbus::VariantDictionary const& metadata, std::string con
   return 0;
 }
 
+std::int32_t int32Value(dbus::VariantDictionary const& metadata, std::string const& key) {
+  auto const it = metadata.values.find(key);
+  if (it == metadata.values.end()) {
+    return 0;
+  }
+  if (auto value = std::get_if<std::int32_t>(&it->second)) {
+    return *value;
+  }
+  if (auto value = std::get_if<std::uint32_t>(&it->second)) {
+    return static_cast<std::int32_t>(*value);
+  }
+  if (auto value = std::get_if<std::int64_t>(&it->second)) {
+    return static_cast<std::int32_t>(*value);
+  }
+  return 0;
+}
+
 std::vector<std::string> stringArrayValue(dbus::VariantDictionary const& metadata,
                                           std::string const& key) {
   auto const it = metadata.values.find(key);
@@ -62,12 +82,20 @@ std::vector<std::string> stringArrayValue(dbus::VariantDictionary const& metadat
 }
 
 MPRISMetadata metadataFromDictionary(dbus::VariantDictionary const& metadata) {
+  std::string artUrl = stringValue(metadata, "mpris:artUrl");
   return MPRISMetadata{
       .trackId = stringValue(metadata, "mpris:trackid"),
       .title = stringValue(metadata, "xesam:title"),
       .album = stringValue(metadata, "xesam:album"),
       .artists = stringArrayValue(metadata, "xesam:artist"),
-      .artUrl = stringValue(metadata, "mpris:artUrl"),
+      .albumArtists = stringArrayValue(metadata, "xesam:albumArtist"),
+      .genres = stringArrayValue(metadata, "xesam:genre"),
+      .artUrl = artUrl,
+      .artCacheKey = mprisArtworkCacheKey(artUrl),
+      .url = stringValue(metadata, "xesam:url"),
+      .contentCreated = stringValue(metadata, "xesam:contentCreated"),
+      .discNumber = int32Value(metadata, "xesam:discNumber"),
+      .trackNumber = int32Value(metadata, "xesam:trackNumber"),
       .lengthUsec = int64Value(metadata, "mpris:length"),
   };
 }
@@ -97,6 +125,17 @@ bool knownPlaybackStatus(std::string_view status) {
   return status == "Playing" || status == "Paused" || status == "Stopped";
 }
 
+std::string serviceSuffix(std::string_view serviceName) {
+  if (startsWith(std::string(serviceName), MPRISClient::servicePrefix)) {
+    return std::string(serviceName.substr(std::string_view(MPRISClient::servicePrefix).size()));
+  }
+  return std::string(serviceName);
+}
+
+bool safeExtensionChar(char ch) {
+  return std::isalnum(static_cast<unsigned char>(ch)) != 0;
+}
+
 bool hasAnyControls(MPRISPlayerSnapshot const& player) {
   return mprisPlayerSupportsAction(player, MPRISPlayerAction::PlayPause) ||
          mprisPlayerSupportsAction(player, MPRISPlayerAction::Stop) ||
@@ -104,6 +143,15 @@ bool hasAnyControls(MPRISPlayerSnapshot const& player) {
          mprisPlayerSupportsAction(player, MPRISPlayerAction::Previous) ||
          mprisPlayerSupportsAction(player, MPRISPlayerAction::Seek) ||
          mprisPlayerSupportsAction(player, MPRISPlayerAction::SetVolume);
+}
+
+std::vector<std::string> pathStrings(dbus::ObjectPathArray const& paths) {
+  std::vector<std::string> output;
+  output.reserve(paths.values.size());
+  for (auto const& path : paths.values) {
+    output.push_back(path.value);
+  }
+  return output;
 }
 
 } // namespace
@@ -156,18 +204,41 @@ MPRISPlayerSnapshot MPRISClient::readPlayer(std::string const& serviceName) {
     player.desktopEntry = std::get<std::string>(getRootProperty(serviceName, "DesktopEntry", "s"));
   } catch (...) {
   }
+  player.desktopIconName = mprisDesktopIconName(player.desktopEntry, player.serviceName);
 
   player.playbackStatus =
       std::get<std::string>(getPlayerProperty(serviceName, "PlaybackStatus", "s"));
   player.metadata = metadataFromValue(getPlayerProperty(serviceName, "Metadata", "a{sv}"));
   player.volume = std::get<double>(getPlayerProperty(serviceName, "Volume", "d"));
   player.positionUsec = std::get<std::int64_t>(getPlayerProperty(serviceName, "Position", "x"));
+  try {
+    player.loopStatus = std::get<std::string>(getPlayerProperty(serviceName, "LoopStatus", "s"));
+  } catch (...) {
+  }
+  try {
+    player.rate = std::get<double>(getPlayerProperty(serviceName, "Rate", "d"));
+  } catch (...) {
+  }
+  try {
+    player.minimumRate = std::get<double>(getPlayerProperty(serviceName, "MinimumRate", "d"));
+  } catch (...) {
+  }
+  try {
+    player.maximumRate = std::get<double>(getPlayerProperty(serviceName, "MaximumRate", "d"));
+  } catch (...) {
+  }
+  try {
+    player.shuffle = std::get<bool>(getPlayerProperty(serviceName, "Shuffle", "b"));
+  } catch (...) {
+  }
   player.canGoNext = std::get<bool>(getPlayerProperty(serviceName, "CanGoNext", "b"));
   player.canGoPrevious = std::get<bool>(getPlayerProperty(serviceName, "CanGoPrevious", "b"));
   player.canPlay = std::get<bool>(getPlayerProperty(serviceName, "CanPlay", "b"));
   player.canPause = std::get<bool>(getPlayerProperty(serviceName, "CanPause", "b"));
   player.canSeek = std::get<bool>(getPlayerProperty(serviceName, "CanSeek", "b"));
   player.canControl = std::get<bool>(getPlayerProperty(serviceName, "CanControl", "b"));
+  player.progress = mprisTrackProgress(player);
+  player.trackList = readTrackList(serviceName);
   return player;
 }
 
@@ -185,7 +256,8 @@ MPRISChangeWatch MPRISClient::watchPlayerChanges(std::function<void()> handler) 
               [sharedHandler](dbus::Message& message) {
                 auto const changed = dbus::readPropertiesChanged(message);
                 if (changed.interface != MPRISClient::rootInterfaceName &&
-                    changed.interface != MPRISClient::playerInterfaceName) {
+                    changed.interface != MPRISClient::playerInterfaceName &&
+                    changed.interface != MPRISClient::trackListInterfaceName) {
                   return;
                 }
                 notify(sharedHandler);
@@ -197,6 +269,50 @@ MPRISChangeWatch MPRISClient::watchPlayerChanges(std::function<void()> handler) 
                   .path = objectPath,
                   .interface = playerInterfaceName,
                   .member = "Seeked",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+      .trackListReplaced =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = {},
+                  .path = objectPath,
+                  .interface = trackListInterfaceName,
+                  .member = "TrackListReplaced",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+      .trackAdded =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = {},
+                  .path = objectPath,
+                  .interface = trackListInterfaceName,
+                  .member = "TrackAdded",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+      .trackRemoved =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = {},
+                  .path = objectPath,
+                  .interface = trackListInterfaceName,
+                  .member = "TrackRemoved",
+              },
+              [sharedHandler](dbus::Message&) {
+                notify(sharedHandler);
+              }),
+      .trackMetadataChanged =
+          bus_.matchSignal(
+              dbus::SignalMatch{
+                  .sender = {},
+                  .path = objectPath,
+                  .interface = trackListInterfaceName,
+                  .member = "TrackMetadataChanged",
               },
               [sharedHandler](dbus::Message&) {
                 notify(sharedHandler);
@@ -278,6 +394,63 @@ dbus::BasicValue MPRISClient::getPlayerProperty(std::string const& serviceName,
                           signature);
 }
 
+dbus::BasicValue MPRISClient::getTrackListProperty(std::string const& serviceName,
+                                                   std::string const& name,
+                                                   std::string_view signature) {
+  return bus_.getProperty(dbus::PropertyAddress{
+                              .destination = serviceName,
+                              .path = objectPath,
+                              .interface = trackListInterfaceName,
+                              .name = name,
+                          },
+                          signature);
+}
+
+MPRISTrackListSnapshot MPRISClient::readTrackList(std::string const& serviceName) {
+  MPRISTrackListSnapshot snapshot;
+  dbus::ObjectPathArray tracks;
+  try {
+    tracks = std::get<dbus::ObjectPathArray>(getTrackListProperty(serviceName, "Tracks", "ao"));
+  } catch (...) {
+    return snapshot;
+  }
+
+  snapshot.available = true;
+  snapshot.trackIds = pathStrings(tracks);
+  try {
+    snapshot.canEditTracks =
+        std::get<bool>(getTrackListProperty(serviceName, "CanEditTracks", "b"));
+  } catch (...) {
+  }
+
+  if (tracks.values.empty()) {
+    return snapshot;
+  }
+
+  try {
+    dbus::Message reply = bus_.call(dbus::MethodCall{
+        .destination = serviceName,
+        .path = objectPath,
+        .interface = trackListInterfaceName,
+        .member = "GetTracksMetadata",
+        .arguments = {tracks},
+    });
+    auto rawTracks = std::get<std::shared_ptr<dbus::ArrayValue>>(reply.readBasic("aa{sv}"));
+    if (!rawTracks) {
+      return snapshot;
+    }
+    for (auto const& rawTrack : rawTracks->values) {
+      auto const* metadata = std::get_if<std::shared_ptr<dbus::VariantDictionary>>(&rawTrack);
+      if (!metadata || !*metadata) {
+        continue;
+      }
+      snapshot.tracks.push_back(metadataFromDictionary(**metadata));
+    }
+  } catch (...) {
+  }
+  return snapshot;
+}
+
 void MPRISClient::callPlayerMethod(std::string const& serviceName, std::string const& member) {
   (void)bus_.call(dbus::MethodCall{
       .destination = serviceName,
@@ -286,6 +459,54 @@ void MPRISClient::callPlayerMethod(std::string const& serviceName, std::string c
       .member = member,
       .arguments = {},
   });
+}
+
+std::string mprisArtworkCacheKey(std::string_view artUrl) {
+  if (artUrl.empty()) {
+    return {};
+  }
+
+  std::uint64_t hash = 1469598103934665603ull;
+  for (unsigned char ch : artUrl) {
+    hash ^= ch;
+    hash *= 1099511628211ull;
+  }
+
+  std::string_view path = artUrl.substr(0, artUrl.find_first_of("?#"));
+  std::string extension;
+  std::size_t const slash = path.find_last_of('/');
+  std::size_t const dot = path.find_last_of('.');
+  if (dot != std::string_view::npos && (slash == std::string_view::npos || dot > slash)) {
+    std::string_view rawExtension = path.substr(dot);
+    if (rawExtension.size() >= 2 && rawExtension.size() <= 8 &&
+        std::all_of(rawExtension.begin() + 1, rawExtension.end(), safeExtensionChar)) {
+      extension.reserve(rawExtension.size());
+      for (char ch : rawExtension) {
+        extension.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+      }
+    }
+  }
+
+  std::ostringstream output;
+  output << "mpris-art-" << std::hex << std::setw(16) << std::setfill('0') << hash << extension;
+  return output.str();
+}
+
+std::string mprisDesktopIconName(std::string_view desktopEntry, std::string_view serviceName) {
+  std::string name = desktopEntry.empty() ? serviceSuffix(serviceName) : std::string(desktopEntry);
+  if (name.ends_with(".desktop")) {
+    name.resize(name.size() - 8u);
+  }
+  return name;
+}
+
+std::optional<double> mprisTrackProgress(MPRISPlayerSnapshot const& player) {
+  if (player.metadata.lengthUsec <= 0 || player.positionUsec < 0) {
+    return std::nullopt;
+  }
+  double const progress =
+      static_cast<double>(player.positionUsec) / static_cast<double>(player.metadata.lengthUsec);
+  return std::clamp(progress, 0.0, 1.0);
 }
 
 bool isStaleMPRISPlayer(MPRISPlayerSnapshot const& player) {

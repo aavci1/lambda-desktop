@@ -20,26 +20,50 @@ struct MPRISMetadata {
   std::string title;
   std::string album;
   std::vector<std::string> artists;
+  std::vector<std::string> albumArtists;
+  std::vector<std::string> genres;
   std::string artUrl;
+  std::string artCacheKey;
+  std::string url;
+  std::string contentCreated;
+  std::int32_t discNumber = 0;
+  std::int32_t trackNumber = 0;
   std::int64_t lengthUsec = 0;
 
   bool operator==(MPRISMetadata const&) const = default;
+};
+
+struct MPRISTrackListSnapshot {
+  bool available = false;
+  bool canEditTracks = false;
+  std::vector<std::string> trackIds;
+  std::vector<MPRISMetadata> tracks;
+
+  bool operator==(MPRISTrackListSnapshot const&) const = default;
 };
 
 struct MPRISPlayerSnapshot {
   std::string serviceName;
   std::string identity;
   std::string desktopEntry;
+  std::string desktopIconName;
   std::string playbackStatus;
+  std::string loopStatus;
   MPRISMetadata metadata;
   double volume = 0.0;
   std::int64_t positionUsec = 0;
+  double rate = 1.0;
+  double minimumRate = 1.0;
+  double maximumRate = 1.0;
+  bool shuffle = false;
   bool canGoNext = false;
   bool canGoPrevious = false;
   bool canPlay = false;
   bool canPause = false;
   bool canSeek = false;
   bool canControl = false;
+  std::optional<double> progress;
+  MPRISTrackListSnapshot trackList;
 
   bool operator==(MPRISPlayerSnapshot const&) const = default;
 };
@@ -56,6 +80,10 @@ enum class MPRISPlayerAction : std::uint8_t {
 struct MPRISChangeWatch {
   dbus::Slot propertiesChanged;
   dbus::Slot seeked;
+  dbus::Slot trackListReplaced;
+  dbus::Slot trackAdded;
+  dbus::Slot trackRemoved;
+  dbus::Slot trackMetadataChanged;
   dbus::Slot nameOwnerChanged;
 };
 
@@ -68,6 +96,7 @@ public:
   static constexpr char const* objectPath = "/org/mpris/MediaPlayer2";
   static constexpr char const* rootInterfaceName = "org.mpris.MediaPlayer2";
   static constexpr char const* playerInterfaceName = "org.mpris.MediaPlayer2.Player";
+  static constexpr char const* trackListInterfaceName = "org.mpris.MediaPlayer2.TrackList";
 
   explicit MPRISClient(dbus::Bus bus);
 
@@ -96,11 +125,19 @@ private:
   [[nodiscard]] dbus::BasicValue getPlayerProperty(std::string const& serviceName,
                                                    std::string const& name,
                                                    std::string_view signature);
+  [[nodiscard]] dbus::BasicValue getTrackListProperty(std::string const& serviceName,
+                                                      std::string const& name,
+                                                      std::string_view signature);
+  [[nodiscard]] MPRISTrackListSnapshot readTrackList(std::string const& serviceName);
   void callPlayerMethod(std::string const& serviceName, std::string const& member);
 
   dbus::Bus bus_;
 };
 
+[[nodiscard]] std::string mprisArtworkCacheKey(std::string_view artUrl);
+[[nodiscard]] std::string mprisDesktopIconName(std::string_view desktopEntry,
+                                               std::string_view serviceName);
+[[nodiscard]] std::optional<double> mprisTrackProgress(MPRISPlayerSnapshot const& player);
 [[nodiscard]] bool isStaleMPRISPlayer(MPRISPlayerSnapshot const& player);
 [[nodiscard]] bool mprisPlayerSupportsAction(MPRISPlayerSnapshot const& player,
                                              MPRISPlayerAction action);
