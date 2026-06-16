@@ -791,6 +791,7 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   }
   std::optional<CommittedSurfaceSnapshot> const& softwareCursorSnapshot = *softwareCursorSnapshotPtr;
   bool const forceFullSceneDamage =
+      ctx.frameCaptureRequested ||
       snapPreview.has_value() ||
       screenshotOverlay.has_value() ||
       windowCyclerOverlay.has_value() ||
@@ -813,8 +814,8 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                                     .dpiScale = ctx.canvas.dpiScale(),
                                     .animationsEnabled = ctx.appliedConfig.config.animationsEnabled,
                                     .forceFullDamage = forceFullSceneDamage,
-                                    .selectScanout = atomicPresenter && !snapPreview && !screenshotOverlay &&
-                                                     !windowCyclerOverlay,
+                                    .selectScanout = atomicPresenter && !ctx.frameCaptureRequested && !snapPreview &&
+                                                     !screenshotOverlay && !windowCyclerOverlay,
                                 });
   std::vector<std::uint64_t> const& frameCallbackSurfaceIds = scenePlan.frameCallbackSurfaceIds;
   SceneDamageResult const& sceneDamage = scenePlan.damage;

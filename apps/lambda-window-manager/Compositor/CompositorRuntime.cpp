@@ -2186,6 +2186,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       renderFrameCtx.idleBlanked = idleBlanked;
       renderFrameCtx.hardwareCursorAvailable =
           hardwareCursorAvailable && !(screenshotPending && screenshotPending->includeCursor);
+      renderFrameCtx.frameCaptureRequested = frameCapturePending;
       renderFrameCtx.screenshotFlashOpacity = screenshotFlashOpacityAt(frameTime);
       renderFrameCtx.vulkanDisplayTimingSupportLogged = displayTimingSupportLogged;
       renderFrameCtx.useVulkanPresentationCompletion = useVulkanPresentationCompletion;

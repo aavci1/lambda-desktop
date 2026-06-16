@@ -66,6 +66,7 @@ struct CompositorRenderFrameContext {
   presentation::LoopInstrumentation& loopStats;
   bool idleBlanked = false;
   bool hardwareCursorAvailable = false;
+  bool frameCaptureRequested = false;
   float screenshotFlashOpacity = 0.f;
   bool detailedFrameProfile = false;
   std::vector<CommittedSurfaceSnapshot> const* committedSurfaces = nullptr;
