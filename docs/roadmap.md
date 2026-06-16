@@ -167,7 +167,7 @@ Missing/expanded apps (new):
 Current implementation:
 
 - `lambda-window-manager` owns a selected KMS output, runs a Wayland server, renders through Vulkan/Canvas, and hosts Lambda plus normal Wayland apps.
-- Core idle behavior, Lambda app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, real-app smoke tooling with optional owned-compositor trace collection, Wayland registry validation, source/list drift checking for advertised globals, and the WM-COMP-27 real-app validation matrix exist.
+- Core idle behavior, Lambda app disconnect handling, shell focus restoration, output selection/scale, cursor config, keyboard config, screenshot modes, in-tree protocol demos, config defaults, compositor CPU/pacing traces, real-app smoke tooling with optional owned-compositor trace collection, repeated VT-switch reset hardening, Wayland registry validation, source/list drift checking for advertised globals, and the WM-COMP-27 real-app validation matrix exist.
 - Screenshot full-output, active-window, and region capture are implemented with compositor-owned region UI. (Note: this is the compositor's own capture; client-facing capture for external tools and screencast is WM-12.)
 - Protocol work includes layer-shell, xdg-shell, xdg-output, viewporter, cursor-shape, fractional-scale, activation, presentation-time, relative pointer, pointer constraints, primary selection, clipboard/data-device, idle inhibit, and background-effect paths.
 - The active wlroots comparison plan has verified core surface-state slices through WM-COMP-27 (see [compositor-wlroots-improvement-plan.md](compositor-wlroots-improvement-plan.md)).
@@ -179,7 +179,7 @@ Open gate (visual stability and validation — unchanged):
 - Finish the remaining wlroots comparison backlog: broader non-popup seat/grab workflow parity and a visual regression/real-app harness.
 - Continue resize/snap/maximize/restore validation across GTK/Qt/terminal apps.
 - Complete `TODO.md` WM items TODO-006 (close animation snapshot), TODO-007 (minimized state + dock-preview handoff), TODO-008 (live resize frame coherence).
-- Complete live real-app validation (Lambda apps, browser, GTK, Qt, `foot`, clipboard, menus/popups, maximize/restore/snap/minimize, screenshots, fullscreen video, mpv, long idle).
+- Complete live real-app validation (Lambda apps, browser, GTK, Qt, `foot`, clipboard, menus/popups, maximize/restore/snap/minimize, repeated VT switching, screenshots, fullscreen video, mpv, long idle).
 - Keep popup grabs config-gated until hardware validation; keep unsupported touch/tablet non-advertised until WM-19.
 
 Open gate (daily-driver protocol and power gates — new, WM-11…WM-21):

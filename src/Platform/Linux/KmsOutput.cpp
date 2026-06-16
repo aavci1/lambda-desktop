@@ -1966,7 +1966,37 @@ public:
   int eventFd() const noexcept { return fd_; }
 
   void syncModeStateFromKernel() noexcept {
-    modesetDone_ = currentKernelModeMatchesTarget();
+    if (pageFlipPending_) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: clearing stale KMS page flip after VT transition "
+                   "present=%u pendingBuffer=%d\n",
+                   pendingTiming_.presentId,
+                   pendingBuffer_);
+    }
+    pageFlipPending_ = false;
+    pendingBuffer_ = -1;
+    pendingOverlayPlaneId_ = 0;
+    pendingOverlayFbId_ = 0;
+    pendingOverlayBufferId_ = 0;
+    pendingDirectScanout_ = false;
+    pendingDirectScanoutFbId_ = 0;
+    pendingDirectScanoutBufferId_ = 0;
+    pendingDirectScanoutState_.reset();
+    pendingTiming_ = {};
+    activeOverlayPlaneId_ = 0;
+    activeOverlayFbId_ = 0;
+    activeOverlayBufferId_ = 0;
+    activeDirectScanout_ = false;
+    activeDirectScanoutFbId_ = 0;
+    activeDirectScanoutBufferId_ = 0;
+    activeDirectScanoutState_.reset();
+    modesetDone_ = false;
+    displayedBuffer_ = -1;
+    for (Buffer& buffer : buffers_) {
+      updateRenderFenceReadiness(buffer);
+      buffer.primaryContentsValid = false;
+      buffer.staleRects.assign(1, fullDamageRect());
+    }
     if (output_) output_->setAtomicPageFlipPending(false);
     clearPreparedOverlayCandidate();
     clearPreparedDirectScanout();

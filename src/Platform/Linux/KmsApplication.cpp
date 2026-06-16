@@ -694,8 +694,9 @@ void KmsApplication::initializeInput() {
       libinput_device* device = libinput_path_add_device(input_, entry.path().c_str());
       if (device) {
         debugLog("added input path %s", entry.path().c_str());
+        // libinput_path_add_device returns a pointer whose lifetime is only
+        // guaranteed until the next dispatch unless we keep our own reference.
         pathInputDevices_.push_back(libinput_device_ref(device));
-        libinput_device_unref(device);
       } else {
         debugLog("libinput rejected input path %s", entry.path().c_str());
       }
