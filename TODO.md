@@ -213,8 +213,9 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Export a basic `org.freedesktop.impl.portal.AppChooser` backend for OpenURI application selection, choosing a valid `last_choice` or the first candidate and accepting `UpdateChoices`.
 - [x] [Auto] Export a basic in-memory `org.freedesktop.impl.portal.Inhibit` backend with request handles, `Request.Close`, `CreateMonitor`, and `QueryEndResponse`.
 - [x] [Auto] Export a basic `org.freedesktop.impl.portal.Account` backend that returns local user id, display name, and optional face-image URI.
+- [x] [Auto] Export a basic `org.freedesktop.impl.portal.FileChooser` backend with `OpenFile`, `SaveFile`, `SaveFiles`, request handles, deterministic `file://` URI results from options/environment fallbacks, choices/current-filter passthrough, private-bus coverage, and a process smoke.
 - [ ] [Manual] Install or stage `lambda-portal` with `xdg-desktop-portal`, set `XDG_CURRENT_DESKTOP=Lambda`, and verify a real GTK/Qt app reads the color-scheme/accent through the frontend portal.
-- [ ] [Auto + Manual] Implement the FileChooser portal backend for Open/Save using a Lambda file-chooser surface backed by `lambda-files` components.
+- [ ] [Auto + Manual] Replace the deterministic FileChooser fallback with a real Lambda file-chooser surface for Open/Save, backed by `lambda-files` components and frontend request/response handling.
 - [ ] [Auto + Manual] Add Account consent UI/policy, wire Inhibit to real logind/session state, and replace the basic OpenURI/AppChooser policy with a real chooser UI/default-app path.
 - [ ] [Auto + Manual] Add real frontend request/response tests for xdg-desktop-portal request objects, handles, cancellation, and response codes.
 

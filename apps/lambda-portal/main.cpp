@@ -1,6 +1,7 @@
 #include <Lambda/System/DBus.hpp>
 #include <Lambda/System/PortalAccount.hpp>
 #include <Lambda/System/PortalAppChooser.hpp>
+#include <Lambda/System/PortalFileChooser.hpp>
 #include <Lambda/System/PortalInhibit.hpp>
 #include <Lambda/System/PortalNotification.hpp>
 #include <Lambda/System/PortalSettings.hpp>
@@ -47,11 +48,13 @@ int main() {
         lambda::system::PortalSettingsService::stateFromShellConfig());
     lambda::system::PortalAccountService account(bus);
     lambda::system::PortalAppChooserService appChooser(bus);
+    lambda::system::PortalFileChooserService fileChooser(bus);
     lambda::system::PortalInhibitService inhibit(bus);
     lambda::system::PortalNotificationService notifications(bus);
 
     auto portalDefinition = mergeDefinitions(settings.objectDefinition(), account.objectDefinition());
     portalDefinition = mergeDefinitions(std::move(portalDefinition), appChooser.objectDefinition());
+    portalDefinition = mergeDefinitions(std::move(portalDefinition), fileChooser.objectDefinition());
     portalDefinition = mergeDefinitions(std::move(portalDefinition), inhibit.objectDefinition());
     portalDefinition =
         mergeDefinitions(std::move(portalDefinition), notifications.objectDefinition());

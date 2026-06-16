@@ -102,7 +102,7 @@ LAMBDA_DEBUG_KMS=1 ./build-linux-kms/apps/lambda-window-manager/lambda-window-ma
 
 ## Portal Backend
 
-The Linux build includes `lambda-portal`, a session-bus backend for the first Lambda portal slice. It currently exports the xdg-desktop-portal Settings backend (`org.freedesktop.impl.portal.Settings`) with appearance color-scheme, accent-color, contrast, and reduced-motion values, the Account backend (`org.freedesktop.impl.portal.Account`) with local user-info replies, the AppChooser backend (`org.freedesktop.impl.portal.AppChooser`) used by OpenURI application selection, the Inhibit backend (`org.freedesktop.impl.portal.Inhibit`) with in-memory request handles, and the Notification backend (`org.freedesktop.impl.portal.Notification`) with basic add/remove/action routing through `lambda-notifications`.
+The Linux build includes `lambda-portal`, a session-bus backend for the first Lambda portal slice. It currently exports the xdg-desktop-portal Settings backend (`org.freedesktop.impl.portal.Settings`) with appearance color-scheme, accent-color, contrast, and reduced-motion values, the Account backend (`org.freedesktop.impl.portal.Account`) with local user-info replies, the AppChooser backend (`org.freedesktop.impl.portal.AppChooser`) used by OpenURI application selection, the FileChooser backend (`org.freedesktop.impl.portal.FileChooser`) with deterministic `file://` URI results for Open/Save requests, the Inhibit backend (`org.freedesktop.impl.portal.Inhibit`) with in-memory request handles, and the Notification backend (`org.freedesktop.impl.portal.Notification`) with basic add/remove/action routing through `lambda-notifications`.
 
 Development smoke without installing:
 
@@ -152,6 +152,19 @@ busctl --user call org.freedesktop.impl.portal.desktop.lambda \
   org.lambda.Smoke "" \
   1 org.lambda.Browser \
   1 uri s https://lambda.invalid/
+```
+
+For the FileChooser backend path, the basic backend returns deterministic file URIs from request options or development environment fallbacks; the interactive Lambda chooser UI is still pending:
+
+```sh
+LAMBDA_PORTAL_FILECHOOSER_SAVE_URI=/tmp/lambda-filechooser-smoke.txt \
+  ./build/apps/lambda-portal/lambda-portal
+busctl --user call org.freedesktop.impl.portal.desktop.lambda \
+  /org/freedesktop/portal/desktop \
+  org.freedesktop.impl.portal.FileChooser SaveFile \
+  "osssa{sv}" \
+  /org/freedesktop/portal/desktop/request/1_1/file_smoke \
+  org.lambda.Smoke "" "Save smoke" 0
 ```
 
 For the Inhibit backend path, the backend records the request and exports a request object that can be closed:

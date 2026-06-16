@@ -41,6 +41,7 @@ set(_lambda_test_sources
   PathFlattenerTests.cpp
   PortalAccountTests.cpp
   PortalAppChooserTests.cpp
+  PortalFileChooserTests.cpp
   PortalInhibitTests.cpp
   PortalNotificationTests.cpp
   PolkitAgentTests.cpp
