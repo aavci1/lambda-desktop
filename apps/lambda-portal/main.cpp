@@ -1,4 +1,5 @@
 #include <Lambda/System/DBus.hpp>
+#include <Lambda/System/PortalAppChooser.hpp>
 #include <Lambda/System/PortalNotification.hpp>
 #include <Lambda/System/PortalSettings.hpp>
 
@@ -42,11 +43,14 @@ int main() {
     lambda::system::PortalSettingsService settings(
         bus,
         lambda::system::PortalSettingsService::stateFromShellConfig());
+    lambda::system::PortalAppChooserService appChooser(bus);
     lambda::system::PortalNotificationService notifications(bus);
 
-    auto portalSlot = bus.exportObject(
-        lambda::system::PortalSettingsService::objectPath,
-        mergeDefinitions(settings.objectDefinition(), notifications.objectDefinition()));
+    auto portalDefinition =
+        mergeDefinitions(settings.objectDefinition(), appChooser.objectDefinition());
+    portalDefinition = mergeDefinitions(std::move(portalDefinition), notifications.objectDefinition());
+    auto portalSlot = bus.exportObject(lambda::system::PortalSettingsService::objectPath,
+                                       std::move(portalDefinition));
     auto notificationActionSlot = notifications.watchNotificationActions();
 
     std::cerr << "lambda-portal: exported portal backends"

@@ -102,7 +102,7 @@ LAMBDA_DEBUG_KMS=1 ./build-linux-kms/apps/lambda-window-manager/lambda-window-ma
 
 ## Portal Backend
 
-The Linux build includes `lambda-portal`, a session-bus backend for the first Lambda portal slice. It currently exports the xdg-desktop-portal Settings backend (`org.freedesktop.impl.portal.Settings`) with appearance color-scheme, accent-color, contrast, and reduced-motion values, plus the Notification backend (`org.freedesktop.impl.portal.Notification`) with basic add/remove/action routing through `lambda-notifications`.
+The Linux build includes `lambda-portal`, a session-bus backend for the first Lambda portal slice. It currently exports the xdg-desktop-portal Settings backend (`org.freedesktop.impl.portal.Settings`) with appearance color-scheme, accent-color, contrast, and reduced-motion values, the AppChooser backend (`org.freedesktop.impl.portal.AppChooser`) used by OpenURI application selection, and the Notification backend (`org.freedesktop.impl.portal.Notification`) with basic add/remove/action routing through `lambda-notifications`.
 
 Development smoke without installing:
 
@@ -127,6 +127,19 @@ gdbus call --session \
   --object-path /org/freedesktop/portal/desktop \
   --method org.freedesktop.impl.portal.Notification.AddNotification \
   org.lambda.Smoke smoke-id "{'title': <'Portal smoke'>, 'body': <'Notification body'>}"
+```
+
+For the OpenURI/AppChooser backend path, the frontend supplies candidate app ids and the backend returns the selected id:
+
+```sh
+busctl --user call org.freedesktop.impl.portal.desktop.lambda \
+  /org/freedesktop/portal/desktop \
+  org.freedesktop.impl.portal.AppChooser ChooseApplication \
+  "ossasa{sv}" \
+  /org/freedesktop/portal/desktop/request/1_1/lambda \
+  org.lambda.Smoke "" \
+  1 org.lambda.Browser \
+  1 uri s https://lambda.invalid/
 ```
 
 For installed portal selection, run a session with `XDG_CURRENT_DESKTOP=Lambda` and install the generated D-Bus service plus `lambda.portal` metadata alongside `xdg-desktop-portal`. `lambda-portal` reads the Shell appearance config path (`LAMBDA_SHELL_CONFIG`, then `$XDG_CONFIG_HOME/lambda-shell/config.toml`, then `$HOME/.config/lambda-shell/config.toml`) for `appearance.color_scheme`, `appearance.accent_color`, `appearance.high_contrast`, and `appearance.reduced_motion`; `LAMBDA_PORTAL_COLOR_SCHEME`, `LAMBDA_PORTAL_ACCENT_COLOR`, `LAMBDA_PORTAL_HIGH_CONTRAST`, and `LAMBDA_PORTAL_REDUCED_MOTION` remain development fallbacks when no config value is present.
