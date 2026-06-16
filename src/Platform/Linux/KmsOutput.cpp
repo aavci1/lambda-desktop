@@ -352,8 +352,9 @@ bool disableAutomaticDirectScanoutRender() {
   return debug::envNonZero(std::getenv("LAMBDA_COMPOSITOR_DISABLE_DIRECT_SCANOUT_RENDER"));
 }
 
-bool disableKmsOverlayPlanes() {
-  return debug::envNonZero(std::getenv("LAMBDA_COMPOSITOR_DISABLE_KMS_OVERLAYS"));
+bool enableKmsOverlayPlanes() {
+  if (debug::envNonZero(std::getenv("LAMBDA_COMPOSITOR_DISABLE_KMS_OVERLAYS"))) return false;
+  return debug::envNonZero(std::getenv("LAMBDA_COMPOSITOR_ENABLE_KMS_OVERLAYS"));
 }
 
 std::uint32_t propertyId(int fd, std::uint32_t objectId, std::uint32_t objectType, char const* name) {
@@ -2883,9 +2884,15 @@ private:
       std::fprintf(stderr,
                    "lambda-window-manager: KMS primary plane has no IN_FENCE_FD; atomic presenter will use CPU GPU waits\n");
     }
-    std::vector<std::uint32_t> const overlayIds = disableKmsOverlayPlanes()
-                                                     ? std::vector<std::uint32_t>{}
-                                                     : planesForCrtcWithType(fd_, connector_.crtcId, DRM_PLANE_TYPE_OVERLAY);
+    bool const overlayPlanesEnabled = enableKmsOverlayPlanes();
+    if (!overlayPlanesEnabled) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: KMS hardware overlay planes disabled by default; set "
+                   "LAMBDA_COMPOSITOR_ENABLE_KMS_OVERLAYS=1 to opt in\n");
+    }
+    std::vector<std::uint32_t> const overlayIds =
+        overlayPlanesEnabled ? planesForCrtcWithType(fd_, connector_.crtcId, DRM_PLANE_TYPE_OVERLAY)
+                             : std::vector<std::uint32_t>{};
     overlayPlanes_.reserve(overlayIds.size());
     std::optional<std::uint64_t> cursorPlaneZpos;
     for (std::uint32_t cursorId : planesForCrtcWithType(fd_, connector_.crtcId, DRM_PLANE_TYPE_CURSOR)) {
