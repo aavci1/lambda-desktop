@@ -79,6 +79,40 @@ DockletStatusItem unavailableItem(std::string id, lambda::IconName icon) {
   return item;
 }
 
+bool batteryAvailable(SystemStatus const& status) {
+  if (status.batteryStatus.available || status.batteryStatus.present) {
+    return true;
+  }
+  return !unavailableStatus(status.battery);
+}
+
+std::string batteryLabel(SystemStatus const& status) {
+  if (!status.batteryStatus.label.empty() && !unavailableStatus(status.batteryStatus.label)) {
+    return status.batteryStatus.label;
+  }
+  return status.battery;
+}
+
+lambda::IconName batteryIcon(BatteryStatus const& status) {
+  if (status.warningLevel == BatteryWarningLevel::Action ||
+      status.warningLevel == BatteryWarningLevel::Critical ||
+      status.chargeState == BatteryChargeState::Empty) {
+    return lambda::IconName::BatteryAlert;
+  }
+  if (status.chargeState == BatteryChargeState::Charging ||
+      status.chargeState == BatteryChargeState::PendingCharge) {
+    return lambda::IconName::BatteryChargingFull;
+  }
+  if (status.chargeState == BatteryChargeState::Full || status.percentage >= 95) {
+    return lambda::IconName::BatteryFull;
+  }
+  if (status.warningLevel == BatteryWarningLevel::Low ||
+      (status.percentage >= 0 && status.percentage <= 15)) {
+    return lambda::IconName::BatteryLow;
+  }
+  return lambda::IconName::BatteryAndroid4;
+}
+
 } // namespace
 
 int clampedDockItemSize(int itemSize) {
@@ -324,15 +358,16 @@ std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status) {
     items.push_back(std::move(item));
   }
 
-  if (unavailableStatus(status.battery)) {
+  if (!batteryAvailable(status)) {
     items.push_back(unavailableItem("battery", lambda::IconName::BatteryUnknown));
   } else {
     DockletStatusItem item;
     item.id = "battery";
-    item.icon = offStatus(status.battery) ? lambda::IconName::BatteryAlert : lambda::IconName::BatteryAndroid4;
-    item.label = offStatus(status.battery) ? std::string{} : status.battery;
+    std::string const label = batteryLabel(status);
+    item.icon = batteryIcon(status.batteryStatus);
+    item.label = offStatus(label) ? std::string{} : label;
     item.availability = StatusAvailability::Available;
-    item.active = !offStatus(status.battery);
+    item.active = !offStatus(label);
     items.push_back(std::move(item));
   }
 

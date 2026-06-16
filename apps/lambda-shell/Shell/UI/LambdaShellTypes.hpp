@@ -145,12 +145,53 @@ struct TrayStatusItem {
   bool operator==(TrayStatusItem const& other) const = default;
 };
 
+enum class BatteryChargeState : std::uint8_t {
+  Unknown,
+  Charging,
+  Discharging,
+  Empty,
+  Full,
+  PendingCharge,
+  PendingDischarge,
+};
+
+enum class BatteryPowerSource : std::uint8_t {
+  Unknown,
+  AC,
+  Battery,
+};
+
+enum class BatteryWarningLevel : std::uint8_t {
+  Unknown,
+  None,
+  Discharging,
+  Low,
+  Critical,
+  Action,
+};
+
+struct BatteryStatus {
+  std::string label = "unknown";
+  bool available = false;
+  bool present = false;
+  int percentage = -1;
+  BatteryChargeState chargeState = BatteryChargeState::Unknown;
+  BatteryPowerSource powerSource = BatteryPowerSource::Unknown;
+  BatteryWarningLevel warningLevel = BatteryWarningLevel::Unknown;
+  std::int64_t timeToEmptySeconds = 0;
+  std::int64_t timeToFullSeconds = 0;
+  std::string iconName;
+
+  bool operator==(BatteryStatus const&) const = default;
+};
+
 struct SystemStatus {
   std::string network = "unknown";
   std::string wifi = "unknown";
   std::string bluetooth = "unknown";
   std::string volume = "unknown";
   std::string battery = "unknown";
+  BatteryStatus batteryStatus;
   std::string media = "unknown";
   std::vector<TrayStatusItem> trayItems;
 

@@ -9,11 +9,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <charconv>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -48,6 +51,17 @@ std::optional<std::string> readText(std::filesystem::path const& path) {
   text = trim(std::move(text));
   if (text.empty()) return std::nullopt;
   return text;
+}
+
+std::optional<int> parseInt(std::string_view text) {
+  int value = 0;
+  auto const* begin = text.data();
+  auto const* end = begin + text.size();
+  auto result = std::from_chars(begin, end, value);
+  if (result.ec != std::errc{} || result.ptr != end) {
+    return std::nullopt;
+  }
+  return value;
 }
 
 bool isDirectory(std::filesystem::path const& path) {
@@ -146,30 +160,115 @@ std::string readBluetoothStatus(std::filesystem::path const& sysRoot) {
   return "unavailable";
 }
 
-std::string readBatteryStatus(std::filesystem::path const& sysRoot) {
+BatteryChargeState batteryChargeStateFromUPower(lambda::system::UPowerDeviceState state) {
+  switch (state) {
+  case lambda::system::UPowerDeviceState::Charging:
+    return BatteryChargeState::Charging;
+  case lambda::system::UPowerDeviceState::Discharging:
+    return BatteryChargeState::Discharging;
+  case lambda::system::UPowerDeviceState::Empty:
+    return BatteryChargeState::Empty;
+  case lambda::system::UPowerDeviceState::FullyCharged:
+    return BatteryChargeState::Full;
+  case lambda::system::UPowerDeviceState::PendingCharge:
+    return BatteryChargeState::PendingCharge;
+  case lambda::system::UPowerDeviceState::PendingDischarge:
+    return BatteryChargeState::PendingDischarge;
+  case lambda::system::UPowerDeviceState::Unknown:
+  default:
+    return BatteryChargeState::Unknown;
+  }
+}
+
+BatteryWarningLevel batteryWarningLevelFromUPower(lambda::system::UPowerWarningLevel level) {
+  switch (level) {
+  case lambda::system::UPowerWarningLevel::None:
+    return BatteryWarningLevel::None;
+  case lambda::system::UPowerWarningLevel::Discharging:
+    return BatteryWarningLevel::Discharging;
+  case lambda::system::UPowerWarningLevel::Low:
+    return BatteryWarningLevel::Low;
+  case lambda::system::UPowerWarningLevel::Critical:
+    return BatteryWarningLevel::Critical;
+  case lambda::system::UPowerWarningLevel::Action:
+    return BatteryWarningLevel::Action;
+  case lambda::system::UPowerWarningLevel::Unknown:
+  default:
+    return BatteryWarningLevel::Unknown;
+  }
+}
+
+BatteryChargeState batteryChargeStateFromSysfs(std::string_view value) {
+  std::string const state = lowerAscii(value);
+  if (state == "charging") return BatteryChargeState::Charging;
+  if (state == "discharging") return BatteryChargeState::Discharging;
+  if (state == "full" || state == "fully charged") return BatteryChargeState::Full;
+  if (state == "empty") return BatteryChargeState::Empty;
+  return BatteryChargeState::Unknown;
+}
+
+BatteryPowerSource powerSourceFor(BatteryChargeState state, bool onBattery) {
+  if (onBattery) return BatteryPowerSource::Battery;
+  if (state == BatteryChargeState::Charging || state == BatteryChargeState::Full ||
+      state == BatteryChargeState::PendingCharge) {
+    return BatteryPowerSource::AC;
+  }
+  if (state == BatteryChargeState::Discharging || state == BatteryChargeState::PendingDischarge ||
+      state == BatteryChargeState::Empty) {
+    return BatteryPowerSource::Battery;
+  }
+  return BatteryPowerSource::Unknown;
+}
+
+BatteryStatus unavailableBatteryStatus(BatteryPowerSource source = BatteryPowerSource::Unknown) {
+  return BatteryStatus{
+      .label = "unavailable",
+      .available = false,
+      .present = false,
+      .percentage = -1,
+      .chargeState = BatteryChargeState::Unknown,
+      .powerSource = source,
+  };
+}
+
+BatteryStatus readBatteryStatus(std::filesystem::path const& sysRoot) {
+  std::optional<BatteryStatus> upowerUnavailable;
   if (sysRoot == "/sys") {
     try {
       auto client = lambda::system::UPowerClient::connectSystem();
       auto const device = client.readDisplayDevice();
-      std::string const status = lambda::system::formatUPowerBatteryStatus(device);
-      if (status != "unavailable") {
+      BatteryStatus status = batteryStatusFromUPower(device);
+      if (status.available) {
         return status;
       }
+      upowerUnavailable = std::move(status);
     } catch (...) {
     }
   }
 
   for (auto const& supplyPath : childDirectories(sysRoot / "class" / "power_supply")) {
     if (lowerAscii(readText(supplyPath / "type").value_or("")) != "battery") continue;
-    if (auto capacity = readText(supplyPath / "capacity")) {
-      return *capacity + "%";
-    }
+    BatteryStatus status;
+    status.available = true;
+    status.present = true;
+    status.label = "unknown";
     if (auto state = readText(supplyPath / "status")) {
-      return *state;
+      status.chargeState = batteryChargeStateFromSysfs(*state);
+      status.powerSource = powerSourceFor(status.chargeState, false);
+      status.label = *state;
     }
-    return "unknown";
+    if (auto capacity = readText(supplyPath / "capacity")) {
+      if (auto percentage = parseInt(*capacity)) {
+        status.percentage = std::clamp(*percentage, 0, 100);
+      }
+      status.label = *capacity + "%";
+    }
+    return status;
   }
-  return "unavailable";
+  if (upowerUnavailable) {
+    return *upowerUnavailable;
+  }
+  return unavailableBatteryStatus();
 }
 
 std::string readVolumeStatus(AudioControlContext const& audioContext) {
@@ -192,6 +291,27 @@ std::string readMediaStatus(std::filesystem::path const& sysRoot) {
 
 } // namespace
 
+BatteryStatus batteryStatusFromUPower(lambda::system::UPowerDisplayDevice const& device) {
+  BatteryPowerSource const source = device.onBattery ? BatteryPowerSource::Battery : BatteryPowerSource::AC;
+  if (!device.present) {
+    return unavailableBatteryStatus(source);
+  }
+
+  int const rounded = std::clamp(static_cast<int>(std::lround(device.percentage)), 0, 100);
+  return BatteryStatus{
+      .label = lambda::system::formatUPowerBatteryStatus(device),
+      .available = true,
+      .present = true,
+      .percentage = rounded,
+      .chargeState = batteryChargeStateFromUPower(device.state),
+      .powerSource = source,
+      .warningLevel = batteryWarningLevelFromUPower(device.warningLevel),
+      .timeToEmptySeconds = device.timeToEmptySeconds,
+      .timeToFullSeconds = device.timeToFullSeconds,
+      .iconName = device.iconName,
+  };
+}
+
 SystemStatus readShellSystemStatus(std::filesystem::path sysRoot) {
   return readShellSystemStatus(std::move(sysRoot), defaultAudioControlContext());
 }
@@ -202,7 +322,8 @@ SystemStatus readShellSystemStatus(std::filesystem::path sysRoot,
   populateNetworkStatus(sysRoot, status);
   status.bluetooth = readBluetoothStatus(sysRoot);
   status.volume = readVolumeStatus(audioContext);
-  status.battery = readBatteryStatus(sysRoot);
+  status.batteryStatus = readBatteryStatus(sysRoot);
+  status.battery = status.batteryStatus.label;
   status.media = readMediaStatus(sysRoot);
   return status;
 }

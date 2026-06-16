@@ -44,6 +44,12 @@ UPowerDisplayDevice UPowerClient::readDisplayDevice() {
   device.percentage = std::get<double>(getDeviceProperty(path, "Percentage", "d"));
   device.state =
       static_cast<UPowerDeviceState>(std::get<std::uint32_t>(getDeviceProperty(path, "State", "u")));
+  try {
+    device.warningLevel = static_cast<UPowerWarningLevel>(
+        std::get<std::uint32_t>(getDeviceProperty(path, "WarningLevel", "u")));
+  } catch (...) {
+    device.warningLevel = UPowerWarningLevel::Unknown;
+  }
   device.timeToEmptySeconds = std::get<std::int64_t>(getDeviceProperty(path, "TimeToEmpty", "x"));
   device.timeToFullSeconds = std::get<std::int64_t>(getDeviceProperty(path, "TimeToFull", "x"));
   device.iconName = std::get<std::string>(getDeviceProperty(path, "IconName", "s"));

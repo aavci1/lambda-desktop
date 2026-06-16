@@ -22,11 +22,21 @@ enum class UPowerDeviceState : std::uint32_t {
   PendingDischarge = 6,
 };
 
+enum class UPowerWarningLevel : std::uint32_t {
+  Unknown = 0,
+  None = 1,
+  Discharging = 2,
+  Low = 3,
+  Critical = 4,
+  Action = 5,
+};
+
 struct UPowerDisplayDevice {
   bool present = false;
   bool onBattery = false;
   double percentage = 0.0;
   UPowerDeviceState state = UPowerDeviceState::Unknown;
+  UPowerWarningLevel warningLevel = UPowerWarningLevel::Unknown;
   std::int64_t timeToEmptySeconds = 0;
   std::int64_t timeToFullSeconds = 0;
   std::string iconName;

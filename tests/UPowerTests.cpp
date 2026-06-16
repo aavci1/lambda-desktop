@@ -50,6 +50,7 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
   bool present = true;
   double percentage = 87.6;
   std::uint32_t state = static_cast<std::uint32_t>(lambda::system::UPowerDeviceState::Discharging);
+  std::uint32_t warningLevel = static_cast<std::uint32_t>(lambda::system::UPowerWarningLevel::Low);
   std::int64_t timeToEmpty = 7200;
   std::int64_t timeToFull = 0;
   std::string iconName = "battery-good-symbolic";
@@ -119,6 +120,14 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
               },
               lambda::dbus::ExportedProperty{
                   .interface = lambda::system::UPowerClient::deviceInterfaceName,
+                  .name = "WarningLevel",
+                  .value = std::uint32_t(0),
+                  .writable = false,
+                  .getter = [&] { return lambda::dbus::BasicValue(warningLevel); },
+                  .setter = nullptr,
+              },
+              lambda::dbus::ExportedProperty{
+                  .interface = lambda::system::UPowerClient::deviceInterfaceName,
                   .name = "TimeToFull",
                   .value = std::int64_t(0),
                   .writable = false,
@@ -155,6 +164,7 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
   CHECK(display.onBattery);
   CHECK(display.percentage == doctest::Approx(87.6));
   CHECK(display.state == lambda::system::UPowerDeviceState::Discharging);
+  CHECK(display.warningLevel == lambda::system::UPowerWarningLevel::Low);
   CHECK(display.timeToEmptySeconds == 7200);
   CHECK(display.timeToFullSeconds == 0);
   CHECK(display.iconName == "battery-good-symbolic");

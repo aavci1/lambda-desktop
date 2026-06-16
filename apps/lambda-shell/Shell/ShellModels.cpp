@@ -632,7 +632,18 @@ std::vector<ShellStatusModuleState> shellStatusModules(ShellSystemStatusSnapshot
     } else if (id == "volume" || id == "audio") {
       modules.push_back(make(id, "Volume", snapshot.volume));
     } else if (id == "battery" || id == "power") {
-      modules.push_back(make(id, "Battery", snapshot.battery));
+      BatteryStatus battery = snapshot.batteryStatus;
+      std::string const value = battery.label.empty() || lowerAscii(battery.label) == "unknown"
+                                    ? snapshot.battery
+                                    : battery.label;
+      if (!value.empty() && !battery.available) {
+        battery.label = value;
+        battery.available = availabilityFor(value) == QuickSettingAvailability::Available;
+        battery.present = battery.available;
+      }
+      auto module = make(id, "Battery", value);
+      module.batteryStatus = std::move(battery);
+      modules.push_back(std::move(module));
     } else if (id == "media" || id == "now-playing") {
       modules.push_back(make(id, "Media", snapshot.media));
     } else if (id == "notifications") {

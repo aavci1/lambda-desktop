@@ -312,6 +312,18 @@ TEST_CASE("Shell status modules classify available unknown and unavailable value
       .wifi = "unknown",
       .bluetooth = "unavailable",
       .volume = "44%",
+      .battery = "44%",
+      .batteryStatus = lambda_shell::BatteryStatus{
+          .label = "44%",
+          .available = true,
+          .present = true,
+          .percentage = 44,
+          .chargeState = lambda_shell::BatteryChargeState::Discharging,
+          .powerSource = lambda_shell::BatteryPowerSource::Battery,
+          .warningLevel = lambda_shell::BatteryWarningLevel::Low,
+          .timeToEmptySeconds = 3600,
+          .iconName = "battery-low-symbolic",
+      },
       .media = "Lambda Artist - Test Song",
   };
 
@@ -331,7 +343,13 @@ TEST_CASE("Shell status modules classify available unknown and unavailable value
   CHECK(modules[1].availability == lambda_shell::QuickSettingAvailability::Unknown);
   CHECK(modules[2].availability == lambda_shell::QuickSettingAvailability::Unavailable);
   CHECK(modules[3].value == "44%");
-  CHECK(modules[4].availability == lambda_shell::QuickSettingAvailability::Unavailable);
+  CHECK(modules[4].availability == lambda_shell::QuickSettingAvailability::Available);
+  CHECK(modules[4].batteryStatus.percentage == 44);
+  CHECK(modules[4].batteryStatus.chargeState == lambda_shell::BatteryChargeState::Discharging);
+  CHECK(modules[4].batteryStatus.powerSource == lambda_shell::BatteryPowerSource::Battery);
+  CHECK(modules[4].batteryStatus.warningLevel == lambda_shell::BatteryWarningLevel::Low);
+  CHECK(modules[4].batteryStatus.timeToEmptySeconds == 3600);
+  CHECK(modules[4].batteryStatus.iconName == "battery-low-symbolic");
   CHECK(modules[5].label == "Media");
   CHECK(modules[5].value == "Lambda Artist - Test Song");
   CHECK(modules[6].availability == lambda_shell::QuickSettingAvailability::Available);
@@ -357,6 +375,14 @@ TEST_CASE("Shell docklet status items expose real and unavailable states") {
       .bluetooth = "off",
       .volume = "55%",
       .battery = "88%",
+      .batteryStatus = lambda_shell::BatteryStatus{
+          .label = "88%",
+          .available = true,
+          .present = true,
+          .percentage = 88,
+          .chargeState = lambda_shell::BatteryChargeState::Charging,
+          .powerSource = lambda_shell::BatteryPowerSource::AC,
+      },
       .media = "Lambda Artist - Test Song",
   };
   auto items = lambda_shell::dockletStatusItems(status);
@@ -370,6 +396,7 @@ TEST_CASE("Shell docklet status items expose real and unavailable states") {
   CHECK_FALSE(items[1].active);
   CHECK(items[2].label == "55%");
   CHECK(items[3].label == "88%");
+  CHECK(items[3].icon == lambda::IconName::BatteryChargingFull);
   CHECK(items[4].id == "media");
   CHECK(items[4].label == "Lambda Artist - Test Song");
   CHECK(items[4].availability == lambda_shell::StatusAvailability::Available);

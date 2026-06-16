@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Shell/ShellAppRegistry.hpp"
+#include "Shell/UI/LambdaShellTypes.hpp"
 
 #include <Lambda/Core/Color.hpp>
 
@@ -30,6 +31,7 @@ struct ShellSystemStatusSnapshot {
   std::string bluetooth;
   std::string volume;
   std::string battery;
+  BatteryStatus batteryStatus;
   std::string media;
 
   bool operator==(ShellSystemStatusSnapshot const&) const = default;
@@ -185,6 +187,7 @@ struct ShellStatusModuleState {
   std::string label;
   std::string value;
   QuickSettingAvailability availability = QuickSettingAvailability::Unavailable;
+  BatteryStatus batteryStatus;
 
   bool operator==(ShellStatusModuleState const&) const = default;
 };
