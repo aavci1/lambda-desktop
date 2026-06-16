@@ -1136,21 +1136,31 @@ void ShellController::performMediaControlAsync(DockStatusAction action) {
     bool changed = false;
     try {
       auto client = lambda::system::MPRISClient::connectSession();
-      auto player = lambda::system::activeMPRISPlayerService(client.readPlayers());
+      auto player = lambda::system::activeMPRISPlayer(client.readPlayers());
       if (player) {
+        using MPRISPlayerAction = lambda::system::MPRISPlayerAction;
+        auto const supports = [&](MPRISPlayerAction playerAction) {
+          return lambda::system::mprisPlayerSupportsAction(*player, playerAction);
+        };
         switch (action) {
         case DockStatusAction::Primary:
-          client.playPause(*player);
-          changed = true;
+          if (supports(MPRISPlayerAction::PlayPause)) {
+            client.playPause(player->serviceName);
+            changed = true;
+          }
           break;
         case DockStatusAction::Secondary:
         case DockStatusAction::ScrollUp:
-          client.next(*player);
-          changed = true;
+          if (supports(MPRISPlayerAction::Next)) {
+            client.next(player->serviceName);
+            changed = true;
+          }
           break;
         case DockStatusAction::ScrollDown:
-          client.previous(*player);
-          changed = true;
+          if (supports(MPRISPlayerAction::Previous)) {
+            client.previous(player->serviceName);
+            changed = true;
+          }
           break;
         }
       }

@@ -48,28 +48,64 @@ TEST_CASE("MPRIS support is compile-time declared") {
   CHECK((LAMBDA_HAS_DBUS == 0 || LAMBDA_HAS_DBUS == 1));
 }
 
-TEST_CASE("MPRIS active player selection prefers controllable playing players") {
+TEST_CASE("MPRIS active player policy prunes stale players and gates capabilities") {
+  lambda::system::MPRISPlayerSnapshot stale{
+      .serviceName = "org.mpris.MediaPlayer2.stale",
+      .playbackStatus = "",
+      .canPlay = true,
+      .canControl = true,
+  };
   lambda::system::MPRISPlayerSnapshot paused{
       .serviceName = "org.mpris.MediaPlayer2.paused",
       .playbackStatus = "Paused",
+      .canPlay = true,
       .canControl = true,
   };
   lambda::system::MPRISPlayerSnapshot uncontrolledPlaying{
       .serviceName = "org.mpris.MediaPlayer2.uncontrolled",
       .playbackStatus = "Playing",
+      .canPause = true,
       .canControl = false,
+  };
+  lambda::system::MPRISPlayerSnapshot playingWithoutToggle{
+      .serviceName = "org.mpris.MediaPlayer2.playing-next-only",
+      .playbackStatus = "Playing",
+      .canGoNext = true,
+      .canControl = true,
   };
   lambda::system::MPRISPlayerSnapshot playing{
       .serviceName = "org.mpris.MediaPlayer2.playing",
       .playbackStatus = "Playing",
+      .canGoNext = true,
+      .canPause = true,
       .canControl = true,
   };
 
-  CHECK(lambda::system::activeMPRISPlayerService({paused, uncontrolledPlaying, playing}) ==
+  CHECK(lambda::system::isStaleMPRISPlayer(stale));
+  CHECK_FALSE(lambda::system::isStaleMPRISPlayer(playing));
+  CHECK(lambda::system::mprisPlayerSupportsAction(
+      playing, lambda::system::MPRISPlayerAction::PlayPause));
+  CHECK(lambda::system::mprisPlayerSupportsAction(
+      playing, lambda::system::MPRISPlayerAction::Next));
+  CHECK_FALSE(lambda::system::mprisPlayerSupportsAction(
+      playing, lambda::system::MPRISPlayerAction::Previous));
+  CHECK_FALSE(lambda::system::mprisPlayerSupportsAction(
+      uncontrolledPlaying, lambda::system::MPRISPlayerAction::PlayPause));
+  CHECK_FALSE(lambda::system::mprisPlayerSupportsAction(
+      stale, lambda::system::MPRISPlayerAction::PlayPause));
+
+  auto active =
+      lambda::system::activeMPRISPlayer({stale, paused, uncontrolledPlaying, playing});
+  REQUIRE(active);
+  CHECK(active->serviceName == "org.mpris.MediaPlayer2.playing");
+  CHECK(lambda::system::activeMPRISPlayerService({stale, paused, uncontrolledPlaying, playing}) ==
         "org.mpris.MediaPlayer2.playing");
-  CHECK(lambda::system::activeMPRISPlayerService({paused, uncontrolledPlaying}) ==
+  CHECK(lambda::system::activeMPRISPlayerService({stale, paused, uncontrolledPlaying}) ==
         "org.mpris.MediaPlayer2.paused");
+  CHECK(lambda::system::activeMPRISPlayerService({playingWithoutToggle, paused}) ==
+        "org.mpris.MediaPlayer2.playing-next-only");
   CHECK_FALSE(lambda::system::activeMPRISPlayerService({uncontrolledPlaying}).has_value());
+  CHECK(lambda::system::formatMPRISStatus({stale}) == "unavailable");
 }
 
 #if LAMBDA_HAS_DBUS

@@ -93,6 +93,19 @@ std::string displayTitle(MPRISPlayerSnapshot const& player) {
   return player.identity.empty() ? player.serviceName : player.identity;
 }
 
+bool knownPlaybackStatus(std::string_view status) {
+  return status == "Playing" || status == "Paused" || status == "Stopped";
+}
+
+bool hasAnyControls(MPRISPlayerSnapshot const& player) {
+  return mprisPlayerSupportsAction(player, MPRISPlayerAction::PlayPause) ||
+         mprisPlayerSupportsAction(player, MPRISPlayerAction::Stop) ||
+         mprisPlayerSupportsAction(player, MPRISPlayerAction::Next) ||
+         mprisPlayerSupportsAction(player, MPRISPlayerAction::Previous) ||
+         mprisPlayerSupportsAction(player, MPRISPlayerAction::Seek) ||
+         mprisPlayerSupportsAction(player, MPRISPlayerAction::SetVolume);
+}
+
 } // namespace
 
 MPRISClient::MPRISClient(dbus::Bus bus) : bus_(std::move(bus)) {}
@@ -275,45 +288,93 @@ void MPRISClient::callPlayerMethod(std::string const& serviceName, std::string c
   });
 }
 
-std::optional<std::string> activeMPRISPlayerService(
+bool isStaleMPRISPlayer(MPRISPlayerSnapshot const& player) {
+  return player.serviceName.empty() || !knownPlaybackStatus(player.playbackStatus);
+}
+
+bool mprisPlayerSupportsAction(MPRISPlayerSnapshot const& player, MPRISPlayerAction action) {
+  if (isStaleMPRISPlayer(player) || !player.canControl) {
+    return false;
+  }
+
+  switch (action) {
+  case MPRISPlayerAction::PlayPause:
+    if (player.playbackStatus == "Playing") {
+      return player.canPause || player.canPlay;
+    }
+    return player.canPlay || player.canPause;
+  case MPRISPlayerAction::Stop:
+    return player.playbackStatus != "Stopped";
+  case MPRISPlayerAction::Next:
+    return player.canGoNext;
+  case MPRISPlayerAction::Previous:
+    return player.canGoPrevious;
+  case MPRISPlayerAction::Seek:
+    return player.canSeek;
+  case MPRISPlayerAction::SetVolume:
+    return true;
+  }
+  return false;
+}
+
+std::optional<MPRISPlayerSnapshot> activeMPRISPlayer(
     std::vector<MPRISPlayerSnapshot> const& players) {
-  auto const select = [&](std::string_view status) -> std::optional<std::string> {
+  auto const select = [&](std::string_view status,
+                          bool requirePlaybackToggle) -> std::optional<MPRISPlayerSnapshot> {
     auto const found = std::find_if(players.begin(), players.end(), [&](auto const& player) {
-      return !player.serviceName.empty() && player.canControl && player.playbackStatus == status;
+      if (isStaleMPRISPlayer(player) || !player.canControl ||
+          player.playbackStatus != status) {
+        return false;
+      }
+      return !requirePlaybackToggle ||
+             mprisPlayerSupportsAction(player, MPRISPlayerAction::PlayPause);
     });
     if (found == players.end()) return std::nullopt;
-    return found->serviceName;
+    return *found;
   };
 
-  if (auto playing = select("Playing")) return playing;
-  if (auto paused = select("Paused")) return paused;
+  if (auto playing = select("Playing", true)) return playing;
+  if (auto playing = select("Playing", false)) return playing;
+  if (auto paused = select("Paused", true)) return paused;
+  if (auto paused = select("Paused", false)) return paused;
+  if (auto stopped = select("Stopped", true)) return stopped;
 
   auto const controllable = std::find_if(players.begin(), players.end(), [](auto const& player) {
-    return !player.serviceName.empty() && player.canControl;
+    return !isStaleMPRISPlayer(player) && hasAnyControls(player);
   });
-  if (controllable != players.end()) return controllable->serviceName;
+  if (controllable != players.end()) return *controllable;
+  return std::nullopt;
+}
+
+std::optional<std::string> activeMPRISPlayerService(
+    std::vector<MPRISPlayerSnapshot> const& players) {
+  if (auto player = activeMPRISPlayer(players)) {
+    return player->serviceName;
+  }
   return std::nullopt;
 }
 
 std::string formatMPRISStatus(std::vector<MPRISPlayerSnapshot> const& players) {
-  if (players.empty()) {
-    return "unavailable";
-  }
-
   auto const playing = std::find_if(players.begin(), players.end(), [](auto const& player) {
-    return player.playbackStatus == "Playing";
+    return !isStaleMPRISPlayer(player) && player.playbackStatus == "Playing";
   });
   if (playing != players.end()) {
     return displayTitle(*playing);
   }
 
   auto const paused = std::find_if(players.begin(), players.end(), [](auto const& player) {
-    return player.playbackStatus == "Paused";
+    return !isStaleMPRISPlayer(player) && player.playbackStatus == "Paused";
   });
   if (paused != players.end()) {
     return "paused: " + displayTitle(*paused);
   }
 
+  auto const stopped = std::find_if(players.begin(), players.end(), [](auto const& player) {
+    return !isStaleMPRISPlayer(player) && player.playbackStatus == "Stopped";
+  });
+  if (stopped == players.end()) {
+    return "unavailable";
+  }
   return "stopped";
 }
 

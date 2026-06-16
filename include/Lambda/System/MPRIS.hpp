@@ -44,6 +44,15 @@ struct MPRISPlayerSnapshot {
   bool operator==(MPRISPlayerSnapshot const&) const = default;
 };
 
+enum class MPRISPlayerAction : std::uint8_t {
+  PlayPause,
+  Stop,
+  Next,
+  Previous,
+  Seek,
+  SetVolume,
+};
+
 struct MPRISChangeWatch {
   dbus::Slot propertiesChanged;
   dbus::Slot seeked;
@@ -92,6 +101,11 @@ private:
   dbus::Bus bus_;
 };
 
+[[nodiscard]] bool isStaleMPRISPlayer(MPRISPlayerSnapshot const& player);
+[[nodiscard]] bool mprisPlayerSupportsAction(MPRISPlayerSnapshot const& player,
+                                             MPRISPlayerAction action);
+[[nodiscard]] std::optional<MPRISPlayerSnapshot> activeMPRISPlayer(
+    std::vector<MPRISPlayerSnapshot> const& players);
 [[nodiscard]] std::optional<std::string> activeMPRISPlayerService(
     std::vector<MPRISPlayerSnapshot> const& players);
 [[nodiscard]] std::string formatMPRISStatus(std::vector<MPRISPlayerSnapshot> const& players);
