@@ -246,7 +246,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add a Shell-side StatusNotifierWatcher client that registers a host, reads registered item services, and watches item register/unregister signals.
 - [x] [Auto] Wire Shell's dock status area to the watcher and render basic live tray item glyphs for registered services.
 - [x] [Auto] Read basic StatusNotifierItem metadata for category, id/title, status, icon names, overlay/attention icon names, menu object path, `ItemIsMenu`, and property-change refresh.
-- [ ] [Auto] Add icon pixmap/theme image resolution, overlay/attention image rendering, tooltip metadata, and richer property-shape coverage.
+- [x] [Auto] Parse StatusNotifierItem icon, overlay, and attention pixmap arrays plus tooltip metadata through the generic D-Bus array/struct value path.
+- [ ] [Auto] Resolve icon names and pixmap bytes into Shell-rendered tray images, theme lookup, and overlay/attention image presentation.
 - [ ] [Auto + Manual] Implement `com.canonical.dbusmenu` menu hosting and item `Activate`, `ContextMenu`, `SecondaryActivate`, and `Scroll` actions.
 - [ ] [Auto + Manual] Harden item property/signal changes so disappearing or misbehaving tray items do not freeze Shell.
 - [ ] [Manual] Validate Steam/Discord/Telegram/nm-applet-style tray icons appear, update, activate, and show menus.

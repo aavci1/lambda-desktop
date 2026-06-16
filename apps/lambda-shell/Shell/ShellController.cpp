@@ -134,6 +134,8 @@ lambda::IconName trayIconForItem(lambda::system::StatusNotifierItemProperties co
   icon += " " + lowerAscii(item.category);
   icon += " " + lowerAscii(item.title);
   icon += " " + lowerAscii(item.itemId);
+  icon += " " + lowerAscii(item.tooltip.title);
+  icon += " " + lowerAscii(item.tooltip.description);
 
   if (containsToken(icon, "bluetooth")) return lambda::IconName::BluetoothConnected;
   if (containsToken(icon, "network") || containsToken(icon, "wifi") ||
@@ -160,7 +162,10 @@ lambda::IconName trayIconForItem(lambda::system::StatusNotifierItemProperties co
 }
 
 TrayStatusItem trayStatusItemFromProperties(lambda::system::StatusNotifierItemProperties const& item) {
-  std::string label = item.title.empty() ? item.itemId : item.title;
+  std::string label = item.title.empty() ? item.tooltip.title : item.title;
+  if (label.empty()) {
+    label = item.itemId;
+  }
   if (label.empty()) {
     label = trayLabelForService(item.address.id);
   }

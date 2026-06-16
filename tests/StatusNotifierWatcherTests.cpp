@@ -7,9 +7,11 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -29,6 +31,34 @@ private:
 
 bool contains(std::vector<std::string> const& values, std::string const& needle) {
   return std::find(values.begin(), values.end(), needle) != values.end();
+}
+
+lambda::dbus::ByteArray bytes(std::vector<std::uint8_t> values) {
+  return lambda::dbus::ByteArray{.values = std::move(values)};
+}
+
+std::shared_ptr<lambda::dbus::StructValue>
+pixmapStruct(std::int32_t width, std::int32_t height, std::vector<std::uint8_t> data) {
+  return std::make_shared<lambda::dbus::StructValue>(
+      lambda::dbus::StructValue{.signature = "iiay",
+                                .fields = {width, height, bytes(std::move(data))}});
+}
+
+std::shared_ptr<lambda::dbus::ArrayValue>
+pixmapArray(std::vector<lambda::dbus::BasicValue> values) {
+  return std::make_shared<lambda::dbus::ArrayValue>(
+      lambda::dbus::ArrayValue{.elementSignature = "(iiay)", .values = std::move(values)});
+}
+
+std::shared_ptr<lambda::dbus::StructValue> tooltipValue() {
+  return std::make_shared<lambda::dbus::StructValue>(
+      lambda::dbus::StructValue{
+          .signature = "sa(iiay)ss",
+          .fields = {std::string("software-update"),
+                     pixmapArray({pixmapStruct(1, 1, {0xff, 0x00, 0x00, 0xff})}),
+                     std::string("Updater tooltip"),
+                     std::string("Updates are available")},
+      });
 }
 
 lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updater",
@@ -79,6 +109,15 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
           },
           lambda::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
+              .name = "IconPixmap",
+              .value = pixmapArray({pixmapStruct(2, 1, {0x10, 0x20, 0x30, 0x40,
+                                                        0x50, 0x60, 0x70, 0x80})}),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
               .name = "OverlayIconName",
               .value = std::string(""),
               .writable = false,
@@ -87,8 +126,32 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
           },
           lambda::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
+              .name = "OverlayIconPixmap",
+              .value = pixmapArray({pixmapStruct(1, 1, {0x01, 0x02, 0x03, 0x04})}),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
               .name = "AttentionIconName",
               .value = std::string("dialog-warning"),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "AttentionIconPixmap",
+              .value = pixmapArray({pixmapStruct(1, 1, {0xaa, 0xbb, 0xcc, 0xdd})}),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "ToolTip",
+              .value = tooltipValue(),
               .writable = false,
               .getter = nullptr,
               .setter = nullptr,
@@ -414,7 +477,22 @@ TEST_CASE("StatusNotifierWatcherClient reads StatusNotifierItem properties") {
   CHECK(properties.title == "Updater");
   CHECK(properties.status == "Active");
   CHECK(properties.iconName == "software-update");
+  REQUIRE(properties.iconPixmaps.size() == 1);
+  CHECK(properties.iconPixmaps.front().width == 2);
+  CHECK(properties.iconPixmaps.front().height == 1);
+  CHECK(properties.iconPixmaps.front().data == std::vector<std::uint8_t>{0x10, 0x20, 0x30, 0x40,
+                                                                          0x50, 0x60, 0x70, 0x80});
+  REQUIRE(properties.overlayIconPixmaps.size() == 1);
+  CHECK(properties.overlayIconPixmaps.front().width == 1);
   CHECK(properties.attentionIconName == "dialog-warning");
+  REQUIRE(properties.attentionIconPixmaps.size() == 1);
+  CHECK(properties.attentionIconPixmaps.front().data == std::vector<std::uint8_t>{0xaa, 0xbb, 0xcc, 0xdd});
+  CHECK(properties.tooltipAvailable);
+  CHECK(properties.tooltip.iconName == "software-update");
+  REQUIRE(properties.tooltip.iconPixmaps.size() == 1);
+  CHECK(properties.tooltip.iconPixmaps.front().height == 1);
+  CHECK(properties.tooltip.title == "Updater tooltip");
+  CHECK(properties.tooltip.description == "Updates are available");
   CHECK(properties.menu.value == "/Menu");
   CHECK(!properties.itemIsMenu);
 

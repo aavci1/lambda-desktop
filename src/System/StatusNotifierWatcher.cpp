@@ -29,6 +29,60 @@ std::string registeredItemId(StatusNotifierItemRegistration const& item) {
   return item.serviceName + item.objectPath;
 }
 
+std::optional<StatusNotifierItemPixmap>
+pixmapFromValue(dbus::BasicValue const& value) {
+  auto const* structure = std::get_if<std::shared_ptr<dbus::StructValue>>(&value);
+  if (!structure || !*structure || (*structure)->fields.size() != 3) {
+    return std::nullopt;
+  }
+  auto const* width = std::get_if<std::int32_t>(&(*structure)->fields[0]);
+  auto const* height = std::get_if<std::int32_t>(&(*structure)->fields[1]);
+  auto const* data = std::get_if<dbus::ByteArray>(&(*structure)->fields[2]);
+  if (!width || !height || !data || *width <= 0 || *height <= 0) {
+    return std::nullopt;
+  }
+  return StatusNotifierItemPixmap{
+      .width = *width,
+      .height = *height,
+      .data = data->values,
+  };
+}
+
+std::vector<StatusNotifierItemPixmap>
+pixmapsFromValue(std::shared_ptr<dbus::ArrayValue> const& value) {
+  std::vector<StatusNotifierItemPixmap> pixmaps;
+  if (!value) {
+    return pixmaps;
+  }
+  pixmaps.reserve(value->values.size());
+  for (auto const& entry : value->values) {
+    if (auto pixmap = pixmapFromValue(entry)) {
+      pixmaps.push_back(std::move(*pixmap));
+    }
+  }
+  return pixmaps;
+}
+
+std::optional<StatusNotifierItemTooltip>
+tooltipFromValue(std::shared_ptr<dbus::StructValue> const& value) {
+  if (!value || value->fields.size() != 4) {
+    return std::nullopt;
+  }
+  auto const* iconName = std::get_if<std::string>(&value->fields[0]);
+  auto const* iconPixmaps = std::get_if<std::shared_ptr<dbus::ArrayValue>>(&value->fields[1]);
+  auto const* title = std::get_if<std::string>(&value->fields[2]);
+  auto const* description = std::get_if<std::string>(&value->fields[3]);
+  if (!iconName || !iconPixmaps || !title || !description) {
+    return std::nullopt;
+  }
+  return StatusNotifierItemTooltip{
+      .iconName = *iconName,
+      .iconPixmaps = pixmapsFromValue(*iconPixmaps),
+      .title = *title,
+      .description = *description,
+  };
+}
+
 template <typename T>
 std::optional<T> readItemProperty(dbus::Bus& bus,
                                   StatusNotifierItemAddress const& address,
@@ -341,12 +395,35 @@ StatusNotifierWatcherClient::readItemProperties(StatusNotifierItemAddress const&
     properties.iconName = *value;
     properties.propertiesAvailable = true;
   }
+  if (auto value = readItemProperty<std::shared_ptr<dbus::ArrayValue>>(
+          bus_, address, "IconPixmap", "a(iiay)")) {
+    properties.iconPixmaps = pixmapsFromValue(*value);
+    properties.propertiesAvailable = true;
+  }
   if (auto value = readItemProperty<std::string>(bus_, address, "OverlayIconName", "s")) {
     properties.overlayIconName = *value;
     properties.propertiesAvailable = true;
   }
+  if (auto value = readItemProperty<std::shared_ptr<dbus::ArrayValue>>(
+          bus_, address, "OverlayIconPixmap", "a(iiay)")) {
+    properties.overlayIconPixmaps = pixmapsFromValue(*value);
+    properties.propertiesAvailable = true;
+  }
   if (auto value = readItemProperty<std::string>(bus_, address, "AttentionIconName", "s")) {
     properties.attentionIconName = *value;
+    properties.propertiesAvailable = true;
+  }
+  if (auto value = readItemProperty<std::shared_ptr<dbus::ArrayValue>>(
+          bus_, address, "AttentionIconPixmap", "a(iiay)")) {
+    properties.attentionIconPixmaps = pixmapsFromValue(*value);
+    properties.propertiesAvailable = true;
+  }
+  if (auto value = readItemProperty<std::shared_ptr<dbus::StructValue>>(
+          bus_, address, "ToolTip", "(sa(iiay)ss)")) {
+    if (auto tooltip = tooltipFromValue(*value)) {
+      properties.tooltip = std::move(*tooltip);
+      properties.tooltipAvailable = true;
+    }
     properties.propertiesAvailable = true;
   }
   if (auto value = readItemProperty<dbus::ObjectPath>(bus_, address, "Menu", "o")) {

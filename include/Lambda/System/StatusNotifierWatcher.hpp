@@ -30,6 +30,23 @@ struct StatusNotifierItemAddress {
   bool operator==(StatusNotifierItemAddress const&) const = default;
 };
 
+struct StatusNotifierItemPixmap {
+  std::int32_t width = 0;
+  std::int32_t height = 0;
+  std::vector<std::uint8_t> data;
+
+  bool operator==(StatusNotifierItemPixmap const&) const = default;
+};
+
+struct StatusNotifierItemTooltip {
+  std::string iconName;
+  std::vector<StatusNotifierItemPixmap> iconPixmaps;
+  std::string title;
+  std::string description;
+
+  bool operator==(StatusNotifierItemTooltip const&) const = default;
+};
+
 struct StatusNotifierItemProperties {
   StatusNotifierItemAddress address;
   bool propertiesAvailable = false;
@@ -40,6 +57,11 @@ struct StatusNotifierItemProperties {
   std::string iconName;
   std::string overlayIconName;
   std::string attentionIconName;
+  std::vector<StatusNotifierItemPixmap> iconPixmaps;
+  std::vector<StatusNotifierItemPixmap> overlayIconPixmaps;
+  std::vector<StatusNotifierItemPixmap> attentionIconPixmaps;
+  StatusNotifierItemTooltip tooltip;
+  bool tooltipAvailable = false;
   dbus::ObjectPath menu;
   bool itemIsMenu = false;
 };
