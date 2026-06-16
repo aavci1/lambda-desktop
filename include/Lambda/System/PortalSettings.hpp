@@ -41,6 +41,7 @@ public:
 
   PortalSettingsService(dbus::Bus& bus, PortalSettingsState state = {});
 
+  [[nodiscard]] dbus::ObjectDefinition objectDefinition();
   [[nodiscard]] dbus::Slot exportObject();
   [[nodiscard]] dbus::BasicValue read(std::string const& nameSpace, std::string const& key) const;
   [[nodiscard]] dbus::NamespacedVariantDictionary readAll(dbus::StringArray const& namespaces) const;

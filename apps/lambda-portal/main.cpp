@@ -1,10 +1,13 @@
 #include <Lambda/System/DBus.hpp>
+#include <Lambda/System/PortalNotification.hpp>
 #include <Lambda/System/PortalSettings.hpp>
 
 #include <atomic>
 #include <csignal>
 #include <exception>
 #include <iostream>
+#include <iterator>
+#include <utility>
 
 namespace {
 
@@ -12,6 +15,17 @@ std::atomic<bool> gRunning = true;
 
 void handleSignal(int) {
   gRunning = false;
+}
+
+lambda::dbus::ObjectDefinition mergeDefinitions(lambda::dbus::ObjectDefinition first,
+                                                lambda::dbus::ObjectDefinition second) {
+  first.methods.insert(first.methods.end(),
+                       std::make_move_iterator(second.methods.begin()),
+                       std::make_move_iterator(second.methods.end()));
+  first.properties.insert(first.properties.end(),
+                          std::make_move_iterator(second.properties.begin()),
+                          std::make_move_iterator(second.properties.end()));
+  return first;
 }
 
 } // namespace
@@ -28,9 +42,14 @@ int main() {
     lambda::system::PortalSettingsService settings(
         bus,
         lambda::system::PortalSettingsService::stateFromShellConfig());
-    auto settingsSlot = settings.exportObject();
+    lambda::system::PortalNotificationService notifications(bus);
 
-    std::cerr << "lambda-portal: exported " << lambda::system::PortalSettingsService::interfaceName
+    auto portalSlot = bus.exportObject(
+        lambda::system::PortalSettingsService::objectPath,
+        mergeDefinitions(settings.objectDefinition(), notifications.objectDefinition()));
+    auto notificationActionSlot = notifications.watchNotificationActions();
+
+    std::cerr << "lambda-portal: exported portal backends"
               << " on " << lambda::system::PortalSettingsService::objectPath << "\n";
 
     while (gRunning.load()) {

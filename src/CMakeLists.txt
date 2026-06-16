@@ -7,6 +7,7 @@ set(LAMBDA_CORE_SOURCES
   System/NetworkManager.cpp
   System/Notifications.cpp
   System/PolkitAgent.cpp
+  System/PortalNotification.cpp
   System/PortalSettings.cpp
   System/Secrets.cpp
   System/StatusNotifierWatcher.cpp

@@ -209,9 +209,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add deterministic private-bus coverage for portal Settings methods, property, namespaced dictionary response, RGB tuple variant, and `SettingChanged` signal.
 - [x] [Auto] Smoke the built `lambda-portal` process on a private session bus and verify a Settings `Read` call through `gdbus`.
 - [x] [Auto] Add Shell/Settings-owned appearance preferences for color scheme, accent color, high contrast, and reduced motion, and make `lambda-portal` prefer that Shell config for `org.freedesktop.appearance` values while keeping environment variables as a missing-config development fallback.
+- [x] [Auto] Export a basic `org.freedesktop.impl.portal.Notification` backend that routes `AddNotification`, `RemoveNotification`, and `ActionInvoked` through the SVC-6 daemon.
 - [ ] [Manual] Install or stage `lambda-portal` with `xdg-desktop-portal`, set `XDG_CURRENT_DESKTOP=Lambda`, and verify a real GTK/Qt app reads the color-scheme/accent through the frontend portal.
 - [ ] [Auto + Manual] Implement the FileChooser portal backend for Open/Save using a Lambda file-chooser surface backed by `lambda-files` components.
-- [ ] [Auto + Manual] Implement OpenURI, Inhibit, Account, and Notification portal backends; route portal Notification requests through the SVC-6 daemon.
+- [ ] [Auto + Manual] Implement OpenURI, Inhibit, and Account portal backends.
 - [ ] [Auto + Manual] Add real frontend request/response tests for xdg-desktop-portal request objects, handles, cancellation, and response codes.
 
 ## TODO-024: Complete SVC-6 notifications daemon and Shell UI
@@ -229,7 +230,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Enforce banner timeout and preview-visibility config for the live Shell banner.
 - [ ] [Auto + Manual] Implement timeout expiry, grouping, persistence policy, and clear-all behavior against the service history.
 - [ ] [Auto] Parse the common notification hints that affect presentation, including urgency, category, desktop-entry, image/icon data, transient, and sound suppression.
-- [ ] [Auto + Manual] Route the SVC-4 portal Notification backend through this service.
+- [x] [Auto] Route the basic SVC-4 portal Notification backend through this service.
 - [ ] [Manual] Validate `notify-send "x"` shows a Shell banner, actions invoke, DND suppresses banners, and history shows past notifications.
 
 ## TODO-025: Complete SVC-7 StatusNotifierWatcher and tray host

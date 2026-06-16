@@ -12,10 +12,17 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace lambda::system {
 
 namespace {
+
+dbus::MethodReply methodReply(std::vector<dbus::ReplyValue> values) {
+  dbus::MethodReply reply;
+  reply.values = std::move(values);
+  return reply;
+}
 
 std::string lowerAscii(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -179,49 +186,47 @@ PortalSettingsService::PortalSettingsService(dbus::Bus& bus, PortalSettingsState
     : bus_(&bus),
       state_(std::move(state)) {}
 
+dbus::ObjectDefinition PortalSettingsService::objectDefinition() {
+  return dbus::ObjectDefinition{
+      .methods = {
+          dbus::ExportedMethod{
+              .interface = interfaceName,
+              .member = "Read",
+              .handler = [this](dbus::Message& message) {
+                std::string const nameSpace = message.readString();
+                std::string const key = message.readString();
+                try {
+                  return methodReply({dbus::VariantValue{read(nameSpace, key)}});
+                } catch (dbus::Error const&) {
+                  throw;
+                } catch (std::exception const& error) {
+                  return dbus::MethodReply::error("org.freedesktop.portal.Error.NotFound", error.what());
+                }
+              },
+          },
+          dbus::ExportedMethod{
+              .interface = interfaceName,
+              .member = "ReadAll",
+              .handler = [this](dbus::Message& message) {
+                return methodReply({readAll(message.readStringArray())});
+              },
+          },
+      },
+      .properties = {
+          dbus::ExportedProperty{
+              .interface = interfaceName,
+              .name = "version",
+              .value = std::uint32_t(1),
+              .writable = false,
+              .getter = {},
+              .setter = {},
+          },
+      },
+  };
+}
+
 dbus::Slot PortalSettingsService::exportObject() {
-  return bus_->exportObject(
-      objectPath,
-      dbus::ObjectDefinition{
-          .methods = {
-              dbus::ExportedMethod{
-                  .interface = interfaceName,
-                  .member = "Read",
-                  .handler = [this](dbus::Message& message) {
-                    std::string const nameSpace = message.readString();
-                    std::string const key = message.readString();
-                    try {
-                      dbus::MethodReply reply;
-                      reply.values = {dbus::VariantValue{read(nameSpace, key)}};
-                      return reply;
-                    } catch (dbus::Error const&) {
-                      throw;
-                    } catch (std::exception const& error) {
-                      return dbus::MethodReply::error("org.freedesktop.portal.Error.NotFound", error.what());
-                    }
-                  },
-              },
-              dbus::ExportedMethod{
-                  .interface = interfaceName,
-                  .member = "ReadAll",
-                  .handler = [this](dbus::Message& message) {
-                    dbus::MethodReply reply;
-                    reply.values = {readAll(message.readStringArray())};
-                    return reply;
-                  },
-              },
-          },
-          .properties = {
-              dbus::ExportedProperty{
-                  .interface = interfaceName,
-                  .name = "version",
-                  .value = std::uint32_t(1),
-                  .writable = false,
-                  .getter = {},
-                  .setter = {},
-              },
-          },
-      });
+  return bus_->exportObject(objectPath, objectDefinition());
 }
 
 dbus::BasicValue PortalSettingsService::read(std::string const& nameSpace, std::string const& key) const {
