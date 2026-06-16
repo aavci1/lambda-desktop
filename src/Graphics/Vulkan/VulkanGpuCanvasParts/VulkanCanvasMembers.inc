@@ -75,6 +75,9 @@
   std::uint32_t pendingFrameCaptureHeight_ = 0;
   bool pendingFrameCaptureBgra_ = true;
   VkFence pendingFrameCaptureFence_ = VK_NULL_HANDLE;
+  bool pendingFrameCaptureExternal_ = false;
+  bool pendingFrameCaptureAwaitingExternalSubmit_ = false;
+  int pendingFrameCaptureTracePolls_ = 0;
   bool frameCaptureRequested_ = false;
   bool capturedFrameAvailable_ = false;
   std::vector<std::uint8_t> capturedFrameBytes_;

@@ -1183,6 +1183,16 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     std::optional<ScreenshotRequest> screenshotCaptureInFlight;
     bool snapCaptureInFlight = false;
     int frameCapturePollAttempts = 0;
+    int const diagnosticScreenshotAfterMs =
+        positiveEnvInt("LWM_DIAGNOSTIC_SCREENSHOT_AFTER_MS", 0, 600000);
+    bool diagnosticScreenshotQueued = diagnosticScreenshotAfterMs <= 0;
+    auto const diagnosticScreenshotAt =
+        SteadyClock::now() + std::chrono::milliseconds(std::max(0, diagnosticScreenshotAfterMs));
+    if (diagnosticScreenshotAfterMs > 0) {
+      std::fprintf(stderr,
+                   "lambda-window-manager: diagnostic screenshot scheduled after %dms\n",
+                   diagnosticScreenshotAfterMs);
+    }
     SnapFrameCapture snapFrameCapture = SnapFrameCapture::fromEnvironment();
     SnapAnimationTrace snapAnimationTrace = SnapAnimationTrace::fromEnvironment();
     if (snapAnimationTrace.enabled) snapAnimationTrace.ensureOpen();
@@ -1204,7 +1214,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       screenshotFlashStartedAt = std::chrono::steady_clock::now();
       if (idleBlanked) idleBlanked = false;
     };
-    auto processCompletedFrameCapture = [&] {
+    auto processCompletedFrameCapture = [&](bool requestRenderWhenPending = false) {
       if (!screenshotCaptureInFlight && !snapCaptureInFlight) {
         return false;
       }
@@ -1220,7 +1230,9 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           frameCapturePollAttempts = 0;
           return false;
         }
-        forceRender = true;
+        if (requestRenderWhenPending) {
+          forceRender = true;
+        }
         return false;
       }
       frameCapturePollAttempts = 0;
@@ -1234,6 +1246,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
           startScreenshotFlash();
         }
         screenshotCaptureInFlight.reset();
+        forceRender = true;
       }
       if (snapCaptureInFlight) {
         snapFrameCapture.recordFrame(pixels, width, height, wayland, appliedConfig.config.chrome);
@@ -1305,6 +1318,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                             forceRender ? 1 : 0);
     };
     constexpr int kIdlePollMs = 250;
+    constexpr int kFrameCapturePollMs = 8;
     auto diagnosticExerciseInterval = [&] {
       std::uint64_t const refresh = refreshNsec(output.refreshRateMilliHz());
       if (refresh == 0) return std::chrono::milliseconds(17);
@@ -1315,6 +1329,13 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       if (!envEnabled("LWM_DIAGNOSTIC_SCRIPTED_EXERCISE")) return kIdlePollMs;
       auto const now = SteadyClock::now();
       return millisecondsUntilCeil(nextDiagnosticExerciseAt, now, kIdlePollMs);
+    };
+    auto frameCapturePollDelayMs = [&] {
+      return (screenshotCaptureInFlight || snapCaptureInFlight) ? kFrameCapturePollMs : kIdlePollMs;
+    };
+    auto diagnosticScreenshotDelayMs = [&] {
+      if (diagnosticScreenshotQueued) return kIdlePollMs;
+      return millisecondsUntilCeil(diagnosticScreenshotAt, SteadyClock::now(), kIdlePollMs);
     };
     auto hardwareCursorFastPathRetryDelayMs = [&]() -> int {
       if (!hardwareCursorMotionFastPathDisabled) return kIdlePollMs;
@@ -2252,6 +2273,22 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
         idleBlanked = false;
       }
     };
+    auto queueDiagnosticScreenshotIfDue = [&] {
+      if (diagnosticScreenshotQueued || screenshotPending) {
+        return false;
+      }
+      if (SteadyClock::now() < diagnosticScreenshotAt) {
+        return false;
+      }
+      screenshotPending = makeScreenshotRequest(ScreenshotMode::FullOutput);
+      diagnosticScreenshotQueued = true;
+      forceRender = true;
+      if (idleBlanked) {
+        idleBlanked = false;
+      }
+      std::fprintf(stderr, "lambda-window-manager: diagnostic screenshot queued\n");
+      return true;
+    };
     auto vulkanDisplayPresentationPollDelayMs = [&] {
       if (presenter->atomicPresenter() || vulkanDisplayPendingFrameCallbacks.empty()) return kIdlePollMs;
       std::uint32_t const nowMs = presentation::monotonicMilliseconds();
@@ -2433,13 +2470,16 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       int const queuedScheduleDelayBeforePoll = queuedAtomicScheduleDelayMs();
       int const acquireWaitCallbackDelayBeforePoll = acquireWaitFrameCallbackDelayMs();
       int const vulkanDisplayPresentationDelayBeforePoll = vulkanDisplayPresentationPollDelayMs();
+      int const frameCapturePollDelayBeforePoll = frameCapturePollDelayMs();
       int pollTimeoutMs = forceRender || animationCanRenderBeforePoll || renderAheadNeededBeforePoll
                               ? 0
                               : std::min(kIdlePollMs, renderAheadDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, queuedScheduleDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, acquireWaitCallbackDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, vulkanDisplayPresentationDelayBeforePoll);
+      pollTimeoutMs = std::min(pollTimeoutMs, frameCapturePollDelayBeforePoll);
       pollTimeoutMs = std::min(pollTimeoutMs, diagnosticExerciseDelayMs());
+      pollTimeoutMs = std::min(pollTimeoutMs, diagnosticScreenshotDelayMs());
       pollTimeoutMs = std::min(pollTimeoutMs, deferredCursorRetryDelayMs());
       pollTimeoutMs = std::min(pollTimeoutMs, hardwareCursorFastPathRetryDelayMs());
       if (std::optional<int> syntheticPointerDelay = syntheticPointerMotion.delayMs(SteadyClock::now())) {
@@ -2512,6 +2552,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool const acquireWaitFrameCallbackSent = maybeSendAcquireWaitFrameCallback();
       bool const deferredCursorRetried = retryDeferredCursorCommit();
       (void)maybeCompleteVulkanDisplayPresentationCallbacks();
+      (void)processCompletedFrameCapture(false);
       if (shellWoke) {
         wayland.dispatchShellIpc();
         loopSnapshots.reset();
@@ -2527,6 +2568,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       wayland.dispatchShellIpc();
       loopSnapshots.reset();
       queueScreenshotIfRequested();
+      (void)queueDiagnosticScreenshotIfDue();
       bool const syntheticPointerEmitted = syntheticPointerMotion.emitDue(*device, SteadyClock::now());
       bool const syntheticChromeEmitted =
           syntheticChromeInteraction.emitDue(*device, wayland, SteadyClock::now());

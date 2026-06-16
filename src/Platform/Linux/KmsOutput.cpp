@@ -3034,6 +3034,7 @@ private:
           .finalLayout = directScanoutRender_ ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
           .preserveContents = false,
           .commandBuffer = buffer.commandBuffer,
+          .completionFence = buffer.renderFence,
       };
       std::fprintf(stderr,
                    "lambda-window-manager: atomic scanout buffer %ux%u modifier=0x%016llx stride=%u\n",

@@ -1789,6 +1789,75 @@ TEST_CASE("Vulkan frame capture preserves transformed and rounded clip geometry"
   CHECK(colorDelta(pixels, width, 174, 66, 8, 8) > 120);
 }
 
+TEST_CASE("Vulkan external render-target frame capture waits for submitted completion fence") {
+  auto& vk = VulkanContext::instance();
+  vk.ensureInitialized();
+
+  FreeTypeTextSystem textSystem;
+  HeadlessVulkanTarget target{vk, 96, 72, 1.f};
+  VulkanCopyContext external{vk.device(), vk.queue(), vk.queueFamily()};
+
+  vkCheck(vkResetCommandBuffer(external.commandBuffer, 0), "vkResetCommandBuffer external render target");
+  auto beginInfo = lambda::vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
+  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+  vkCheck(vkBeginCommandBuffer(external.commandBuffer, &beginInfo), "vkBeginCommandBuffer external render target");
+
+  VulkanRenderTargetSpec spec{
+      .image = target.targetImage.image,
+      .view = target.targetImage.view,
+      .format = target.targetImage.format,
+      .width = target.pixelW,
+      .height = target.pixelH,
+      .initialLayout = target.layout,
+      .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .commandBuffer = external.commandBuffer,
+      .completionFence = external.fence,
+  };
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(spec, textSystem);
+  REQUIRE(canvas);
+
+  canvas->resize(target.logicalW, target.logicalH);
+  canvas->updateDpiScale(target.dpiScale, target.dpiScale);
+  canvas->beginFrame();
+  canvas->clear(Colors::white);
+  canvas->drawRect(Rect::sharp(20.f, 18.f, 38.f, 28.f),
+                   CornerRadius{},
+                   FillStyle::solid(Colors::red),
+                   StrokeStyle::none());
+
+  REQUIRE(requestNextFrameCaptureForCanvas(canvas.get()));
+  canvas->present();
+  target.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  std::vector<std::uint8_t> pixels;
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+  CHECK_FALSE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+
+  vkCheck(vkEndCommandBuffer(external.commandBuffer), "vkEndCommandBuffer external render target");
+  auto submit = lambda::vkStructure<VkSubmitInfo>(VK_STRUCTURE_TYPE_SUBMIT_INFO);
+  submit.commandBufferCount = 1;
+  submit.pCommandBuffers = &external.commandBuffer;
+  vkCheck(vkResetFences(vk.device(), 1, &external.fence), "vkResetFences external render target");
+  vkCheck(vkQueueSubmit(vk.queue(), 1, &submit, external.fence), "vkQueueSubmit external render target");
+  REQUIRE(markVulkanRenderTargetCanvasSubmitted(canvas.get()));
+  vkCheck(vkWaitForFences(vk.device(), 1, &external.fence, VK_TRUE, UINT64_MAX),
+          "vkWaitForFences external render target");
+
+  REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+  CHECK(width == target.pixelW);
+  CHECK(height == target.pixelH);
+  REQUIRE(pixels.size() == static_cast<std::size_t>(width) * height * 4u);
+  CHECK(capturedChannel(pixels, width, 28, 24, 2) >= 240);
+  CHECK(capturedChannel(pixels, width, 28, 24, 2) >
+        capturedChannel(pixels, width, 28, 24, 1) + 140);
+  CHECK(capturedChannel(pixels, width, 28, 24, 2) >
+        capturedChannel(pixels, width, 28, 24, 0) + 160);
+  CHECK(capturedChannel(pixels, width, 4, 4, 0) >= 240);
+  CHECK(capturedChannel(pixels, width, 4, 4, 1) >= 240);
+  CHECK(capturedChannel(pixels, width, 4, 4, 2) >= 240);
+}
+
 TEST_CASE("Vulkan RenderTarget preserves image sampling when clipped by the viewport") {
   auto& vk = VulkanContext::instance();
   vk.ensureInitialized();

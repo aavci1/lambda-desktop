@@ -444,6 +444,12 @@
     texture.layout = newLayout;
   }
 
+  bool frameCaptureTraceEnabled() const {
+    char const* raw = std::getenv("LAMBDA_VULKAN_FRAME_CAPTURE_TRACE");
+    return raw && *raw && std::strcmp(raw, "0") != 0 && std::strcmp(raw, "false") != 0 &&
+           std::strcmp(raw, "FALSE") != 0;
+  }
+
   bool readbackFenceReady(VkFence fence, bool wait, char const* label) {
     if (!fence) {
       return true;
@@ -485,7 +491,10 @@
     debugScreenshotWritten_ = true;
   }
 
-  void captureFrameIfRequested(VkCommandBuffer commandBuffer, VkImage source, VkFence frameFence) {
+  void captureFrameIfRequested(VkCommandBuffer commandBuffer,
+                               VkImage source,
+                               VkFence frameFence,
+                               bool awaitingExternalSubmit = false) {
     if (!frameCaptureRequested_) {
       return;
     }
@@ -493,6 +502,9 @@
     if (pendingFrameCaptureBuffer_.buffer) {
       destroyBuffer(pendingFrameCaptureBuffer_);
       pendingFrameCaptureFence_ = VK_NULL_HANDLE;
+      pendingFrameCaptureExternal_ = false;
+      pendingFrameCaptureAwaitingExternalSubmit_ = false;
+      pendingFrameCaptureTracePolls_ = 0;
     }
     Buffer staging{};
     VkDeviceSize size = static_cast<VkDeviceSize>(framebufferWidth_) * framebufferHeight_ * 4u;
@@ -510,14 +522,49 @@
     pendingFrameCaptureBgra_ = surfaceFormat_.format == VK_FORMAT_B8G8R8A8_UNORM ||
                                surfaceFormat_.format == VK_FORMAT_B8G8R8A8_SRGB;
     pendingFrameCaptureFence_ = frameFence;
+    pendingFrameCaptureExternal_ = awaitingExternalSubmit;
+    pendingFrameCaptureAwaitingExternalSubmit_ = awaitingExternalSubmit;
+    pendingFrameCaptureTracePolls_ = 0;
+    if (frameCaptureTraceEnabled()) {
+      std::fprintf(stderr,
+                   "Lambda Vulkan: frame capture queued external=%d awaitingSubmit=%d fence=%d size=%ux%u\n",
+                   awaitingExternalSubmit ? 1 : 0,
+                   pendingFrameCaptureAwaitingExternalSubmit_ ? 1 : 0,
+                   frameFence ? 1 : 0,
+                   pendingFrameCaptureWidth_,
+                   pendingFrameCaptureHeight_);
+    }
   }
 
   bool pollFrameCapture(bool wait) {
     if (!pendingFrameCaptureBuffer_.buffer || pendingFrameCaptureWidth_ == 0 || pendingFrameCaptureHeight_ == 0) {
       return false;
     }
-    if (!readbackFenceReady(pendingFrameCaptureFence_, wait, "vkGetFenceStatus(frameCapture)")) {
+    ++pendingFrameCaptureTracePolls_;
+    if (pendingFrameCaptureAwaitingExternalSubmit_) {
+      if (frameCaptureTraceEnabled() && pendingFrameCaptureTracePolls_ <= 8) {
+        std::fprintf(stderr, "Lambda Vulkan: frame capture poll awaiting external submit poll=%d\n",
+                     pendingFrameCaptureTracePolls_);
+      }
       return false;
+    }
+    if (pendingFrameCaptureExternal_ && pendingFrameCaptureFence_ == VK_NULL_HANDLE) {
+      if (frameCaptureTraceEnabled()) {
+        std::fprintf(stderr, "Lambda Vulkan: frame capture external readback has no fence; waiting queue idle\n");
+      }
+      vkCheck(vkQueueWaitIdle(queue_), "vkQueueWaitIdle(frameCapture)");
+    }
+    if (!readbackFenceReady(pendingFrameCaptureFence_, wait, "vkGetFenceStatus(frameCapture)")) {
+      if (frameCaptureTraceEnabled() && pendingFrameCaptureTracePolls_ <= 8) {
+        std::fprintf(stderr, "Lambda Vulkan: frame capture poll fence not ready poll=%d wait=%d\n",
+                     pendingFrameCaptureTracePolls_,
+                     wait ? 1 : 0);
+      }
+      return false;
+    }
+    if (frameCaptureTraceEnabled()) {
+      std::fprintf(stderr, "Lambda Vulkan: frame capture readback ready poll=%d\n",
+                   pendingFrameCaptureTracePolls_);
     }
     void* mapped = nullptr;
     vkCheck(vmaInvalidateAllocation(allocator_,
@@ -549,6 +596,9 @@
     pendingFrameCaptureHeight_ = 0;
     pendingFrameCaptureBgra_ = true;
     pendingFrameCaptureFence_ = VK_NULL_HANDLE;
+    pendingFrameCaptureExternal_ = false;
+    pendingFrameCaptureAwaitingExternalSubmit_ = false;
+    pendingFrameCaptureTracePolls_ = 0;
     return true;
   }
 

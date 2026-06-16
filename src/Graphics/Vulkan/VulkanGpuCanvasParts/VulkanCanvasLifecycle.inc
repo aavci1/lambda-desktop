@@ -112,6 +112,10 @@ public:
   }
 
   void markExternalRenderTargetSubmitted() {
+    pendingFrameCaptureAwaitingExternalSubmit_ = false;
+    if (frameCaptureTraceEnabled() && pendingFrameCaptureExternal_) {
+      std::fprintf(stderr, "Lambda Vulkan: external render target submitted for frame capture\n");
+    }
     retireDeferredResourcesAfterSubmit();
     renderTargetFrameCacheValid_ = false;
     currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
@@ -787,7 +791,7 @@ public:
         return;
       }
       VkCommandBuffer commandBuffer = targetSpec_.commandBuffer;
-      VkFence frameFence = VK_NULL_HANDLE;
+      VkFence frameFence = externalCommandBuffer ? targetSpec_.completionFence : VK_NULL_HANDLE;
       bool const traceResize = detail::resizeTraceEnabled();
       auto const phaseStart = [&] {
         return traceResize ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
@@ -825,7 +829,7 @@ public:
                                  traceResize ? &recordStats : nullptr);
       if (frameCaptureRequested_) {
         transition(commandBuffer, targetSpec_.image, targetSpec_.finalLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-        captureFrameIfRequested(commandBuffer, targetSpec_.image, frameFence);
+        captureFrameIfRequested(commandBuffer, targetSpec_.image, frameFence, externalCommandBuffer);
         transition(commandBuffer, targetSpec_.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, targetSpec_.finalLayout);
       }
 

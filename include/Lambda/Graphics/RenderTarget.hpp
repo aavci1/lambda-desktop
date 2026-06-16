@@ -43,6 +43,10 @@ struct VulkanRenderTargetSpec {
   /// Optional command buffer. When null, Lambda records, submits, and synchronizes internally.
   /// When non-null, Lambda records commands into it and the caller owns submission/synchronization.
   VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+
+  /// Optional fence signaled when external command-buffer work has completed.
+  /// Readback users such as compositor screenshots wait on this before mapping staging buffers.
+  VkFence completionFence = VK_NULL_HANDLE;
 };
 #endif
 
