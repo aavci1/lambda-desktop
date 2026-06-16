@@ -405,6 +405,11 @@ TEST_CASE("StatusNotifierWatcherClient reads and watches registered items") {
 
   auto items = client.registeredItems();
   CHECK(contains(items, itemName));
+
+  auto missingProperties = client.registeredItemProperties();
+  REQUIRE(missingProperties.size() == 1);
+  CHECK(missingProperties.front().address.id == itemName);
+  CHECK_FALSE(missingProperties.front().propertiesAvailable);
 }
 
 TEST_CASE("StatusNotifierWatcherClient reads StatusNotifierItem properties") {

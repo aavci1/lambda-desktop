@@ -16,6 +16,7 @@ constexpr char kDBusPath[] = "/org/freedesktop/DBus";
 constexpr char kDBusInterface[] = "org.freedesktop.DBus";
 constexpr char kStatusNotifierItemInterface[] = "org.kde.StatusNotifierItem";
 constexpr char kFreedesktopStatusNotifierItemInterface[] = "org.freedesktop.StatusNotifierItem";
+constexpr std::uint64_t kStatusNotifierItemPropertyTimeoutUsec = 250'000;
 
 bool startsWithObjectPath(std::string const& value) {
   return !value.empty() && value.front() == '/';
@@ -83,26 +84,44 @@ tooltipFromValue(std::shared_ptr<dbus::StructValue> const& value) {
   };
 }
 
-template <typename T>
-std::optional<T> readItemProperty(dbus::Bus& bus,
-                                  StatusNotifierItemAddress const& address,
-                                  std::string const& property,
-                                  std::string_view signature) {
-  for (char const* interface :
-       std::array{kStatusNotifierItemInterface, kFreedesktopStatusNotifierItemInterface}) {
-    try {
-      return std::get<T>(bus.getProperty(dbus::PropertyAddress{
-                                             .destination = address.serviceName,
-                                             .path = address.objectPath,
-                                             .interface = interface,
-                                             .name = property,
-                                         },
-                                         signature));
-    } catch (dbus::Error const&) {
-    } catch (std::bad_variant_access const&) {
-    }
+std::optional<dbus::VariantDictionary> readItemPropertyDictionary(dbus::Bus& bus,
+                                                                  StatusNotifierItemAddress const& address,
+                                                                  std::string_view interface) {
+  try {
+    auto reply = bus.call(dbus::MethodCall{
+        .destination = address.serviceName,
+        .path = address.objectPath,
+        .interface = "org.freedesktop.DBus.Properties",
+        .member = "GetAll",
+        .arguments = {std::string(interface)},
+        .timeoutUsec = kStatusNotifierItemPropertyTimeoutUsec,
+    });
+    return reply.readVariantDictionary();
+  } catch (dbus::Error const&) {
+  } catch (std::bad_variant_access const&) {
   }
   return std::nullopt;
+}
+
+template <typename T>
+std::optional<T> propertyValue(dbus::VariantDictionary const& values, std::string const& name) {
+  auto const item = values.values.find(name);
+  if (item == values.values.end()) {
+    return std::nullopt;
+  }
+  if (auto const* value = std::get_if<T>(&item->second)) {
+    return *value;
+  }
+  return std::nullopt;
+}
+
+template <typename T>
+bool assignProperty(dbus::VariantDictionary const& values, std::string const& name, T& output) {
+  if (auto value = propertyValue<T>(values, name)) {
+    output = std::move(*value);
+    return true;
+  }
+  return false;
 }
 
 } // namespace
@@ -375,64 +394,46 @@ StatusNotifierWatcherClient::readItemProperties(StatusNotifierItemAddress const&
   StatusNotifierItemProperties properties;
   properties.address = address;
 
-  if (auto value = readItemProperty<std::string>(bus_, address, "Category", "s")) {
-    properties.category = *value;
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<std::string>(bus_, address, "Id", "s")) {
-    properties.itemId = *value;
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<std::string>(bus_, address, "Title", "s")) {
-    properties.title = *value;
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<std::string>(bus_, address, "Status", "s")) {
-    properties.status = *value;
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<std::string>(bus_, address, "IconName", "s")) {
-    properties.iconName = *value;
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<std::shared_ptr<dbus::ArrayValue>>(
-          bus_, address, "IconPixmap", "a(iiay)")) {
-    properties.iconPixmaps = pixmapsFromValue(*value);
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<std::string>(bus_, address, "OverlayIconName", "s")) {
-    properties.overlayIconName = *value;
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<std::shared_ptr<dbus::ArrayValue>>(
-          bus_, address, "OverlayIconPixmap", "a(iiay)")) {
-    properties.overlayIconPixmaps = pixmapsFromValue(*value);
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<std::string>(bus_, address, "AttentionIconName", "s")) {
-    properties.attentionIconName = *value;
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<std::shared_ptr<dbus::ArrayValue>>(
-          bus_, address, "AttentionIconPixmap", "a(iiay)")) {
-    properties.attentionIconPixmaps = pixmapsFromValue(*value);
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<std::shared_ptr<dbus::StructValue>>(
-          bus_, address, "ToolTip", "(sa(iiay)ss)")) {
-    if (auto tooltip = tooltipFromValue(*value)) {
-      properties.tooltip = std::move(*tooltip);
-      properties.tooltipAvailable = true;
+  for (char const* interface :
+       std::array{kStatusNotifierItemInterface, kFreedesktopStatusNotifierItemInterface}) {
+    auto values = readItemPropertyDictionary(bus_, address, interface);
+    if (!values) {
+      continue;
     }
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<dbus::ObjectPath>(bus_, address, "Menu", "o")) {
-    properties.menu = *value;
-    properties.propertiesAvailable = true;
-  }
-  if (auto value = readItemProperty<bool>(bus_, address, "ItemIsMenu", "b")) {
-    properties.itemIsMenu = *value;
-    properties.propertiesAvailable = true;
+
+    properties.propertiesAvailable |= assignProperty(*values, "Category", properties.category);
+    properties.propertiesAvailable |= assignProperty(*values, "Id", properties.itemId);
+    properties.propertiesAvailable |= assignProperty(*values, "Title", properties.title);
+    properties.propertiesAvailable |= assignProperty(*values, "Status", properties.status);
+    properties.propertiesAvailable |= assignProperty(*values, "IconName", properties.iconName);
+    properties.propertiesAvailable |= assignProperty(*values, "OverlayIconName", properties.overlayIconName);
+    properties.propertiesAvailable |= assignProperty(*values, "AttentionIconName", properties.attentionIconName);
+    properties.propertiesAvailable |= assignProperty(*values, "Menu", properties.menu);
+    properties.propertiesAvailable |= assignProperty(*values, "ItemIsMenu", properties.itemIsMenu);
+
+    if (auto value = propertyValue<std::shared_ptr<dbus::ArrayValue>>(*values, "IconPixmap")) {
+      properties.iconPixmaps = pixmapsFromValue(*value);
+      properties.propertiesAvailable = true;
+    }
+    if (auto value = propertyValue<std::shared_ptr<dbus::ArrayValue>>(*values, "OverlayIconPixmap")) {
+      properties.overlayIconPixmaps = pixmapsFromValue(*value);
+      properties.propertiesAvailable = true;
+    }
+    if (auto value = propertyValue<std::shared_ptr<dbus::ArrayValue>>(*values, "AttentionIconPixmap")) {
+      properties.attentionIconPixmaps = pixmapsFromValue(*value);
+      properties.propertiesAvailable = true;
+    }
+    if (auto value = propertyValue<std::shared_ptr<dbus::StructValue>>(*values, "ToolTip")) {
+      if (auto tooltip = tooltipFromValue(*value)) {
+        properties.tooltip = std::move(*tooltip);
+        properties.tooltipAvailable = true;
+      }
+      properties.propertiesAvailable = true;
+    }
+
+    if (properties.propertiesAvailable) {
+      return properties;
+    }
   }
   return properties;
 }
