@@ -8,6 +8,7 @@ set(LAMBDA_CORE_SOURCES
   System/Notifications.cpp
   System/PolkitAgent.cpp
   System/PortalAppChooser.cpp
+  System/PortalInhibit.cpp
   System/PortalNotification.cpp
   System/PortalSettings.cpp
   System/Secrets.cpp

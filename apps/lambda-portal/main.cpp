@@ -1,5 +1,6 @@
 #include <Lambda/System/DBus.hpp>
 #include <Lambda/System/PortalAppChooser.hpp>
+#include <Lambda/System/PortalInhibit.hpp>
 #include <Lambda/System/PortalNotification.hpp>
 #include <Lambda/System/PortalSettings.hpp>
 
@@ -44,11 +45,14 @@ int main() {
         bus,
         lambda::system::PortalSettingsService::stateFromShellConfig());
     lambda::system::PortalAppChooserService appChooser(bus);
+    lambda::system::PortalInhibitService inhibit(bus);
     lambda::system::PortalNotificationService notifications(bus);
 
     auto portalDefinition =
         mergeDefinitions(settings.objectDefinition(), appChooser.objectDefinition());
-    portalDefinition = mergeDefinitions(std::move(portalDefinition), notifications.objectDefinition());
+    portalDefinition = mergeDefinitions(std::move(portalDefinition), inhibit.objectDefinition());
+    portalDefinition =
+        mergeDefinitions(std::move(portalDefinition), notifications.objectDefinition());
     auto portalSlot = bus.exportObject(lambda::system::PortalSettingsService::objectPath,
                                        std::move(portalDefinition));
     auto notificationActionSlot = notifications.watchNotificationActions();

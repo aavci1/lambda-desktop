@@ -211,9 +211,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add Shell/Settings-owned appearance preferences for color scheme, accent color, high contrast, and reduced motion, and make `lambda-portal` prefer that Shell config for `org.freedesktop.appearance` values while keeping environment variables as a missing-config development fallback.
 - [x] [Auto] Export a basic `org.freedesktop.impl.portal.Notification` backend that routes `AddNotification`, `RemoveNotification`, and `ActionInvoked` through the SVC-6 daemon.
 - [x] [Auto] Export a basic `org.freedesktop.impl.portal.AppChooser` backend for OpenURI application selection, choosing a valid `last_choice` or the first candidate and accepting `UpdateChoices`.
+- [x] [Auto] Export a basic in-memory `org.freedesktop.impl.portal.Inhibit` backend with request handles, `Request.Close`, `CreateMonitor`, and `QueryEndResponse`.
 - [ ] [Manual] Install or stage `lambda-portal` with `xdg-desktop-portal`, set `XDG_CURRENT_DESKTOP=Lambda`, and verify a real GTK/Qt app reads the color-scheme/accent through the frontend portal.
 - [ ] [Auto + Manual] Implement the FileChooser portal backend for Open/Save using a Lambda file-chooser surface backed by `lambda-files` components.
-- [ ] [Auto + Manual] Implement Inhibit and Account portal backends, and replace the basic OpenURI/AppChooser policy with a real chooser UI/default-app path.
+- [ ] [Auto + Manual] Implement the Account portal backend, wire Inhibit to real logind/session state, and replace the basic OpenURI/AppChooser policy with a real chooser UI/default-app path.
 - [ ] [Auto + Manual] Add real frontend request/response tests for xdg-desktop-portal request objects, handles, cancellation, and response codes.
 
 ## TODO-024: Complete SVC-6 notifications daemon and Shell UI
