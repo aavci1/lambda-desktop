@@ -44,6 +44,7 @@ set(_lambda_test_sources
   PortalFileChooserTests.cpp
   PortalInhibitTests.cpp
   PortalNotificationTests.cpp
+  PortalScreenCastTests.cpp
   PolkitAgentTests.cpp
   PortalSettingsTests.cpp
   SceneGraphTests.cpp

@@ -102,7 +102,7 @@ LAMBDA_DEBUG_KMS=1 ./build-linux-kms/apps/lambda-window-manager/lambda-window-ma
 
 ## Portal Backend
 
-The Linux build includes `lambda-portal`, a session-bus backend for the first Lambda portal slice. It currently exports the xdg-desktop-portal Settings backend (`org.freedesktop.impl.portal.Settings`) with appearance color-scheme, accent-color, contrast, and reduced-motion values, the Account backend (`org.freedesktop.impl.portal.Account`) with local user-info replies, the AppChooser backend (`org.freedesktop.impl.portal.AppChooser`) used by OpenURI application selection, the FileChooser backend (`org.freedesktop.impl.portal.FileChooser`) with deterministic `file://` URI results for Open/Save requests, the Inhibit backend (`org.freedesktop.impl.portal.Inhibit`) with in-memory request handles, and the Notification backend (`org.freedesktop.impl.portal.Notification`) with basic add/remove/action routing through `lambda-notifications`.
+The Linux build includes `lambda-portal`, a session-bus backend for the first Lambda portal slice. It currently exports the xdg-desktop-portal Settings backend (`org.freedesktop.impl.portal.Settings`) with appearance color-scheme, accent-color, contrast, and reduced-motion values, the Account backend (`org.freedesktop.impl.portal.Account`) with local user-info replies, the AppChooser backend (`org.freedesktop.impl.portal.AppChooser`) used by OpenURI application selection, the FileChooser backend (`org.freedesktop.impl.portal.FileChooser`) with deterministic `file://` URI results for Open/Save requests, the Inhibit backend (`org.freedesktop.impl.portal.Inhibit`) with in-memory request handles, the Notification backend (`org.freedesktop.impl.portal.Notification`) with basic add/remove/action routing through `lambda-notifications`, and the ScreenCast backend (`org.freedesktop.impl.portal.ScreenCast`) with request/session plumbing plus deterministic development PipeWire stream metadata when explicitly configured.
 
 Development smoke without installing:
 
@@ -165,6 +165,28 @@ busctl --user call org.freedesktop.impl.portal.desktop.lambda \
   "osssa{sv}" \
   /org/freedesktop/portal/desktop/request/1_1/file_smoke \
   org.lambda.Smoke "" "Save smoke" 0
+```
+
+For the ScreenCast backend path, the basic backend returns no-selection unless a development stream node id is explicitly provided; real WM capture and PipeWire publishing are still pending:
+
+```sh
+LAMBDA_PORTAL_SCREENCAST_NODE_ID=42 \
+LAMBDA_PORTAL_SCREENCAST_PIPEWIRE_SERIAL=987654321 \
+  ./build/apps/lambda-portal/lambda-portal
+busctl --user call org.freedesktop.impl.portal.desktop.lambda \
+  /org/freedesktop/portal/desktop \
+  org.freedesktop.impl.portal.ScreenCast CreateSession \
+  "oosa{sv}" \
+  /org/freedesktop/portal/desktop/request/1_1/cast_create \
+  /org/freedesktop/portal/desktop/session/1_1/cast \
+  org.lambda.Smoke 0
+busctl --user call org.freedesktop.impl.portal.desktop.lambda \
+  /org/freedesktop/portal/desktop \
+  org.freedesktop.impl.portal.ScreenCast Start \
+  "oossa{sv}" \
+  /org/freedesktop/portal/desktop/request/1_1/cast_start \
+  /org/freedesktop/portal/desktop/session/1_1/cast \
+  org.lambda.Smoke "" 0
 ```
 
 For the Inhibit backend path, the backend records the request and exports a request object that can be closed:

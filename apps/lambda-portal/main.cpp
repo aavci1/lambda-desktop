@@ -4,6 +4,7 @@
 #include <Lambda/System/PortalFileChooser.hpp>
 #include <Lambda/System/PortalInhibit.hpp>
 #include <Lambda/System/PortalNotification.hpp>
+#include <Lambda/System/PortalScreenCast.hpp>
 #include <Lambda/System/PortalSettings.hpp>
 
 #include <atomic>
@@ -51,6 +52,7 @@ int main() {
     lambda::system::PortalFileChooserService fileChooser(bus);
     lambda::system::PortalInhibitService inhibit(bus);
     lambda::system::PortalNotificationService notifications(bus);
+    lambda::system::PortalScreenCastService screenCast(bus);
 
     auto portalDefinition = mergeDefinitions(settings.objectDefinition(), account.objectDefinition());
     portalDefinition = mergeDefinitions(std::move(portalDefinition), appChooser.objectDefinition());
@@ -58,6 +60,7 @@ int main() {
     portalDefinition = mergeDefinitions(std::move(portalDefinition), inhibit.objectDefinition());
     portalDefinition =
         mergeDefinitions(std::move(portalDefinition), notifications.objectDefinition());
+    portalDefinition = mergeDefinitions(std::move(portalDefinition), screenCast.objectDefinition());
     auto portalSlot = bus.exportObject(lambda::system::PortalSettingsService::objectPath,
                                        std::move(portalDefinition));
     auto notificationActionSlot = notifications.watchNotificationActions();

@@ -12,6 +12,7 @@ set(LAMBDA_CORE_SOURCES
   System/PortalFileChooser.cpp
   System/PortalInhibit.cpp
   System/PortalNotification.cpp
+  System/PortalScreenCast.cpp
   System/PortalSettings.cpp
   System/Secrets.cpp
   System/StatusNotifierWatcher.cpp
