@@ -186,7 +186,7 @@ gdbus call --session \
 
 ## StatusNotifierWatcher
 
-The Linux build includes `lambda-status-notifier-watcher`, a basic `org.kde.StatusNotifierWatcher` session-bus daemon. It accepts StatusNotifierItem and StatusNotifierHost registrations, exposes watcher properties, emits registration signals, and is ready for Shell tray UI wiring.
+The Linux build includes `lambda-status-notifier-watcher`, a basic `org.kde.StatusNotifierWatcher` session-bus daemon. It accepts StatusNotifierItem and StatusNotifierHost registrations, exposes watcher properties, emits registration signals, and lets Shell register a host, read basic item metadata, refresh on item property changes, and render live tray labels/glyphs from category, title/id, status, icon names, and menu path metadata. Icon pixmaps/theme images, tooltips, DBusMenu menus, and activation actions are still pending.
 
 Development smoke without installing:
 

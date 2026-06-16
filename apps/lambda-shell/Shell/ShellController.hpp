@@ -59,7 +59,7 @@ private:
   void setupSystemStatusWatchers();
   void setupNotificationWatcher();
   void setupTrayStatusWatcher();
-  void updateTrayItems(std::vector<std::string> services);
+  void updateTrayItems(std::vector<TrayStatusItem> items);
   void updateNotificationPolicy();
   void syncNotificationWindow();
   void scheduleNotificationTimeout(Notification const& notification);

@@ -31,6 +31,88 @@ bool contains(std::vector<std::string> const& values, std::string const& needle)
   return std::find(values.begin(), values.end(), needle) != values.end();
 }
 
+lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updater",
+                                                       std::string iconName = "software-update",
+                                                       std::string status = "Active") {
+  return lambda::dbus::ObjectDefinition{
+      .methods = {},
+      .properties = {
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "Category",
+              .value = std::string("ApplicationStatus"),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "Id",
+              .value = std::string("lambda-updater"),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "Title",
+              .value = std::move(title),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "Status",
+              .value = std::move(status),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "IconName",
+              .value = std::move(iconName),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "OverlayIconName",
+              .value = std::string(""),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "AttentionIconName",
+              .value = std::string("dialog-warning"),
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "Menu",
+              .value = lambda::dbus::ObjectPath{"/Menu"},
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+          lambda::dbus::ExportedProperty{
+              .interface = "org.kde.StatusNotifierItem",
+              .name = "ItemIsMenu",
+              .value = false,
+              .writable = false,
+              .getter = nullptr,
+              .setter = nullptr,
+          },
+      },
+  };
+}
+
 } // namespace
 
 TEST_CASE("StatusNotifierWatcher support is compile-time declared") {
@@ -260,6 +342,98 @@ TEST_CASE("StatusNotifierWatcherClient reads and watches registered items") {
 
   auto items = client.registeredItems();
   CHECK(contains(items, itemName));
+}
+
+TEST_CASE("StatusNotifierWatcherClient reads StatusNotifierItem properties") {
+  auto privateBus = startPrivateBus();
+  if (!privateBus) {
+    MESSAGE("Skipping StatusNotifierItem properties test because a private bus could not be started");
+    return;
+  }
+
+  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambda::system::StatusNotifierWatcherService::serviceName);
+
+  lambda::system::StatusNotifierWatcherService watcher(serviceBus);
+  auto watcherSlot = watcher.exportObject();
+  auto ownerSlot = watcher.watchNameOwners();
+
+  std::atomic<bool> serviceRunning = true;
+  std::thread serviceThread([&] {
+    while (serviceRunning.load()) {
+      pollBus(serviceBus, 25);
+    }
+  });
+  ScopeExit stopServiceThread([&] {
+    serviceRunning = false;
+    if (serviceThread.joinable()) {
+      serviceThread.join();
+    }
+  });
+
+  std::string const itemName = "org.freedesktop.StatusNotifierItem.lambda-properties";
+  auto itemBus = lambda::dbus::Bus::openAddress(privateBus->address);
+  itemBus.requestName(itemName);
+  auto itemSlot = itemBus.exportObject("/StatusNotifierItem", fakeStatusNotifierItem());
+
+  auto registerReply = itemBus.call(lambda::dbus::MethodCall{
+      .destination = lambda::system::StatusNotifierWatcherService::serviceName,
+      .path = lambda::system::StatusNotifierWatcherService::objectPath,
+      .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+      .member = "RegisterStatusNotifierItem",
+      .arguments = {itemName},
+  });
+  CHECK(registerReply.valid());
+
+  std::atomic<bool> itemRunning = true;
+  std::thread itemThread([&] {
+    while (itemRunning.load()) {
+      pollBus(itemBus, 25);
+    }
+  });
+  ScopeExit stopItemThread([&] {
+    itemRunning = false;
+    if (itemThread.joinable()) {
+      itemThread.join();
+    }
+  });
+
+  auto client = lambda::system::StatusNotifierWatcherClient(
+      lambda::dbus::Bus::openAddress(privateBus->address));
+  auto addresses = client.registeredItemAddresses();
+  REQUIRE(addresses.size() == 1);
+  CHECK(addresses.front().id == itemName);
+  CHECK(addresses.front().serviceName == itemName);
+  CHECK(addresses.front().objectPath ==
+        lambda::system::StatusNotifierWatcherService::defaultItemObjectPath);
+
+  auto properties = client.readItemProperties(addresses.front());
+  CHECK(properties.propertiesAvailable);
+  CHECK(properties.category == "ApplicationStatus");
+  CHECK(properties.itemId == "lambda-updater");
+  CHECK(properties.title == "Updater");
+  CHECK(properties.status == "Active");
+  CHECK(properties.iconName == "software-update");
+  CHECK(properties.attentionIconName == "dialog-warning");
+  CHECK(properties.menu.value == "/Menu");
+  CHECK(!properties.itemIsMenu);
+
+  int propertyRefreshes = 0;
+  auto propertyWatch = client.watchItemProperties(addresses.front(), [&] {
+    ++propertyRefreshes;
+  });
+  itemBus.emitPropertiesChanged(
+      "/StatusNotifierItem",
+      "org.kde.StatusNotifierItem",
+      lambda::dbus::VariantDictionary{.values = {{"Title", std::string("Updater ready")}}},
+      {});
+  itemBus.flush();
+  CHECK(pumpUntil(client.bus(), [&] { return propertyRefreshes == 1; }, std::chrono::milliseconds(500)));
+
+  auto encodedAddress =
+      lambda::system::parseStatusNotifierItemAddress("org.example.Tray/CustomItem");
+  CHECK(encodedAddress.serviceName == "org.example.Tray");
+  CHECK(encodedAddress.objectPath == "/CustomItem");
 }
 
 #endif

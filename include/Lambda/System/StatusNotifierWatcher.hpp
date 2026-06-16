@@ -22,6 +22,28 @@ struct StatusNotifierItemRegistration {
   bool operator==(StatusNotifierItemRegistration const&) const = default;
 };
 
+struct StatusNotifierItemAddress {
+  std::string id;
+  std::string serviceName;
+  std::string objectPath;
+
+  bool operator==(StatusNotifierItemAddress const&) const = default;
+};
+
+struct StatusNotifierItemProperties {
+  StatusNotifierItemAddress address;
+  bool propertiesAvailable = false;
+  std::string category;
+  std::string itemId;
+  std::string title;
+  std::string status;
+  std::string iconName;
+  std::string overlayIconName;
+  std::string attentionIconName;
+  dbus::ObjectPath menu;
+  bool itemIsMenu = false;
+};
+
 class StatusNotifierWatcherService {
 public:
   static constexpr char const* serviceName = "org.kde.StatusNotifierWatcher";
@@ -73,6 +95,8 @@ struct StatusNotifierItemsWatch {
   dbus::Slot itemUnregistered;
 };
 
+[[nodiscard]] StatusNotifierItemAddress parseStatusNotifierItemAddress(std::string id);
+
 class StatusNotifierWatcherClient {
 public:
   explicit StatusNotifierWatcherClient(dbus::Bus bus);
@@ -84,7 +108,12 @@ public:
 
   void registerHost(std::string serviceName);
   [[nodiscard]] std::vector<std::string> registeredItems();
+  [[nodiscard]] std::vector<StatusNotifierItemAddress> registeredItemAddresses();
+  [[nodiscard]] StatusNotifierItemProperties readItemProperties(StatusNotifierItemAddress const& address);
+  [[nodiscard]] std::vector<StatusNotifierItemProperties> registeredItemProperties();
   [[nodiscard]] StatusNotifierItemsWatch watchItems(std::function<void()> handler);
+  [[nodiscard]] dbus::Slot watchItemProperties(StatusNotifierItemAddress const& address,
+                                               std::function<void()> handler);
 
 private:
   dbus::Bus bus_;

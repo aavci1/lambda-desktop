@@ -245,9 +245,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Smoke the built `lambda-status-notifier-watcher` process on a private session bus and verify a `ProtocolVersion` property query through `gdbus`.
 - [x] [Auto] Add a Shell-side StatusNotifierWatcher client that registers a host, reads registered item services, and watches item register/unregister signals.
 - [x] [Auto] Wire Shell's dock status area to the watcher and render basic live tray item glyphs for registered services.
-- [ ] [Auto] Read StatusNotifierItem properties for category, title, status, icon names, icon pixmaps, overlay/attention icons, tooltip, menu object path, and item updates.
+- [x] [Auto] Read basic StatusNotifierItem metadata for category, id/title, status, icon names, overlay/attention icon names, menu object path, `ItemIsMenu`, and property-change refresh.
+- [ ] [Auto] Add icon pixmap/theme image resolution, overlay/attention image rendering, tooltip metadata, and richer property-shape coverage.
 - [ ] [Auto + Manual] Implement `com.canonical.dbusmenu` menu hosting and item `Activate`, `ContextMenu`, `SecondaryActivate`, and `Scroll` actions.
-- [ ] [Auto + Manual] Handle item property/signal changes live without freezing Shell when a tray item misbehaves or disappears.
+- [ ] [Auto + Manual] Harden item property/signal changes so disappearing or misbehaving tray items do not freeze Shell.
 - [ ] [Manual] Validate Steam/Discord/Telegram/nm-applet-style tray icons appear, update, activate, and show menus.
 
 ## TODO-031: Complete SVC-8 polkit authentication agent

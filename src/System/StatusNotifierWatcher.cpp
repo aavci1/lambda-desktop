@@ -1,8 +1,11 @@
 #include <Lambda/System/StatusNotifierWatcher.hpp>
 
 #include <algorithm>
+#include <array>
 #include <memory>
+#include <optional>
 #include <utility>
+#include <variant>
 
 namespace lambda::system {
 
@@ -11,9 +14,41 @@ namespace {
 constexpr char kDBusService[] = "org.freedesktop.DBus";
 constexpr char kDBusPath[] = "/org/freedesktop/DBus";
 constexpr char kDBusInterface[] = "org.freedesktop.DBus";
+constexpr char kStatusNotifierItemInterface[] = "org.kde.StatusNotifierItem";
+constexpr char kFreedesktopStatusNotifierItemInterface[] = "org.freedesktop.StatusNotifierItem";
 
 bool startsWithObjectPath(std::string const& value) {
   return !value.empty() && value.front() == '/';
+}
+
+std::string registeredItemId(StatusNotifierItemRegistration const& item) {
+  if (item.objectPath.empty() ||
+      item.objectPath == StatusNotifierWatcherService::defaultItemObjectPath) {
+    return item.serviceName;
+  }
+  return item.serviceName + item.objectPath;
+}
+
+template <typename T>
+std::optional<T> readItemProperty(dbus::Bus& bus,
+                                  StatusNotifierItemAddress const& address,
+                                  std::string const& property,
+                                  std::string_view signature) {
+  for (char const* interface :
+       std::array{kStatusNotifierItemInterface, kFreedesktopStatusNotifierItemInterface}) {
+    try {
+      return std::get<T>(bus.getProperty(dbus::PropertyAddress{
+                                             .destination = address.serviceName,
+                                             .path = address.objectPath,
+                                             .interface = interface,
+                                             .name = property,
+                                         },
+                                         signature));
+    } catch (dbus::Error const&) {
+    } catch (std::bad_variant_access const&) {
+    }
+  }
+  return std::nullopt;
 }
 
 } // namespace
@@ -163,7 +198,7 @@ std::vector<std::string> StatusNotifierWatcherService::registeredItemServices() 
   std::vector<std::string> services;
   services.reserve(items_.size());
   for (auto const& item : items_) {
-    services.push_back(item.serviceName);
+    services.push_back(registeredItemId(item));
   }
   return services;
 }
@@ -183,11 +218,20 @@ StatusNotifierWatcherService::normalizeItem(std::string serviceOrPath, std::stri
         .ownerName = std::move(sender),
     };
   }
-  std::string owner = serviceOrPath;
   auto const slash = serviceOrPath.find('/');
   if (slash != std::string::npos) {
-    owner = serviceOrPath.substr(0, slash);
+    std::string owner = serviceOrPath.substr(0, slash);
+    std::string path = serviceOrPath.substr(slash);
+    if (owner.empty() || path.empty()) {
+      return std::nullopt;
+    }
+    return NormalizedRegistration{
+        .serviceName = owner,
+        .objectPath = std::move(path),
+        .ownerName = std::move(owner),
+    };
   }
+  std::string owner = serviceOrPath;
   return NormalizedRegistration{
       .serviceName = std::move(serviceOrPath),
       .objectPath = defaultItemObjectPath,
@@ -227,6 +271,20 @@ StatusNotifierWatcherClient StatusNotifierWatcherClient::connectSession() {
   return StatusNotifierWatcherClient(dbus::Bus::open(dbus::BusType::Session));
 }
 
+StatusNotifierItemAddress parseStatusNotifierItemAddress(std::string id) {
+  StatusNotifierItemAddress address;
+  address.id = id;
+  auto const slash = id.find('/');
+  if (slash == std::string::npos) {
+    address.serviceName = std::move(id);
+    address.objectPath = StatusNotifierWatcherService::defaultItemObjectPath;
+    return address;
+  }
+  address.serviceName = id.substr(0, slash);
+  address.objectPath = id.substr(slash);
+  return address;
+}
+
 void StatusNotifierWatcherClient::registerHost(std::string serviceName) {
   (void)bus_.call(dbus::MethodCall{
       .destination = StatusNotifierWatcherService::serviceName,
@@ -246,6 +304,70 @@ std::vector<std::string> StatusNotifierWatcherClient::registeredItems() {
                                                       },
                                                       "as"))
       .values;
+}
+
+std::vector<StatusNotifierItemAddress> StatusNotifierWatcherClient::registeredItemAddresses() {
+  auto items = registeredItems();
+  std::vector<StatusNotifierItemAddress> addresses;
+  addresses.reserve(items.size());
+  for (auto& item : items) {
+    addresses.push_back(parseStatusNotifierItemAddress(std::move(item)));
+  }
+  return addresses;
+}
+
+StatusNotifierItemProperties
+StatusNotifierWatcherClient::readItemProperties(StatusNotifierItemAddress const& address) {
+  StatusNotifierItemProperties properties;
+  properties.address = address;
+
+  if (auto value = readItemProperty<std::string>(bus_, address, "Category", "s")) {
+    properties.category = *value;
+    properties.propertiesAvailable = true;
+  }
+  if (auto value = readItemProperty<std::string>(bus_, address, "Id", "s")) {
+    properties.itemId = *value;
+    properties.propertiesAvailable = true;
+  }
+  if (auto value = readItemProperty<std::string>(bus_, address, "Title", "s")) {
+    properties.title = *value;
+    properties.propertiesAvailable = true;
+  }
+  if (auto value = readItemProperty<std::string>(bus_, address, "Status", "s")) {
+    properties.status = *value;
+    properties.propertiesAvailable = true;
+  }
+  if (auto value = readItemProperty<std::string>(bus_, address, "IconName", "s")) {
+    properties.iconName = *value;
+    properties.propertiesAvailable = true;
+  }
+  if (auto value = readItemProperty<std::string>(bus_, address, "OverlayIconName", "s")) {
+    properties.overlayIconName = *value;
+    properties.propertiesAvailable = true;
+  }
+  if (auto value = readItemProperty<std::string>(bus_, address, "AttentionIconName", "s")) {
+    properties.attentionIconName = *value;
+    properties.propertiesAvailable = true;
+  }
+  if (auto value = readItemProperty<dbus::ObjectPath>(bus_, address, "Menu", "o")) {
+    properties.menu = *value;
+    properties.propertiesAvailable = true;
+  }
+  if (auto value = readItemProperty<bool>(bus_, address, "ItemIsMenu", "b")) {
+    properties.itemIsMenu = *value;
+    properties.propertiesAvailable = true;
+  }
+  return properties;
+}
+
+std::vector<StatusNotifierItemProperties> StatusNotifierWatcherClient::registeredItemProperties() {
+  auto addresses = registeredItemAddresses();
+  std::vector<StatusNotifierItemProperties> items;
+  items.reserve(addresses.size());
+  for (auto const& address : addresses) {
+    items.push_back(readItemProperties(address));
+  }
+  return items;
 }
 
 StatusNotifierItemsWatch StatusNotifierWatcherClient::watchItems(std::function<void()> handler) {
@@ -275,6 +397,27 @@ StatusNotifierItemsWatch StatusNotifierWatcherClient::watchItems(std::function<v
               },
               notify),
   };
+}
+
+dbus::Slot StatusNotifierWatcherClient::watchItemProperties(StatusNotifierItemAddress const& address,
+                                                            std::function<void()> handler) {
+  auto sharedHandler = std::make_shared<std::function<void()>>(std::move(handler));
+  return bus_.matchSignal(
+      dbus::SignalMatch{
+          .sender = address.serviceName,
+          .path = address.objectPath,
+          .interface = "org.freedesktop.DBus.Properties",
+          .member = "PropertiesChanged",
+      },
+      [sharedHandler](dbus::Message& message) {
+        auto const changed = dbus::readPropertiesChanged(message);
+        if (changed.interface == kStatusNotifierItemInterface ||
+            changed.interface == kFreedesktopStatusNotifierItemInterface) {
+          if (sharedHandler && *sharedHandler) {
+            (*sharedHandler)();
+          }
+        }
+      });
 }
 
 } // namespace lambda::system

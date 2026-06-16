@@ -28,6 +28,7 @@
 
 #include <any>
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -70,7 +71,7 @@ struct ShellNotificationClosed {
 };
 
 struct ShellTrayItemsChanged {
-  std::vector<std::string> services;
+  std::vector<TrayStatusItem> items;
 };
 
 std::optional<std::filesystem::file_time_type> configLastWriteTime(std::filesystem::path const& path) {
@@ -115,16 +116,68 @@ std::string trayLabelForService(std::string const& service) {
   return label.empty() ? std::string("Tray Item") : label;
 }
 
-std::vector<TrayStatusItem> trayStatusItemsFromServices(std::vector<std::string> const& services) {
+std::string lowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  return value;
+}
+
+bool containsToken(std::string const& haystack, std::string const& needle) {
+  return haystack.find(needle) != std::string::npos;
+}
+
+lambda::IconName trayIconForItem(lambda::system::StatusNotifierItemProperties const& item) {
+  std::string icon = lowerAscii(item.status == "NeedsAttention" && !item.attentionIconName.empty()
+                                    ? item.attentionIconName
+                                    : item.iconName);
+  icon += " " + lowerAscii(item.category);
+  icon += " " + lowerAscii(item.title);
+  icon += " " + lowerAscii(item.itemId);
+
+  if (containsToken(icon, "bluetooth")) return lambda::IconName::BluetoothConnected;
+  if (containsToken(icon, "network") || containsToken(icon, "wifi") ||
+      containsToken(icon, "nm-")) {
+    return lambda::IconName::NetworkWifi;
+  }
+  if (containsToken(icon, "audio") || containsToken(icon, "volume") ||
+      containsToken(icon, "sound")) {
+    return lambda::IconName::VolumeUp;
+  }
+  if (containsToken(icon, "battery") || containsToken(icon, "power")) {
+    return lambda::IconName::BatteryAndroid4;
+  }
+  if (containsToken(icon, "media") || containsToken(icon, "music") ||
+      containsToken(icon, "spotify") || containsToken(icon, "player")) {
+    return lambda::IconName::MusicNote;
+  }
+  if (containsToken(icon, "mail")) return lambda::IconName::Mail;
+  if (containsToken(icon, "calendar")) return lambda::IconName::CalendarToday;
+  if (containsToken(icon, "notification") || containsToken(icon, "update")) {
+    return lambda::IconName::Notifications;
+  }
+  return lambda::IconName::Widgets;
+}
+
+TrayStatusItem trayStatusItemFromProperties(lambda::system::StatusNotifierItemProperties const& item) {
+  std::string label = item.title.empty() ? item.itemId : item.title;
+  if (label.empty()) {
+    label = trayLabelForService(item.address.id);
+  }
+  return TrayStatusItem{
+      .id = item.address.id,
+      .label = label.empty() ? std::string("Tray Item") : std::move(label),
+      .icon = trayIconForItem(item),
+  };
+}
+
+std::vector<TrayStatusItem>
+trayStatusItemsFromProperties(std::vector<lambda::system::StatusNotifierItemProperties> const& properties) {
   std::vector<TrayStatusItem> items;
-  items.reserve(services.size());
-  for (auto const& service : services) {
-    if (service.empty()) continue;
-    items.push_back(TrayStatusItem{
-        .id = service,
-        .label = trayLabelForService(service),
-        .icon = lambda::IconName::Widgets,
-    });
+  items.reserve(properties.size());
+  for (auto const& item : properties) {
+    if (item.address.id.empty()) continue;
+    items.push_back(trayStatusItemFromProperties(item));
   }
   return items;
 }
@@ -227,29 +280,47 @@ struct ShellNotificationWatcher {
 };
 
 struct ShellTrayStatusWatcher {
-  ShellTrayStatusWatcher(lambda::Application& app, std::function<void(std::vector<std::string>)> onItemsChanged)
+  ShellTrayStatusWatcher(lambda::Application& app, std::function<void(std::vector<TrayStatusItem>)> onItemsChanged)
       : watcher(lambda::system::StatusNotifierWatcherClient::connectSession()),
-        pump(app, watcher.bus()) {
+        pump(app, watcher.bus()),
+        onItemsChanged(std::move(onItemsChanged)) {
     watcher.registerHost("org.freedesktop.StatusNotifierHost.lambda-shell");
-    auto refresh = [this, onItemsChanged] {
-      if (!onItemsChanged) {
-        return;
-      }
-      try {
-        onItemsChanged(watcher.registeredItems());
-      } catch (std::exception const& error) {
-        std::fprintf(stderr, "lambda-shell: tray status refresh failed: %s\n", error.what());
-      } catch (...) {
-        std::fprintf(stderr, "lambda-shell: tray status refresh failed\n");
-      }
-    };
-    changed = watcher.watchItems(refresh);
+    changed = watcher.watchItems([this] {
+      refresh();
+    });
     refresh();
+  }
+
+  void refresh() {
+    if (!onItemsChanged) {
+      return;
+    }
+    try {
+      auto properties = watcher.registeredItemProperties();
+      rebuildPropertyWatches(properties);
+      onItemsChanged(trayStatusItemsFromProperties(properties));
+    } catch (std::exception const& error) {
+      std::fprintf(stderr, "lambda-shell: tray status refresh failed: %s\n", error.what());
+    } catch (...) {
+      std::fprintf(stderr, "lambda-shell: tray status refresh failed\n");
+    }
+  }
+
+  void rebuildPropertyWatches(std::vector<lambda::system::StatusNotifierItemProperties> const& properties) {
+    itemPropertyWatches.clear();
+    itemPropertyWatches.reserve(properties.size());
+    for (auto const& item : properties) {
+      itemPropertyWatches.push_back(watcher.watchItemProperties(item.address, [this] {
+        refresh();
+      }));
+    }
   }
 
   lambda::system::StatusNotifierWatcherClient watcher;
   lambda::dbus::BusEventPump pump;
   lambda::system::StatusNotifierItemsWatch changed;
+  std::vector<lambda::dbus::Slot> itemPropertyWatches;
+  std::function<void(std::vector<TrayStatusItem>)> onItemsChanged;
 };
 
 struct ShellSystemStatusWatchers {
@@ -463,7 +534,7 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
   });
 
   app_.eventQueue().on<ShellTrayItemsChanged>([this](ShellTrayItemsChanged const& event) {
-    updateTrayItems(event.services);
+    updateTrayItems(event.items);
   });
 }
 
@@ -841,8 +912,8 @@ void ShellController::setupTrayStatusWatcher() {
   try {
     trayStatusWatcher_ = std::make_unique<ShellTrayStatusWatcher>(
         app_,
-        [this](std::vector<std::string> services) {
-          app_.eventQueue().post(ShellTrayItemsChanged{.services = std::move(services)});
+        [this](std::vector<TrayStatusItem> items) {
+          app_.eventQueue().post(ShellTrayItemsChanged{.items = std::move(items)});
         });
   } catch (std::exception const& error) {
     std::fprintf(stderr, "lambda-shell: tray status watcher unavailable: %s\n", error.what());
@@ -851,12 +922,11 @@ void ShellController::setupTrayStatusWatcher() {
   }
 }
 
-void ShellController::updateTrayItems(std::vector<std::string> services) {
-  auto nextItems = trayStatusItemsFromServices(services);
-  if (nextItems == trayItems_) {
+void ShellController::updateTrayItems(std::vector<TrayStatusItem> items) {
+  if (items == trayItems_) {
     return;
   }
-  trayItems_ = std::move(nextItems);
+  trayItems_ = std::move(items);
   SystemStatus status = model_.systemStatus();
   status.trayItems = trayItems_;
   if (model_.setSystemStatus(std::move(status))) {
