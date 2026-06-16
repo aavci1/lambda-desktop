@@ -39,6 +39,7 @@ set(_lambda_test_sources
   NotificationsTests.cpp
   main.cpp
   PathFlattenerTests.cpp
+  PortalAccountTests.cpp
   PortalAppChooserTests.cpp
   PortalInhibitTests.cpp
   PortalNotificationTests.cpp

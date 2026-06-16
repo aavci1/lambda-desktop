@@ -102,7 +102,7 @@ LAMBDA_DEBUG_KMS=1 ./build-linux-kms/apps/lambda-window-manager/lambda-window-ma
 
 ## Portal Backend
 
-The Linux build includes `lambda-portal`, a session-bus backend for the first Lambda portal slice. It currently exports the xdg-desktop-portal Settings backend (`org.freedesktop.impl.portal.Settings`) with appearance color-scheme, accent-color, contrast, and reduced-motion values, the AppChooser backend (`org.freedesktop.impl.portal.AppChooser`) used by OpenURI application selection, the Inhibit backend (`org.freedesktop.impl.portal.Inhibit`) with in-memory request handles, and the Notification backend (`org.freedesktop.impl.portal.Notification`) with basic add/remove/action routing through `lambda-notifications`.
+The Linux build includes `lambda-portal`, a session-bus backend for the first Lambda portal slice. It currently exports the xdg-desktop-portal Settings backend (`org.freedesktop.impl.portal.Settings`) with appearance color-scheme, accent-color, contrast, and reduced-motion values, the Account backend (`org.freedesktop.impl.portal.Account`) with local user-info replies, the AppChooser backend (`org.freedesktop.impl.portal.AppChooser`) used by OpenURI application selection, the Inhibit backend (`org.freedesktop.impl.portal.Inhibit`) with in-memory request handles, and the Notification backend (`org.freedesktop.impl.portal.Notification`) with basic add/remove/action routing through `lambda-notifications`.
 
 Development smoke without installing:
 
@@ -127,6 +127,18 @@ gdbus call --session \
   --object-path /org/freedesktop/portal/desktop \
   --method org.freedesktop.impl.portal.Notification.AddNotification \
   org.lambda.Smoke smoke-id "{'title': <'Portal smoke'>, 'body': <'Notification body'>}"
+```
+
+For the Account backend path, the backend returns local user information:
+
+```sh
+busctl --user call org.freedesktop.impl.portal.desktop.lambda \
+  /org/freedesktop/portal/desktop \
+  org.freedesktop.impl.portal.Account GetUserInformation \
+  "ossa{sv}" \
+  /org/freedesktop/portal/desktop/request/1_1/account_smoke \
+  org.lambda.Smoke "" \
+  1 reason s "Smoke reason"
 ```
 
 For the OpenURI/AppChooser backend path, the frontend supplies candidate app ids and the backend returns the selected id:

@@ -212,9 +212,10 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Export a basic `org.freedesktop.impl.portal.Notification` backend that routes `AddNotification`, `RemoveNotification`, and `ActionInvoked` through the SVC-6 daemon.
 - [x] [Auto] Export a basic `org.freedesktop.impl.portal.AppChooser` backend for OpenURI application selection, choosing a valid `last_choice` or the first candidate and accepting `UpdateChoices`.
 - [x] [Auto] Export a basic in-memory `org.freedesktop.impl.portal.Inhibit` backend with request handles, `Request.Close`, `CreateMonitor`, and `QueryEndResponse`.
+- [x] [Auto] Export a basic `org.freedesktop.impl.portal.Account` backend that returns local user id, display name, and optional face-image URI.
 - [ ] [Manual] Install or stage `lambda-portal` with `xdg-desktop-portal`, set `XDG_CURRENT_DESKTOP=Lambda`, and verify a real GTK/Qt app reads the color-scheme/accent through the frontend portal.
 - [ ] [Auto + Manual] Implement the FileChooser portal backend for Open/Save using a Lambda file-chooser surface backed by `lambda-files` components.
-- [ ] [Auto + Manual] Implement the Account portal backend, wire Inhibit to real logind/session state, and replace the basic OpenURI/AppChooser policy with a real chooser UI/default-app path.
+- [ ] [Auto + Manual] Add Account consent UI/policy, wire Inhibit to real logind/session state, and replace the basic OpenURI/AppChooser policy with a real chooser UI/default-app path.
 - [ ] [Auto + Manual] Add real frontend request/response tests for xdg-desktop-portal request objects, handles, cancellation, and response codes.
 
 ## TODO-024: Complete SVC-6 notifications daemon and Shell UI
