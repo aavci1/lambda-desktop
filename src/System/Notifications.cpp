@@ -1,6 +1,9 @@
 #include <Lambda/System/Notifications.hpp>
 
 #include <algorithm>
+#include <initializer_list>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -22,6 +25,124 @@ std::vector<NotificationAction> parseActions(dbus::StringArray const& rawActions
   return actions;
 }
 
+template <typename T>
+std::optional<T> valueAs(dbus::BasicValue const& value) {
+  if (auto const* typed = std::get_if<T>(&value)) {
+    return *typed;
+  }
+  return std::nullopt;
+}
+
+std::optional<dbus::BasicValue> hintValue(dbus::VariantDictionary const& hints,
+                                          std::initializer_list<char const*> keys) {
+  for (char const* key : keys) {
+    auto it = hints.values.find(key);
+    if (it != hints.values.end()) {
+      return it->second;
+    }
+  }
+  return std::nullopt;
+}
+
+std::string stringHint(dbus::VariantDictionary const& hints,
+                       std::initializer_list<char const*> keys) {
+  if (auto value = hintValue(hints, keys)) {
+    if (auto typed = valueAs<std::string>(*value)) {
+      return *typed;
+    }
+  }
+  return {};
+}
+
+std::optional<std::int32_t> int32Hint(dbus::VariantDictionary const& hints,
+                                      std::initializer_list<char const*> keys) {
+  if (auto value = hintValue(hints, keys)) {
+    return valueAs<std::int32_t>(*value);
+  }
+  return std::nullopt;
+}
+
+bool boolHint(dbus::VariantDictionary const& hints, std::initializer_list<char const*> keys) {
+  if (auto value = hintValue(hints, keys)) {
+    if (auto typed = valueAs<bool>(*value)) {
+      return *typed;
+    }
+  }
+  return false;
+}
+
+NotificationUrgency urgencyFromByte(std::uint8_t raw) noexcept {
+  switch (raw) {
+  case 0:
+    return NotificationUrgency::Low;
+  case 2:
+    return NotificationUrgency::Critical;
+  case 1:
+  default:
+    return NotificationUrgency::Normal;
+  }
+}
+
+std::optional<NotificationImageData> imageDataFromValue(dbus::BasicValue const& value) {
+  auto const* structure = std::get_if<std::shared_ptr<dbus::StructValue>>(&value);
+  if (!structure || !*structure || (*structure)->fields.size() != 7u) {
+    return std::nullopt;
+  }
+
+  auto const& fields = (*structure)->fields;
+  auto width = valueAs<std::int32_t>(fields[0]);
+  auto height = valueAs<std::int32_t>(fields[1]);
+  auto rowStride = valueAs<std::int32_t>(fields[2]);
+  auto hasAlpha = valueAs<bool>(fields[3]);
+  auto bitsPerSample = valueAs<std::int32_t>(fields[4]);
+  auto channels = valueAs<std::int32_t>(fields[5]);
+  auto pixels = valueAs<dbus::ByteArray>(fields[6]);
+  if (!width || !height || !rowStride || !hasAlpha || !bitsPerSample || !channels || !pixels ||
+      *width <= 0 || *height <= 0 || *rowStride <= 0 || *bitsPerSample <= 0 || *channels <= 0 ||
+      pixels->values.empty()) {
+    return std::nullopt;
+  }
+
+  return NotificationImageData{
+      .width = *width,
+      .height = *height,
+      .rowStride = *rowStride,
+      .hasAlpha = *hasAlpha,
+      .bitsPerSample = *bitsPerSample,
+      .channels = *channels,
+      .pixels = pixels->values,
+  };
+}
+
+std::optional<NotificationImageData> imageDataHint(dbus::VariantDictionary const& hints) {
+  if (auto value = hintValue(hints, {"image-data", "image_data", "icon_data"})) {
+    return imageDataFromValue(*value);
+  }
+  return std::nullopt;
+}
+
+NotificationHints parseHints(dbus::VariantDictionary const& hints) {
+  NotificationHints parsed;
+  if (auto value = hintValue(hints, {"urgency"})) {
+    if (auto raw = valueAs<std::uint8_t>(*value)) {
+      parsed.urgency = urgencyFromByte(*raw);
+    }
+  }
+  parsed.category = stringHint(hints, {"category"});
+  parsed.desktopEntry = stringHint(hints, {"desktop-entry"});
+  parsed.imagePath = stringHint(hints, {"image-path", "image_path"});
+  parsed.imageData = imageDataHint(hints);
+  parsed.soundName = stringHint(hints, {"sound-name"});
+  parsed.soundFile = stringHint(hints, {"sound-file"});
+  parsed.x = int32Hint(hints, {"x"});
+  parsed.y = int32Hint(hints, {"y"});
+  parsed.actionIcons = boolHint(hints, {"action-icons"});
+  parsed.resident = boolHint(hints, {"resident"});
+  parsed.suppressSound = boolHint(hints, {"suppress-sound"});
+  parsed.transient = boolHint(hints, {"transient"});
+  return parsed;
+}
+
 dbus::StringArray encodeActions(std::vector<NotificationAction> const& actions) {
   dbus::StringArray encoded;
   encoded.values.reserve(actions.size() * 2u);
@@ -31,6 +152,60 @@ dbus::StringArray encodeActions(std::vector<NotificationAction> const& actions) 
     }
     encoded.values.push_back(action.key);
     encoded.values.push_back(action.label);
+  }
+  return encoded;
+}
+
+std::shared_ptr<dbus::StructValue> encodeImageData(NotificationImageData const& image) {
+  return std::make_shared<dbus::StructValue>(
+      dbus::StructValue{.signature = "iiibiiay",
+                        .fields = {image.width,
+                                   image.height,
+                                   image.rowStride,
+                                   image.hasAlpha,
+                                   image.bitsPerSample,
+                                   image.channels,
+                                   dbus::ByteArray{image.pixels}}});
+}
+
+dbus::VariantDictionary encodeHints(NotificationHints const& hints) {
+  dbus::VariantDictionary encoded;
+  encoded.values["urgency"] = static_cast<std::uint8_t>(hints.urgency);
+  if (!hints.category.empty()) {
+    encoded.values["category"] = hints.category;
+  }
+  if (!hints.desktopEntry.empty()) {
+    encoded.values["desktop-entry"] = hints.desktopEntry;
+  }
+  if (!hints.imagePath.empty()) {
+    encoded.values["image-path"] = hints.imagePath;
+  }
+  if (hints.imageData) {
+    encoded.values["image-data"] = encodeImageData(*hints.imageData);
+  }
+  if (!hints.soundName.empty()) {
+    encoded.values["sound-name"] = hints.soundName;
+  }
+  if (!hints.soundFile.empty()) {
+    encoded.values["sound-file"] = hints.soundFile;
+  }
+  if (hints.x) {
+    encoded.values["x"] = *hints.x;
+  }
+  if (hints.y) {
+    encoded.values["y"] = *hints.y;
+  }
+  if (hints.actionIcons) {
+    encoded.values["action-icons"] = hints.actionIcons;
+  }
+  if (hints.resident) {
+    encoded.values["resident"] = hints.resident;
+  }
+  if (hints.suppressSound) {
+    encoded.values["suppress-sound"] = hints.suppressSound;
+  }
+  if (hints.transient) {
+    encoded.values["transient"] = hints.transient;
   }
   return encoded;
 }
@@ -79,7 +254,7 @@ dbus::Slot NotificationsService::exportObject() {
                     std::string summary = message.readString();
                     std::string body = message.readString();
                     dbus::StringArray actions = message.readStringArray();
-                    message.skip("a{sv}");
+                    dbus::VariantDictionary hints = message.readVariantDictionary();
                     std::int32_t expireTimeoutMs = message.readInt32();
 
                     dbus::MethodReply reply;
@@ -89,6 +264,7 @@ dbus::Slot NotificationsService::exportObject() {
                                                             std::move(summary),
                                                             std::move(body),
                                                             std::move(actions),
+                                                            std::move(hints),
                                                             expireTimeoutMs))};
                     return reply;
                   },
@@ -130,6 +306,25 @@ std::uint32_t NotificationsService::notify(std::string appName,
                                            std::string body,
                                            dbus::StringArray actions,
                                            std::int32_t expireTimeoutMs) {
+  return notify(std::move(appName),
+                replacesId,
+                std::move(appIcon),
+                std::move(summary),
+                std::move(body),
+                std::move(actions),
+                dbus::VariantDictionary{},
+                expireTimeoutMs);
+}
+
+std::uint32_t NotificationsService::notify(std::string appName,
+                                           std::uint32_t replacesId,
+                                           std::string appIcon,
+                                           std::string summary,
+                                           std::string body,
+                                           dbus::StringArray actions,
+                                           dbus::VariantDictionary hints,
+                                           std::int32_t expireTimeoutMs) {
+  NotificationHints parsedHints = parseHints(hints);
   if (replacesId != 0) {
     if (auto* existing = find(replacesId)) {
       existing->appName = std::move(appName);
@@ -137,6 +332,7 @@ std::uint32_t NotificationsService::notify(std::string appName,
       existing->summary = std::move(summary);
       existing->body = std::move(body);
       existing->actions = parseActions(actions);
+      existing->hints = std::move(parsedHints);
       existing->expireTimeoutMs = expireTimeoutMs;
       existing->closed = false;
       existing->closeReason = NotificationCloseReason::Undefined;
@@ -155,6 +351,7 @@ std::uint32_t NotificationsService::notify(std::string appName,
                             .body = std::move(body),
                             .expireTimeoutMs = expireTimeoutMs,
                             .actions = parseActions(actions),
+                            .hints = std::move(parsedHints),
                         });
   trimHistory();
   emitPosted(notifications_.front());
@@ -229,7 +426,8 @@ void NotificationsService::emitPosted(NotificationRecord const& record) const {
                     record.summary,
                     record.body,
                     record.expireTimeoutMs,
-                    encodeActions(record.actions)});
+                    encodeActions(record.actions),
+                    encodeHints(record.hints)});
 }
 
 void NotificationsService::emitActionInvoked(std::uint32_t id, std::string const& actionKey) const {
@@ -265,6 +463,9 @@ dbus::Slot NotificationsClient::watchPosted(std::function<void(NotificationPoste
         posted.body = message.readString();
         posted.expireTimeoutMs = message.readInt32();
         posted.actions = parseActions(message.readStringArray());
+        if (message.signature(false).ends_with("a{sv}")) {
+          posted.hints = parseHints(message.readVariantDictionary());
+        }
         if (handler) {
           handler(std::move(posted));
         }

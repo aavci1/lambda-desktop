@@ -21,11 +21,47 @@ enum class NotificationCloseReason : std::uint32_t {
   Undefined = 4,
 };
 
+enum class NotificationUrgency : std::uint8_t {
+  Low = 0,
+  Normal = 1,
+  Critical = 2,
+};
+
 struct NotificationAction {
   std::string key;
   std::string label;
 
   bool operator==(NotificationAction const&) const = default;
+};
+
+struct NotificationImageData {
+  std::int32_t width = 0;
+  std::int32_t height = 0;
+  std::int32_t rowStride = 0;
+  bool hasAlpha = false;
+  std::int32_t bitsPerSample = 0;
+  std::int32_t channels = 0;
+  std::vector<std::uint8_t> pixels;
+
+  bool operator==(NotificationImageData const&) const = default;
+};
+
+struct NotificationHints {
+  NotificationUrgency urgency = NotificationUrgency::Normal;
+  std::string category;
+  std::string desktopEntry;
+  std::string imagePath;
+  std::optional<NotificationImageData> imageData;
+  std::string soundName;
+  std::string soundFile;
+  std::optional<std::int32_t> x;
+  std::optional<std::int32_t> y;
+  bool actionIcons = false;
+  bool resident = false;
+  bool suppressSound = false;
+  bool transient = false;
+
+  bool operator==(NotificationHints const&) const = default;
 };
 
 struct NotificationRecord {
@@ -36,6 +72,7 @@ struct NotificationRecord {
   std::string body;
   std::int32_t expireTimeoutMs = -1;
   std::vector<NotificationAction> actions;
+  NotificationHints hints;
   bool closed = false;
   NotificationCloseReason closeReason = NotificationCloseReason::Undefined;
 
@@ -50,6 +87,7 @@ struct NotificationPosted {
   std::string body;
   std::vector<NotificationAction> actions;
   std::int32_t expireTimeoutMs = -1;
+  NotificationHints hints;
 
   bool operator==(NotificationPosted const&) const = default;
 };
@@ -73,6 +111,14 @@ public:
                                      std::string summary,
                                      std::string body,
                                      dbus::StringArray actions,
+                                     std::int32_t expireTimeoutMs);
+  [[nodiscard]] std::uint32_t notify(std::string appName,
+                                     std::uint32_t replacesId,
+                                     std::string appIcon,
+                                     std::string summary,
+                                     std::string body,
+                                     dbus::StringArray actions,
+                                     dbus::VariantDictionary hints,
                                      std::int32_t expireTimeoutMs);
   bool closeNotification(std::uint32_t id,
                          NotificationCloseReason reason = NotificationCloseReason::ClosedByCall);

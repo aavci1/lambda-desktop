@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <string>
 #include <thread>
 #include <utility>
@@ -28,6 +29,36 @@ public:
 private:
   Callback callback_;
 };
+
+std::shared_ptr<lambda::dbus::StructValue> notificationImageData() {
+  return std::make_shared<lambda::dbus::StructValue>(
+      lambda::dbus::StructValue{.signature = "iiibiiay",
+                                .fields = {std::int32_t(1),
+                                           std::int32_t(1),
+                                           std::int32_t(4),
+                                           true,
+                                           std::int32_t(8),
+                                           std::int32_t(4),
+                                           lambda::dbus::ByteArray{{0x11, 0x22, 0x33, 0xff}}}});
+}
+
+std::shared_ptr<lambda::dbus::VariantDictionary> notificationHints() {
+  auto hints = std::make_shared<lambda::dbus::VariantDictionary>();
+  hints->values["urgency"] = std::uint8_t(2);
+  hints->values["category"] = std::string("device.added");
+  hints->values["desktop-entry"] = std::string("lambda-files");
+  hints->values["image-path"] = std::string("file:///tmp/notification.png");
+  hints->values["image-data"] = notificationImageData();
+  hints->values["sound-name"] = std::string("message-new-instant");
+  hints->values["sound-file"] = std::string("/tmp/sound.oga");
+  hints->values["x"] = std::int32_t(24);
+  hints->values["y"] = std::int32_t(48);
+  hints->values["action-icons"] = true;
+  hints->values["resident"] = true;
+  hints->values["suppress-sound"] = true;
+  hints->values["transient"] = true;
+  return hints;
+}
 
 } // namespace
 
@@ -108,6 +139,33 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
               .label = rawActions.values[i + 1u],
           });
         }
+        lambda::system::NotificationHints hints;
+        CHECK(message.signature(false).ends_with("a{sv}"));
+        if (message.signature(false).ends_with("a{sv}")) {
+          auto rawHints = message.readVariantDictionary();
+          hints.urgency = static_cast<lambda::system::NotificationUrgency>(
+              std::get<std::uint8_t>(rawHints.values.at("urgency")));
+          if (auto it = rawHints.values.find("category"); it != rawHints.values.end()) {
+            if (auto category = std::get_if<std::string>(&it->second)) {
+              hints.category = *category;
+            }
+          }
+          if (auto it = rawHints.values.find("desktop-entry"); it != rawHints.values.end()) {
+            if (auto desktopEntry = std::get_if<std::string>(&it->second)) {
+              hints.desktopEntry = *desktopEntry;
+            }
+          }
+          if (auto it = rawHints.values.find("suppress-sound"); it != rawHints.values.end()) {
+            if (auto suppressSound = std::get_if<bool>(&it->second)) {
+              hints.suppressSound = *suppressSound;
+            }
+          }
+          if (auto it = rawHints.values.find("transient"); it != rawHints.values.end()) {
+            if (auto transient = std::get_if<bool>(&it->second)) {
+              hints.transient = *transient;
+            }
+          }
+        }
         postedSignals.push_back(lambda::system::NotificationPosted{
             .id = id,
             .appName = std::move(appName),
@@ -116,6 +174,7 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
             .body = std::move(body),
             .actions = std::move(actions),
             .expireTimeoutMs = expireTimeoutMs,
+            .hints = std::move(hints),
         });
       });
 
@@ -130,7 +189,7 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
                     std::string("Build complete"),
                     std::string("Tests passed"),
                     lambda::dbus::StringArray{{"default", "Open"}},
-                    lambda::dbus::EmptyVariantDictionary{},
+                    notificationHints(),
                     std::int32_t(5000)},
   });
   std::uint32_t const id = notifyReply.readUint32();
@@ -142,6 +201,28 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   REQUIRE(record->actions.size() == 1);
   CHECK(record->actions[0].key == "default");
   CHECK(record->actions[0].label == "Open");
+  CHECK(record->hints.urgency == lambda::system::NotificationUrgency::Critical);
+  CHECK(record->hints.category == "device.added");
+  CHECK(record->hints.desktopEntry == "lambda-files");
+  CHECK(record->hints.imagePath == "file:///tmp/notification.png");
+  REQUIRE(record->hints.imageData);
+  CHECK(record->hints.imageData->width == 1);
+  CHECK(record->hints.imageData->height == 1);
+  CHECK(record->hints.imageData->rowStride == 4);
+  CHECK(record->hints.imageData->hasAlpha);
+  CHECK(record->hints.imageData->bitsPerSample == 8);
+  CHECK(record->hints.imageData->channels == 4);
+  CHECK(record->hints.imageData->pixels == std::vector<std::uint8_t>{0x11, 0x22, 0x33, 0xff});
+  CHECK(record->hints.soundName == "message-new-instant");
+  CHECK(record->hints.soundFile == "/tmp/sound.oga");
+  REQUIRE(record->hints.x);
+  CHECK(*record->hints.x == 24);
+  REQUIRE(record->hints.y);
+  CHECK(*record->hints.y == 48);
+  CHECK(record->hints.actionIcons);
+  CHECK(record->hints.resident);
+  CHECK(record->hints.suppressSound);
+  CHECK(record->hints.transient);
   serviceBus.flush();
   CHECK(pumpUntil(client,
                   [&] { return postedSignals.size() == 1 && postedSignals.back().id == id; },
@@ -154,6 +235,11 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   CHECK(postedSignals.back().expireTimeoutMs == 5000);
   CHECK(postedSignals.back().actions == std::vector<lambda::system::NotificationAction>{{.key = "default",
                                                                                          .label = "Open"}});
+  CHECK(postedSignals.back().hints.urgency == lambda::system::NotificationUrgency::Critical);
+  CHECK(postedSignals.back().hints.category == "device.added");
+  CHECK(postedSignals.back().hints.desktopEntry == "lambda-files");
+  CHECK(postedSignals.back().hints.suppressSound);
+  CHECK(postedSignals.back().hints.transient);
 
   auto replaceReply = client.call(lambda::dbus::MethodCall{
       .destination = lambda::system::NotificationsService::serviceName,
@@ -174,6 +260,10 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   REQUIRE(record);
   CHECK(record->summary == "Build failed");
   CHECK(record->body == "One test failed");
+  CHECK(record->hints.urgency == lambda::system::NotificationUrgency::Normal);
+  CHECK(record->hints.category.empty());
+  CHECK_FALSE(record->hints.imageData);
+  CHECK_FALSE(record->hints.transient);
   serviceBus.flush();
   CHECK(pumpUntil(client,
                   [&] {
