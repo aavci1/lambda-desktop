@@ -256,7 +256,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto] Resolve icon names and pixmap bytes into Shell-rendered tray images, theme lookup, and overlay/attention image presentation.
 - [ ] [Auto + Manual] Implement `com.canonical.dbusmenu` menu hosting and item `Activate`, `ContextMenu`, `SecondaryActivate`, and `Scroll` actions.
 - [x] [Auto] Bound StatusNotifierItem metadata refreshes to timed `Properties.GetAll` calls and return unavailable metadata for registered items that disappear or do not export an item object.
-- [ ] [Auto + Manual] Debounce/coalesce tray property refreshes and validate slow or misbehaving real tray items do not stall Shell.
+- [x] [Auto] Debounce/coalesce Shell tray item/property refresh requests so a burst of watcher signals schedules one Shell refresh event before issuing timed `Properties.GetAll` calls. Validation: `ShellModelsTests.cpp` covers the coalescer and full `ctest` passes under headless Weston.
+- [ ] [Manual] Validate slow or misbehaving real tray items do not stall Shell.
 - [ ] [Manual] Validate Steam/Discord/Telegram/nm-applet-style tray icons appear, update, activate, and show menus.
 
 ## TODO-031: Complete SVC-8 polkit authentication agent

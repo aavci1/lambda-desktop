@@ -74,6 +74,8 @@ struct ShellTrayItemsChanged {
   std::vector<TrayStatusItem> items;
 };
 
+struct ShellTrayRefreshRequested {};
+
 std::optional<std::filesystem::file_time_type> configLastWriteTime(std::filesystem::path const& path) {
   if (path.empty()) return std::nullopt;
   std::error_code ec;
@@ -286,17 +288,26 @@ struct ShellNotificationWatcher {
 
 struct ShellTrayStatusWatcher {
   ShellTrayStatusWatcher(lambda::Application& app, std::function<void(std::vector<TrayStatusItem>)> onItemsChanged)
-      : watcher(lambda::system::StatusNotifierWatcherClient::connectSession()),
+      : app(&app),
+        watcher(lambda::system::StatusNotifierWatcherClient::connectSession()),
         pump(app, watcher.bus()),
         onItemsChanged(std::move(onItemsChanged)) {
     watcher.registerHost("org.freedesktop.StatusNotifierHost.lambda-shell");
     changed = watcher.watchItems([this] {
-      refresh();
+      requestRefresh();
     });
-    refresh();
+    refreshNow();
   }
 
-  void refresh() {
+  void requestRefresh() {
+    if (!app || !coalescer.request()) {
+      return;
+    }
+    app->eventQueue().post(ShellTrayRefreshRequested{});
+  }
+
+  void refreshNow() {
+    (void)coalescer.consume();
     if (!onItemsChanged) {
       return;
     }
@@ -316,15 +327,17 @@ struct ShellTrayStatusWatcher {
     itemPropertyWatches.reserve(properties.size());
     for (auto const& item : properties) {
       itemPropertyWatches.push_back(watcher.watchItemProperties(item.address, [this] {
-        refresh();
+        requestRefresh();
       }));
     }
   }
 
+  lambda::Application* app = nullptr;
   lambda::system::StatusNotifierWatcherClient watcher;
   lambda::dbus::BusEventPump pump;
   lambda::system::StatusNotifierItemsWatch changed;
   std::vector<lambda::dbus::Slot> itemPropertyWatches;
+  TrayRefreshCoalescer coalescer;
   std::function<void(std::vector<TrayStatusItem>)> onItemsChanged;
 };
 
@@ -540,6 +553,12 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
 
   app_.eventQueue().on<ShellTrayItemsChanged>([this](ShellTrayItemsChanged const& event) {
     updateTrayItems(event.items);
+  });
+
+  app_.eventQueue().on<ShellTrayRefreshRequested>([this](ShellTrayRefreshRequested const&) {
+    if (trayStatusWatcher_) {
+      trayStatusWatcher_->refreshNow();
+    }
   });
 }
 

@@ -299,6 +299,16 @@ private:
   void trimHistory();
 };
 
+class TrayRefreshCoalescer {
+public:
+  [[nodiscard]] bool request() noexcept;
+  [[nodiscard]] bool consume() noexcept;
+  [[nodiscard]] bool pending() const noexcept { return pending_; }
+
+private:
+  bool pending_ = false;
+};
+
 class ClipboardHistoryModel {
 public:
   explicit ClipboardHistoryModel(std::size_t limit = 20);

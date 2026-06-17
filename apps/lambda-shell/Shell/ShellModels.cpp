@@ -344,6 +344,20 @@ void NotificationCenterModel::trimHistory() {
   if (notifications_.size() > historyLimit_) notifications_.resize(historyLimit_);
 }
 
+bool TrayRefreshCoalescer::request() noexcept {
+  if (pending_) {
+    return false;
+  }
+  pending_ = true;
+  return true;
+}
+
+bool TrayRefreshCoalescer::consume() noexcept {
+  bool const wasPending = pending_;
+  pending_ = false;
+  return wasPending;
+}
+
 ClipboardHistoryModel::ClipboardHistoryModel(std::size_t limit)
     : ClipboardHistoryModel(ClipboardHistoryPolicy{.maxEntries = limit}) {}
 

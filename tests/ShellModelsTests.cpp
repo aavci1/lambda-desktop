@@ -241,6 +241,19 @@ TEST_CASE("Shell notification banner timeout honors app and Shell persistence po
   CHECK_FALSE(lambda_shell::notificationBannerTimeout(config, defaultExpiry));
 }
 
+TEST_CASE("Shell tray refresh coalescer collapses pending refresh requests") {
+  lambda_shell::TrayRefreshCoalescer coalescer;
+
+  CHECK_FALSE(coalescer.pending());
+  CHECK(coalescer.request());
+  CHECK(coalescer.pending());
+  CHECK_FALSE(coalescer.request());
+  CHECK(coalescer.consume());
+  CHECK_FALSE(coalescer.pending());
+  CHECK_FALSE(coalescer.consume());
+  CHECK(coalescer.request());
+}
+
 TEST_CASE("Shell clipboard history dedupes respects limits and disabled state") {
   lambda_shell::ClipboardHistoryModel clipboard{3};
   clipboard.addText("one");
