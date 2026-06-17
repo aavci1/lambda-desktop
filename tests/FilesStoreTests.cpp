@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -59,6 +60,13 @@ bool hasStagingCopyPath(std::filesystem::path const& root) {
   return false;
 }
 
+lambda::system::UDisks2OperationResult storageSuccess(std::string value = {}) {
+  lambda::system::UDisks2OperationResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
 } // namespace
 
 TEST_CASE("FilesStore parses XDG user directories") {
@@ -85,7 +93,7 @@ TEST_CASE("FilesStore home directory falls back when HOME is unusable") {
   CHECK(lambda_files::homeDirectory() == std::filesystem::current_path());
 }
 
-TEST_CASE("FilesStore appends mounted UDisks2 volumes to sidebar places") {
+TEST_CASE("FilesStore surfaces UDisks2 volumes in sidebar places") {
   std::vector<lambda_files::SidebarPlace> places = {
       {.id = "home", .label = "Home", .icon = lambda::IconName::Home, .path = "/home/tester"},
       {.id = "downloads", .label = "Downloads", .icon = lambda::IconName::Download, .path = "/media/DUP"},
@@ -94,9 +102,23 @@ TEST_CASE("FilesStore appends mounted UDisks2 volumes to sidebar places") {
   lambda::system::UDisks2Snapshot snapshot;
   snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdb1",
+      .drivePath = "/org/freedesktop/UDisks2/drives/Lambda_USB",
       .label = "USB_DISK",
       .hasFilesystem = true,
       .mountPoints = {"/media/USB_DISK"},
+      .jobs = {
+          lambda::system::UDisks2JobSnapshot{
+              .path = "/org/freedesktop/UDisks2/jobs/1",
+              .operation = "filesystem-unmount",
+              .progress = 0.5,
+              .progressValid = true,
+              .cancelable = true,
+          },
+      },
+      .drive = lambda::system::UDisks2DriveSnapshot{
+          .path = "/org/freedesktop/UDisks2/drives/Lambda_USB",
+          .ejectable = true,
+      },
   });
   snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdc1",
@@ -106,8 +128,44 @@ TEST_CASE("FilesStore appends mounted UDisks2 volumes to sidebar places") {
   });
   snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdd1",
+      .drivePath = "/org/freedesktop/UDisks2/drives/Lambda_USB",
       .label = "UNMOUNTED",
       .hasFilesystem = true,
+      .drive = lambda::system::UDisks2DriveSnapshot{
+          .path = "/org/freedesktop/UDisks2/drives/Lambda_USB",
+          .ejectable = true,
+      },
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/sde1",
+      .drivePath = "/org/freedesktop/UDisks2/drives/Lambda_USB",
+      .label = "LOCKED",
+      .cleartextDevice = "/",
+      .encrypted = true,
+      .unlocked = false,
+      .drive = lambda::system::UDisks2DriveSnapshot{
+          .path = "/org/freedesktop/UDisks2/drives/Lambda_USB",
+          .ejectable = true,
+      },
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/sdf1",
+      .label = "CRYPT_PARENT",
+      .cleartextDevice = "/org/freedesktop/UDisks2/block_devices/dm_2d0",
+      .encrypted = true,
+      .unlocked = true,
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/dm_2d0",
+      .drivePath = "/org/freedesktop/UDisks2/drives/Lambda_USB",
+      .label = "UNLOCKED",
+      .cryptoBackingDevice = "/org/freedesktop/UDisks2/block_devices/sdf1",
+      .hasFilesystem = true,
+      .cleartext = true,
+      .drive = lambda::system::UDisks2DriveSnapshot{
+          .path = "/org/freedesktop/UDisks2/drives/Lambda_USB",
+          .ejectable = true,
+      },
   });
   snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/nvme0n1p1",
@@ -118,12 +176,200 @@ TEST_CASE("FilesStore appends mounted UDisks2 volumes to sidebar places") {
   });
 
   auto withVolumes = lambda_files::sidebarPlacesWithVolumes(std::move(places), snapshot);
+  auto findPlace = [&withVolumes](std::string const& id) -> lambda_files::SidebarPlace const* {
+    auto found = std::find_if(withVolumes.begin(), withVolumes.end(), [&](auto const& place) {
+      return place.id == id;
+    });
+    return found == withVolumes.end() ? nullptr : &*found;
+  };
 
-  REQUIRE(withVolumes.size() == 3);
-  CHECK(withVolumes.back().id == "volume:/org/freedesktop/UDisks2/block_devices/sdb1");
-  CHECK(withVolumes.back().label == "USB_DISK");
-  CHECK(withVolumes.back().icon == lambda::IconName::DevicesOther);
-  CHECK(withVolumes.back().path == "/media/USB_DISK");
+  REQUIRE(withVolumes.size() == 6);
+  auto const* mounted = findPlace("volume:/org/freedesktop/UDisks2/block_devices/sdb1");
+  REQUIRE(mounted != nullptr);
+  CHECK(mounted->label == "USB_DISK");
+  CHECK(mounted->kind == lambda_files::SidebarPlaceKind::Volume);
+  CHECK(mounted->icon == lambda::IconName::DevicesOther);
+  CHECK(mounted->path == "/media/USB_DISK");
+  CHECK(mounted->subtitle == "Unmounting 50%");
+  CHECK(mounted->volumeMounted);
+  CHECK(mounted->volumeEjectable);
+  CHECK(mounted->volumeCancelable);
+  CHECK(mounted->jobPath == "/org/freedesktop/UDisks2/jobs/1");
+
+  auto mountedCommands = lambda_files::sidebarVolumeContextCommands(*mounted);
+  REQUIRE(mountedCommands.size() == 5);
+  CHECK(mountedCommands[0].kind == lambda_files::SidebarVolumeCommandKind::Open);
+  CHECK(mountedCommands[0].enabled);
+  CHECK(mountedCommands[1].kind == lambda_files::SidebarVolumeCommandKind::Unmount);
+  CHECK(mountedCommands[1].enabled);
+  CHECK(mountedCommands[2].kind == lambda_files::SidebarVolumeCommandKind::ForceUnmount);
+  CHECK(mountedCommands[2].destructive);
+  CHECK(mountedCommands[3].kind == lambda_files::SidebarVolumeCommandKind::Eject);
+  CHECK(mountedCommands[3].enabled);
+  CHECK(mountedCommands[4].kind == lambda_files::SidebarVolumeCommandKind::Cancel);
+  CHECK(mountedCommands[4].enabled);
+
+  auto const* unmounted = findPlace("volume:/org/freedesktop/UDisks2/block_devices/sdd1");
+  REQUIRE(unmounted != nullptr);
+  CHECK(unmounted->path.empty());
+  CHECK(unmounted->subtitle == "Not mounted");
+  CHECK(unmounted->volumeMountable);
+  auto unmountedCommands = lambda_files::sidebarVolumeContextCommands(*unmounted);
+  REQUIRE(unmountedCommands.size() == 3);
+  CHECK(unmountedCommands[0].kind == lambda_files::SidebarVolumeCommandKind::Open);
+  CHECK(unmountedCommands[0].enabled);
+  CHECK(unmountedCommands[1].kind == lambda_files::SidebarVolumeCommandKind::Mount);
+  CHECK(unmountedCommands[1].enabled);
+
+  auto const* locked = findPlace("volume:/org/freedesktop/UDisks2/block_devices/sde1");
+  REQUIRE(locked != nullptr);
+  CHECK(locked->icon == lambda::IconName::Lock);
+  CHECK(locked->subtitle == "Locked");
+  CHECK(locked->volumeLocked);
+  auto lockedCommands = lambda_files::sidebarVolumeContextCommands(*locked);
+  REQUIRE(lockedCommands.size() == 3);
+  CHECK_FALSE(lockedCommands[0].enabled);
+  CHECK_FALSE(lockedCommands[1].enabled);
+  CHECK(lockedCommands[2].enabled);
+
+  CHECK(findPlace("volume:/org/freedesktop/UDisks2/block_devices/sdf1") == nullptr);
+  auto const* cleartext = findPlace("volume:/org/freedesktop/UDisks2/block_devices/dm_2d0");
+  REQUIRE(cleartext != nullptr);
+  CHECK(cleartext->icon == lambda::IconName::LockOpen);
+  CHECK(cleartext->encryptedPath == "/org/freedesktop/UDisks2/block_devices/sdf1");
+}
+
+TEST_CASE("FilesStore performs sidebar volume actions through a storage backend") {
+  lambda_files::SidebarPlace unmounted{
+      .id = "volume:/org/freedesktop/UDisks2/block_devices/sdb1",
+      .label = "USB_DISK",
+      .kind = lambda_files::SidebarPlaceKind::Volume,
+      .volumePath = "/org/freedesktop/UDisks2/block_devices/sdb1",
+      .volumeMountable = true,
+  };
+  lambda_files::SidebarPlace mounted = unmounted;
+  mounted.path = "/media/USB_DISK";
+  mounted.volumeMounted = true;
+  mounted.volumeMountable = false;
+  mounted.drivePath = "/org/freedesktop/UDisks2/drives/Lambda_USB";
+  mounted.jobPath = "/org/freedesktop/UDisks2/jobs/1";
+  mounted.volumeEjectable = true;
+  mounted.volumeCancelable = true;
+
+  int mountCalls = 0;
+  int unmountCalls = 0;
+  bool lastForce = false;
+  int ejectCalls = 0;
+  int cancelCalls = 0;
+  lambda_files::SidebarVolumeActionBackend backend{
+      .mountFilesystem = [&](std::string const& path) {
+        CHECK(path == unmounted.volumePath);
+        ++mountCalls;
+        return storageSuccess("/media/USB_DISK");
+      },
+      .unmountFilesystem = [&](std::string const& path, bool force) {
+        CHECK(path == mounted.volumePath);
+        ++unmountCalls;
+        lastForce = force;
+        return storageSuccess();
+      },
+      .ejectDrive = [&](std::string const& path) {
+        CHECK(path == mounted.drivePath);
+        ++ejectCalls;
+        return storageSuccess();
+      },
+      .cancelJob = [&](std::string const& path) {
+        CHECK(path == mounted.jobPath);
+        ++cancelCalls;
+        return storageSuccess();
+      },
+  };
+
+  auto openMounted = lambda_files::performSidebarVolumeAction(
+      mounted,
+      lambda_files::SidebarVolumeCommandKind::Open,
+      backend);
+  CHECK(openMounted.ok);
+  CHECK(openMounted.navigateToPath);
+  CHECK(openMounted.path == "/media/USB_DISK");
+  CHECK(mountCalls == 0);
+
+  auto mountResult = lambda_files::performSidebarVolumeAction(
+      unmounted,
+      lambda_files::SidebarVolumeCommandKind::Open,
+      backend);
+  CHECK(mountResult.ok);
+  CHECK(mountResult.refreshPlaces);
+  CHECK(mountResult.navigateToPath);
+  CHECK(mountResult.path == "/media/USB_DISK");
+  CHECK(mountCalls == 1);
+
+  auto plainMountResult = lambda_files::performSidebarVolumeAction(
+      unmounted,
+      lambda_files::SidebarVolumeCommandKind::Mount,
+      backend);
+  CHECK(plainMountResult.ok);
+  CHECK(plainMountResult.refreshPlaces);
+  CHECK_FALSE(plainMountResult.navigateToPath);
+  CHECK(mountCalls == 2);
+
+  auto unmountResult = lambda_files::performSidebarVolumeAction(
+      mounted,
+      lambda_files::SidebarVolumeCommandKind::Unmount,
+      backend);
+  CHECK(unmountResult.ok);
+  CHECK(unmountResult.refreshPlaces);
+  CHECK_FALSE(unmountResult.navigateToPath);
+  CHECK(unmountCalls == 1);
+  CHECK_FALSE(lastForce);
+
+  auto forceResult = lambda_files::performSidebarVolumeAction(
+      mounted,
+      lambda_files::SidebarVolumeCommandKind::ForceUnmount,
+      backend);
+  CHECK(forceResult.ok);
+  CHECK(unmountCalls == 2);
+  CHECK(lastForce);
+
+  auto ejectResult = lambda_files::performSidebarVolumeAction(
+      mounted,
+      lambda_files::SidebarVolumeCommandKind::Eject,
+      backend);
+  CHECK(ejectResult.ok);
+  CHECK(ejectCalls == 1);
+
+  auto cancelResult = lambda_files::performSidebarVolumeAction(
+      mounted,
+      lambda_files::SidebarVolumeCommandKind::Cancel,
+      backend);
+  CHECK(cancelResult.ok);
+  CHECK(cancelCalls == 1);
+
+  backend.unmountFilesystem = [](std::string const&, bool) {
+    lambda::system::UDisks2OperationResult result;
+    result.userMessage = "The volume is busy. Close files using it, then retry or force unmount.";
+    result.retryable = true;
+    result.canForce = true;
+    return result;
+  };
+  auto busy = lambda_files::performSidebarVolumeAction(
+      mounted,
+      lambda_files::SidebarVolumeCommandKind::Unmount,
+      backend);
+  CHECK_FALSE(busy.ok);
+  CHECK(busy.retryable);
+  CHECK(busy.canForce);
+  CHECK(busy.error.find("busy") != std::string::npos);
+
+  lambda_files::SidebarPlace locked = unmounted;
+  locked.volumeMountable = false;
+  locked.volumeLocked = true;
+  auto lockedOpen = lambda_files::performSidebarVolumeAction(
+      locked,
+      lambda_files::SidebarVolumeCommandKind::Open,
+      backend);
+  CHECK_FALSE(lockedOpen.ok);
+  CHECK(lockedOpen.error.find("locked") != std::string::npos);
 }
 
 TEST_CASE("FilesStore breadcrumbs handle home root and outside home") {

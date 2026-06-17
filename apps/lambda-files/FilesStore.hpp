@@ -67,13 +67,68 @@ struct FileEntry {
   bool operator==(FileEntry const& other) const = default;
 };
 
+enum class SidebarPlaceKind {
+  Directory,
+  Volume,
+};
+
+enum class SidebarVolumeCommandKind {
+  Open,
+  Mount,
+  Unmount,
+  ForceUnmount,
+  Eject,
+  Cancel,
+};
+
+struct SidebarVolumeCommand {
+  SidebarVolumeCommandKind kind = SidebarVolumeCommandKind::Open;
+  std::string label;
+  bool enabled = false;
+  bool destructive = false;
+
+  bool operator==(SidebarVolumeCommand const&) const = default;
+};
+
 struct SidebarPlace {
   std::string id;
   std::string label;
   lambda::IconName icon = lambda::IconName::Folder;
   std::filesystem::path path;
+  SidebarPlaceKind kind = SidebarPlaceKind::Directory;
+  std::string subtitle;
+  std::string volumePath;
+  std::string drivePath;
+  std::string encryptedPath;
+  std::string jobPath;
+  bool volumeMounted = false;
+  bool volumeMountable = false;
+  bool volumeLocked = false;
+  bool volumeEncrypted = false;
+  bool volumeEjectable = false;
+  bool volumeBusy = false;
+  bool volumeCancelable = false;
 
   bool operator==(SidebarPlace const&) const = default;
+};
+
+struct SidebarVolumeActionResult {
+  bool ok = false;
+  std::filesystem::path path;
+  std::string error;
+  bool refreshPlaces = false;
+  bool navigateToPath = false;
+  bool retryable = false;
+  bool canForce = false;
+
+  bool operator==(SidebarVolumeActionResult const&) const = default;
+};
+
+struct SidebarVolumeActionBackend {
+  std::function<lambda::system::UDisks2OperationResult(std::string const&)> mountFilesystem;
+  std::function<lambda::system::UDisks2OperationResult(std::string const&, bool)> unmountFilesystem;
+  std::function<lambda::system::UDisks2OperationResult(std::string const&)> ejectDrive;
+  std::function<lambda::system::UDisks2OperationResult(std::string const&)> cancelJob;
 };
 
 struct BreadcrumbCrumb {
@@ -285,6 +340,11 @@ std::vector<SidebarPlace> const& sidebarPlaces();
 std::vector<SidebarPlace> sidebarPlacesWithVolumes(std::vector<SidebarPlace> places,
                                                    lambda::system::UDisks2Snapshot const& snapshot);
 std::vector<SidebarPlace> sidebarPlacesWithMountedVolumes();
+std::vector<SidebarVolumeCommand> sidebarVolumeContextCommands(SidebarPlace const& place);
+SidebarVolumeActionBackend udisksSidebarVolumeActionBackend(lambda::system::UDisks2Client& client);
+SidebarVolumeActionResult performSidebarVolumeAction(SidebarPlace const& place,
+                                                     SidebarVolumeCommandKind command,
+                                                     SidebarVolumeActionBackend const& backend);
 ListDirectoryResult listDirectory(std::filesystem::path const& directory, bool includeHidden = false);
 std::vector<FileEntry> sortedEntries(std::vector<FileEntry> entries,
                                      FileSortKey key = FileSortKey::Name,

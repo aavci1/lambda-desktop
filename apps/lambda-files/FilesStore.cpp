@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <ctime>
 #include <cstring>
@@ -572,6 +573,84 @@ std::string iconNameForMime(std::string const& mimeType) {
   return "application-octet-stream";
 }
 
+std::string formatVolumeJobOperation(std::string operation) {
+  std::replace(operation.begin(), operation.end(), '_', '-');
+  if (operation.find("unmount") != std::string::npos) return "Unmounting";
+  if (operation.find("mount") != std::string::npos) return "Mounting";
+  if (operation.find("eject") != std::string::npos) return "Ejecting";
+  if (operation.find("unlock") != std::string::npos) return "Unlocking";
+  if (operation.find("lock") != std::string::npos) return "Locking";
+  return "Working";
+}
+
+std::string formatVolumeJobSubtitle(lambda::system::UDisks2JobSnapshot const& job) {
+  std::string status = formatVolumeJobOperation(job.operation);
+  if (job.progressValid) {
+    int const percent = static_cast<int>(std::lround(std::clamp(job.progress, 0.0, 1.0) * 100.0));
+    status += " " + std::to_string(percent) + "%";
+  }
+  return status;
+}
+
+std::string volumeSubtitle(lambda::system::UDisks2VolumeSnapshot const& volume) {
+  if (!volume.jobs.empty()) {
+    return formatVolumeJobSubtitle(volume.jobs.front());
+  }
+  if (volume.encrypted && !volume.unlocked && !volume.cleartext) {
+    return "Locked";
+  }
+  if (volume.mounted()) {
+    return "Mounted";
+  }
+  if (volume.hasFilesystem) {
+    return "Not mounted";
+  }
+  if (volume.encrypted) {
+    return volume.unlocked ? "Unlocked" : "Locked";
+  }
+  return {};
+}
+
+lambda::IconName volumeIcon(lambda::system::UDisks2VolumeSnapshot const& volume) {
+  if (volume.encrypted && !volume.unlocked && !volume.cleartext) {
+    return lambda::IconName::Lock;
+  }
+  if (volume.cleartext || volume.encrypted) {
+    return lambda::IconName::LockOpen;
+  }
+  return lambda::IconName::DevicesOther;
+}
+
+bool hasMountedDuplicate(std::vector<SidebarPlace> const& places, std::filesystem::path const& path) {
+  return std::any_of(places.begin(), places.end(), [&](SidebarPlace const& place) {
+    return !path.empty() && place.path == path;
+  });
+}
+
+SidebarVolumeActionResult disabledVolumeAction(std::string message) {
+  return {.error = std::move(message)};
+}
+
+SidebarVolumeActionResult volumeActionFromUDisks(lambda::system::UDisks2OperationResult const& result,
+                                                 bool navigateToResultPath) {
+  if (result.ok) {
+    return {
+        .ok = true,
+        .path = result.value,
+        .refreshPlaces = true,
+        .navigateToPath = navigateToResultPath && !result.value.empty(),
+    };
+  }
+  std::string error = result.userMessage;
+  if (error.empty()) error = result.errorMessage;
+  if (error.empty()) error = "Storage operation failed.";
+  return {
+      .error = std::move(error),
+      .retryable = result.retryable,
+      .canForce = result.canForce,
+  };
+}
+
 } // namespace
 
 std::filesystem::path homeDirectory() {
@@ -665,25 +744,55 @@ std::vector<SidebarPlace> const& sidebarPlaces() {
 
 std::vector<SidebarPlace> sidebarPlacesWithVolumes(std::vector<SidebarPlace> places,
                                                    lambda::system::UDisks2Snapshot const& snapshot) {
-  auto hasPath = [&places](std::filesystem::path const& path) {
-    return std::any_of(places.begin(), places.end(), [&](SidebarPlace const& place) {
-      return place.path == path;
-    });
-  };
+  std::set<std::string> cleartextBackingDevices;
+  for (auto const& volume : snapshot.volumes) {
+    if (volume.cleartext && !volume.cryptoBackingDevice.empty() && volume.cryptoBackingDevice != "/") {
+      cleartextBackingDevices.insert(volume.cryptoBackingDevice);
+    }
+  }
 
   for (auto const& volume : snapshot.volumes) {
-    if (!volume.userVisible() || !volume.mounted()) {
+    if (!volume.userVisible()) {
       continue;
     }
-    std::filesystem::path const mountPath = volume.mountPoints.front();
-    if (mountPath.empty() || hasPath(mountPath)) {
+    if (volume.encrypted && !volume.cleartext && cleartextBackingDevices.contains(volume.path)) {
       continue;
     }
+
+    std::filesystem::path const mountPath = volume.mounted() ? std::filesystem::path(volume.mountPoints.front())
+                                                             : std::filesystem::path{};
+    if (volume.mounted() && hasMountedDuplicate(places, mountPath)) {
+      continue;
+    }
+
+    std::string jobPath;
+    bool cancelable = false;
+    for (auto const& job : volume.jobs) {
+      if (job.cancelable) {
+        jobPath = job.path;
+        cancelable = true;
+        break;
+      }
+    }
+
     places.push_back({
         .id = "volume:" + volume.path,
         .label = lambda::system::formatUDisks2VolumeName(volume),
-        .icon = lambda::IconName::DevicesOther,
+        .icon = volumeIcon(volume),
         .path = mountPath,
+        .kind = SidebarPlaceKind::Volume,
+        .subtitle = volumeSubtitle(volume),
+        .volumePath = volume.path,
+        .drivePath = volume.drivePath,
+        .encryptedPath = volume.cleartext ? volume.cryptoBackingDevice : (volume.encrypted ? volume.path : std::string{}),
+        .jobPath = std::move(jobPath),
+        .volumeMounted = volume.mounted(),
+        .volumeMountable = volume.hasFilesystem && !volume.mounted(),
+        .volumeLocked = volume.encrypted && !volume.unlocked && !volume.cleartext,
+        .volumeEncrypted = volume.encrypted || volume.cleartext || !volume.cryptoBackingDevice.empty(),
+        .volumeEjectable = volume.drive.ejectable && !volume.drivePath.empty(),
+        .volumeBusy = !volume.jobs.empty(),
+        .volumeCancelable = cancelable,
     });
   }
   return places;
@@ -697,6 +806,141 @@ std::vector<SidebarPlace> sidebarPlacesWithMountedVolumes() {
   } catch (...) {
     return places;
   }
+}
+
+std::vector<SidebarVolumeCommand> sidebarVolumeContextCommands(SidebarPlace const& place) {
+  if (place.kind != SidebarPlaceKind::Volume) {
+    return {};
+  }
+
+  std::vector<SidebarVolumeCommand> commands;
+  commands.push_back({
+      .kind = SidebarVolumeCommandKind::Open,
+      .label = "Open",
+      .enabled = place.volumeMounted || place.volumeMountable,
+  });
+
+  if (place.volumeMounted) {
+    commands.push_back({
+        .kind = SidebarVolumeCommandKind::Unmount,
+        .label = "Unmount",
+        .enabled = !place.volumePath.empty(),
+    });
+    commands.push_back({
+        .kind = SidebarVolumeCommandKind::ForceUnmount,
+        .label = "Force Unmount",
+        .enabled = !place.volumePath.empty(),
+        .destructive = true,
+    });
+  } else {
+    commands.push_back({
+        .kind = SidebarVolumeCommandKind::Mount,
+        .label = "Mount",
+        .enabled = place.volumeMountable,
+    });
+  }
+
+  commands.push_back({
+      .kind = SidebarVolumeCommandKind::Eject,
+      .label = "Eject",
+      .enabled = place.volumeEjectable,
+  });
+
+  if (place.volumeCancelable) {
+    commands.push_back({
+        .kind = SidebarVolumeCommandKind::Cancel,
+        .label = "Cancel Operation",
+        .enabled = !place.jobPath.empty(),
+    });
+  }
+
+  return commands;
+}
+
+SidebarVolumeActionBackend udisksSidebarVolumeActionBackend(lambda::system::UDisks2Client& client) {
+  return SidebarVolumeActionBackend{
+      .mountFilesystem = [&client](std::string const& path) {
+        return client.tryMountFilesystem(path);
+      },
+      .unmountFilesystem = [&client](std::string const& path, bool force) {
+        return client.tryUnmountFilesystem(path, lambda::system::UDisks2MountOptions{.force = force});
+      },
+      .ejectDrive = [&client](std::string const& path) {
+        return client.tryEjectDrive(path);
+      },
+      .cancelJob = [&client](std::string const& path) {
+        return client.tryCancelJob(path);
+      },
+  };
+}
+
+SidebarVolumeActionResult performSidebarVolumeAction(SidebarPlace const& place,
+                                                     SidebarVolumeCommandKind command,
+                                                     SidebarVolumeActionBackend const& backend) {
+  if (place.kind != SidebarPlaceKind::Volume) {
+    return disabledVolumeAction("This sidebar item is not a removable volume.");
+  }
+
+  switch (command) {
+  case SidebarVolumeCommandKind::Open:
+    if (place.volumeMounted && !place.path.empty()) {
+      return {.ok = true, .path = place.path, .navigateToPath = true};
+    }
+    if (place.volumeMountable) {
+      if (!backend.mountFilesystem) {
+        return disabledVolumeAction("Volume mounting is unavailable.");
+      }
+      return volumeActionFromUDisks(backend.mountFilesystem(place.volumePath), true);
+    }
+    if (place.volumeLocked) {
+      return disabledVolumeAction("This volume is locked. Unlock support is not wired into Files yet.");
+    }
+    return disabledVolumeAction("This volume cannot be opened.");
+  case SidebarVolumeCommandKind::Mount:
+    if (!place.volumeMountable) {
+      return disabledVolumeAction(place.volumeLocked
+                                      ? "This volume is locked. Unlock support is not wired into Files yet."
+                                      : "This volume is not mountable.");
+    }
+    if (!backend.mountFilesystem) {
+      return disabledVolumeAction("Volume mounting is unavailable.");
+    }
+    return volumeActionFromUDisks(backend.mountFilesystem(place.volumePath), false);
+  case SidebarVolumeCommandKind::Unmount:
+    if (!place.volumeMounted || place.volumePath.empty()) {
+      return disabledVolumeAction("This volume is not mounted.");
+    }
+    if (!backend.unmountFilesystem) {
+      return disabledVolumeAction("Volume unmounting is unavailable.");
+    }
+    return volumeActionFromUDisks(backend.unmountFilesystem(place.volumePath, false), false);
+  case SidebarVolumeCommandKind::ForceUnmount:
+    if (!place.volumeMounted || place.volumePath.empty()) {
+      return disabledVolumeAction("This volume is not mounted.");
+    }
+    if (!backend.unmountFilesystem) {
+      return disabledVolumeAction("Volume unmounting is unavailable.");
+    }
+    return volumeActionFromUDisks(backend.unmountFilesystem(place.volumePath, true), false);
+  case SidebarVolumeCommandKind::Eject:
+    if (!place.volumeEjectable || place.drivePath.empty()) {
+      return disabledVolumeAction("This volume cannot be ejected.");
+    }
+    if (!backend.ejectDrive) {
+      return disabledVolumeAction("Volume eject is unavailable.");
+    }
+    return volumeActionFromUDisks(backend.ejectDrive(place.drivePath), false);
+  case SidebarVolumeCommandKind::Cancel:
+    if (!place.volumeCancelable || place.jobPath.empty()) {
+      return disabledVolumeAction("There is no cancellable storage operation for this volume.");
+    }
+    if (!backend.cancelJob) {
+      return disabledVolumeAction("Storage operation cancellation is unavailable.");
+    }
+    return volumeActionFromUDisks(backend.cancelJob(place.jobPath), false);
+  }
+
+  return disabledVolumeAction("Storage operation failed.");
 }
 
 std::string gridDisplayName(std::string name) {

@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <exception>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -224,16 +225,31 @@ struct SideItemRow {
       return activeBinding.evaluate() ? FilesTheme::accent : FilesTheme::text3;
     }};
 
+    std::vector<Element> labelChildren;
+    labelChildren.push_back(Text {
+        .text = place.label,
+        .font = Font {.size = 14.f, .weight = 400.f},
+        .color = labelColor,
+        .horizontalAlignment = HorizontalAlignment::Leading,
+    });
+    if (!place.subtitle.empty()) {
+      labelChildren.push_back(Text {
+          .text = place.subtitle,
+          .font = Font {.size = 11.f, .weight = 400.f},
+          .color = FilesTheme::text3,
+          .horizontalAlignment = HorizontalAlignment::Leading,
+      });
+    }
+
     auto row = HStack {
         .spacing = 8.f,
         .alignment = Alignment::Center,
         .children = children(
             Icon {.name = place.icon, .size = 18.f, .weight = 400.f, .color = iconColor},
-            Text {
-                .text = place.label,
-                .font = Font {.size = 14.f, .weight = 400.f},
-                .color = labelColor,
-                .horizontalAlignment = HorizontalAlignment::Leading,
+            VStack {
+                .spacing = 0.f,
+                .alignment = Alignment::Stretch,
+                .children = std::move(labelChildren),
             }
         )
     }
@@ -695,6 +711,33 @@ struct FilesAppRoot {
       applyHistory(std::move(result.history));
     };
 
+    auto performVolumeSidebarCommand =
+        [navigateToPath, syncPlaces, listError](SidebarPlace place, SidebarVolumeCommandKind command) {
+          try {
+            auto client = lambda::system::UDisks2Client::connectSystem();
+            SidebarVolumeActionResult const result =
+                performSidebarVolumeAction(place, command, udisksSidebarVolumeActionBackend(client));
+            if (!result.ok) {
+              listError.set(result.error.empty() ? "Storage operation failed." : result.error);
+              return;
+            }
+            listError.set(std::string{});
+            if (result.refreshPlaces) {
+              (void)syncPlaces();
+            }
+            if (result.navigateToPath) {
+              navigateToPath(result.path);
+            }
+            if (Application::hasInstance()) {
+              Application::instance().requestRedraw();
+            }
+          } catch (std::exception const& error) {
+            listError.set(error.what());
+          } catch (...) {
+            listError.set("Storage operation failed.");
+          }
+        };
+
     auto goBackNav = [history, applyHistory] {
       if (!history().canGoBack()) {
         return;
@@ -957,6 +1000,26 @@ struct FilesAppRoot {
       showMenu(PopupMenu{.items = {std::move(open), std::move(reveal)}});
     };
 
+    auto showVolumeContextMenu =
+        [showMenu, performVolumeSidebarCommand](SidebarPlace place) {
+          std::vector<SidebarVolumeCommand> commands = sidebarVolumeContextCommands(place);
+          std::vector<MenuItem> items;
+          items.reserve(commands.size());
+          for (auto const& command : commands) {
+            MenuItem item;
+            item.label = command.label;
+            item.actionName = command.label;
+            item.isEnabled = [enabled = command.enabled] { return enabled; };
+            if (command.enabled) {
+              item.handler = [performVolumeSidebarCommand, place, kind = command.kind] {
+                performVolumeSidebarCommand(place, kind);
+              };
+            }
+            items.push_back(std::move(item));
+          }
+          showMenu(PopupMenu{.items = std::move(items)});
+        };
+
     Reactive::Bindable<bool> const canGoBack{[history] { return history().canGoBack(); }};
     Reactive::Bindable<bool> const canGoForward{[history] { return history().canGoForward(); }};
 
@@ -1008,19 +1071,29 @@ struct FilesAppRoot {
                             Element{For(
                                 places,
                                 [](SidebarPlace const& place) { return place.id; },
-                                [activePlaceId, navigateToPath, showPathContextMenu](
+                                [activePlaceId, navigateToPath, performVolumeSidebarCommand,
+                                 showPathContextMenu, showVolumeContextMenu](
                                     SidebarPlace const& place, Signal<std::size_t> const&) {
                                   Reactive::Bindable<bool> active{
                                       [activePlaceId, id = place.id] { return activePlaceId() == id; }};
                                   return SideItemRow{
                                       .place = place,
                                       .isActive = active,
-                                      .onTap = [navigateToPath, place, activePlaceId] {
+                                      .onTap = [navigateToPath, performVolumeSidebarCommand, place,
+                                                activePlaceId] {
                                         activePlaceId.set(place.id);
+                                        if (place.kind == SidebarPlaceKind::Volume) {
+                                          performVolumeSidebarCommand(place, SidebarVolumeCommandKind::Open);
+                                          return;
+                                        }
                                         navigateToPath(place.path);
                                       },
-                                      .onContextMenu = [showPathContextMenu, path = place.path] {
-                                        showPathContextMenu(path);
+                                      .onContextMenu = [showPathContextMenu, showVolumeContextMenu, place] {
+                                        if (place.kind == SidebarPlaceKind::Volume) {
+                                          showVolumeContextMenu(place);
+                                          return;
+                                        }
+                                        showPathContextMenu(place.path);
                                       },
                                   };
                                 })},
