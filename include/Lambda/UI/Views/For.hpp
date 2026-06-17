@@ -76,7 +76,8 @@ public:
     });
 
     state->configureMount(ctx.environmentBinding(), ctx.textSystem(),
-                          ctx.constraints(), ctx.redrawCallback());
+                          ctx.constraints(), ctx.redrawCallback(),
+                          detail::currentInteractionScopeKeyCopy());
 
     scenegraph::SceneNode* rawGroup = group.get();
     rawGroup->setLayoutConstraints(ctx.constraints());
@@ -131,6 +132,7 @@ private:
     TextSystem* textSystem = nullptr;
     LayoutConstraints constraints;
     Reactive::SmallFn<void()> requestRedraw;
+    std::optional<ComponentKey> parentInteractionScopeKey;
     std::vector<Row> rows;
     bool disposed = false;
 
@@ -156,18 +158,23 @@ private:
       environment = ctx.environmentBinding();
       textSystem = &measureTextSystem;
       constraints = nextConstraints;
+      if (auto key = detail::currentInteractionScopeKeyCopy()) {
+        parentInteractionScopeKey = std::move(key);
+      }
       reconcileMeasuredRows(items.peek());
       return measuredStackSize(nextConstraints);
     }
 
     void configureMount(EnvironmentBinding environmentIn,
                         TextSystem& textSystemIn, LayoutConstraints constraintsIn,
-                        Reactive::SmallFn<void()> requestRedrawIn) {
+                        Reactive::SmallFn<void()> requestRedrawIn,
+                        std::optional<ComponentKey> parentInteractionScopeKeyIn) {
       disposed = false;
       environment = std::move(environmentIn);
       textSystem = &textSystemIn;
       constraints = constraintsIn;
       requestRedraw = std::move(requestRedrawIn);
+      parentInteractionScopeKey = std::move(parentInteractionScopeKeyIn);
     }
 
     void dispose() {
@@ -356,6 +363,8 @@ private:
           MountContext factoryMountContext{*rowScope, *textSystem, factoryMeasureContext,
                                            constraints, rowHints(), requestRedraw, rowEnvironment};
           detail::CurrentMountContextScope const currentMountContext{factoryMountContext};
+          detail::ScopedInteractionScopeKey const parentScope{parentInteractionScopeKey};
+          detail::HookInteractionSignalScope const rowInteractionScope{*rowScope};
           return detail::invokeForFactory(factory, item, indexSignal);
         });
 
@@ -373,6 +382,7 @@ private:
         ensureMeasured(row, environment, *textSystem,
                        rowConstraints(constraints), childHints);
       }
+      detail::ScopedInteractionScopeKey const parentScope{parentInteractionScopeKey};
       return detail::controlMountElement(
           row.element, *row.scope, environment, *textSystem,
           detail::controlFixedConstraints(row.cachedSize), childHints, requestRedraw);
@@ -397,6 +407,8 @@ private:
           hintsEqual(row.cachedHints, childHints)) {
         return;
       }
+      detail::ScopedInteractionScopeKey const parentScope{parentInteractionScopeKey};
+      detail::HookInteractionSignalScope const rowInteractionScope{*row.scope};
       row.cachedSize = detail::controlMeasureElement(
           row.element, measureEnvironment, measureTextSystem,
           childConstraints, childHints);

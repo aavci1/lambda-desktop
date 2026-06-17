@@ -15,6 +15,7 @@
 #include <Lambda/UI/Hooks.hpp>
 #include <Lambda/UI/Overlay.hpp>
 #include <Lambda/UI/Views/Button.hpp>
+#include <Lambda/UI/Views/For.hpp>
 #include <Lambda/UI/Views/HStack.hpp>
 #include <Lambda/UI/Views/Popover.hpp>
 #include <Lambda/UI/Views/PopoverCalloutShape.hpp>
@@ -32,6 +33,7 @@
 #include <string>
 #include <functional>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -388,6 +390,39 @@ struct ConditionalActionRoot {
     return lambda::Show(visible, [fired = fired] {
       return lambda::Element{ActionProbeView{fired}};
     });
+  }
+};
+
+struct AncestorActionShowRoot {
+  lambda::Reactive::Signal<bool> visible;
+  int* fired = nullptr;
+
+  lambda::Element body() const {
+    lambda::useViewAction("demo.save", [fired = fired] {
+      ++*fired;
+    });
+    return lambda::Show(visible, [] {
+      return lambda::Element{ProbeView{}};
+    });
+  }
+};
+
+struct AncestorActionForRoot {
+  lambda::Reactive::Signal<std::vector<int>> items;
+  int* fired = nullptr;
+
+  lambda::Element body() const {
+    lambda::useViewAction("demo.save", [fired = fired] {
+      ++*fired;
+    });
+    return lambda::For(
+        items,
+        [](int value) {
+          return value;
+        },
+        [](int, lambda::Reactive::Signal<std::size_t>) {
+          return lambda::Element{ProbeView{}};
+        });
   }
 };
 
@@ -802,14 +837,7 @@ TEST_CASE("root mount does not select among multiple focusable targets") {
   CHECK_FALSE(secondFocus.get());
 }
 
-// Known failure (TODO-016): useAutoFocus matches targets via
-// stableTargetKey_.hasPrefix(fromScope(hookScope)), but stable target keys
-// only carry the nearest body scope id (HookInteractionSignalScope starts
-// fresh instead of extending the parent key), so focusables inside nested
-// child components never match. Only same-scope focusables work today.
-// This was masked until the FileDialogTests crash (which aborted the suite
-// before reaching this file) was fixed.
-TEST_CASE("auto focus requests first focusable target inside hook scope" * doctest::may_fail()) {
+TEST_CASE("auto focus requests first focusable target inside hook scope") {
   RuntimeHarness harness;
   lambda::Reactive::Signal<int> focusGeneration{0};
   lambda::Reactive::Signal<bool> outsideFocus;
@@ -1074,6 +1102,46 @@ TEST_CASE("view action deregisters on view unmount") {
   visible.set(false);
   harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
   CHECK(fired == 1);
+}
+
+TEST_CASE("view action on ancestor resolves through Show branch remount") {
+  RuntimeHarness harness;
+  registerSaveAction(harness.window);
+  lambda::Reactive::Signal<bool> visible{true};
+  int fired = 0;
+  harness.setRoot(AncestorActionShowRoot{.visible = visible, .fired = &fired});
+
+  harness.pointerDown({10.f, 10.f});
+  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  REQUIRE(fired == 1);
+
+  visible.set(false);
+  harness.app.eventQueue().dispatch();
+  visible.set(true);
+  harness.app.eventQueue().dispatch();
+
+  harness.pointerDown({10.f, 10.f});
+  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  CHECK(fired == 2);
+}
+
+TEST_CASE("view action on ancestor resolves through For row replacement") {
+  RuntimeHarness harness;
+  registerSaveAction(harness.window);
+  lambda::Reactive::Signal<std::vector<int>> items{std::vector<int>{1}};
+  int fired = 0;
+  harness.setRoot(AncestorActionForRoot{.items = items, .fired = &fired});
+
+  harness.pointerDown({10.f, 10.f});
+  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  REQUIRE(fired == 1);
+
+  items.set(std::vector<int>{2});
+  harness.app.eventQueue().dispatch();
+
+  harness.pointerDown({10.f, 10.f});
+  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  CHECK(fired == 2);
 }
 
 TEST_CASE("hover chain disposes signals on subtree unmount") {

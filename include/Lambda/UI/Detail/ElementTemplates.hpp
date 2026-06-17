@@ -49,6 +49,7 @@ Element const& Element::Model<C>::bodyElement(LayoutConstraints const& constrain
     bodyCache_.scope = std::make_shared<Reactive::Scope>();
     Reactive::withOwner(*bodyCache_.scope, [&] {
       detail::HookLayoutScope const hookScope{constraints};
+      detail::HookInteractionSignalScope const interactionScope{*bodyCache_.scope};
       bodyCache_.element.emplace(value.body());
     });
   }

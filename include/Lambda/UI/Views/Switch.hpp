@@ -77,7 +77,7 @@ public:
     auto state = std::make_shared<State>(
         selector_, cases_, defaultFactory_, frameSize, ctx.environmentBinding(),
         ctx.textSystem(), ctx.constraints(), ctx.hints(),
-        ctx.redrawCallback());
+        ctx.redrawCallback(), detail::currentInteractionScopeKeyCopy());
 
     scenegraph::SceneNode* rawGroup = group.get();
     rawGroup->setLayoutConstraints(ctx.constraints());
@@ -104,6 +104,7 @@ private:
     LayoutConstraints constraints;
     LayoutHints hints;
     Reactive::SmallFn<void()> requestRedraw;
+    std::optional<ComponentKey> parentInteractionScopeKey;
     std::optional<Size> assignedSlot;
     std::optional<std::size_t> activeBranch;
     std::shared_ptr<Reactive::Scope> branchScope;
@@ -112,7 +113,8 @@ private:
           std::function<Element()> defaultFactoryIn, Size frameSizeIn,
           EnvironmentBinding environmentIn, TextSystem& textSystemIn,
           LayoutConstraints constraintsIn, LayoutHints hintsIn,
-          Reactive::SmallFn<void()> requestRedrawIn)
+          Reactive::SmallFn<void()> requestRedrawIn,
+          std::optional<ComponentKey> parentInteractionScopeKeyIn)
         : selector(std::move(selectorIn))
         , cases(std::move(casesIn))
         , defaultFactory(std::move(defaultFactoryIn))
@@ -121,7 +123,8 @@ private:
         , textSystem(textSystemIn)
         , constraints(constraintsIn)
         , hints(hintsIn)
-        , requestRedraw(std::move(requestRedrawIn)) {}
+        , requestRedraw(std::move(requestRedrawIn))
+        , parentInteractionScopeKey(std::move(parentInteractionScopeKeyIn)) {}
 
     ~State() {
       disposeBranch();
@@ -193,14 +196,21 @@ private:
           MeasureContext factoryMeasureContext{textSystem, environment};
           MountContext factoryMountContext{*branchScope, textSystem, factoryMeasureContext,
                                            constraints, hints, requestRedraw, environment};
-          detail::CurrentMountContextScope const currentMountContext{factoryMountContext};
-          Element element = branch < cases.size()
-              ? cases[branch].factory()
-              : defaultFactory();
-          Size measured = detail::controlMeasureElement(
-              element, environment, textSystem, constraints, hints);
+          std::optional<Element> element;
+          Size measured{};
+          {
+            detail::CurrentMountContextScope const currentMountContext{factoryMountContext};
+            detail::ScopedInteractionScopeKey const parentScope{parentInteractionScopeKey};
+            detail::HookInteractionSignalScope const branchInteractionScope{*branchScope};
+            element.emplace(branch < cases.size()
+                ? cases[branch].factory()
+                : defaultFactory());
+            measured = detail::controlMeasureElement(
+                *element, environment, textSystem, constraints, hints);
+          }
+          detail::ScopedInteractionScopeKey const parentScope{parentInteractionScopeKey};
           return detail::controlMountElement(
-              element, *branchScope, environment, textSystem,
+              *element, *branchScope, environment, textSystem,
               detail::controlFixedConstraints(measured), hints, requestRedraw);
         });
       });

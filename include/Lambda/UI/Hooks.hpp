@@ -22,6 +22,7 @@
 #include <cassert>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <source_location>
 #include <string>
 #include <type_traits>
@@ -43,6 +44,11 @@ struct InteractionSignalBundle {
 
 struct OwnerInteractionSignals {
   InteractionSignalBundle signals;
+  bool cleanupRegistered = false;
+};
+
+struct OwnerInteractionScopeKey {
+  ComponentKey key;
   bool cleanupRegistered = false;
 };
 
@@ -74,6 +80,12 @@ inline std::unordered_map<Reactive::detail::ScopeState*, OwnerInteractionSignals
 ownerInteractionSignals() {
   static thread_local std::unordered_map<Reactive::detail::ScopeState*, OwnerInteractionSignals> signals;
   return signals;
+}
+
+inline std::unordered_map<Reactive::detail::ScopeState*, OwnerInteractionScopeKey>&
+ownerInteractionScopeKeys() {
+  static thread_local std::unordered_map<Reactive::detail::ScopeState*, OwnerInteractionScopeKey> keys;
+  return keys;
 }
 
 #ifndef NDEBUG
@@ -114,10 +126,82 @@ inline ComponentKey const* currentInteractionScopeKey() {
   return stack.empty() ? nullptr : stack.back();
 }
 
+inline std::optional<ComponentKey> currentInteractionScopeKeyCopy() {
+  if (ComponentKey const* key = currentInteractionScopeKey()) {
+    return *key;
+  }
+  return std::nullopt;
+}
+
+inline void appendComponentKey(ComponentKey& key, ComponentKey const& suffix) {
+  for (LocalId const id : suffix.materialize()) {
+    key.push_back(id);
+  }
+}
+
+inline ComponentKey makeMountedInteractionScopeKey(Reactive::detail::ScopeState* owner) {
+  ComponentKey const localKey = ComponentKey::fromScope(owner);
+  if (ComponentKey const* parentKey = currentInteractionScopeKey();
+      parentKey && !parentKey->empty()) {
+    ComponentKey key = *parentKey;
+    appendComponentKey(key, localKey);
+    return key;
+  }
+  return localKey;
+}
+
+inline ComponentKey interactionScopeKeyForOwner(Reactive::detail::ScopeState* owner) {
+  if (!owner) {
+    return {};
+  }
+  auto const it = ownerInteractionScopeKeys().find(owner);
+  if (it != ownerInteractionScopeKeys().end()) {
+    return it->second.key;
+  }
+  return ComponentKey::fromScope(owner);
+}
+
+class ScopedInteractionScopeKey {
+public:
+  explicit ScopedInteractionScopeKey(ComponentKey const* key)
+      : pushed_(key && !key->empty()) {
+    if (pushed_) {
+      interactionScopeKeyMountStack().push_back(key);
+    }
+  }
+
+  explicit ScopedInteractionScopeKey(std::optional<ComponentKey> const& key)
+      : ScopedInteractionScopeKey(key ? &*key : nullptr) {}
+
+  ScopedInteractionScopeKey(ScopedInteractionScopeKey const&) = delete;
+  ScopedInteractionScopeKey& operator=(ScopedInteractionScopeKey const&) = delete;
+
+  ~ScopedInteractionScopeKey() {
+    if (pushed_) {
+      auto& stack = interactionScopeKeyMountStack();
+      if (!stack.empty()) {
+        stack.pop_back();
+      }
+    }
+  }
+
+private:
+  bool pushed_ = false;
+};
+
 class HookInteractionSignalScope {
 public:
   explicit HookInteractionSignalScope(Reactive::Scope& owner)
-      : scopeKey_(ComponentKey::fromScope(owner.state())) {
+      : scopeKey_(makeMountedInteractionScopeKey(owner.state())) {
+    auto& keyEntry = ownerInteractionScopeKeys()[owner.state()];
+    keyEntry.key = scopeKey_;
+    if (!keyEntry.cleanupRegistered) {
+      keyEntry.cleanupRegistered = true;
+      Reactive::detail::ScopeState* ownerState = owner.state();
+      owner.onCleanup([ownerState] {
+        ownerInteractionScopeKeys().erase(ownerState);
+      });
+    }
     auto const it = ownerInteractionSignals().find(owner.state());
     if (it != ownerInteractionSignals().end()) {
       signals_ = &it->second.signals;
@@ -412,12 +496,16 @@ inline void useAutoFocus(Reactive::Signal<int> generation) {
     return;
   }
 
-  ComponentKey const key = ComponentKey::fromScope(scope);
+  ComponentKey const fallbackKey = detail::interactionScopeKeyForOwner(scope);
   Reactive::Signal<int> lastFocusedGeneration = useState(-1);
-  useEffect([runtime, key, generation, lastFocusedGeneration] {
+  useEffect([runtime, scope, fallbackKey, generation, lastFocusedGeneration] {
     int const currentGeneration = generation.get();
     if (lastFocusedGeneration.peek() == currentGeneration) {
       return;
+    }
+    ComponentKey key = detail::interactionScopeKeyForOwner(scope);
+    if (key.empty()) {
+      key = fallbackKey;
     }
     runtime->requestFocusAfterLayout(key);
     lastFocusedGeneration.set(currentGeneration);
@@ -451,7 +539,7 @@ inline void useViewCommand(std::string const& name, std::function<void()> handle
     return;
   }
   Reactive::detail::ScopeState* scope = Reactive::detail::sCurrentOwner;
-  ComponentKey const key = scope ? ComponentKey::fromScope(scope) : ComponentKey{};
+  ComponentKey const key = detail::interactionScopeKeyForOwner(scope);
   CommandId const id = runtime->commandRegistry().registerViewHandler(
       key, name, std::move(handler), std::move(isEnabled));
   Reactive::onCleanup([runtime, id] {

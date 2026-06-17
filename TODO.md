@@ -109,11 +109,12 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 ## TODO-016: useAutoFocus cannot focus targets inside nested child components
 
-- [ ] [Auto] `useAutoFocus` requests focus with `ComponentKey::fromScope(hookScope)` and `Runtime::requestFocus` matches targets via `stableTargetKey_.hasPrefix(key)`, but stable target keys only carry the nearest body scope id: `HookInteractionSignalScope` builds its key fresh from `fromScope(owner)` instead of extending the parent scope key on the stack.
-- [ ] [Auto] As a result, focusable targets mounted inside nested child components (their own `body()` scopes) can never match the hook's scope key. Only focusables mounted directly in the same body scope work (the current `lambda-editor` usage).
-- [ ] [Auto] The test "auto focus requests first focusable target inside hook scope" in `tests/RuntimeInputTests.cpp` documents the expected nested behavior and is currently marked `doctest::may_fail`; remove the decorator when fixing.
-- [ ] [Auto] A fix likely needs hierarchical scope keys (extend the parent key in `HookInteractionSignalScope`) plus stable accumulation across `For`/`Show` remounts (capture the parent key at view creation and re-push it during reconcile), since `stableTargetKey_` equality is also used for focus restore, hover tracking, command registry prefix walks, and overlay anchors. Scope this carefully before implementing.
-- [ ] [Auto] This was masked until the FileDialogTests segfault (fixed) aborted the suite before `RuntimeInputTests.cpp` ran.
+- [x] [Auto] `HookInteractionSignalScope` now extends the parent interaction scope key instead of rebuilding each body scope from only `ComponentKey::fromScope(owner)`.
+- [x] [Auto] `useAutoFocus` now resolves the stable interaction scope key for its owner, so focusable targets mounted inside nested child `body()` scopes match the hook's scope prefix.
+- [x] [Auto] The test "auto focus requests first focusable target inside hook scope" in `tests/RuntimeInputTests.cpp` documents the expected nested behavior and no longer uses `doctest::may_fail`.
+- [x] [Auto] `For`, `Show`, and `Switch` now capture the parent interaction key at view creation and re-push it during row/branch factory, measure, and mount paths so command registry prefix walks stay stable across remounts.
+- [x] [Auto] The previously masked `RuntimeInputTests.cpp` coverage now runs and passes with the nested-autofocus case enabled.
+- [x] [Auto] Validation: `lambda_tests` rebuilt; under headless Weston, focused autofocus/view-action cases passed 5 / 18, full `RuntimeInputTests.cpp` passed 41 / 237, and `ForTests.cpp` + `ShowTests.cpp` passed 12 / 147.
 
 ## TODO-019: Work through the frame-pacing improvement plan
 
