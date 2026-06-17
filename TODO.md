@@ -236,7 +236,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Auto + Manual] Add the full Shell notification-center UI with history inspection, dismissal, and clear-all controls.
 - [x] [Auto] Route basic Shell banner action button clicks back to the daemon so it emits `ActionInvoked`.
 - [x] [Auto] Enforce banner timeout and preview-visibility config for the live Shell banner.
-- [ ] [Auto + Manual] Implement timeout expiry, grouping, persistence policy, and clear-all behavior against the service history.
+- [x] [Auto] Implement daemon-side timeout expiry, transient/resident/zero-timeout persistence policy, and Shell-facing clear-all behavior against the service history. Validation: `NotificationsTests.cpp` covers expiry, transient pruning, resident/zero-timeout persistence, and `org.lambda.Notifications.ClearHistory` on a private bus.
+- [ ] [Auto + Manual] Complete grouped service-history inspection and wire the full Shell notification-center UI to service clear-all/dismiss controls.
 - [x] [Auto] Parse the common notification hints that affect presentation, including urgency, category, desktop-entry, image/icon path/data, transient/resident/action-icon flags, sound metadata/suppression, and x/y placement hints; `NotificationsTests.cpp` covers parsed metadata and replacement reset behavior against a private bus.
 - [x] [Auto] Route the basic SVC-4 portal Notification backend through this service.
 - [ ] [Manual] Validate `notify-send "x"` shows a Shell banner, actions invoke, DND suppresses banners, and history shows past notifications.

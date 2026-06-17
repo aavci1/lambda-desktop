@@ -6,6 +6,7 @@
 
 #include <Lambda/System/DBus.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -73,6 +74,7 @@ struct NotificationRecord {
   std::int32_t expireTimeoutMs = -1;
   std::vector<NotificationAction> actions;
   NotificationHints hints;
+  std::chrono::steady_clock::time_point postedAt{};
   bool closed = false;
   NotificationCloseReason closeReason = NotificationCloseReason::Undefined;
 
@@ -123,10 +125,13 @@ public:
   bool closeNotification(std::uint32_t id,
                          NotificationCloseReason reason = NotificationCloseReason::ClosedByCall);
   bool invokeAction(std::uint32_t id, std::string actionKey);
+  std::size_t clearHistory(NotificationCloseReason reason = NotificationCloseReason::DismissedByUser);
+  std::size_t expireDueNotifications(std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now());
 
   [[nodiscard]] std::vector<std::string> capabilities() const;
   [[nodiscard]] std::vector<NotificationRecord> const& history() const noexcept { return notifications_; }
   [[nodiscard]] std::optional<NotificationRecord> notification(std::uint32_t id) const;
+  [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> nextExpirationDeadline() const;
   [[nodiscard]] bool doNotDisturb() const noexcept { return doNotDisturb_; }
   void setDoNotDisturb(bool enabled) noexcept { doNotDisturb_ = enabled; }
 
@@ -137,6 +142,7 @@ private:
   void emitClosed(std::uint32_t id, NotificationCloseReason reason) const;
   void emitActionInvoked(std::uint32_t id, std::string const& actionKey) const;
   void trimHistory();
+  void pruneClosedTransient();
 
   dbus::Bus* bus_ = nullptr;
   std::size_t historyLimit_ = 100;
@@ -157,6 +163,7 @@ public:
   [[nodiscard]] dbus::Slot watchPosted(std::function<void(NotificationPosted)> handler);
   [[nodiscard]] dbus::Slot watchClosed(std::function<void(std::uint32_t, NotificationCloseReason)> handler);
   void closeNotification(std::uint32_t id);
+  std::uint32_t clearHistory();
   void invokeAction(std::uint32_t id, std::string actionKey);
 
 private:

@@ -2,6 +2,8 @@
 #include <Lambda/System/Notifications.hpp>
 
 #include <atomic>
+#include <algorithm>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <exception>
@@ -36,6 +38,19 @@ bool dndFromEnvironment() {
   return raw[0] == '1' || raw[0] == 't' || raw[0] == 'T' || raw[0] == 'y' || raw[0] == 'Y';
 }
 
+int waitTimeoutForNextExpiration(lambda::system::NotificationsService const& notifications) {
+  auto const deadline = notifications.nextExpirationDeadline();
+  if (!deadline) {
+    return 1000;
+  }
+  auto const now = std::chrono::steady_clock::now();
+  if (*deadline <= now) {
+    return 0;
+  }
+  auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(*deadline - now);
+  return std::clamp(static_cast<int>(remaining.count() + 1), 0, 1000);
+}
+
 } // namespace
 
 int main() {
@@ -56,7 +71,9 @@ int main() {
               << " on " << lambda::system::NotificationsService::objectPath << "\n";
 
     while (gRunning.load()) {
-      (void)bus.waitAndProcess(1000);
+      (void)notifications.expireDueNotifications();
+      (void)bus.waitAndProcess(waitTimeoutForNextExpiration(notifications));
+      (void)notifications.expireDueNotifications();
     }
     bus.flush();
     return 0;

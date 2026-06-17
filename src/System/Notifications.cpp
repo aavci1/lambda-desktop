@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <initializer_list>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -283,6 +284,16 @@ dbus::Slot NotificationsService::exportObject() {
               },
               dbus::ExportedMethod{
                   .interface = monitorInterfaceName,
+                  .member = "ClearHistory",
+                  .handler = [this](dbus::Message&) {
+                    dbus::MethodReply reply;
+                    reply.values = {dbus::BasicValue(static_cast<std::uint32_t>(
+                        std::min<std::size_t>(clearHistory(), std::numeric_limits<std::uint32_t>::max())))};
+                    return reply;
+                  },
+              },
+              dbus::ExportedMethod{
+                  .interface = monitorInterfaceName,
                   .member = invokeActionMethodName,
                   .handler = [this](dbus::Message& message) {
                     std::uint32_t const id = message.readUint32();
@@ -325,6 +336,7 @@ std::uint32_t NotificationsService::notify(std::string appName,
                                            dbus::VariantDictionary hints,
                                            std::int32_t expireTimeoutMs) {
   NotificationHints parsedHints = parseHints(hints);
+  auto const now = std::chrono::steady_clock::now();
   if (replacesId != 0) {
     if (auto* existing = find(replacesId)) {
       existing->appName = std::move(appName);
@@ -334,6 +346,7 @@ std::uint32_t NotificationsService::notify(std::string appName,
       existing->actions = parseActions(actions);
       existing->hints = std::move(parsedHints);
       existing->expireTimeoutMs = expireTimeoutMs;
+      existing->postedAt = now;
       existing->closed = false;
       existing->closeReason = NotificationCloseReason::Undefined;
       emitPosted(*existing);
@@ -352,6 +365,7 @@ std::uint32_t NotificationsService::notify(std::string appName,
                             .expireTimeoutMs = expireTimeoutMs,
                             .actions = parseActions(actions),
                             .hints = std::move(parsedHints),
+                            .postedAt = now,
                         });
   trimHistory();
   emitPosted(notifications_.front());
@@ -359,13 +373,19 @@ std::uint32_t NotificationsService::notify(std::string appName,
 }
 
 bool NotificationsService::closeNotification(std::uint32_t id, NotificationCloseReason reason) {
-  auto* record = find(id);
-  if (!record || record->closed) {
+  auto it = std::find_if(notifications_.begin(), notifications_.end(), [&](auto const& notification) {
+    return notification.id == id;
+  });
+  if (it == notifications_.end() || it->closed) {
     return false;
   }
-  record->closed = true;
-  record->closeReason = reason;
+  it->closed = true;
+  it->closeReason = reason;
+  bool const transient = it->hints.transient;
   emitClosed(id, reason);
+  if (transient) {
+    notifications_.erase(it);
+  }
   return true;
 }
 
@@ -384,6 +404,43 @@ bool NotificationsService::invokeAction(std::uint32_t id, std::string actionKey)
   return true;
 }
 
+std::size_t NotificationsService::clearHistory(NotificationCloseReason reason) {
+  std::vector<std::uint32_t> closedIds;
+  closedIds.reserve(notifications_.size());
+  for (auto& notification : notifications_) {
+    if (!notification.closed) {
+      notification.closed = true;
+      notification.closeReason = reason;
+      closedIds.push_back(notification.id);
+    }
+  }
+  notifications_.clear();
+  for (std::uint32_t id : closedIds) {
+    emitClosed(id, reason);
+  }
+  return closedIds.size();
+}
+
+std::size_t NotificationsService::expireDueNotifications(std::chrono::steady_clock::time_point now) {
+  std::size_t expired = 0;
+  std::vector<std::uint32_t> ids;
+  ids.reserve(notifications_.size());
+  for (auto const& notification : notifications_) {
+    if (!notification.closed &&
+        !notification.hints.resident &&
+        notification.expireTimeoutMs > 0 &&
+        notification.postedAt + std::chrono::milliseconds(notification.expireTimeoutMs) <= now) {
+      ids.push_back(notification.id);
+    }
+  }
+  for (std::uint32_t id : ids) {
+    if (closeNotification(id, NotificationCloseReason::Expired)) {
+      ++expired;
+    }
+  }
+  return expired;
+}
+
 std::vector<std::string> NotificationsService::capabilities() const {
   return {"actions", "body", "body-markup", "persistence"};
 }
@@ -393,6 +450,20 @@ std::optional<NotificationRecord> NotificationsService::notification(std::uint32
     return *record;
   }
   return std::nullopt;
+}
+
+std::optional<std::chrono::steady_clock::time_point> NotificationsService::nextExpirationDeadline() const {
+  std::optional<std::chrono::steady_clock::time_point> deadline;
+  for (auto const& notification : notifications_) {
+    if (notification.closed || notification.hints.resident || notification.expireTimeoutMs <= 0) {
+      continue;
+    }
+    auto const candidate = notification.postedAt + std::chrono::milliseconds(notification.expireTimeoutMs);
+    if (!deadline || candidate < *deadline) {
+      deadline = candidate;
+    }
+  }
+  return deadline;
 }
 
 NotificationRecord* NotificationsService::find(std::uint32_t id) {
@@ -436,8 +507,30 @@ void NotificationsService::emitActionInvoked(std::uint32_t id, std::string const
 
 void NotificationsService::trimHistory() {
   if (notifications_.size() > historyLimit_) {
+    std::vector<std::uint32_t> closedIds;
+    closedIds.reserve(notifications_.size() - historyLimit_);
+    for (std::size_t index = historyLimit_; index < notifications_.size(); ++index) {
+      if (!notifications_[index].closed) {
+        notifications_[index].closed = true;
+        notifications_[index].closeReason = NotificationCloseReason::Undefined;
+        closedIds.push_back(notifications_[index].id);
+      }
+    }
     notifications_.resize(historyLimit_);
+    for (std::uint32_t id : closedIds) {
+      emitClosed(id, NotificationCloseReason::Undefined);
+    }
   }
+  pruneClosedTransient();
+}
+
+void NotificationsService::pruneClosedTransient() {
+  notifications_.erase(std::remove_if(notifications_.begin(),
+                                      notifications_.end(),
+                                      [](NotificationRecord const& notification) {
+                                        return notification.closed && notification.hints.transient;
+                                      }),
+                       notifications_.end());
 }
 
 NotificationsClient::NotificationsClient(dbus::Bus bus) : bus_(std::move(bus)) {}
@@ -497,6 +590,17 @@ void NotificationsClient::closeNotification(std::uint32_t id) {
       .member = "CloseNotification",
       .arguments = {id},
   });
+}
+
+std::uint32_t NotificationsClient::clearHistory() {
+  auto reply = bus_.call(dbus::MethodCall{
+      .destination = NotificationsService::serviceName,
+      .path = NotificationsService::objectPath,
+      .interface = NotificationsService::monitorInterfaceName,
+      .member = "ClearHistory",
+      .arguments = {},
+  });
+  return reply.readUint32();
 }
 
 void NotificationsClient::invokeAction(std::uint32_t id, std::string actionKey) {

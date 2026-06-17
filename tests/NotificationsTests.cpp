@@ -60,6 +60,17 @@ std::shared_ptr<lambda::dbus::VariantDictionary> notificationHints() {
   return hints;
 }
 
+lambda::dbus::VariantDictionary policyHints(bool resident = false, bool transient = false) {
+  lambda::dbus::VariantDictionary hints;
+  if (resident) {
+    hints.values["resident"] = true;
+  }
+  if (transient) {
+    hints.values["transient"] = true;
+  }
+  return hints;
+}
+
 } // namespace
 
 TEST_CASE("Notifications support is compile-time declared") {
@@ -342,6 +353,112 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
                   [&] { return invokedId == actionId && invokedAction == "default"; },
                   std::chrono::milliseconds(500)));
 
+}
+
+TEST_CASE("NotificationsService expires and clears daemon history by policy") {
+  auto privateBus = startPrivateBus();
+  if (!privateBus) {
+    MESSAGE("Skipping notifications policy test because a private bus could not be started in this environment");
+    return;
+  }
+
+  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
+  auto controlClient = lambda::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambda::system::NotificationsService::serviceName);
+
+  lambda::system::NotificationsService service(serviceBus, 8);
+  auto objectSlot = service.exportObject();
+
+  std::vector<std::pair<std::uint32_t, lambda::system::NotificationCloseReason>> closedSignals;
+  auto closedSlot = client.matchSignal(
+      lambda::dbus::SignalMatch{
+          .sender = lambda::system::NotificationsService::serviceName,
+          .path = lambda::system::NotificationsService::objectPath,
+          .interface = lambda::system::NotificationsService::interfaceName,
+          .member = "NotificationClosed",
+      },
+      [&](lambda::dbus::Message& message) {
+        closedSignals.push_back({message.readUint32(),
+                                 static_cast<lambda::system::NotificationCloseReason>(message.readUint32())});
+      });
+
+  auto expiring = service.notify("app",
+                                 0,
+                                 "",
+                                 "Expiring",
+                                 "Body",
+                                 lambda::dbus::StringArray{},
+                                 policyHints(),
+                                 10);
+  auto resident = service.notify("app",
+                                 0,
+                                 "",
+                                 "Resident",
+                                 "Body",
+                                 lambda::dbus::StringArray{},
+                                 policyHints(true, false),
+                                 10);
+  auto sticky = service.notify("app",
+                               0,
+                               "",
+                               "Sticky",
+                               "Body",
+                               lambda::dbus::StringArray{},
+                               policyHints(),
+                               0);
+  auto transient = service.notify("app",
+                                  0,
+                                  "",
+                                  "Transient",
+                                  "Body",
+                                  lambda::dbus::StringArray{},
+                                  policyHints(false, true),
+                                  10);
+
+  auto const deadline = service.nextExpirationDeadline();
+  REQUIRE(deadline);
+  CHECK(service.expireDueNotifications(*deadline - std::chrono::milliseconds(1)) == 0);
+  CHECK(service.expireDueNotifications(*deadline + std::chrono::milliseconds(1)) == 2);
+  serviceBus.flush();
+  CHECK(pumpUntil(client,
+                  [&] { return closedSignals.size() == 2; },
+                  std::chrono::milliseconds(500)));
+  auto expiringRecord = service.notification(expiring);
+  REQUIRE(expiringRecord);
+  CHECK(expiringRecord->closed);
+  CHECK(expiringRecord->closeReason == lambda::system::NotificationCloseReason::Expired);
+  auto residentRecord = service.notification(resident);
+  REQUIRE(residentRecord);
+  CHECK_FALSE(residentRecord->closed);
+  auto stickyRecord = service.notification(sticky);
+  REQUIRE(stickyRecord);
+  CHECK_FALSE(stickyRecord->closed);
+  CHECK_FALSE(service.notification(transient));
+
+  std::atomic<bool> running = true;
+  std::thread serviceThread([&] {
+    while (running.load()) {
+      pollBus(serviceBus, 25);
+    }
+  });
+  ScopeExit stopServiceThread([&] {
+    running = false;
+    if (serviceThread.joinable()) {
+      serviceThread.join();
+    }
+  });
+
+  std::uint32_t const cleared = lambda::system::NotificationsClient(std::move(controlClient)).clearHistory();
+  running = false;
+  if (serviceThread.joinable()) {
+    serviceThread.join();
+  }
+  CHECK(cleared == 2);
+  CHECK(pumpUntil(client,
+                  [&] { return closedSignals.size() == 4; },
+                  std::chrono::milliseconds(500)));
+  CHECK(service.history().empty());
 }
 
 #endif
