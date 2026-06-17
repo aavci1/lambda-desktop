@@ -150,6 +150,13 @@ struct NetworkManagerSnapshot {
   bool operator==(NetworkManagerSnapshot const&) const = default;
 };
 
+struct NetworkActivationResult {
+  std::string connectionPath;
+  std::string activeConnectionPath;
+
+  bool operator==(NetworkActivationResult const&) const = default;
+};
+
 struct NetworkManagerStatusWatch {
   dbus::Slot managerChanged;
   dbus::Slot deviceOrAccessPointChanged;
@@ -189,6 +196,14 @@ public:
   [[nodiscard]] NetworkManagerSnapshot readSnapshot();
   [[nodiscard]] dbus::Slot watchManagerChanged(std::function<void()> handler);
   [[nodiscard]] NetworkManagerStatusWatch watchStatusChanges(std::function<void()> handler);
+  [[nodiscard]] std::string activateConnection(std::string connectionPath,
+                                               std::string devicePath,
+                                               std::string specificObjectPath = {});
+  [[nodiscard]] NetworkActivationResult addAndActivateWirelessConnection(std::string ssid,
+                                                                         std::string devicePath,
+                                                                         std::string accessPointPath,
+                                                                         std::string password = {});
+  void deactivateConnection(std::string activeConnectionPath);
   void setWirelessEnabled(bool enabled);
 
 private:

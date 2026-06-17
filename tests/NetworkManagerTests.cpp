@@ -100,6 +100,14 @@ TEST_CASE("NetworkManagerClient reads device and Wi-Fi status") {
       static_cast<std::uint32_t>(lambda::system::NetworkDeviceState::Activated);
   std::uint8_t strength = 82;
   std::string ssid = "LambdaNet";
+  std::string activatedConnection;
+  std::string activatedDevice;
+  std::string activatedSpecificObject;
+  lambda::dbus::NamespacedVariantDictionary addedConnectionSettings;
+  std::string addActivateDevice;
+  std::string addActivateSpecificObject;
+  int addActivateCalls = 0;
+  std::string deactivatedConnection;
 
   auto managerSlot = service.exportObject(
       lambda::system::NetworkManagerClient::objectPath,
@@ -112,6 +120,40 @@ TEST_CASE("NetworkManagerClient reads device and Wi-Fi status") {
                     return lambda::dbus::MethodReply{
                         .values = {objectPaths({kEthernetDevicePath, kWifiDevicePath})},
                     };
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = lambda::system::NetworkManagerClient::interfaceName,
+                  .member = "ActivateConnection",
+                  .handler = [&](lambda::dbus::Message& message) {
+                    activatedConnection = message.readObjectPath().value;
+                    activatedDevice = message.readObjectPath().value;
+                    activatedSpecificObject = message.readObjectPath().value;
+                    return lambda::dbus::MethodReply{
+                        .values = {lambda::dbus::ObjectPath{kActiveConnectionPath}},
+                    };
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = lambda::system::NetworkManagerClient::interfaceName,
+                  .member = "AddAndActivateConnection",
+                  .handler = [&](lambda::dbus::Message& message) {
+                    addedConnectionSettings = message.readNamespacedVariantDictionary();
+                    addActivateDevice = message.readObjectPath().value;
+                    addActivateSpecificObject = message.readObjectPath().value;
+                    ++addActivateCalls;
+                    return lambda::dbus::MethodReply{
+                        .values = {lambda::dbus::ObjectPath{kSavedConnectionPath},
+                                   lambda::dbus::ObjectPath{kActiveConnectionPath}},
+                    };
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = lambda::system::NetworkManagerClient::interfaceName,
+                  .member = "DeactivateConnection",
+                  .handler = [&](lambda::dbus::Message& message) {
+                    deactivatedConnection = message.readObjectPath().value;
+                    return lambda::dbus::MethodReply{};
                   },
               },
           },
@@ -616,6 +658,40 @@ TEST_CASE("NetworkManagerClient reads device and Wi-Fi status") {
   CHECK(!wirelessEnabled);
   snapshot = client.readSnapshot();
   CHECK(lambda::system::formatWifiStatus(snapshot) == "off");
+
+  auto activatedPath = client.activateConnection(kSavedConnectionPath, kWifiDevicePath, kAccessPointPath);
+  CHECK(activatedPath == kActiveConnectionPath);
+  CHECK(activatedConnection == kSavedConnectionPath);
+  CHECK(activatedDevice == kWifiDevicePath);
+  CHECK(activatedSpecificObject == kAccessPointPath);
+
+  auto activationResult =
+      client.addAndActivateWirelessConnection("CoffeeGuest", kWifiDevicePath, kSecondAccessPointPath);
+  CHECK(activationResult.connectionPath == kSavedConnectionPath);
+  CHECK(activationResult.activeConnectionPath == kActiveConnectionPath);
+  CHECK(addActivateCalls == 1);
+  CHECK(addActivateDevice == kWifiDevicePath);
+  CHECK(addActivateSpecificObject == kSecondAccessPointPath);
+  CHECK(std::get<std::string>(addedConnectionSettings.values["connection"]["id"]) == "CoffeeGuest");
+  CHECK(std::get<std::string>(addedConnectionSettings.values["connection"]["type"]) == "802-11-wireless");
+  CHECK(std::get<bool>(addedConnectionSettings.values["connection"]["autoconnect"]));
+  CHECK(std::get<std::string>(addedConnectionSettings.values["802-11-wireless"]["mode"]) == "infrastructure");
+  CHECK(std::get<lambda::dbus::ByteArray>(
+            addedConnectionSettings.values["802-11-wireless"]["ssid"]).values == ssidBytes("CoffeeGuest").values);
+  CHECK_FALSE(addedConnectionSettings.values.contains("802-11-wireless-security"));
+
+  activationResult =
+      client.addAndActivateWirelessConnection("SecureNet", kWifiDevicePath, kSecondAccessPointPath, "correct horse");
+  CHECK(activationResult.activeConnectionPath == kActiveConnectionPath);
+  CHECK(addActivateCalls == 2);
+  CHECK(std::get<std::string>(addedConnectionSettings.values["connection"]["id"]) == "SecureNet");
+  CHECK(std::get<std::string>(
+            addedConnectionSettings.values["802-11-wireless-security"]["key-mgmt"]) == "wpa-psk");
+  CHECK(std::get<std::string>(
+            addedConnectionSettings.values["802-11-wireless-security"]["psk"]) == "correct horse");
+
+  client.deactivateConnection(kActiveConnectionPath);
+  CHECK(deactivatedConnection == kActiveConnectionPath);
 
   managerState = static_cast<std::uint32_t>(lambda::system::NetworkManagerState::Connecting);
   wifiState = static_cast<std::uint32_t>(lambda::system::NetworkDeviceState::Config);

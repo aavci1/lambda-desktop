@@ -24,6 +24,52 @@ std::string decodeSsid(dbus::ByteArray const& bytes) {
   return ssid;
 }
 
+dbus::ByteArray encodeSsid(std::string_view ssid) {
+  dbus::ByteArray bytes;
+  bytes.values.reserve(ssid.size());
+  for (char ch : ssid) {
+    bytes.values.push_back(static_cast<std::uint8_t>(ch));
+  }
+  return bytes;
+}
+
+dbus::ObjectPath objectPathOrRoot(std::string path) {
+  if (path.empty()) {
+    path = "/";
+  }
+  return dbus::ObjectPath{std::move(path)};
+}
+
+std::shared_ptr<dbus::DictionaryValue>
+variantDictionaryValue(std::map<std::string, dbus::BasicValue> const& values) {
+  auto dictionary = std::make_shared<dbus::DictionaryValue>();
+  dictionary->keySignature = "s";
+  dictionary->valueSignature = "v";
+  dictionary->entries.reserve(values.size());
+  for (auto const& [key, value] : values) {
+    dictionary->entries.push_back(dbus::DictionaryEntry{
+        .key = key,
+        .value = value,
+    });
+  }
+  return dictionary;
+}
+
+std::shared_ptr<dbus::DictionaryValue>
+namespacedDictionaryValue(dbus::NamespacedVariantDictionary const& settings) {
+  auto dictionary = std::make_shared<dbus::DictionaryValue>();
+  dictionary->keySignature = "s";
+  dictionary->valueSignature = "a{sv}";
+  dictionary->entries.reserve(settings.values.size());
+  for (auto const& [group, values] : settings.values) {
+    dictionary->entries.push_back(dbus::DictionaryEntry{
+        .key = group,
+        .value = variantDictionaryValue(values),
+    });
+  }
+  return dictionary;
+}
+
 bool connectedState(NetworkManagerState state) {
   return state == NetworkManagerState::ConnectedLocal || state == NetworkManagerState::ConnectedSite ||
          state == NetworkManagerState::ConnectedGlobal;
@@ -304,6 +350,61 @@ void NetworkManagerClient::setWirelessEnabled(bool enabled) {
                        .name = "WirelessEnabled",
                    },
                    enabled);
+}
+
+std::string NetworkManagerClient::activateConnection(std::string connectionPath,
+                                                     std::string devicePath,
+                                                     std::string specificObjectPath) {
+  dbus::Message reply = bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = objectPath,
+      .interface = interfaceName,
+      .member = "ActivateConnection",
+      .arguments = {objectPathOrRoot(std::move(connectionPath)),
+                    objectPathOrRoot(std::move(devicePath)),
+                    objectPathOrRoot(std::move(specificObjectPath))},
+  });
+  return reply.readObjectPath().value;
+}
+
+NetworkActivationResult NetworkManagerClient::addAndActivateWirelessConnection(std::string ssid,
+                                                                               std::string devicePath,
+                                                                               std::string accessPointPath,
+                                                                               std::string password) {
+  dbus::NamespacedVariantDictionary settings;
+  settings.values["connection"]["id"] = ssid;
+  settings.values["connection"]["type"] = std::string("802-11-wireless");
+  settings.values["connection"]["autoconnect"] = true;
+  settings.values["802-11-wireless"]["mode"] = std::string("infrastructure");
+  settings.values["802-11-wireless"]["ssid"] = encodeSsid(ssid);
+  if (!password.empty()) {
+    settings.values["802-11-wireless-security"]["key-mgmt"] = std::string("wpa-psk");
+    settings.values["802-11-wireless-security"]["psk"] = std::move(password);
+  }
+
+  dbus::Message reply = bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = objectPath,
+      .interface = interfaceName,
+      .member = "AddAndActivateConnection",
+      .arguments = {namespacedDictionaryValue(settings),
+                    objectPathOrRoot(std::move(devicePath)),
+                    objectPathOrRoot(std::move(accessPointPath))},
+  });
+  return NetworkActivationResult{
+      .connectionPath = reply.readObjectPath().value,
+      .activeConnectionPath = reply.readObjectPath().value,
+  };
+}
+
+void NetworkManagerClient::deactivateConnection(std::string activeConnectionPath) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = objectPath,
+      .interface = interfaceName,
+      .member = "DeactivateConnection",
+      .arguments = {objectPathOrRoot(std::move(activeConnectionPath))},
+  });
 }
 
 dbus::BasicValue NetworkManagerClient::getManagerProperty(std::string const& name,

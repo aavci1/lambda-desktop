@@ -305,7 +305,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Wire NetworkManager manager `PropertiesChanged` into production Shell through `BusEventPump` so global network state and Wi-Fi enablement can refresh immediately instead of waiting for the polling timer.
 - [x] [Auto] Wire NetworkManager device and access-point `PropertiesChanged` plus device add/remove signals into production Shell through `BusEventPump` so active interface, SSID, and signal strength update without waiting for the polling timer.
 - [x] [Auto] Enumerate visible access points, saved connections, active connections, metered state, connectivity state, and VPN state for Shell quick settings and Settings. Covered by `NetworkManagerTests.cpp` against a private fake bus.
-- [ ] [Auto + Manual] Implement Wi-Fi access-point connect/disconnect flows, including a secrets path for password-protected networks.
+- [x] [Auto] Add NetworkManager activation primitives for saved-connection activation, new Wi-Fi `AddAndActivateConnection` with optional WPA-PSK secret settings, and active-connection deactivation. Validation: `NetworkManagerTests.cpp` covers all three methods against a private fake bus.
+- [ ] [Auto + Manual] Wire Wi-Fi access-point connect/disconnect flows into Shell/Settings UI, including password collection for protected networks.
 - [ ] [Auto + Manual] Build the Settings network page for saved networks, VPNs, and detailed adapter/IP state.
 - [ ] [Manual] Validate against the real system bus: Ethernet, Wi-Fi connect/disconnect, Wi-Fi enable/disable, captive/limited connectivity, and no-NetworkManager fallback all report truthfully in the Shell docklet.
 
