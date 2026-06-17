@@ -175,6 +175,9 @@ public:
   /// Registers a non-blocking file descriptor polled each `exec()` iteration before platform I/O.
   /// Returns an opaque id for `unregisterEventPollSource`. `fd` must stay valid until unregister.
   std::uint64_t registerEventPollSource(int fd, std::function<void()> onReadable);
+  std::uint64_t registerEventPollSource(int fd,
+                                        std::function<int()> eventMask,
+                                        std::function<void(int)> onReady);
   void unregisterEventPollSource(std::uint64_t id);
 
   friend class Window;

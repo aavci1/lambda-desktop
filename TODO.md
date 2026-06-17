@@ -173,7 +173,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add deterministic fixture tests for the first MPRIS client that consumes `lambda::dbus`.
 - [x] [Auto] Add deterministic fixture tests for the first UDisks2 client that consumes `lambda::dbus`.
 - [x] [Auto] Add a shared `Bus::waitAndProcess` fd-pumping helper and switch first-party service daemons plus private-bus fixtures to it.
-- [ ] [Auto + Manual] Wire remaining D-Bus fd pumping into compositor runtime paths that will host SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
+- [x] [Auto] Harden Application-backed D-Bus fd pumping: `Application` poll sources now support dynamic event masks, safe unregister during callbacks, and `BusEventPump` follows `Bus::eventMask()` with a `POLLIN` fallback; private-bus tests cover an Application-serviced D-Bus method call.
+- [ ] [Auto + Manual] Wire remaining D-Bus fd pumping into direct KMS compositor runtime paths that will host in-process SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
 
 ## TODO-021: Complete SVC-2 libseat seat/session integration
 

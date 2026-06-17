@@ -1979,9 +1979,15 @@ void Bus::flush() {
 }
 
 BusEventPump::BusEventPump(Application& application, Bus& bus) : application_(&application) {
-  pollSourceId_ = application.registerEventPollSource(bus.eventFileDescriptor(), [&bus] {
-    (void)bus.processPending();
-  });
+  pollSourceId_ = application.registerEventPollSource(
+      bus.eventFileDescriptor(),
+      [&bus] {
+        int const mask = bus.eventMask();
+        return mask > 0 ? mask : POLLIN;
+      },
+      [&bus](int) {
+        (void)bus.processPending();
+      });
 }
 
 BusEventPump::~BusEventPump() {

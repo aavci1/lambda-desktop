@@ -1,4 +1,5 @@
 #include <Lambda/System/DBus.hpp>
+#include <Lambda/UI/Application.hpp>
 
 #include "DBusTestHelpers.hpp"
 
@@ -390,6 +391,62 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
 
   running = false;
   serviceThread.join();
+}
+
+TEST_CASE("DBus event pump services calls through Application poll sources") {
+  auto privateBus = startPrivateBus();
+  if (!privateBus) {
+    MESSAGE("Skipping D-Bus event-pump test because a private bus could not be started in this environment");
+    return;
+  }
+
+  lambda::Application app;
+  auto service = lambda::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
+  std::string const serviceName =
+      "org.lambda.DBusPumpTest" + std::to_string(static_cast<unsigned long long>(getpid()));
+  service.requestName(serviceName);
+  auto objectSlot = service.exportObject(
+      "/org/lambda/DBusPumpTest",
+      lambda::dbus::ObjectDefinition{
+          .methods = {
+              lambda::dbus::ExportedMethod{
+                  .interface = "org.lambda.DBusPumpTest",
+                  .member = "Echo",
+                  .handler = [](lambda::dbus::Message& message) {
+                    return lambda::dbus::MethodReply{.values = {message.readString()}};
+                  },
+              },
+          },
+      });
+  lambda::dbus::BusEventPump pump(app, service);
+
+  std::atomic<bool> callDone = false;
+  std::atomic<bool> callSucceeded = false;
+  std::thread clientThread([&] {
+    try {
+      auto reply = client.call(lambda::dbus::MethodCall{
+          .destination = serviceName,
+          .path = "/org/lambda/DBusPumpTest",
+          .interface = "org.lambda.DBusPumpTest",
+          .member = "Echo",
+          .arguments = {std::string("pumped")},
+          .timeoutUsec = 1'000'000,
+      });
+      callSucceeded.store(reply.readString() == "pumped");
+    } catch (...) {
+      callSucceeded.store(false);
+    }
+    callDone.store(true);
+    app.quit();
+  });
+
+  int const exitCode = app.exec();
+  clientThread.join();
+
+  CHECK(exitCode == 0);
+  CHECK(callDone.load());
+  CHECK(callSucceeded.load());
 }
 
 #endif

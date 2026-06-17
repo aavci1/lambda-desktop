@@ -275,20 +275,36 @@ struct Application::Impl {
   struct PollSourceEntry {
     std::uint64_t id = 0;
     int fd = -1;
-    std::function<void()> onReadable;
+    std::function<int()> eventMask;
+    std::function<void(int)> onReady;
   };
   std::vector<PollSourceEntry> pollSources_;
   std::uint64_t nextPollSourceId_ = 1;
 
   void dispatchPollSources() {
+    std::vector<std::uint64_t> ids;
+    ids.reserve(pollSources_.size());
     for (auto const& source : pollSources_) {
-      if (source.fd < 0 || !source.onReadable) {
+      ids.push_back(source.id);
+    }
+    for (std::uint64_t const id : ids) {
+      auto it = std::find_if(pollSources_.begin(), pollSources_.end(),
+                             [&](PollSourceEntry const& entry) {
+                               return entry.id == id;
+                             });
+      if (it == pollSources_.end() || it->fd < 0 || !it->onReady) {
         continue;
       }
-      pollfd pfd{.fd = source.fd, .events = POLLIN, .revents = 0};
+      int const requestedEvents = it->eventMask ? it->eventMask() : POLLIN;
+      if (requestedEvents <= 0) {
+        continue;
+      }
+      pollfd pfd{.fd = it->fd, .events = static_cast<short>(requestedEvents), .revents = 0};
       int const ready = poll(&pfd, 1, 0);
-      if (ready > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL))) {
-        source.onReadable();
+      int const readyEvents = pfd.revents & (requestedEvents | POLLHUP | POLLERR | POLLNVAL);
+      if (ready > 0 && readyEvents != 0) {
+        auto onReady = it->onReady;
+        onReady(readyEvents);
       }
     }
   }
@@ -782,11 +798,31 @@ void Application::cancelTimer(std::uint64_t timerId) {
 }
 
 std::uint64_t Application::registerEventPollSource(int fd, std::function<void()> onReadable) {
+  return registerEventPollSource(
+      fd,
+      [] {
+        return POLLIN;
+      },
+      [onReadable = std::move(onReadable)](int) mutable {
+        if (onReadable) {
+          onReadable();
+        }
+      });
+}
+
+std::uint64_t Application::registerEventPollSource(int fd,
+                                                   std::function<int()> eventMask,
+                                                   std::function<void(int)> onReady) {
   if (fd < 0) {
     return 0;
   }
   std::uint64_t const id = d->nextPollSourceId_++;
-  d->pollSources_.push_back(Impl::PollSourceEntry{.id = id, .fd = fd, .onReadable = std::move(onReadable)});
+  d->pollSources_.push_back(Impl::PollSourceEntry{
+      .id = id,
+      .fd = fd,
+      .eventMask = std::move(eventMask),
+      .onReady = std::move(onReady),
+  });
   wakeEventLoop();
   return id;
 }
