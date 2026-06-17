@@ -103,6 +103,15 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   bool powered = true;
   bool discovering = false;
   bool connected = true;
+  bool trusted = true;
+  bool blocked = false;
+  int startDiscoveryCalls = 0;
+  int stopDiscoveryCalls = 0;
+  int pairCalls = 0;
+  int cancelPairingCalls = 0;
+  int connectCalls = 0;
+  int disconnectCalls = 0;
+  std::string removedDevicePath;
 
   auto managerSlot = service.exportObject(
       lambda::system::BlueZClient::objectManagerPath,
@@ -124,7 +133,34 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   auto adapterSlot = service.exportObject(
       kAdapterPath,
       lambda::dbus::ObjectDefinition{
-          .methods = {},
+          .methods = {
+              lambda::dbus::ExportedMethod{
+                  .interface = lambda::system::BlueZClient::adapterInterfaceName,
+                  .member = "StartDiscovery",
+                  .handler = [&](lambda::dbus::Message&) {
+                    discovering = true;
+                    ++startDiscoveryCalls;
+                    return lambda::dbus::MethodReply{};
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = lambda::system::BlueZClient::adapterInterfaceName,
+                  .member = "StopDiscovery",
+                  .handler = [&](lambda::dbus::Message&) {
+                    discovering = false;
+                    ++stopDiscoveryCalls;
+                    return lambda::dbus::MethodReply{};
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = lambda::system::BlueZClient::adapterInterfaceName,
+                  .member = "RemoveDevice",
+                  .handler = [&](lambda::dbus::Message& message) {
+                    removedDevicePath = message.readObjectPath().value;
+                    return lambda::dbus::MethodReply{};
+                  },
+              },
+          },
           .properties = {
               lambda::dbus::ExportedProperty{
                   .interface = lambda::system::BlueZClient::adapterInterfaceName,
@@ -134,6 +170,69 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
                   .getter = [&] { return lambda::dbus::BasicValue(powered); },
                   .setter = [&](lambda::dbus::BasicValue const& value) {
                     powered = std::get<bool>(value);
+                  },
+              },
+          },
+      });
+
+  auto deviceSlot = service.exportObject(
+      kDevicePath,
+      lambda::dbus::ObjectDefinition{
+          .methods = {
+              lambda::dbus::ExportedMethod{
+                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+                  .member = "Pair",
+                  .handler = [&](lambda::dbus::Message&) {
+                    ++pairCalls;
+                    return lambda::dbus::MethodReply{};
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+                  .member = "CancelPairing",
+                  .handler = [&](lambda::dbus::Message&) {
+                    ++cancelPairingCalls;
+                    return lambda::dbus::MethodReply{};
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+                  .member = "Connect",
+                  .handler = [&](lambda::dbus::Message&) {
+                    connected = true;
+                    ++connectCalls;
+                    return lambda::dbus::MethodReply{};
+                  },
+              },
+              lambda::dbus::ExportedMethod{
+                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+                  .member = "Disconnect",
+                  .handler = [&](lambda::dbus::Message&) {
+                    connected = false;
+                    ++disconnectCalls;
+                    return lambda::dbus::MethodReply{};
+                  },
+              },
+          },
+          .properties = {
+              lambda::dbus::ExportedProperty{
+                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+                  .name = "Trusted",
+                  .value = true,
+                  .writable = true,
+                  .getter = [&] { return lambda::dbus::BasicValue(trusted); },
+                  .setter = [&](lambda::dbus::BasicValue const& value) {
+                    trusted = std::get<bool>(value);
+                  },
+              },
+              lambda::dbus::ExportedProperty{
+                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+                  .name = "Blocked",
+                  .value = false,
+                  .writable = true,
+                  .getter = [&] { return lambda::dbus::BasicValue(blocked); },
+                  .setter = [&](lambda::dbus::BasicValue const& value) {
+                    blocked = std::get<bool>(value);
                   },
               },
           },
@@ -203,6 +302,29 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   CHECK(!powered);
   snapshot = client.readSnapshot();
   CHECK(lambda::system::formatBluetoothStatus(snapshot) == "off");
+
+  client.startDiscovery(kAdapterPath);
+  CHECK(discovering);
+  CHECK(startDiscoveryCalls == 1);
+  client.stopDiscovery(kAdapterPath);
+  CHECK_FALSE(discovering);
+  CHECK(stopDiscoveryCalls == 1);
+  client.pairDevice(kDevicePath);
+  CHECK(pairCalls == 1);
+  client.cancelDevicePairing(kDevicePath);
+  CHECK(cancelPairingCalls == 1);
+  client.connectDevice(kDevicePath);
+  CHECK(connected);
+  CHECK(connectCalls == 1);
+  client.disconnectDevice(kDevicePath);
+  CHECK_FALSE(connected);
+  CHECK(disconnectCalls == 1);
+  client.setDeviceTrusted(kDevicePath, false);
+  CHECK_FALSE(trusted);
+  client.setDeviceBlocked(kDevicePath, true);
+  CHECK(blocked);
+  client.removeDevice(kAdapterPath, kDevicePath);
+  CHECK(removedDevicePath == kDevicePath);
 
   int adapterChanges = 0;
   auto adapterChangedSlot = client.watchAdapterOrDeviceChanged([&] {

@@ -105,6 +105,15 @@ public:
   [[nodiscard]] dbus::Slot watchDeviceDisconnected(std::function<void(BlueZDeviceDisconnectedEvent)> handler);
   [[nodiscard]] BlueZStatusWatch watchStatusChanges(std::function<void()> handler);
   void setAdapterPowered(std::string const& adapterPath, bool powered);
+  void startDiscovery(std::string const& adapterPath);
+  void stopDiscovery(std::string const& adapterPath);
+  void removeDevice(std::string const& adapterPath, std::string const& devicePath);
+  void pairDevice(std::string const& devicePath);
+  void cancelDevicePairing(std::string const& devicePath);
+  void connectDevice(std::string const& devicePath);
+  void disconnectDevice(std::string const& devicePath);
+  void setDeviceTrusted(std::string const& devicePath, bool trusted);
+  void setDeviceBlocked(std::string const& devicePath, bool blocked);
 
 private:
   [[nodiscard]] dbus::ManagedObjectDictionary managedObjects();

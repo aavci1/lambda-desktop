@@ -227,6 +227,96 @@ void BlueZClient::setAdapterPowered(std::string const& adapterPath, bool powered
                    powered);
 }
 
+void BlueZClient::startDiscovery(std::string const& adapterPath) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = adapterPath,
+      .interface = adapterInterfaceName,
+      .member = "StartDiscovery",
+      .arguments = {},
+  });
+}
+
+void BlueZClient::stopDiscovery(std::string const& adapterPath) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = adapterPath,
+      .interface = adapterInterfaceName,
+      .member = "StopDiscovery",
+      .arguments = {},
+  });
+}
+
+void BlueZClient::removeDevice(std::string const& adapterPath, std::string const& devicePath) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = adapterPath,
+      .interface = adapterInterfaceName,
+      .member = "RemoveDevice",
+      .arguments = {dbus::ObjectPath{devicePath}},
+  });
+}
+
+void BlueZClient::pairDevice(std::string const& devicePath) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = devicePath,
+      .interface = deviceInterfaceName,
+      .member = "Pair",
+      .arguments = {},
+  });
+}
+
+void BlueZClient::cancelDevicePairing(std::string const& devicePath) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = devicePath,
+      .interface = deviceInterfaceName,
+      .member = "CancelPairing",
+      .arguments = {},
+  });
+}
+
+void BlueZClient::connectDevice(std::string const& devicePath) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = devicePath,
+      .interface = deviceInterfaceName,
+      .member = "Connect",
+      .arguments = {},
+  });
+}
+
+void BlueZClient::disconnectDevice(std::string const& devicePath) {
+  (void)bus_.call(dbus::MethodCall{
+      .destination = serviceName,
+      .path = devicePath,
+      .interface = deviceInterfaceName,
+      .member = "Disconnect",
+      .arguments = {},
+  });
+}
+
+void BlueZClient::setDeviceTrusted(std::string const& devicePath, bool trusted) {
+  bus_.setProperty(dbus::PropertyAddress{
+                       .destination = serviceName,
+                       .path = devicePath,
+                       .interface = deviceInterfaceName,
+                       .name = "Trusted",
+                   },
+                   trusted);
+}
+
+void BlueZClient::setDeviceBlocked(std::string const& devicePath, bool blocked) {
+  bus_.setProperty(dbus::PropertyAddress{
+                       .destination = serviceName,
+                       .path = devicePath,
+                       .interface = deviceInterfaceName,
+                       .name = "Blocked",
+                   },
+                   blocked);
+}
+
 dbus::Slot BlueZClient::watchAdapterOrDeviceChanged(std::function<void()> handler) {
   return bus_.matchSignal(
       dbus::SignalMatch{

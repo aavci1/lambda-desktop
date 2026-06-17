@@ -319,7 +319,8 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Wire BlueZ adapter/device `PropertiesChanged` into production Shell through `BusEventPump` so power and connection state can refresh immediately instead of waiting for the polling timer.
 - [x] [Auto] Wire BlueZ ObjectManager add/remove signals into production Shell through `BusEventPump` so adapter and device arrival/removal update without waiting for the polling timer.
 - [x] [Auto] Enumerate adapters and devices with richer state: discoverable/discovering, trusted/blocked, paired/unpaired, battery where exposed, icon/class/category, and connection errors. Covered by `BlueZTests.cpp` against a private fake bus.
-- [ ] [Auto + Manual] Expand Bluetooth controls with discovery, pairing-agent, pair/unpair, trust/untrust, connect/disconnect, per-adapter handling, and forget-device flows.
+- [x] [Auto] Add BlueZ control primitives for adapter discovery, device pair/cancel-pair/connect/disconnect, trust/block property writes, and adapter `RemoveDevice` forget flow. Validation: `BlueZTests.cpp` covers all methods against a private fake bus.
+- [ ] [Auto + Manual] Wire Bluetooth controls into Shell/Settings UI with pairing-agent prompts, per-adapter handling, and manual real-device validation.
 - [ ] [Auto + Manual] Build the Settings Bluetooth page for pairing, device management, and adapter details.
 - [ ] [Manual] Validate against the real system bus: adapter power on/off, device pair/connect/disconnect, no-adapter fallback, and Bluetooth controller removal all report truthfully in the Shell docklet.
 
