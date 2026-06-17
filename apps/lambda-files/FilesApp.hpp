@@ -272,19 +272,36 @@ struct SideItemRow {
 };
 
 struct FilesVolumeWatcher {
-  FilesVolumeWatcher(lambda::Application& app, std::function<bool()> refreshPlaces)
+  FilesVolumeWatcher(lambda::Application& app,
+                     FilesPreferences preferences,
+                     std::function<bool()> refreshPlaces)
       : refreshPlaces(std::move(refreshPlaces)),
+        preferences(std::move(preferences)),
         udisks(lambda::system::UDisks2Client::connectSystem()),
         pump(app, udisks.bus()),
         changed(udisks.watchStatusChanges([this] { refresh(); })) {}
 
   void refresh() {
+    applyAutoMountPolicy();
     if (refreshPlaces && refreshPlaces() && lambda::Application::hasInstance()) {
       lambda::Application::instance().requestRedraw();
     }
   }
 
+  void applyAutoMountPolicy() {
+    if (!preferences.autoMountRemovable) {
+      return;
+    }
+    try {
+      for (auto const& request : autoMountRequestsForVolumes(udisks.readSnapshot(), preferences)) {
+        (void)udisks.tryMountFilesystem(request.volumePath, request.options);
+      }
+    } catch (...) {
+    }
+  }
+
   std::function<bool()> refreshPlaces;
+  FilesPreferences preferences;
   lambda::system::UDisks2Client udisks;
   lambda::dbus::BusEventPump pump;
   lambda::system::UDisks2StatusWatch changed;
@@ -680,12 +697,13 @@ struct FilesAppRoot {
       });
     }
 
-    useEffect([syncPlaces] {
+    useEffect([syncPlaces, preferences] {
       if (!Application::hasInstance()) {
         return;
       }
       try {
-        auto watcher = std::make_shared<FilesVolumeWatcher>(Application::instance(), syncPlaces);
+        auto watcher = std::make_shared<FilesVolumeWatcher>(Application::instance(), preferences(), syncPlaces);
+        watcher->refresh();
         std::shared_ptr<void> keepAlive = watcher;
         Reactive::onCleanup([keepAlive] {});
       } catch (...) {

@@ -943,6 +943,34 @@ SidebarVolumeActionResult performSidebarVolumeAction(SidebarPlace const& place,
   return disabledVolumeAction("Storage operation failed.");
 }
 
+std::vector<FilesAutoMountRequest> autoMountRequestsForVolumes(lambda::system::UDisks2Snapshot const& snapshot,
+                                                               FilesPreferences const& preferences) {
+  if (!preferences.autoMountRemovable) {
+    return {};
+  }
+
+  std::vector<FilesAutoMountRequest> requests;
+  for (auto const& volume : snapshot.volumes) {
+    if (!volume.userVisible() || !volume.hasFilesystem || volume.mounted() || !volume.hintAuto ||
+        !volume.jobs.empty()) {
+      continue;
+    }
+    if (volume.encrypted && !volume.cleartext) {
+      continue;
+    }
+
+    lambda::system::UDisks2MountOptions options;
+    if (preferences.autoMountReadOnly) {
+      options.mountOptions = "ro";
+    }
+    requests.push_back({
+        .volumePath = volume.path,
+        .options = std::move(options),
+    });
+  }
+  return requests;
+}
+
 std::string gridDisplayName(std::string name) {
   constexpr std::size_t kMaxChars = 20;
   if (kMaxChars <= 3) {
@@ -2195,6 +2223,12 @@ FilesPreferences parseFilesPreferencesToml(std::string_view tomlText) {
     } else if (key == "show_trash") {
       if (lower == "true" || lower == "1") preferences.showTrash = true;
       else if (lower == "false" || lower == "0") preferences.showTrash = false;
+    } else if (key == "auto_mount_removable") {
+      if (lower == "true" || lower == "1") preferences.autoMountRemovable = true;
+      else if (lower == "false" || lower == "0") preferences.autoMountRemovable = false;
+    } else if (key == "auto_mount_read_only") {
+      if (lower == "true" || lower == "1") preferences.autoMountReadOnly = true;
+      else if (lower == "false" || lower == "0") preferences.autoMountReadOnly = false;
     }
   }
   return preferences;
@@ -2217,6 +2251,8 @@ std::string writeFilesPreferencesToml(FilesPreferences const& preferences) {
   out << "sort_ascending = " << (preferences.sortAscending ? "true" : "false") << "\n";
   out << "icon_size = " << preferences.iconSize << "\n";
   out << "show_trash = " << (preferences.showTrash ? "true" : "false") << "\n";
+  out << "auto_mount_removable = " << (preferences.autoMountRemovable ? "true" : "false") << "\n";
+  out << "auto_mount_read_only = " << (preferences.autoMountReadOnly ? "true" : "false") << "\n";
   return out.str();
 }
 

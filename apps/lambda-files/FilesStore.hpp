@@ -131,6 +131,11 @@ struct SidebarVolumeActionBackend {
   std::function<lambda::system::UDisks2OperationResult(std::string const&)> cancelJob;
 };
 
+struct FilesAutoMountRequest {
+  std::string volumePath;
+  lambda::system::UDisks2MountOptions options;
+};
+
 struct BreadcrumbCrumb {
   std::string label;
   std::filesystem::path path;
@@ -214,6 +219,8 @@ struct FilesPreferences {
   bool sortAscending = true;
   int iconSize = 96;
   bool showTrash = true;
+  bool autoMountRemovable = false;
+  bool autoMountReadOnly = true;
 
   bool operator==(FilesPreferences const&) const = default;
 };
@@ -345,6 +352,8 @@ SidebarVolumeActionBackend udisksSidebarVolumeActionBackend(lambda::system::UDis
 SidebarVolumeActionResult performSidebarVolumeAction(SidebarPlace const& place,
                                                      SidebarVolumeCommandKind command,
                                                      SidebarVolumeActionBackend const& backend);
+std::vector<FilesAutoMountRequest> autoMountRequestsForVolumes(lambda::system::UDisks2Snapshot const& snapshot,
+                                                               FilesPreferences const& preferences);
 ListDirectoryResult listDirectory(std::filesystem::path const& directory, bool includeHidden = false);
 std::vector<FileEntry> sortedEntries(std::vector<FileEntry> entries,
                                      FileSortKey key = FileSortKey::Name,

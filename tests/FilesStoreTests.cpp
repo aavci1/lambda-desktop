@@ -372,6 +372,73 @@ TEST_CASE("FilesStore performs sidebar volume actions through a storage backend"
   CHECK(lockedOpen.error.find("locked") != std::string::npos);
 }
 
+TEST_CASE("FilesStore plans opt-in removable auto mounts conservatively") {
+  lambda::system::UDisks2Snapshot snapshot;
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/sdb1",
+      .label = "ELIGIBLE",
+      .hintAuto = true,
+      .hasFilesystem = true,
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/sdc1",
+      .label = "MOUNTED",
+      .hintAuto = true,
+      .hasFilesystem = true,
+      .mountPoints = {"/media/MOUNTED"},
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/sdd1",
+      .label = "NO_HINT",
+      .hasFilesystem = true,
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/sde1",
+      .label = "BUSY",
+      .hintAuto = true,
+      .hasFilesystem = true,
+      .jobs = {lambda::system::UDisks2JobSnapshot{.path = "/org/freedesktop/UDisks2/jobs/2"}},
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/sdf1",
+      .label = "LOCKED",
+      .hintAuto = true,
+      .encrypted = true,
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/nvme0n1p1",
+      .label = "ROOT",
+      .hintSystem = true,
+      .hintAuto = true,
+      .hasFilesystem = true,
+  });
+  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+      .path = "/org/freedesktop/UDisks2/block_devices/dm_2d0",
+      .label = "UNLOCKED",
+      .cryptoBackingDevice = "/org/freedesktop/UDisks2/block_devices/sdg1",
+      .hintAuto = true,
+      .hasFilesystem = true,
+      .cleartext = true,
+  });
+
+  lambda_files::FilesPreferences preferences;
+  CHECK(lambda_files::autoMountRequestsForVolumes(snapshot, preferences).empty());
+
+  preferences.autoMountRemovable = true;
+  auto requests = lambda_files::autoMountRequestsForVolumes(snapshot, preferences);
+  REQUIRE(requests.size() == 2);
+  CHECK(requests[0].volumePath == "/org/freedesktop/UDisks2/block_devices/sdb1");
+  CHECK(requests[0].options.mountOptions == "ro");
+  CHECK(requests[1].volumePath == "/org/freedesktop/UDisks2/block_devices/dm_2d0");
+  CHECK(requests[1].options.mountOptions == "ro");
+
+  preferences.autoMountReadOnly = false;
+  requests = lambda_files::autoMountRequestsForVolumes(snapshot, preferences);
+  REQUIRE(requests.size() == 2);
+  CHECK(requests[0].options.mountOptions.empty());
+  CHECK(requests[1].options.mountOptions.empty());
+}
+
 TEST_CASE("FilesStore breadcrumbs handle home root and outside home") {
   ScopedEnv homeEnv("HOME");
   auto root = tempRoot("lambda-files-breadcrumb-test");
@@ -1337,6 +1404,8 @@ sort_key = "modified_time"
 sort_ascending = false
 icon_size = 128
 show_trash = false
+auto_mount_removable = true
+auto_mount_read_only = false
 )");
   CHECK(preferences.showHidden);
   CHECK(preferences.viewMode == "list");
@@ -1344,6 +1413,8 @@ show_trash = false
   CHECK_FALSE(preferences.sortAscending);
   CHECK(preferences.iconSize == 128);
   CHECK_FALSE(preferences.showTrash);
+  CHECK(preferences.autoMountRemovable);
+  CHECK_FALSE(preferences.autoMountReadOnly);
 
   CHECK(lambda_files::parseFilesPreferencesToml(lambda_files::writeFilesPreferencesToml(preferences)) == preferences);
 
@@ -1352,6 +1423,8 @@ show_hidden = maybe
 view_mode = "columns"
 sort_key = "random"
 icon_size = 4
+auto_mount_removable = maybe
+auto_mount_read_only = maybe
 )");
   CHECK(fallback == lambda_files::defaultFilesPreferences());
 
@@ -1371,6 +1444,8 @@ icon_size = 4
   preferences.viewMode = "list";
   preferences.sortKey = lambda_files::FileSortKey::Size;
   preferences.sortAscending = false;
+  preferences.autoMountRemovable = true;
+  preferences.autoMountReadOnly = true;
   auto saved = lambda_files::saveFilesPreferences(preferences);
   REQUIRE(saved.ok);
   auto loaded = lambda_files::loadFilesPreferences();

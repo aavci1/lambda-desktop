@@ -336,5 +336,5 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add UDisks2 ObjectManager/property signal watchers and wire Files to refresh mounted visible volume sidebar places through `BusEventPump` so mounted removable media can appear/disappear without polling.
 - [x] [Auto + Manual] Surface removable volumes in the Files sidebar, with open, mount, unmount, eject, and error states. Covered by `FilesStoreTests.cpp` for visible-volume rows and action/error mapping; real removable-media validation remains below.
 - [x] [Auto] Add support for encrypted volumes, locked/unlocked state, mount options, busy-device errors, job progress, and safe retry/cancel messaging. Covered by `UDisks2Tests.cpp` against a private fake bus.
-- [ ] [Auto + Manual] Decide and implement optional auto-mount policy, respecting user config and avoiding surprise writes.
+- [x] [Auto + Manual] Decide and implement optional auto-mount policy, respecting user config and avoiding surprise writes. Covered by `FilesStoreTests.cpp`: disabled by default, opt-in through `auto_mount_removable`, and read-only by default through `auto_mount_read_only`.
 - [ ] [Manual] Validate against the real system bus: insert USB media, mount from Files, open files, unmount/eject safely, remove media, and confirm system/internal volumes are hidden unless explicitly requested.
