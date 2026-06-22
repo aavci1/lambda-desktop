@@ -446,21 +446,21 @@ Manual validation coverage inherited from the old readiness specs (Window Manage
 Useful targeted checks:
 
 ```sh
-./build/lambda_tests --test-case="Shell*"
-./build/lambda_tests --test-case="Settings*"
-./build/lambda_tests --test-case="*Files*"
-./build/lambda_tests --test-case="Terminal*"
-./build/lambda_tests --test-case="screenshot*"
-./build/lambda_tests --test-case="surface*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="Shell*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="Settings*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="*Files*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="Terminal*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="screenshot*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="surface*"
 # new (as workstreams land):
-./build/lambda_tests --test-case="*DBus*"
-./build/lambda_tests --test-case="*Logind*"
-./build/lambda_tests --test-case="*PortalSettings*"
-./build/lambda_tests --test-case="*Notifications*"
-./build/lambda_tests --test-case="*Shell notification*"
-./build/lambda_tests --test-case="*SessionLock*"
-./build/lambda_tests --test-case="*Portal*"
-./build/lambda_tests --test-case="*OutputManagement*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="*DBus*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="*Logind*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="*PortalSettings*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="*Notifications*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="*Shell notification*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="*SessionLock*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="*Portal*"
+./build/lambda-desktop/tests/lambda_desktop_tests --test-case="*OutputManagement*"
 ```
 
 `ctest --test-dir build --output-on-failure` may require a live Wayland display and Vulkan device depending on the environment.

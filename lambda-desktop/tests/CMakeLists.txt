@@ -76,6 +76,7 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
     CompositorOutputStateTests.cpp
     CompositorPointerExtensionTests.cpp
     CompositorPresentationFeedbackTests.cpp
+    CompositorVulkanRenderTargetTests.cpp
     CompositorScreenshotTests.cpp
     CompositorSceneDamageTests.cpp
     CompositorSeatSerialTests.cpp
@@ -156,7 +157,3 @@ if(LAMBDA_ENABLE_ASAN)
   target_link_options(lambda_desktop_tests PRIVATE -fsanitize=address)
 endif()
 add_test(NAME lambda_desktop_tests COMMAND lambda_desktop_tests)
-
-if(TARGET lambda_tests)
-  add_dependencies(lambda_tests lambda_desktop_tests)
-endif()

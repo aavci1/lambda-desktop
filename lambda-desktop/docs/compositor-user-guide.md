@@ -18,7 +18,7 @@ cmake --build build
 Run the unit tests that cover deterministic compositor logic:
 
 ```sh
-cmake --build build --target lambda_tests
+cmake --build build --target lambda_desktop_tests
 ./build/lambda-desktop/tests/lambda_desktop_tests --test-case="*compositor*"
 ```
 
