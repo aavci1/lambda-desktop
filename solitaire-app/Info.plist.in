@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleExecutable</key>
+  <string>@SOLITAIRE_APP_NAME@</string>
+  <key>CFBundleIconFile</key>
+  <string>@SOLITAIRE_BUNDLE_ICON_FILE@</string>
+  <key>CFBundleIdentifier</key>
+  <string>@SOLITAIRE_BUNDLE_IDENTIFIER@</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>@SOLITAIRE_APP_NAME@</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@SOLITAIRE_VERSION@</string>
+  <key>CFBundleVersion</key>
+  <string>@SOLITAIRE_BUILD@</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>@SOLITAIRE_COPYRIGHT@</string>
+  <key>LSApplicationCategoryType</key>
+  <string>@SOLITAIRE_CATEGORY@</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>@SOLITAIRE_MIN_MACOS@</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+</dict>
+</plist>

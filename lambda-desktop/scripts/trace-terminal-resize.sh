@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LOG_DIR="${LWM_TRACE_DIR:-$ROOT/.debug-logs}"
+TEST_SECONDS="${LAMBDA_TERMINAL_RESIZE_TEST_SECONDS:-60}"
+RENDER_LOG="${LAMBDA_TERMINAL_RENDER_LOG:-$LOG_DIR/lambda-terminal-resize-render.log}"
+RESIZE_LOG="${LAMBDA_TERMINAL_RESIZE_LOG:-$LOG_DIR/lambda-terminal-resize.log}"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<EOF
+Usage: lambda-desktop/scripts/trace-terminal-resize.sh
+
+Runs the lambda-terminal synthetic workload with resize tracing enabled. While it
+runs, repeatedly resize the terminal window. Logs are written under $LOG_DIR by default.
+
+Environment overrides:
+  LWM_BUILD_DIR                          Build directory. Default: $ROOT/build
+  LWM_TRACE_DIR                          Log directory. Default: $LOG_DIR
+  LAMBDA_TERMINAL_RESIZE_TEST_SECONDS    Run duration. Default: $TEST_SECONDS
+  LAMBDA_TERMINAL_RENDER_LOG             Terminal render log. Default: $RENDER_LOG
+  LAMBDA_TERMINAL_RESIZE_LOG             Resize trace log. Default: $RESIZE_LOG
+  LAMBDA_TERMINAL_TEST_ROWS              Grid rows drawn by workload. Default: 48
+  LAMBDA_TERMINAL_TEST_SEGMENTS          Color runs per row in grid mode. Default: 14
+  LAMBDA_TERMINAL_FRAME_SLEEP            Workload frame sleep. Default: 0.016
+  LAMBDA_RESIZE_TRACE_STDERR               Mirror resize trace to stderr. Default: 0
+EOF
+  exit 0
+fi
+
+mkdir -p "$LOG_DIR"
+
+echo "Resize trace test:"
+echo "  terminal render log: $RENDER_LOG"
+echo "  resize trace log:    $RESIZE_LOG"
+echo "  duration:            ${TEST_SECONDS}s"
+echo
+echo "During the run, repeatedly resize the lambda-terminal window."
+echo
+
+export LAMBDA_TERMINAL_TEST_SECONDS="$TEST_SECONDS"
+export LAMBDA_TERMINAL_TEST_MODE="${LAMBDA_TERMINAL_TEST_MODE:-grid}"
+export LAMBDA_TERMINAL_RENDER_LOG="$RENDER_LOG"
+export LAMBDA_TERMINAL_RESIZE_LOG="$RESIZE_LOG"
+export LAMBDA_DEBUG_PERF="${LAMBDA_DEBUG_PERF:-2}"
+export LAMBDA_RESIZE_TRACE=1
+export LAMBDA_RESIZE_TRACE_STDERR="${LAMBDA_RESIZE_TRACE_STDERR:-0}"
+
+set +e
+"$ROOT/lambda-desktop/scripts/trace-terminal-rendering.sh"
+render_status=$?
+set -e
+
+if [[ "$render_status" -ne 0 ]]; then
+  echo
+  echo "Terminal render test exited with status $render_status; summarizing captured resize log anyway."
+fi
+
+if [[ ! -s "$RESIZE_LOG" ]]; then
+  echo "No resize trace entries were captured. Resize the window during the run and try again."
+  exit "$render_status"
+fi
+
+resize_event_count="$(grep -Ec 'toplevel-configure|request-resize-redraw|flush-deferred' "$RESIZE_LOG" || true)"
+if [[ "$resize_event_count" == "0" ]]; then
+  echo "No interactive resize events were captured."
+  echo "Run this again and drag-resize the terminal window while the workload is active."
+  exit "$render_status"
+fi
+
+echo
+echo "Resize trace summary:"
+awk '
+  {
+    prefix = $3
+    sub(/:$/, "", prefix)
+    count[prefix]++
+
+    line = $0
+    while (match(line, /(elapsed|record|submit|queuePresent|waitFrame|acquire|waitImage|presentFence|waitPresentFence|resetPresentFence)=([0-9.]+)ms/)) {
+      field = substr(line, RSTART, RLENGTH)
+      split(field, parts, "=")
+      metric = parts[1]
+      value = parts[2]
+      sub(/ms$/, "", value)
+      key = prefix " " metric
+      if ((value + 0.0) > maxValue[key]) {
+        maxValue[key] = value + 0.0
+      }
+      line = substr(line, RSTART + RLENGTH)
+    }
+  }
+  END {
+    for (prefix in count) {
+      printf "  %-24s %6d events\n", prefix, count[prefix]
+    }
+    print ""
+    print "  Slowest traced phase by prefix:"
+    for (key in maxValue) {
+      printf "  %-34s %8.3fms\n", key, maxValue[key]
+    }
+  }
+' "$RESIZE_LOG"
+
+echo
+echo "Recent resize trace entries:"
+tail -n 20 "$RESIZE_LOG"
+
+exit "$render_status"

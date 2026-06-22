@@ -4,7 +4,7 @@ if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSIO
   set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(lambda-desktop VERSION 5.0.0 LANGUAGES CXX C)
+project(lambda VERSION 5.0.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,7 +12,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(GNUInstallDirs)
 include(FetchContent)
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LambdaApp.cmake)
+
+set(LAMBDA_FRAMEWORK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lambda")
+set(LAMBDA_FRAMEWORK_INCLUDE_DIR "${LAMBDA_FRAMEWORK_DIR}/include")
+set(LAMBDA_FRAMEWORK_SOURCE_DIR "${LAMBDA_FRAMEWORK_DIR}/src")
+set(LAMBDA_FRAMEWORK_CMAKE_DIR "${LAMBDA_FRAMEWORK_DIR}/cmake")
+set(LAMBDA_FRAMEWORK_RESOURCE_DIR "${LAMBDA_FRAMEWORK_DIR}/resources")
+set(LAMBDA_FRAMEWORK_PROTOCOL_DIR "${LAMBDA_FRAMEWORK_DIR}/protocols")
+set(LAMBDA_FRAMEWORK_VENDOR_DIR "${LAMBDA_FRAMEWORK_DIR}/vendor")
+
+include(${LAMBDA_FRAMEWORK_CMAKE_DIR}/LambdaApp.cmake)
 
 set(LAMBDA_PLATFORM "AUTO" CACHE STRING
     "Lambda backend: AUTO, MACOS, LINUX_WAYLAND, LINUX_KMS.")
@@ -144,13 +153,6 @@ target_include_directories(libtess2 PUBLIC
   $<BUILD_INTERFACE:${libtess2_SOURCE_DIR}/Include>
 )
 
-FetchContent_Declare(tomlplusplus
-  GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
-  GIT_TAG v3.4.0
-  GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(tomlplusplus)
-
 option(LAMBDA_ENABLE_DEFAULT_EVENT_LOGGING
   "Print built-in Application event handlers to stdout (disable for quiet or embedded builds)."
   OFF)
@@ -170,11 +172,25 @@ option(LAMBDA_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT
   "Debug: compare incremental vs full paragraph-cache assembly (non-NDEBUG only)."
   OFF)
 
-option(LAMBDA_BUILD_APPS "Build Lambda desktop apps." ON)
-option(LAMBDA_BUILD_DEMOS "Build standalone demos under demos/." OFF)
-option(LAMBDA_BUILD_TESTS "Build unit and integration tests under tests/." OFF)
-option(LAMBDA_BUILD_BENCHMARKS "Build micro-benchmarks in bench/." OFF)
-option(LAMBDA_BUILD_TOOLS "Build developer verification tools under tools/." ON)
+option(LAMBDA_BUILD_DEMOS "Build standalone demos under lambda/demos/." OFF)
+option(LAMBDA_BUILD_TESTS "Build unit and integration tests." OFF)
+option(LAMBDA_BUILD_BENCHMARKS "Build micro-benchmarks in lambda/bench/." OFF)
+option(LAMBDA_BUILD_TOOLS "Build developer verification tools under lambda-desktop/tools/." ON)
+option(LAMBDA_BUILD_SOLITAIRE "Build the standalone Solitaire app." ON)
+
+set(LAMBDA_BUILD_DESKTOP_DEFAULT OFF)
+if(UNIX AND NOT APPLE)
+  set(LAMBDA_BUILD_DESKTOP_DEFAULT ON)
+endif()
+option(LAMBDA_BUILD_DESKTOP
+  "Build the Linux-only Lambda Desktop app suite and services."
+  ${LAMBDA_BUILD_DESKTOP_DEFAULT})
+
+if(LAMBDA_BUILD_DESKTOP)
+  if(NOT UNIX OR APPLE)
+    message(FATAL_ERROR "LAMBDA_BUILD_DESKTOP requires a Linux host.")
+  endif()
+endif()
 
 set(LAMBDA_BUILD_WINDOW_MANAGER_DEFAULT OFF)
 if(UNIX AND NOT APPLE)
@@ -184,29 +200,36 @@ option(LAMBDA_BUILD_WINDOW_MANAGER
   "Build the Linux KMS lambda-window-manager executable."
   ${LAMBDA_BUILD_WINDOW_MANAGER_DEFAULT})
 
-add_subdirectory(src)
+add_subdirectory(lambda/src)
 
 if(LAMBDA_ENABLE_WARNINGS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   target_compile_options(lambda PRIVATE -Wall -Wextra)
 endif()
 
-if(LAMBDA_BUILD_APPS)
-  add_subdirectory(apps)
+if(LAMBDA_BUILD_DESKTOP)
+  add_subdirectory(lambda-desktop)
+endif()
+
+if(LAMBDA_BUILD_SOLITAIRE)
+  add_subdirectory(solitaire-app)
 endif()
 
 if(LAMBDA_BUILD_DEMOS)
-  add_subdirectory(demos)
+  add_subdirectory(lambda/demos)
 endif()
 
 if(LAMBDA_BUILD_TESTS)
   enable_testing()
-  add_subdirectory(tests)
+  add_subdirectory(lambda/tests)
+  if(LAMBDA_BUILD_DESKTOP)
+    add_subdirectory(lambda-desktop/tests)
+  endif()
 endif()
 
 if(LAMBDA_BUILD_BENCHMARKS)
-  add_subdirectory(bench)
+  add_subdirectory(lambda/bench)
 endif()
 
-if(LAMBDA_BUILD_TOOLS)
-  add_subdirectory(tools)
+if(LAMBDA_BUILD_TOOLS AND LAMBDA_BUILD_DESKTOP)
+  add_subdirectory(lambda-desktop/tools)
 endif()

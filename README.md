@@ -1,14 +1,16 @@
-# Lambda Desktop
+# Lambda
 
-Lambda Desktop is a small **C++23** desktop framework and app suite for **macOS** with a **Metal** 2D canvas, Linux **Wayland/Vulkan**, and Linux **KMS/DRM/Vulkan** backends, vector paths tessellated through [libtess2](https://github.com/memononen/libtess2), platform text layout, and a retained declarative UI layer.
+Lambda is a **C++23** UI framework and monorepo workspace. The current tree is split into a cross-platform core/framework, a Linux-only `lambda-desktop` app suite, and the standalone cross-platform `solitaire-app`.
+
+The framework provides a **Metal** canvas on macOS, Linux **Wayland/Vulkan** and **KMS/DRM/Vulkan** backends, vector paths tessellated through [libtess2](https://github.com/memononen/libtess2), platform text layout, and a retained declarative UI layer.
 
 The v5 UI runtime mounts each view tree once, owns reactive state in scopes, and updates retained scene nodes through `Signal`, `Computed`, `Effect`, `Bindable`, animation handles, and reactive environment values.
 
 ## Build
 
-Requirements: **CMake 3.25+**.
+Requirements: **CMake 3.25+** and a C++23 compiler.
 
-macOS builds need **full Xcode selected as the active developer directory**, because Lambda compiles and embeds Metal shaders with `xcrun -sdk macosx metal`, `xcrun -sdk macosx metallib`, and `xxd`. Xcode Command Line Tools alone may configure a C++ compiler but still omit the Metal shader compiler. Install Xcode, then run:
+macOS framework, demos, tests, benchmarks, and `solitaire-app` builds need **full Xcode selected as the active developer directory**, because Lambda compiles and embeds Metal shaders with `xcrun -sdk macosx metal`, `xcrun -sdk macosx metallib`, and `xxd`. Xcode Command Line Tools alone may configure a C++ compiler but still omit the Metal shader compiler. Install Xcode, then run:
 
 ```bash
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -18,7 +20,9 @@ xcrun -sdk macosx -find metal
 xcrun -sdk macosx -find metallib
 ```
 
-Linux Wayland builds need `wayland-client`, `wayland-cursor`, `wayland-protocols`, `xkbcommon`, `vulkan`, `freetype2`, `fontconfig`, `harfbuzz`, `zlib`, and `glslangValidator`. Linux KMS builds need `libdrm`, `libinput`, `libudev`, `xkbcommon`, `vulkan`, `freetype2`, `fontconfig`, `harfbuzz`, `zlib`, and `glslangValidator`.
+Linux Wayland framework builds need `pkg-config`, `wayland-client`, `wayland-cursor`, `wayland-protocols`, `libdrm`, `xkbcommon`, `vulkan`, `freetype2`, `fontconfig`, `harfbuzz`, `librsvg-2.0`, `zlib`, and `glslangValidator`. Linux KMS framework builds need `pkg-config`, `libdrm`, `gbm`, `libinput`, `libseat`, `libudev`, `xkbcommon`, `vulkan`, `freetype2`, `fontconfig`, `harfbuzz`, `librsvg-2.0`, `zlib`, and `glslangValidator`.
+
+The Linux-only `lambda-desktop` product additionally needs `libsystemd` for its D-Bus/system-services layer. `tomlplusplus` is fetched only when `LAMBDA_BUILD_DESKTOP=ON`; `libvterm` is fetched only by `lambda-terminal` and needs `perl` to generate its encoding headers.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLAMBDA_BUILD_TESTS=ON -DLAMBDA_BUILD_DEMOS=ON
@@ -26,13 +30,24 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-By default the shared `lambda` library and real apps under `apps/` are built. Pass `-DLAMBDA_BUILD_DEMOS=ON` to build the demo executables under `demos/`.
+On macOS, the default build includes the framework and `solitaire-app`; desktop apps are not configured. Framework demos, tests, and benchmarks build as normal terminal executables on macOS rather than `.app` bundles. Solitaire owns its macOS bundle packaging under `solitaire-app/`. On Linux, `LAMBDA_BUILD_DESKTOP` defaults to `ON` and builds the desktop suite under `lambda-desktop/apps/`. Pass `-DLAMBDA_BUILD_DEMOS=ON` to build the demo executables under `lambda/demos/`.
+
+## Layout
+
+- `lambda/` owns the cross-platform framework/library target, public headers, private sources, tests, benchmarks, and demos.
+- `lambda-desktop/` owns Linux desktop apps, services, DBus/system clients, and desktop-wide dependencies such as `tomlplusplus`.
+- `lambda-desktop/apps/lambda-terminal/` owns the terminal emulator and its `libvterm` dependency.
+- `solitaire-app/` is a standalone cross-platform app.
 
 ## Apps
 
-Current app targets:
+Current standalone target:
 
-`lambda-editor`, `lambda-files`, `lambda-preview`, `lambda-settings`, `lambda-shell`, `lambda-terminal`, `solitaire-app`, and on Linux `lambda-window-manager`.
+`solitaire-app`.
+
+Linux desktop targets:
+
+`lambda-editor`, `lambda-files`, `lambda-notifications`, `lambda-polkit-agent`, `lambda-portal`, `lambda-preview`, `lambda-secrets`, `lambda-settings`, `lambda-shell`, `lambda-status-notifier-watcher`, `lambda-terminal`, and `lambda-window-manager`.
 
 ## Demos
 
@@ -43,10 +58,12 @@ Current demo targets:
 ## Options
 
 - `LAMBDA_PLATFORM` - `AUTO` (default), `MACOS`, `LINUX_WAYLAND`, or `LINUX_KMS`.
-- `LAMBDA_BUILD_APPS` - default `ON`; set `OFF` to skip real apps.
+- `LAMBDA_BUILD_DESKTOP` - default `ON` on Linux and `OFF` elsewhere; builds the Linux-only desktop suite.
+- `LAMBDA_BUILD_SOLITAIRE` - default `ON`; builds the standalone Solitaire app.
 - `LAMBDA_BUILD_DEMOS` - default `OFF`; set `ON` to build demos.
 - `LAMBDA_BUILD_TESTS` - default `OFF`; set `ON` to build unit and reactive tests.
 - `LAMBDA_BUILD_BENCHMARKS` - default `OFF`; set `ON` to build micro-benchmarks.
+- `LAMBDA_BUILD_TOOLS` - default `ON`; builds developer verification tools.
 - `LAMBDA_BUILD_WINDOW_MANAGER` - default `ON` on Linux; set `OFF` to skip `lambda-window-manager`.
 - `LAMBDA_ENABLE_ASAN` - default `OFF`; set `ON` for AddressSanitizer builds.
 - `LAMBDA_ENABLE_DEFAULT_EVENT_LOGGING` - default `OFF`; set `ON` to print default `Application` event handlers.
@@ -54,10 +71,10 @@ Current demo targets:
 ## Documentation
 
 - [Documentation index](docs/README.md)
-- [Project status and roadmap](docs/roadmap.md)
+- [Project status and roadmap](lambda-desktop/docs/roadmap.md)
 - [Conventions](docs/conventions.md)
-- [Reactive graph](docs/reactive-graph.md)
-- [Migrating to v5](docs/migrating-to-v5.md)
-- [Compositor](docs/compositor.md) (Linux window manager)
+- [Reactive graph](lambda/docs/reactive-graph.md)
+- [Migrating to v5](lambda/docs/migrating-to-v5.md)
+- [Compositor](lambda-desktop/docs/compositor.md) (Linux window manager)
 
-Public API headers live under `include/Lambda/`. The umbrella header is [`include/Lambda.hpp`](include/Lambda.hpp). Declarative UI apps usually include [`include/Lambda/UI/UI.hpp`](include/Lambda/UI/UI.hpp) and use `Window::setView`.
+Public API headers live under `lambda/include/Lambda/`. The umbrella header is [`lambda/include/Lambda.hpp`](lambda/include/Lambda.hpp). Declarative UI apps usually include [`lambda/include/Lambda/UI/UI.hpp`](lambda/include/Lambda/UI/UI.hpp) and use `Window::setView`.

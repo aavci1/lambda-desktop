@@ -40,7 +40,8 @@ jobs:
             libwayland-dev wayland-protocols \
             libxkbcommon-dev libvulkan-dev glslang-tools mesa-vulkan-drivers \
             libfreetype-dev libfontconfig-dev libharfbuzz-dev zlib1g-dev \
-            libdrm-dev libinput-dev libudev-dev librsvg2-dev
+            libdrm-dev libinput-dev libudev-dev libseat-dev libsystemd-dev \
+            librsvg2-dev perl
 
       - name: Configure
         run: >-
@@ -61,14 +62,14 @@ jobs:
             # "Compositor*" picks up the glass-material cases in
             # VulkanRenderTargetTests.cpp whose names lack "Vulkan".
             VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
-              ./build/tests/lambda_tests --test-case="*Vulkan*,Compositor*"
+              ./build/lambda/tests/lambda_framework_tests --test-case="*Vulkan*,Compositor*"
           else
             echo "lavapipe ICD not found; skipping Vulkan tests"
           fi
 
       # Keep the display-independent reactive suite as a fast Linux smoke test.
       - name: Reactive tests
-        run: ./build/tests/lambda_reactive_tests
+        run: ./build/lambda/tests/lambda_reactive_tests
 
       - name: Module dependency check
-        run: ./scripts/check_module_dependencies.sh
+        run: ./lambda/scripts/check_module_dependencies.sh
