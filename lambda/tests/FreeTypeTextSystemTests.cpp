@@ -7,7 +7,7 @@ using namespace lambda;
 
 TEST_CASE("FreeTypeTextSystem reports line boxes from resolved line height") {
   FreeTypeTextSystem textSystem([] {
-    return "lambda_tests";
+    return "lambda-tests";
   });
 
   TextLayoutOptions options{};
@@ -25,7 +25,7 @@ TEST_CASE("FreeTypeTextSystem reports line boxes from resolved line height") {
 
 TEST_CASE("FreeTypeTextSystem centers boxed text using line box height") {
   FreeTypeTextSystem textSystem([] {
-    return "lambda_tests";
+    return "lambda-tests";
   });
 
   TextLayoutOptions options{};

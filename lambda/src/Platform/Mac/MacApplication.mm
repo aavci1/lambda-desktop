@@ -243,7 +243,7 @@ public:
     [NSApplication sharedApplication];
 #if defined(LAMBDA_TESTING)
     NSString* processName = [[NSProcessInfo processInfo] processName];
-    bool const headlessTestProcess = processName && [processName isEqualToString:@"lambda_tests"];
+    bool const headlessTestProcess = processName && [processName isEqualToString:@"lambda-tests"];
     [NSApp setActivationPolicy:headlessTestProcess ? NSApplicationActivationPolicyProhibited
                                                    : NSApplicationActivationPolicyRegular];
 #else
