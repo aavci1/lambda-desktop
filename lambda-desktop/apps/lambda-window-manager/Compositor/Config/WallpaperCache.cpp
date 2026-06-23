@@ -6,7 +6,7 @@
 #include <fstream>
 #include <system_error>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 constexpr char kCacheMagic[4] = {'L', 'M', 'W', 'P'};
@@ -68,7 +68,7 @@ std::filesystem::path wallpaperCacheDirectory(std::filesystem::path const& cache
   return dir;
 }
 
-std::optional<lambda::DecodedImageRgba> readWallpaperCache(std::filesystem::path const& sourcePath,
+std::optional<lambdaui::DecodedImageRgba> readWallpaperCache(std::filesystem::path const& sourcePath,
                                                           std::uint32_t maxLongEdge,
                                                           std::filesystem::path const& cacheRoot) {
   auto const identity = sourceFileIdentity(sourcePath);
@@ -93,7 +93,7 @@ std::optional<lambda::DecodedImageRgba> readWallpaperCache(std::filesystem::path
 
   std::size_t const pixelBytes =
       static_cast<std::size_t>(header.width) * static_cast<std::size_t>(header.height) * 4u;
-  lambda::DecodedImageRgba decoded{
+  lambdaui::DecodedImageRgba decoded{
       .width = header.width,
       .height = header.height,
       .pixels = {},
@@ -109,7 +109,7 @@ std::optional<lambda::DecodedImageRgba> readWallpaperCache(std::filesystem::path
 bool writeWallpaperCache(std::filesystem::path const& sourcePath,
                          std::uint32_t maxLongEdge,
                          std::filesystem::path const& cacheRoot,
-                         lambda::DecodedImageRgba const& image) {
+                         lambdaui::DecodedImageRgba const& image) {
   auto const identity = sourceFileIdentity(sourcePath);
   if (!identity || image.width == 0 || image.height == 0 ||
       image.pixels.size() != static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4u) {
@@ -149,4 +149,4 @@ bool writeWallpaperCache(std::filesystem::path const& sourcePath,
   return true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

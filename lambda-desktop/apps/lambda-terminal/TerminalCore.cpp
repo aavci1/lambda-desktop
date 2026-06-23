@@ -24,11 +24,11 @@
 namespace lambda_terminal {
 namespace {
 
-using lambda::KeyCode;
-using lambda::Modifiers;
+using lambdaui::KeyCode;
+using lambdaui::Modifiers;
 
 [[nodiscard]] bool has(Modifiers modifiers, Modifiers flag) {
-  return lambda::any(modifiers & flag);
+  return lambdaui::any(modifiers & flag);
 }
 
 [[nodiscard]] int xtermModifierValue(Modifiers modifiers) {
@@ -64,7 +64,7 @@ using lambda::Modifiers;
 }
 
 [[nodiscard]] std::optional<char> controlForKey(KeyCode key) {
-  using namespace lambda::keys;
+  using namespace lambdaui::keys;
   static constexpr std::array<std::pair<KeyCode, char>, 30> controls{{
       {A, '\x01'}, {B, '\x02'}, {C, '\x03'}, {D, '\x04'}, {E, '\x05'}, {F, '\x06'},
       {G, '\x07'}, {H, '\x08'}, {I, '\x09'}, {J, '\x0a'}, {K, '\x0b'}, {L, '\x0c'},
@@ -103,8 +103,8 @@ using lambda::Modifiers;
          (codepoint >= 0x1f900 && codepoint <= 0x1f9ff);
 }
 
-[[nodiscard]] lambda::Color colorFromByte(std::uint8_t red, std::uint8_t green, std::uint8_t blue) {
-  return lambda::Color{
+[[nodiscard]] lambdaui::Color colorFromByte(std::uint8_t red, std::uint8_t green, std::uint8_t blue) {
+  return lambdaui::Color{
       static_cast<float>(red) / 255.f,
       static_cast<float>(green) / 255.f,
       static_cast<float>(blue) / 255.f,
@@ -112,7 +112,7 @@ using lambda::Modifiers;
   };
 }
 
-[[nodiscard]] std::optional<lambda::Color> parseHexColor(std::string const& text) {
+[[nodiscard]] std::optional<lambdaui::Color> parseHexColor(std::string const& text) {
   if (text.size() != 9 || text.front() != '#') return std::nullopt;
   auto hex = [](char ch) -> std::optional<int> {
     if (ch >= '0' && ch <= '9') return ch - '0';
@@ -127,7 +127,7 @@ using lambda::Modifiers;
     if (!high || !low) return std::nullopt;
     channels[i] = static_cast<std::uint8_t>((*high << 4) | *low);
   }
-  return lambda::Color{
+  return lambdaui::Color{
       static_cast<float>(channels[0]) / 255.f,
       static_cast<float>(channels[1]) / 255.f,
       static_cast<float>(channels[2]) / 255.f,
@@ -167,7 +167,7 @@ using lambda::Modifiers;
   return false;
 }
 
-[[nodiscard]] std::string colorToHex(lambda::Color color) {
+[[nodiscard]] std::string colorToHex(lambdaui::Color color) {
   auto channel = [](float value) {
     return std::clamp(static_cast<int>(std::lround(value * 255.f)), 0, 255);
   };
@@ -413,7 +413,7 @@ std::string TerminalTextBuffer::selectedText(TerminalSelection selection) const 
 }
 
 std::string encodeTerminalKey(KeyCode key, Modifiers modifiers, TerminalInputMode mode) {
-  using namespace lambda::keys;
+  using namespace lambdaui::keys;
   if (has(modifiers, Modifiers::Ctrl)) {
     if (auto control = controlForKey(key)) {
       std::string sequence(1, *control);
@@ -499,14 +499,14 @@ std::string terminalPastePayload(std::string_view clipboardText, TerminalConfig 
 }
 
 bool isTerminalPasteShortcut(KeyCode key, Modifiers modifiers) {
-  if (key != lambda::keys::V || has(modifiers, Modifiers::Alt) || has(modifiers, Modifiers::Meta)) {
+  if (key != lambdaui::keys::V || has(modifiers, Modifiers::Alt) || has(modifiers, Modifiers::Meta)) {
     return false;
   }
   return has(modifiers, Modifiers::Ctrl) && has(modifiers, Modifiers::Shift);
 }
 
 bool isTerminalCopyShortcut(KeyCode key, Modifiers modifiers) {
-  if (key != lambda::keys::C || has(modifiers, Modifiers::Alt) || has(modifiers, Modifiers::Meta)) {
+  if (key != lambdaui::keys::C || has(modifiers, Modifiers::Alt) || has(modifiers, Modifiers::Meta)) {
     return false;
   }
   return has(modifiers, Modifiers::Ctrl) && has(modifiers, Modifiers::Shift);
@@ -706,7 +706,7 @@ int terminalDisplayWidth(std::string_view utf8) {
   return width;
 }
 
-lambda::Color terminalIndexedColor(std::uint8_t index) {
+lambdaui::Color terminalIndexedColor(std::uint8_t index) {
   static constexpr std::array<std::array<std::uint8_t, 3>, 16> ansi{{
       {{0x1d, 0x24, 0x2d}}, {{0xcc, 0x66, 0x66}}, {{0x99, 0xcc, 0x99}}, {{0xf0, 0xc6, 0x74}},
       {{0x81, 0xa2, 0xbe}}, {{0xb2, 0x94, 0xbb}}, {{0x8a, 0xbe, 0xb7}}, {{0xc5, 0xc8, 0xc6}},
@@ -728,15 +728,15 @@ lambda::Color terminalIndexedColor(std::uint8_t index) {
   return colorFromByte(gray, gray, gray);
 }
 
-lambda::Color terminalTrueColor(std::uint8_t red, std::uint8_t green, std::uint8_t blue) {
+lambdaui::Color terminalTrueColor(std::uint8_t red, std::uint8_t green, std::uint8_t blue) {
   return colorFromByte(red, green, blue);
 }
 
-TerminalResolvedCellStyle resolveTerminalCellStyle(lambda::Color foreground,
-                                                   lambda::Color background,
+TerminalResolvedCellStyle resolveTerminalCellStyle(lambdaui::Color foreground,
+                                                   lambdaui::Color background,
                                                    TerminalAttributes attributes) {
   if (attributes.dim) {
-    foreground = lambda::Color{foreground.r * 0.65f, foreground.g * 0.65f, foreground.b * 0.65f, foreground.a};
+    foreground = lambdaui::Color{foreground.r * 0.65f, foreground.g * 0.65f, foreground.b * 0.65f, foreground.a};
   }
   if (attributes.reverse) {
     std::swap(foreground, background);

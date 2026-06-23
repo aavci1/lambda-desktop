@@ -12,7 +12,7 @@
 #include <cstddef>
 #include <optional>
 
-namespace lambda {
+namespace lambdaui {
 
 class TextSystem;
 class Element;
@@ -89,4 +89,4 @@ private:
 };
 
 } // namespace detail
-} // namespace lambda
+} // namespace lambdaui

@@ -10,7 +10,7 @@
 #include <map>
 #include <string>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 struct PortalNotificationKey {
   std::string appId;
@@ -50,4 +50,4 @@ private:
   std::map<std::uint32_t, PortalNotificationKey> portalKeys_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

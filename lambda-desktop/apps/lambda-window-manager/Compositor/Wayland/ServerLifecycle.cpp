@@ -58,7 +58,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 char const* xkbName(std::string const& value) {
@@ -396,4 +396,4 @@ void WaylandServer::Impl::setRetainedDmabufBufferIds(std::vector<std::uint64_t> 
   retainedDmabufBufferIds_ = std::move(bufferIds);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -14,7 +14,7 @@
 #include <memory>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 class AnimationBase;
 
@@ -58,7 +58,7 @@ public:
   ObserverHandle subscribe(Reactive::SmallFn<FrameAction(AnimationTick const&)> callback);
   void unsubscribe(ObserverHandle handle);
 
-#if defined(LAMBDA_TESTING)
+#if defined(LAMBDAUI_TESTING)
   void testTick(double nowSeconds) { onTick(static_cast<std::int64_t>(nowSeconds * 1e9)); }
   std::size_t testOwnedAnimationCount() const { return ownedActive_.size(); }
 #endif
@@ -88,4 +88,4 @@ private:
   bool subscribersNeedCompaction_ = false;
 };
 
-} // namespace lambda
+} // namespace lambdaui

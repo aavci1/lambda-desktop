@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace detail {
 
@@ -154,4 +154,4 @@ std::vector<Rect> selectionRects(TextEditLayoutResult const &result, TextEditSel
 
 } // namespace detail
 
-} // namespace lambda
+} // namespace lambdaui

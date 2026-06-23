@@ -22,26 +22,26 @@
 
 namespace {
 
-class FakeTextSystem final : public lambda::TextSystem {
+class FakeTextSystem final : public lambdaui::TextSystem {
 public:
-  std::shared_ptr<lambda::TextLayout const>
-  layout(lambda::AttributedString const&, float, lambda::TextLayoutOptions const&) override {
-    return std::make_shared<lambda::TextLayout>();
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(lambdaui::AttributedString const&, float, lambdaui::TextLayoutOptions const&) override {
+    return std::make_shared<lambdaui::TextLayout>();
   }
 
-  std::shared_ptr<lambda::TextLayout const>
-  layout(std::string_view, lambda::Font const&, lambda::Color const&, float,
-         lambda::TextLayoutOptions const&) override {
-    return std::make_shared<lambda::TextLayout>();
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(std::string_view, lambdaui::Font const&, lambdaui::Color const&, float,
+         lambdaui::TextLayoutOptions const&) override {
+    return std::make_shared<lambdaui::TextLayout>();
   }
 
-  lambda::Size measure(lambda::AttributedString const&, float,
-                     lambda::TextLayoutOptions const&) override {
+  lambdaui::Size measure(lambdaui::AttributedString const&, float,
+                     lambdaui::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
-  lambda::Size measure(std::string_view, lambda::Font const&, lambda::Color const&, float,
-                     lambda::TextLayoutOptions const&) override {
+  lambdaui::Size measure(std::string_view, lambdaui::Font const&, lambdaui::Color const&, float,
+                     lambdaui::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
@@ -50,7 +50,7 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
-                                           lambda::Point& outBearing) override {
+                                           lambdaui::Point& outBearing) override {
     outWidth = 0;
     outHeight = 0;
     outBearing = {};
@@ -58,12 +58,12 @@ public:
   }
 };
 
-lambda::EnvironmentBinding testEnvironment() {
-  return lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(lambda::Theme::light());
+lambdaui::EnvironmentBinding testEnvironment() {
+  return lambdaui::EnvironmentBinding{}.withValue<lambdaui::ThemeKey>(lambdaui::Theme::light());
 }
 
-lambda::scenegraph::SceneNode const& rootGroup(lambda::scenegraph::SceneGraph const& sceneGraph) {
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+lambdaui::scenegraph::SceneNode const& rootGroup(lambdaui::scenegraph::SceneGraph const& sceneGraph) {
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   return sceneGraph.root();
 }
 
@@ -71,32 +71,32 @@ lambda::scenegraph::SceneNode const& rootGroup(lambda::scenegraph::SceneGraph co
 
 TEST_CASE("Show replaces branches and disposes the inactive scope") {
   struct Root {
-    lambda::Reactive::Signal<bool> visible;
+    lambdaui::Reactive::Signal<bool> visible;
     int* thenCreated = nullptr;
     int* thenDisposed = nullptr;
     int* elseCreated = nullptr;
     int* elseDisposed = nullptr;
 
-    lambda::Element body() const {
-      return lambda::Show(
+    lambdaui::Element body() const {
+      return lambdaui::Show(
           visible,
           [thenCreated = thenCreated, thenDisposed = thenDisposed] {
             ++*thenCreated;
-            lambda::Reactive::onCleanup([thenDisposed] {
+            lambdaui::Reactive::onCleanup([thenDisposed] {
               ++*thenDisposed;
             });
-            return lambda::Element{lambda::Rectangle{}}
+            return lambdaui::Element{lambdaui::Rectangle{}}
                 .size(20.f, 10.f)
-                .fill(lambda::Colors::red);
+                .fill(lambdaui::Colors::red);
           },
           [elseCreated = elseCreated, elseDisposed = elseDisposed] {
             ++*elseCreated;
-            lambda::Reactive::onCleanup([elseDisposed] {
+            lambdaui::Reactive::onCleanup([elseDisposed] {
               ++*elseDisposed;
             });
-            return lambda::Element{lambda::Rectangle{}}
+            return lambdaui::Element{lambdaui::Rectangle{}}
                 .size(12.f, 8.f)
-                .fill(lambda::Colors::blue);
+                .fill(lambdaui::Colors::blue);
           });
     }
   };
@@ -105,15 +105,15 @@ TEST_CASE("Show replaces branches and disposes the inactive scope") {
   int thenDisposed = 0;
   int elseCreated = 0;
   int elseDisposed = 0;
-  lambda::Reactive::Signal<bool> visible{true};
+  lambdaui::Reactive::Signal<bool> visible{true};
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(
           std::in_place, Root{visible, &thenCreated, &thenDisposed, &elseCreated, &elseDisposed}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -150,29 +150,29 @@ TEST_CASE("Show replaces branches and disposes the inactive scope") {
 
 TEST_CASE("Show false branch collapses out of stack spacing") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::VStack{
+    lambdaui::Element body() const {
+      return lambdaui::VStack{
           .spacing = 12.f,
-          .children = lambda::children(
-              lambda::Element{lambda::Rectangle{}}
+          .children = lambdaui::children(
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(lambda::Colors::red),
-              lambda::Show(false, [] {
-                return lambda::Element{lambda::Rectangle{}}
+                  .fill(lambdaui::Colors::red),
+              lambdaui::Show(false, [] {
+                return lambdaui::Element{lambdaui::Rectangle{}}
                     .size(20.f, 10.f)
-                    .fill(lambda::Colors::blue);
+                    .fill(lambdaui::Colors::blue);
               })),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 100.f},
+      lambdaui::Size{100.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -188,50 +188,50 @@ TEST_CASE("Show branch composite effects are scoped once and disposed with branc
     int* activeEffects = nullptr;
     int* cleanups = nullptr;
 
-    lambda::Element body() const {
-      lambda::useEffect([activeEffects = activeEffects, cleanups = cleanups] {
+    lambdaui::Element body() const {
+      lambdaui::useEffect([activeEffects = activeEffects, cleanups = cleanups] {
         ++*activeEffects;
-        lambda::Reactive::onCleanup([activeEffects, cleanups] {
+        lambdaui::Reactive::onCleanup([activeEffects, cleanups] {
           --*activeEffects;
           ++*cleanups;
         });
       });
-      return lambda::Element{lambda::Rectangle{}}
+      return lambdaui::Element{lambdaui::Rectangle{}}
           .size(20.f, 10.f)
-          .fill(lambda::Colors::red);
+          .fill(lambdaui::Colors::red);
     }
   };
 
   struct Root {
-    lambda::Reactive::Signal<bool> visible;
+    lambdaui::Reactive::Signal<bool> visible;
     int* activeEffects = nullptr;
     int* cleanups = nullptr;
 
-    lambda::Element body() const {
-      return lambda::Show(
+    lambdaui::Element body() const {
+      return lambdaui::Show(
           visible,
           [activeEffects = activeEffects, cleanups = cleanups] {
-            return lambda::Element{EffectfulChild{activeEffects, cleanups}};
+            return lambdaui::Element{EffectfulChild{activeEffects, cleanups}};
           },
           [] {
-            return lambda::Element{lambda::Rectangle{}}
+            return lambdaui::Element{lambdaui::Rectangle{}}
                 .size(12.f, 8.f)
-                .fill(lambda::Colors::blue);
+                .fill(lambdaui::Colors::blue);
           });
     }
   };
 
   int activeEffects = 0;
   int cleanups = 0;
-  lambda::Reactive::Signal<bool> visible{true};
+  lambdaui::Reactive::Signal<bool> visible{true};
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(
           std::in_place, Root{visible, &activeEffects, &cleanups}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -249,35 +249,35 @@ TEST_CASE("Show branch composite effects are scoped once and disposed with branc
 
 TEST_CASE("Show hidden stack child stays mounted and expands later") {
   struct Root {
-    lambda::Reactive::Signal<bool> visible;
+    lambdaui::Reactive::Signal<bool> visible;
 
-    lambda::Element body() const {
-      return lambda::VStack{
+    lambdaui::Element body() const {
+      return lambdaui::VStack{
           .spacing = 12.f,
-          .children = lambda::children(
-              lambda::Element{lambda::Rectangle{}}
+          .children = lambdaui::children(
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(lambda::Colors::red),
-              lambda::Show(visible, [] {
-                return lambda::Element{lambda::Rectangle{}}
+                  .fill(lambdaui::Colors::red),
+              lambdaui::Show(visible, [] {
+                return lambdaui::Element{lambdaui::Rectangle{}}
                     .size(20.f, 10.f)
-                    .fill(lambda::Colors::blue);
+                    .fill(lambdaui::Colors::blue);
               }),
-              lambda::Element{lambda::Rectangle{}}
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(lambda::Colors::green)),
+                  .fill(lambdaui::Colors::green)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<bool> visible{false};
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{visible}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<bool> visible{false};
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{visible}),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 100.f},
+      lambdaui::Size{100.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -305,30 +305,30 @@ TEST_CASE("Show hidden stack child stays mounted and expands later") {
 
 TEST_CASE("Show keeps natural constraints after transient zero-size layout") {
   FakeTextSystem textSystem;
-  lambda::EnvironmentBinding environment = testEnvironment();
-  lambda::MeasureContext measure{textSystem, environment};
-  lambda::Reactive::Scope owner;
-  lambda::Reactive::Signal<bool> visible{false};
-  lambda::Element show{lambda::Show(
+  lambdaui::EnvironmentBinding environment = testEnvironment();
+  lambdaui::MeasureContext measure{textSystem, environment};
+  lambdaui::Reactive::Scope owner;
+  lambdaui::Reactive::Signal<bool> visible{false};
+  lambdaui::Element show{lambdaui::Show(
       [visible] {
         return visible.get();
       },
       [] {
-        return lambda::Element{lambda::Rectangle{}}
+        return lambdaui::Element{lambdaui::Rectangle{}}
             .size(80.f, 20.f)
-            .fill(lambda::Colors::blue);
+            .fill(lambdaui::Colors::blue);
       })};
 
-  lambda::LayoutConstraints natural{
+  lambdaui::LayoutConstraints natural{
       .maxWidth = 100.f,
       .maxHeight = std::numeric_limits<float>::infinity(),
       .minWidth = 0.f,
       .minHeight = 0.f,
   };
-  lambda::MountContext mount{owner, textSystem, measure, natural, {}, {}, environment};
-  std::unique_ptr<lambda::scenegraph::SceneNode> node = show.mount(mount);
+  lambdaui::MountContext mount{owner, textSystem, measure, natural, {}, {}, environment};
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> node = show.mount(mount);
 
-  node->relayout(lambda::LayoutConstraints{
+  node->relayout(lambdaui::LayoutConstraints{
                      .maxWidth = 100.f,
                      .maxHeight = 0.f,
                      .minWidth = 100.f,
@@ -345,28 +345,28 @@ TEST_CASE("Show keeps natural constraints after transient zero-size layout") {
 
 TEST_CASE("Show relayouts active branch into flexible stack slot") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::HStack{
+    lambdaui::Element body() const {
+      return lambdaui::HStack{
           .spacing = 0.f,
-          .alignment = lambda::Alignment::Stretch,
-          .children = lambda::children(
-              lambda::Element{lambda::Rectangle{}}
+          .alignment = lambdaui::Alignment::Stretch,
+          .children = lambdaui::children(
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(lambda::Colors::red),
-              lambda::Element{lambda::Show(true, [] {
-                return lambda::Rectangle{}.fill(lambda::Colors::blue);
+                  .fill(lambdaui::Colors::red),
+              lambdaui::Element{lambdaui::Show(true, [] {
+                return lambdaui::Rectangle{}.fill(lambdaui::Colors::blue);
               })}.flex(1.f, 1.f, 0.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 40.f},
+      lambdaui::Size{100.f, 40.f},
   };
 
   root.mount(sceneGraph);
@@ -383,39 +383,39 @@ TEST_CASE("Show relayouts active branch into flexible stack slot") {
 
 TEST_CASE("Show size changes grow wrapper ancestors and move following stack siblings") {
   struct Root {
-    lambda::Reactive::Signal<bool> visible;
+    lambdaui::Reactive::Signal<bool> visible;
 
-    lambda::Element body() const {
-      return lambda::VStack{
+    lambdaui::Element body() const {
+      return lambdaui::VStack{
           .spacing = 12.f,
-          .children = lambda::children(
-              lambda::Element{lambda::VStack{
+          .children = lambdaui::children(
+              lambdaui::Element{lambdaui::VStack{
                   .spacing = 12.f,
-                  .children = lambda::children(
-                      lambda::Element{lambda::Rectangle{}}
+                  .children = lambdaui::children(
+                      lambdaui::Element{lambdaui::Rectangle{}}
                           .size(20.f, 10.f)
-                          .fill(lambda::Colors::red),
-                      lambda::Show(visible, [] {
-                        return lambda::Element{lambda::Rectangle{}}
+                          .fill(lambdaui::Colors::red),
+                      lambdaui::Show(visible, [] {
+                        return lambdaui::Element{lambdaui::Rectangle{}}
                             .size(20.f, 10.f)
-                            .fill(lambda::Colors::blue);
+                            .fill(lambdaui::Colors::blue);
                       })),
               }}.padding(16.f),
-              lambda::Element{lambda::Rectangle{}}
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(lambda::Colors::green)),
+                  .fill(lambdaui::Colors::green)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<bool> visible{false};
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{visible}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<bool> visible{false};
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{visible}),
       textSystem,
       testEnvironment(),
-      lambda::Size{120.f, 120.f},
+      lambdaui::Size{120.f, 120.f},
   };
 
   root.mount(sceneGraph);
@@ -442,43 +442,43 @@ TEST_CASE("Show size changes grow wrapper ancestors and move following stack sib
 
 TEST_CASE("Switch replaces scopes when the selected case changes") {
   struct Root {
-    lambda::Reactive::Signal<int> mode;
+    lambdaui::Reactive::Signal<int> mode;
     int* created = nullptr;
     int* disposed = nullptr;
 
-    lambda::Element body() const {
-      auto branch = [created = created, disposed = disposed](lambda::Color color) {
+    lambdaui::Element body() const {
+      auto branch = [created = created, disposed = disposed](lambdaui::Color color) {
         return [created, disposed, color] {
           ++*created;
-          lambda::Reactive::onCleanup([disposed] {
+          lambdaui::Reactive::onCleanup([disposed] {
             ++*disposed;
           });
-          return lambda::Element{lambda::Rectangle{}}
+          return lambdaui::Element{lambdaui::Rectangle{}}
               .size(18.f, 18.f)
               .fill(color);
         };
       };
 
-      return lambda::Switch(
+      return lambdaui::Switch(
           [mode = mode] { return mode.get(); },
           std::vector{
-              lambda::Case(0, branch(lambda::Colors::red)),
-              lambda::Case(1, branch(lambda::Colors::green)),
+              lambdaui::Case(0, branch(lambdaui::Colors::red)),
+              lambdaui::Case(1, branch(lambdaui::Colors::green)),
           },
-          branch(lambda::Colors::blue));
+          branch(lambdaui::Colors::blue));
     }
   };
 
   int created = 0;
   int disposed = 0;
-  lambda::Reactive::Signal<int> mode{0};
+  lambdaui::Reactive::Signal<int> mode{0};
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{mode, &created, &disposed}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{mode, &created, &disposed}),
       textSystem,
       testEnvironment(),
-      lambda::Size{160.f, 100.f},
+      lambdaui::Size{160.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -508,40 +508,40 @@ TEST_CASE("Switch replaces scopes when the selected case changes") {
 
 TEST_CASE("Switch relayouts newly selected branch into flexible stack slot") {
   struct Root {
-    lambda::Reactive::Signal<int> mode;
+    lambdaui::Reactive::Signal<int> mode;
 
-    lambda::Element body() const {
-      auto branch = [](lambda::Color color) {
+    lambdaui::Element body() const {
+      auto branch = [](lambdaui::Color color) {
         return [color] {
-          return lambda::Rectangle{}.fill(color);
+          return lambdaui::Rectangle{}.fill(color);
         };
       };
 
-      return lambda::HStack{
+      return lambdaui::HStack{
           .spacing = 0.f,
-          .alignment = lambda::Alignment::Stretch,
-          .children = lambda::children(
-              lambda::Element{lambda::Rectangle{}}
+          .alignment = lambdaui::Alignment::Stretch,
+          .children = lambdaui::children(
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(lambda::Colors::red),
-              lambda::Element{lambda::Switch(
+                  .fill(lambdaui::Colors::red),
+              lambdaui::Element{lambdaui::Switch(
                   [mode = mode] { return mode.get(); },
                   std::vector{
-                      lambda::Case(0, branch(lambda::Colors::blue)),
-                      lambda::Case(1, branch(lambda::Colors::green)),
+                      lambdaui::Case(0, branch(lambdaui::Colors::blue)),
+                      lambdaui::Case(1, branch(lambdaui::Colors::green)),
                   })}.flex(1.f, 1.f, 0.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<int> mode{0};
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{mode}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<int> mode{0};
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{mode}),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 40.f},
+      lambdaui::Size{100.f, 40.f},
   };
 
   root.mount(sceneGraph);

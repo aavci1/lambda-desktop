@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Preferred placement of the popover relative to its anchor.
 /// Automatically flipped to the opposite direction if insufficient room.
@@ -18,4 +18,4 @@ enum class PopoverPlacement : std::uint8_t {
   Start, ///< To the left of the anchor (LTR)
 };
 
-} // namespace lambda
+} // namespace lambdaui

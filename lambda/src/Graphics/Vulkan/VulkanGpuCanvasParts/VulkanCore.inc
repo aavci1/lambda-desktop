@@ -63,7 +63,7 @@
 
 #include <unistd.h>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 

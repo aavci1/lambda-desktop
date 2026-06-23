@@ -9,7 +9,7 @@
 
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 /**
  * CPU path → tessellated triangles for the Metal path pipeline.
@@ -21,4 +21,4 @@ void metalPathRasterizeToMesh(Path const& path, FillStyle const& fill, StrokeSty
                               std::vector<MetalPathOp>& pathOps, std::vector<MetalOpRef>& opOrder,
                               BlendMode blendMode);
 
-} // namespace lambda
+} // namespace lambdaui

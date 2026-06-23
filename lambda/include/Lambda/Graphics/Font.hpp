@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Font family, size, and weight. For `AttributedString` runs, an empty `family`, `size <= 0`, or
 /// `weight <= 0` inherits from the preceding resolved style; for UI `Text`, use concrete defaults
@@ -40,4 +40,4 @@ struct Font {
   bool operator==(Font const& other) const = default;
 };
 
-} // namespace lambda
+} // namespace lambdaui

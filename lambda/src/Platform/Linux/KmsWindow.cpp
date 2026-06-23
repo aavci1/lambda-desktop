@@ -24,7 +24,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 namespace {
 
 std::atomic<unsigned int> gNextHandle{1};
@@ -155,7 +155,7 @@ KmsWindow::~KmsWindow() {
   if (frameTimerFd_ >= 0) close(frameTimerFd_);
 }
 
-void KmsWindow::setLambdaWindow(::lambda::Window* window) {
+void KmsWindow::setLambdaWindow(::lambdaui::Window* window) {
   lambdaWindow_ = window;
 }
 
@@ -170,7 +170,7 @@ void KmsWindow::show() {
   Application::instance().flushRedraw();
 }
 
-std::unique_ptr<Canvas> KmsWindow::createCanvas(::lambda::Window&) {
+std::unique_ptr<Canvas> KmsWindow::createCanvas(::lambdaui::Window&) {
   auto* provider = app_.gpuSurfaceProvider();
   if (!provider) {
     throw std::runtime_error("KMS application does not provide Vulkan surfaces");
@@ -399,4 +399,4 @@ std::unique_ptr<Window> createWindow(WindowConfig const& config) {
 }
 
 } // namespace platform
-} // namespace lambda
+} // namespace lambdaui

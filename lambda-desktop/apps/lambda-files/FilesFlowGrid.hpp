@@ -37,7 +37,7 @@ struct RowDescriptor {
   bool operator==(RowDescriptor const& other) const = default;
 };
 
-inline float resolvedLayoutWidth(lambda::LayoutConstraints const& constraints) {
+inline float resolvedLayoutWidth(lambdaui::LayoutConstraints const& constraints) {
   if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
     return constraints.maxWidth;
   }
@@ -105,8 +105,8 @@ inline std::vector<RowDescriptor> makeRows(std::vector<FileEntry> const& current
 
 struct GridState {
   float layoutWidth = 0.f;
-  lambda::Reactive::Signal<int> columns{0};
-  lambda::Reactive::Signal<std::vector<RowDescriptor>> rows{};
+  lambdaui::Reactive::Signal<int> columns{0};
+  lambdaui::Reactive::Signal<std::vector<RowDescriptor>> rows{};
 };
 
 inline void updateGridLayout(GridState& state, float width, FilesFlowGridLayout const& metrics) {
@@ -124,14 +124,14 @@ inline void updateGridLayout(GridState& state, float width, FilesFlowGridLayout 
 struct GridRelayoutBridge {
   std::shared_ptr<GridState> state;
   FilesFlowGridLayout metrics;
-  lambda::Element content;
+  lambdaui::Element content;
 
-  lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const& constraints,
-                     lambda::LayoutHints const& hints, lambda::TextSystem& textSystem) const {
+  lambdaui::Size measure(lambdaui::MeasureContext& ctx, lambdaui::LayoutConstraints const& constraints,
+                     lambdaui::LayoutHints const& hints, lambdaui::TextSystem& textSystem) const {
     double const startMs = trace::nowMs();
     float const width = resolvedLayoutWidth(constraints);
     updateGridLayout(*state, width, metrics);
-    lambda::Size const size = content.measure(ctx, constraints, hints, textSystem);
+    lambdaui::Size const size = content.measure(ctx, constraints, hints, textSystem);
     LAMBDA_FILES_TRACE_EVENT("flow-grid bridge-measure width=%.1f rows=%zu size=%.1fx%.1f elapsed=%.3fms\n",
                  width,
                  state->rows.peek().size(),
@@ -141,23 +141,23 @@ struct GridRelayoutBridge {
     return size;
   }
 
-  std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext& ctx) const {
-    auto wrapper = std::make_unique<lambda::scenegraph::SceneNode>(lambda::Rect{});
-    std::unique_ptr<lambda::scenegraph::SceneNode> child = content.mount(ctx);
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext& ctx) const {
+    auto wrapper = std::make_unique<lambdaui::scenegraph::SceneNode>(lambdaui::Rect{});
+    std::unique_ptr<lambdaui::scenegraph::SceneNode> child = content.mount(ctx);
     if (!child) {
       return wrapper;
     }
-    lambda::scenegraph::SceneNode* rawChild = child.get();
-    lambda::scenegraph::SceneNode* rawWrapper = wrapper.get();
+    lambdaui::scenegraph::SceneNode* rawChild = child.get();
+    lambdaui::scenegraph::SceneNode* rawWrapper = wrapper.get();
     wrapper->appendChild(std::move(child));
     wrapper->setRelayout([state = state, metrics = metrics, rawChild, rawWrapper](
-                             lambda::LayoutConstraints const& constraints) {
+                             lambdaui::LayoutConstraints const& constraints) {
       double const startMs = trace::nowMs();
       float const width = resolvedLayoutWidth(constraints);
       updateGridLayout(*state, width, metrics);
       (void)rawChild->relayout(constraints);
       rawWrapper->setSize(rawChild->size());
-      lambda::Size const size = rawChild->size();
+      lambdaui::Size const size = rawChild->size();
       LAMBDA_FILES_TRACE_EVENT("flow-grid bridge-relayout width=%.1f rows=%zu size=%.1fx%.1f elapsed=%.3fms\n",
                    width,
                    state->rows.peek().size(),
@@ -173,14 +173,14 @@ struct GridRelayoutBridge {
 
 /// Composite grid: `For` of `HStack` rows.
 struct FilesFlowGrid {
-  lambda::Reactive::Signal<std::vector<FileEntry>> entries;
-  lambda::Reactive::Signal<std::string> listingKey;
-  lambda::Reactive::Signal<std::string> selectedPath;
-  lambda::Reactive::Signal<FileSelectionState> selection;
+  lambdaui::Reactive::Signal<std::vector<FileEntry>> entries;
+  lambdaui::Reactive::Signal<std::string> listingKey;
+  lambdaui::Reactive::Signal<std::string> selectedPath;
+  lambdaui::Reactive::Signal<FileSelectionState> selection;
   std::vector<std::filesystem::path> iconThemeRoots;
   int iconSize = 48;
   std::function<void(FileEntry const&)> activateEntry;
-  std::function<void(FileEntry const&, lambda::Modifiers)> tapEntry;
+  std::function<void(FileEntry const&, lambdaui::Modifiers)> tapEntry;
   std::function<void(FileEntry const&)> showEntryContextMenu;
 
   float cellWidth = FilesTheme::kGridMinCell;
@@ -199,20 +199,20 @@ struct FilesFlowGrid {
     };
   }
 
-  lambda::Size measure(lambda::MeasureContext&, lambda::LayoutConstraints const& constraints,
-                     lambda::LayoutHints const&, lambda::TextSystem&) const;
+  lambdaui::Size measure(lambdaui::MeasureContext&, lambdaui::LayoutConstraints const& constraints,
+                     lambdaui::LayoutHints const&, lambdaui::TextSystem&) const;
 
-  lambda::Element body() const;
+  lambdaui::Element body() const;
 };
 
-inline lambda::Size FilesFlowGrid::measure(lambda::MeasureContext&, lambda::LayoutConstraints const& constraints,
-                                         lambda::LayoutHints const&, lambda::TextSystem&) const {
+inline lambdaui::Size FilesFlowGrid::measure(lambdaui::MeasureContext&, lambdaui::LayoutConstraints const& constraints,
+                                         lambdaui::LayoutHints const&, lambdaui::TextSystem&) const {
   double const startMs = trace::nowMs();
   float const width = detail::resolvedLayoutWidth(constraints);
   detail::updateGridLayout(*state, width, layoutMetrics());
   float const layoutWidth = width > 0.f ? width : std::max(0.f, state->layoutWidth);
   std::size_t const entryCount = entries.peek().size();
-  lambda::Size const size = layoutMetrics().contentSizeFor(layoutWidth, entryCount);
+  lambdaui::Size const size = layoutMetrics().contentSizeFor(layoutWidth, entryCount);
   LAMBDA_FILES_TRACE_EVENT("flow-grid measure entries=%zu width=%.1f layoutWidth=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                entryCount,
                width,
@@ -223,14 +223,14 @@ inline lambda::Size FilesFlowGrid::measure(lambda::MeasureContext&, lambda::Layo
   return size;
 }
 
-inline lambda::Size measureFilesFlowGrid(FilesFlowGrid const& grid,
-                                     lambda::LayoutConstraints const& constraints) {
+inline lambdaui::Size measureFilesFlowGrid(FilesFlowGrid const& grid,
+                                     lambdaui::LayoutConstraints const& constraints) {
   double const startMs = trace::nowMs();
   float const width = detail::resolvedLayoutWidth(constraints);
   detail::updateGridLayout(*grid.state, width, grid.layoutMetrics());
   float const layoutWidth = width > 0.f ? width : std::max(0.f, grid.state->layoutWidth);
   std::size_t const entryCount = grid.entries.peek().size();
-  lambda::Size const size = grid.layoutMetrics().contentSizeFor(layoutWidth, entryCount);
+  lambdaui::Size const size = grid.layoutMetrics().contentSizeFor(layoutWidth, entryCount);
   LAMBDA_FILES_TRACE_EVENT("flow-grid test-measure entries=%zu width=%.1f layoutWidth=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                entryCount,
                width,
@@ -241,8 +241,8 @@ inline lambda::Size measureFilesFlowGrid(FilesFlowGrid const& grid,
   return size;
 }
 
-inline lambda::Element FilesFlowGrid::body() const {
-  using namespace lambda;
+inline lambdaui::Element FilesFlowGrid::body() const {
+  using namespace lambdaui;
 
   FilesFlowGridLayout const metrics = layoutMetrics();
   Reactive::Signal<std::vector<FileEntry>> const entriesSignal = entries;

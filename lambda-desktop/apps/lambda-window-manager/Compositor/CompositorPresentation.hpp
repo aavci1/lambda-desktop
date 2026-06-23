@@ -15,7 +15,7 @@
 #include <cstring>
 #include <ctime>
 
-namespace lambda::compositor::presentation {
+namespace lambdaui::compositor::presentation {
 
 using SteadyClock = std::chrono::steady_clock;
 
@@ -385,18 +385,18 @@ struct AtomicFrameProfile {
   double maxConfigureToCommitMs = 0.0;
 };
 
-} // namespace lambda::compositor::presentation
+} // namespace lambdaui::compositor::presentation
 
 #define LAMBDA_WINDOW_MANAGER_TRACE_TIMING(...)                                      \
   do {                                                                              \
-    if (::lambda::compositor::presentation::timingTraceEnabled()) {                 \
-      ::lambda::compositor::presentation::traceTiming(__VA_ARGS__);                 \
+    if (::lambdaui::compositor::presentation::timingTraceEnabled()) {                 \
+      ::lambdaui::compositor::presentation::traceTiming(__VA_ARGS__);                 \
     }                                                                               \
   } while (false)
 
 #define LAMBDA_WINDOW_MANAGER_TRACE_PACING(...)                                     \
   do {                                                                              \
-    if (::lambda::compositor::presentation::pacingTraceEnabled()) {                 \
-      ::lambda::compositor::presentation::tracePacing(__VA_ARGS__);                 \
+    if (::lambdaui::compositor::presentation::pacingTraceEnabled()) {                 \
+      ::lambdaui::compositor::presentation::tracePacing(__VA_ARGS__);                 \
     }                                                                               \
   } while (false)

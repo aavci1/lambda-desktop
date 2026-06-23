@@ -5,7 +5,7 @@
 /// Linux-only KMS output access for embedders that need to own a display without
 /// creating a Lambda Window.
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 
 #include <cstdint>
 #include <filesystem>
@@ -18,7 +18,7 @@
 
 #include <vulkan/vulkan.h>
 
-namespace lambda {
+namespace lambdaui {
 
 class Canvas;
 class TextSystem;
@@ -250,6 +250,6 @@ public:
 };
 
 } // namespace platform
-} // namespace lambda
+} // namespace lambdaui
 
-#endif // LAMBDA_VULKAN
+#endif // LAMBDAUI_VULKAN

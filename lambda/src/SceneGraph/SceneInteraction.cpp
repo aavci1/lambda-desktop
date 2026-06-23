@@ -9,7 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 namespace {
 
@@ -87,4 +87,4 @@ std::uint64_t hitTestTraversalCountForTesting() noexcept {
 
 } // namespace detail
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

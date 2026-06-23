@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace lambda::linux_platform {
+namespace lambdaui::linux_platform {
 
 constexpr int kFirstAdjacentVtSession = 1;
 constexpr int kLastAdjacentVtSession = 15;
@@ -42,4 +42,4 @@ constexpr int kLastAdjacentVtSession = 15;
   return std::nullopt;
 }
 
-} // namespace lambda::linux_platform
+} // namespace lambdaui::linux_platform

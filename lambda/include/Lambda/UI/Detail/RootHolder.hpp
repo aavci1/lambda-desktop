@@ -5,7 +5,7 @@
 
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 struct RootHolder {
   virtual ~RootHolder() = default;
@@ -29,4 +29,4 @@ struct TypedRootHolder final : RootHolder {
   C value;
 };
 
-} // namespace lambda
+} // namespace lambdaui

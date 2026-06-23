@@ -2,7 +2,7 @@
 
 #include <doctest/doctest.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 TEST_CASE("fractional scale preferred scale keeps sub-1 output scales") {
   CHECK(fractionalScalePreferredScale120(0.5f) == 60);
@@ -18,4 +18,4 @@ TEST_CASE("fractional scale resources use the implemented protocol version") {
   CHECK(fractionalScaleResourceVersion(2) == 1);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

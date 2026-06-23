@@ -4,7 +4,7 @@
 
 struct wl_client;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kCompositorVersion = 5;
 inline constexpr std::uint32_t kSubcompositorVersion = 1;
@@ -20,4 +20,4 @@ constexpr std::uint32_t subcompositorResourceVersion(std::uint32_t requestedVers
 void bindCompositor(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 void bindSubcompositor(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

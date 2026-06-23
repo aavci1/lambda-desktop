@@ -10,7 +10,7 @@
 #include <string_view>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 struct LocalId {
   enum class Kind : std::uint8_t {
@@ -125,4 +125,4 @@ struct ComponentKeyHash {
 
 bool keySharesPrefix(ComponentKey const& a, ComponentKey const& b) noexcept;
 
-} // namespace lambda
+} // namespace lambdaui

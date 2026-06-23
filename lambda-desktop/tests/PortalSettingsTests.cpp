@@ -14,9 +14,9 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::pumpUntil;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::pumpUntil;
+using lambdaui::testing::dbus::startPrivateBus;
 
 std::filesystem::path tempRoot(char const* name) {
   auto path = std::filesystem::temp_directory_path() /
@@ -47,8 +47,8 @@ reduced_motion = true
 )";
   }
 
-  auto state = lambda::system::PortalSettingsService::stateFromShellConfig(configPath);
-  CHECK(state.colorScheme == lambda::system::PortalColorScheme::PreferLight);
+  auto state = lambdaui::system::PortalSettingsService::stateFromShellConfig(configPath);
+  CHECK(state.colorScheme == lambdaui::system::PortalColorScheme::PreferLight);
   REQUIRE(state.accentColor.has_value());
   CHECK(state.accentColor->red == doctest::Approx(0x33 / 255.0));
   CHECK(state.accentColor->green == doctest::Approx(0x66 / 255.0));
@@ -68,17 +68,17 @@ TEST_CASE("PortalSettingsService exports xdg-desktop-portal Settings backend met
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::PortalSettingsService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::PortalSettingsService::serviceName);
 
-  lambda::system::PortalSettingsState state{
-      .colorScheme = lambda::system::PortalColorScheme::PreferDark,
-      .accentColor = lambda::system::PortalAccentColor{.red = 0.25, .green = 0.5, .blue = 0.75},
+  lambdaui::system::PortalSettingsState state{
+      .colorScheme = lambdaui::system::PortalColorScheme::PreferDark,
+      .accentColor = lambdaui::system::PortalAccentColor{.red = 0.25, .green = 0.5, .blue = 0.75},
       .highContrast = true,
       .reducedMotion = true,
   };
-  lambda::system::PortalSettingsService service(serviceBus, state);
+  lambdaui::system::PortalSettingsService service(serviceBus, state);
   auto objectSlot = service.exportObject();
 
   std::atomic<bool> running = true;
@@ -88,71 +88,71 @@ TEST_CASE("PortalSettingsService exports xdg-desktop-portal Settings backend met
     }
   });
 
-  auto version = client.getProperty(lambda::dbus::PropertyAddress{
-                                        .destination = lambda::system::PortalSettingsService::serviceName,
-                                        .path = lambda::system::PortalSettingsService::objectPath,
-                                        .interface = lambda::system::PortalSettingsService::interfaceName,
+  auto version = client.getProperty(lambdaui::dbus::PropertyAddress{
+                                        .destination = lambdaui::system::PortalSettingsService::serviceName,
+                                        .path = lambdaui::system::PortalSettingsService::objectPath,
+                                        .interface = lambdaui::system::PortalSettingsService::interfaceName,
                                         .name = "version",
                                     },
                                     "u");
   CHECK(std::get<std::uint32_t>(version) == 1);
 
-  auto readColorScheme = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalSettingsService::serviceName,
-      .path = lambda::system::PortalSettingsService::objectPath,
-      .interface = lambda::system::PortalSettingsService::interfaceName,
+  auto readColorScheme = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalSettingsService::serviceName,
+      .path = lambdaui::system::PortalSettingsService::objectPath,
+      .interface = lambdaui::system::PortalSettingsService::interfaceName,
       .member = "Read",
-      .arguments = {std::string(lambda::system::PortalSettingsService::appearanceNamespace),
+      .arguments = {std::string(lambdaui::system::PortalSettingsService::appearanceNamespace),
                     std::string("color-scheme")},
   });
   CHECK(std::get<std::uint32_t>(readColorScheme.readVariant("u")) == 1);
 
-  auto readAccent = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalSettingsService::serviceName,
-      .path = lambda::system::PortalSettingsService::objectPath,
-      .interface = lambda::system::PortalSettingsService::interfaceName,
+  auto readAccent = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalSettingsService::serviceName,
+      .path = lambdaui::system::PortalSettingsService::objectPath,
+      .interface = lambdaui::system::PortalSettingsService::interfaceName,
       .member = "Read",
-      .arguments = {std::string(lambda::system::PortalSettingsService::appearanceNamespace),
+      .arguments = {std::string(lambdaui::system::PortalSettingsService::appearanceNamespace),
                     std::string("accent-color")},
   });
-  auto accent = std::get<lambda::dbus::RgbColor>(readAccent.readVariant("(ddd)"));
+  auto accent = std::get<lambdaui::dbus::RgbColor>(readAccent.readVariant("(ddd)"));
   CHECK(accent.red == doctest::Approx(0.25));
   CHECK(accent.green == doctest::Approx(0.5));
   CHECK(accent.blue == doctest::Approx(0.75));
 
-  auto readAll = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalSettingsService::serviceName,
-      .path = lambda::system::PortalSettingsService::objectPath,
-      .interface = lambda::system::PortalSettingsService::interfaceName,
+  auto readAll = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalSettingsService::serviceName,
+      .path = lambdaui::system::PortalSettingsService::objectPath,
+      .interface = lambdaui::system::PortalSettingsService::interfaceName,
       .member = "ReadAll",
-      .arguments = {lambda::dbus::StringArray{{lambda::system::PortalSettingsService::appearanceNamespace}}},
+      .arguments = {lambdaui::dbus::StringArray{{lambdaui::system::PortalSettingsService::appearanceNamespace}}},
   });
   auto settings = readAll.readNamespacedVariantDictionary();
-  auto appearance = settings.values.find(lambda::system::PortalSettingsService::appearanceNamespace);
+  auto appearance = settings.values.find(lambdaui::system::PortalSettingsService::appearanceNamespace);
   REQUIRE(appearance != settings.values.end());
   CHECK(std::get<std::uint32_t>(appearance->second.at("color-scheme")) == 1);
   CHECK(std::get<std::uint32_t>(appearance->second.at("contrast")) == 1);
   CHECK(std::get<std::uint32_t>(appearance->second.at("reduced-motion")) == 1);
-  auto allAccent = std::get<lambda::dbus::RgbColor>(appearance->second.at("accent-color"));
+  auto allAccent = std::get<lambdaui::dbus::RgbColor>(appearance->second.at("accent-color"));
   CHECK(allAccent.red == doctest::Approx(0.25));
   CHECK(allAccent.green == doctest::Approx(0.5));
   CHECK(allAccent.blue == doctest::Approx(0.75));
 
   std::uint32_t changedColorScheme = 0;
   auto signalSlot = client.matchSignal(
-      lambda::dbus::SignalMatch{
-          .sender = lambda::system::PortalSettingsService::serviceName,
-          .path = lambda::system::PortalSettingsService::objectPath,
-          .interface = lambda::system::PortalSettingsService::interfaceName,
+      lambdaui::dbus::SignalMatch{
+          .sender = lambdaui::system::PortalSettingsService::serviceName,
+          .path = lambdaui::system::PortalSettingsService::objectPath,
+          .interface = lambdaui::system::PortalSettingsService::interfaceName,
           .member = "SettingChanged",
       },
-      [&changedColorScheme](lambda::dbus::Message& message) {
-        CHECK(message.readString() == lambda::system::PortalSettingsService::appearanceNamespace);
+      [&changedColorScheme](lambdaui::dbus::Message& message) {
+        CHECK(message.readString() == lambdaui::system::PortalSettingsService::appearanceNamespace);
         CHECK(message.readString() == "color-scheme");
         changedColorScheme = std::get<std::uint32_t>(message.readVariant("u"));
       });
 
-  state.colorScheme = lambda::system::PortalColorScheme::PreferLight;
+  state.colorScheme = lambdaui::system::PortalColorScheme::PreferLight;
   service.setState(state);
   service.emitChanged("color-scheme");
   serviceBus.flush();

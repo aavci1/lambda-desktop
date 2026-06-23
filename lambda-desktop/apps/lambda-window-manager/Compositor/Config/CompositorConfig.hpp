@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct CompositorRenderingConfig {
   std::uint32_t backdropBlurBaseDownsample = 2;
@@ -52,4 +52,4 @@ struct LoadedCompositorConfig {
 [[nodiscard]] bool configChanged(LoadedCompositorConfig const& loaded);
 [[nodiscard]] float scaleForOutput(CompositorConfig const& config, std::string const& outputName);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct ChromeControlsMetrics {
   float titleBarHeight = 0.f;
@@ -70,4 +70,4 @@ inline ChromeControlRects chromeControlRects(ChromeConfig const& chrome,
   };
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

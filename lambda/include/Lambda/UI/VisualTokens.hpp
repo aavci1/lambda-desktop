@@ -6,7 +6,7 @@
 
 #include <Lambda/Core/Color.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 struct VisualTokens {
   static constexpr Color windowSurface{245.f / 255.f, 248.f / 255.f, 252.f / 255.f, 0.78f};
@@ -32,4 +32,4 @@ struct VisualTokens {
   static constexpr Color controlShadow{20.f / 255.f, 40.f / 255.f, 70.f / 255.f, 0.12f};
 };
 
-} // namespace lambda
+} // namespace lambdaui

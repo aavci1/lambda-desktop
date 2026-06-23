@@ -18,7 +18,7 @@
 #include "Graphics/Metal/MetalPathRasterizer.hpp"
 #include "Debug/PerfCounters.hpp"
 
-namespace lambda {
+namespace lambdaui {
 class Window;
 }
 
@@ -41,7 +41,7 @@ class Window;
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -3071,4 +3071,4 @@ bool takeCapturedFrameForCanvas(Canvas* canvas, std::vector<std::uint8_t>& out, 
   return false;
 }
 
-} // namespace lambda
+} // namespace lambdaui

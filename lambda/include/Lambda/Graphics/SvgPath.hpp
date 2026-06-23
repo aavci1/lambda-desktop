@@ -10,7 +10,7 @@
 #include <string>
 #include <string_view>
 
-namespace lambda {
+namespace lambdaui {
 
 struct SvgPathParseError {
   std::size_t position = 0;
@@ -24,4 +24,4 @@ struct SvgPathParseError {
 /// when provided.
 Path parseSvgPath(std::string_view d, SvgPathParseError* error = nullptr);
 
-} // namespace lambda
+} // namespace lambdaui

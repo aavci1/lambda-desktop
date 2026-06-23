@@ -9,7 +9,7 @@
 
 #include <linux/input-event-codes.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct VtSwitchShortcutState {
   bool leftCtrlDown = false;
@@ -137,4 +137,4 @@ struct VtSwitchShortcutResult {
   return result;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

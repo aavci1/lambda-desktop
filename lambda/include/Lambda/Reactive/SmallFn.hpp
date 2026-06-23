@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace lambda::Reactive {
+namespace lambdaui::Reactive {
 
 namespace detail {
 
@@ -210,4 +210,4 @@ private:
   bool heap_ = false;
 };
 
-} // namespace lambda::Reactive
+} // namespace lambdaui::Reactive

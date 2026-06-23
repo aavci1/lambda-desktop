@@ -32,7 +32,7 @@ public:
   /// Drains readable bytes and invokes `handler` for each newline-delimited message.
   void dispatchReadable(LineHandler handler);
 
-#ifdef LAMBDA_TESTING
+#ifdef LAMBDAUI_TESTING
   void adoptFdForTesting(int fd);
 #endif
 

@@ -1,8 +1,8 @@
-if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND OR LAMBDAUI_PLATFORM_LINUX_KMS)
   add_executable(lambda-polkit-agent main.cpp)
-  target_link_libraries(lambda-polkit-agent PRIVATE lambda)
+  target_link_libraries(lambda-polkit-agent PRIVATE lambdaui)
 
-  if(LAMBDA_ENABLE_ASAN)
+  if(LAMBDAUI_ENABLE_ASAN)
     target_compile_options(lambda-polkit-agent PRIVATE -fsanitize=address -fno-omit-frame-pointer)
     target_link_options(lambda-polkit-agent PRIVATE -fsanitize=address)
   endif()

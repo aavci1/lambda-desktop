@@ -4,7 +4,7 @@
 #include <span>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct PendingBufferReleaseRecord {
   std::uintptr_t token = 0;
@@ -20,4 +20,4 @@ struct BufferReleasePlan {
     std::span<PendingBufferReleaseRecord const> pending,
     std::span<std::uint64_t const> retainedDmabufBufferIds);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

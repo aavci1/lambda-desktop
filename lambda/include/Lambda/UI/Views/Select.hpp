@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class SelectTriggerMode : std::uint8_t {
     /// Button-like field with border and chevron.
@@ -118,4 +118,4 @@ struct Select : ViewModifiers<Select> {
     Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

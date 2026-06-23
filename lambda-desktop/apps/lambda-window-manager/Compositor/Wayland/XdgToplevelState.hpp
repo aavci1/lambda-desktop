@@ -4,7 +4,7 @@
 
 #include <string_view>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 [[nodiscard]] inline bool xdgToplevelSurfaceConfigured(WaylandServer::Impl::XdgToplevel const* toplevel) {
   return toplevel &&
@@ -120,4 +120,4 @@ inline bool resetXdgToplevelClientStateForUnmap(WaylandServer::Impl::XdgToplevel
   return true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

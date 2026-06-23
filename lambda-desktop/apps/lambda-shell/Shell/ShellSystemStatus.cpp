@@ -97,10 +97,10 @@ bool interfaceUp(std::filesystem::path const& interfacePath) {
 bool populateNetworkManagerStatus(SystemStatus& status) {
 #if LAMBDA_HAS_DBUS
   try {
-    auto client = lambda::system::NetworkManagerClient::connectSystem();
+    auto client = lambdaui::system::NetworkManagerClient::connectSystem();
     auto const snapshot = client.readSnapshot();
-    status.network = lambda::system::formatNetworkStatus(snapshot);
-    status.wifi = lambda::system::formatWifiStatus(snapshot);
+    status.network = lambdaui::system::formatNetworkStatus(snapshot);
+    status.wifi = lambdaui::system::formatWifiStatus(snapshot);
     return true;
   } catch (...) {
     return false;
@@ -144,8 +144,8 @@ std::string readBluetoothStatus(std::filesystem::path const& sysRoot) {
 #if LAMBDA_HAS_DBUS
   if (sysRoot == "/sys") {
     try {
-      auto client = lambda::system::BlueZClient::connectSystem();
-      return lambda::system::formatBluetoothStatus(client.readSnapshot());
+      auto client = lambdaui::system::BlueZClient::connectSystem();
+      return lambdaui::system::formatBluetoothStatus(client.readSnapshot());
     } catch (...) {
     }
   }
@@ -170,39 +170,39 @@ std::string readBluetoothStatus(std::filesystem::path const& sysRoot) {
 }
 
 #if LAMBDA_HAS_DBUS
-BatteryChargeState batteryChargeStateFromUPower(lambda::system::UPowerDeviceState state) {
+BatteryChargeState batteryChargeStateFromUPower(lambdaui::system::UPowerDeviceState state) {
   switch (state) {
-  case lambda::system::UPowerDeviceState::Charging:
+  case lambdaui::system::UPowerDeviceState::Charging:
     return BatteryChargeState::Charging;
-  case lambda::system::UPowerDeviceState::Discharging:
+  case lambdaui::system::UPowerDeviceState::Discharging:
     return BatteryChargeState::Discharging;
-  case lambda::system::UPowerDeviceState::Empty:
+  case lambdaui::system::UPowerDeviceState::Empty:
     return BatteryChargeState::Empty;
-  case lambda::system::UPowerDeviceState::FullyCharged:
+  case lambdaui::system::UPowerDeviceState::FullyCharged:
     return BatteryChargeState::Full;
-  case lambda::system::UPowerDeviceState::PendingCharge:
+  case lambdaui::system::UPowerDeviceState::PendingCharge:
     return BatteryChargeState::PendingCharge;
-  case lambda::system::UPowerDeviceState::PendingDischarge:
+  case lambdaui::system::UPowerDeviceState::PendingDischarge:
     return BatteryChargeState::PendingDischarge;
-  case lambda::system::UPowerDeviceState::Unknown:
+  case lambdaui::system::UPowerDeviceState::Unknown:
   default:
     return BatteryChargeState::Unknown;
   }
 }
 
-BatteryWarningLevel batteryWarningLevelFromUPower(lambda::system::UPowerWarningLevel level) {
+BatteryWarningLevel batteryWarningLevelFromUPower(lambdaui::system::UPowerWarningLevel level) {
   switch (level) {
-  case lambda::system::UPowerWarningLevel::None:
+  case lambdaui::system::UPowerWarningLevel::None:
     return BatteryWarningLevel::None;
-  case lambda::system::UPowerWarningLevel::Discharging:
+  case lambdaui::system::UPowerWarningLevel::Discharging:
     return BatteryWarningLevel::Discharging;
-  case lambda::system::UPowerWarningLevel::Low:
+  case lambdaui::system::UPowerWarningLevel::Low:
     return BatteryWarningLevel::Low;
-  case lambda::system::UPowerWarningLevel::Critical:
+  case lambdaui::system::UPowerWarningLevel::Critical:
     return BatteryWarningLevel::Critical;
-  case lambda::system::UPowerWarningLevel::Action:
+  case lambdaui::system::UPowerWarningLevel::Action:
     return BatteryWarningLevel::Action;
-  case lambda::system::UPowerWarningLevel::Unknown:
+  case lambdaui::system::UPowerWarningLevel::Unknown:
   default:
     return BatteryWarningLevel::Unknown;
   }
@@ -247,7 +247,7 @@ BatteryStatus readBatteryStatus(std::filesystem::path const& sysRoot) {
 #if LAMBDA_HAS_DBUS
   if (sysRoot == "/sys") {
     try {
-      auto client = lambda::system::UPowerClient::connectSystem();
+      auto client = lambdaui::system::UPowerClient::connectSystem();
       auto const device = client.readDisplayDevice();
       BatteryStatus status = batteryStatusFromUPower(device);
       if (status.available) {
@@ -298,8 +298,8 @@ std::string readMediaStatus(std::filesystem::path const& sysRoot) {
 
 #if LAMBDA_HAS_DBUS
   try {
-    auto client = lambda::system::MPRISClient::connectSession();
-    return lambda::system::formatMPRISStatus(client.readPlayers());
+    auto client = lambdaui::system::MPRISClient::connectSession();
+    return lambdaui::system::formatMPRISStatus(client.readPlayers());
   } catch (...) {
     return "unavailable";
   }
@@ -311,7 +311,7 @@ std::string readMediaStatus(std::filesystem::path const& sysRoot) {
 } // namespace
 
 #if LAMBDA_HAS_DBUS
-BatteryStatus batteryStatusFromUPower(lambda::system::UPowerDisplayDevice const& device) {
+BatteryStatus batteryStatusFromUPower(lambdaui::system::UPowerDisplayDevice const& device) {
   BatteryPowerSource const source = device.onBattery ? BatteryPowerSource::Battery : BatteryPowerSource::AC;
   if (!device.present) {
     return unavailableBatteryStatus(source);
@@ -319,7 +319,7 @@ BatteryStatus batteryStatusFromUPower(lambda::system::UPowerDisplayDevice const&
 
   int const rounded = std::clamp(static_cast<int>(std::lround(device.percentage)), 0, 100);
   return BatteryStatus{
-      .label = lambda::system::formatUPowerBatteryStatus(device),
+      .label = lambdaui::system::formatUPowerBatteryStatus(device),
       .available = true,
       .present = true,
       .percentage = rounded,

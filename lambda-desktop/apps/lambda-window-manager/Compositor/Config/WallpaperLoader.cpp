@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <utility>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 AsyncWallpaperLoader::~AsyncWallpaperLoader() {
   cancel();
@@ -42,21 +42,21 @@ void AsyncWallpaperLoader::workerMain(std::string path,
   auto const start = presentation::SteadyClock::now();
   std::filesystem::path const sourcePath{path};
 
-  std::optional<lambda::DecodedImageRgba> decoded =
+  std::optional<lambdaui::DecodedImageRgba> decoded =
       readWallpaperCache(sourcePath, maxLongEdge, cacheRoot);
   bool fromCache = decoded.has_value();
 
   if (!decoded) {
-    decoded = lambda::decodeImageRgbaFromFile(path);
+    decoded = lambdaui::decodeImageRgbaFromFile(path);
     if (decoded) {
-      auto const preview = lambda::downscaleDecodedImageRgba(*decoded, wallpaperPreviewMaxEdge());
+      auto const preview = lambdaui::downscaleDecodedImageRgba(*decoded, wallpaperPreviewMaxEdge());
       if (!cancel_.load(std::memory_order_acquire)) {
         std::lock_guard const lock(mutex_);
         previewReady_ = preview;
       }
 
       auto const beforeDownscale = presentation::SteadyClock::now();
-      *decoded = lambda::downscaleDecodedImageRgba(std::move(*decoded), maxLongEdge);
+      *decoded = lambdaui::downscaleDecodedImageRgba(std::move(*decoded), maxLongEdge);
       if (presentation::timingTraceEnabled()) {
         LAMBDA_WINDOW_MANAGER_TRACE_TIMING("wallpaper-downscale", beforeDownscale);
       }
@@ -90,12 +90,12 @@ void AsyncWallpaperLoader::workerMain(std::string path,
   loading_.store(false, std::memory_order_release);
 }
 
-std::optional<lambda::DecodedImageRgba> AsyncWallpaperLoader::takePreview() {
+std::optional<lambdaui::DecodedImageRgba> AsyncWallpaperLoader::takePreview() {
   std::lock_guard const lock(mutex_);
   return std::exchange(previewReady_, std::nullopt);
 }
 
-std::optional<lambda::DecodedImageRgba> AsyncWallpaperLoader::takeReady(double* decodeMilliseconds) {
+std::optional<lambdaui::DecodedImageRgba> AsyncWallpaperLoader::takeReady(double* decodeMilliseconds) {
   std::lock_guard const lock(mutex_);
   if (!ready_) {
     return std::nullopt;
@@ -112,14 +112,14 @@ bool tryLoadWallpaperFromCache(CompositorConfigWatchContext& ctx) {
   }
 
   auto const cacheStart = presentation::SteadyClock::now();
-  std::optional<lambda::DecodedImageRgba> decoded = readWallpaperCache(
+  std::optional<lambdaui::DecodedImageRgba> decoded = readWallpaperCache(
       *ctx.appliedConfig.config.wallpaperPath, ctx.wallpaperMaxLongEdge, ctx.wallpaperCacheDir);
   if (!decoded) {
     return false;
   }
 
   ctx.appliedConfig.wallpaperImage =
-      lambda::imageFromDecodedRgba(*decoded, ctx.canvas.gpuDevice());
+      lambdaui::imageFromDecodedRgba(*decoded, ctx.canvas.gpuDevice());
   if (!ctx.appliedConfig.wallpaperImage) {
     return false;
   }
@@ -143,13 +143,13 @@ bool pollWallpaperPreview(CompositorConfigWatchContext& ctx) {
     return false;
   }
 
-  std::optional<lambda::DecodedImageRgba> decoded = ctx.wallpaperLoader->takePreview();
+  std::optional<lambdaui::DecodedImageRgba> decoded = ctx.wallpaperLoader->takePreview();
   if (!decoded) {
     return false;
   }
 
   auto const uploadStart = presentation::SteadyClock::now();
-  ctx.appliedConfig.wallpaperPreviewImage = lambda::imageFromDecodedRgba(*decoded, ctx.canvas.gpuDevice());
+  ctx.appliedConfig.wallpaperPreviewImage = lambdaui::imageFromDecodedRgba(*decoded, ctx.canvas.gpuDevice());
   LAMBDA_WINDOW_MANAGER_TRACE_TIMING("wallpaper-preview-upload", uploadStart);
   if (!ctx.appliedConfig.wallpaperPreviewImage) {
     return false;
@@ -165,13 +165,13 @@ bool pollWallpaperLoad(CompositorConfigWatchContext& ctx) {
   }
 
   double decodeMs = 0.0;
-  std::optional<lambda::DecodedImageRgba> decoded = ctx.wallpaperLoader->takeReady(&decodeMs);
+  std::optional<lambdaui::DecodedImageRgba> decoded = ctx.wallpaperLoader->takeReady(&decodeMs);
   if (!decoded) {
     return false;
   }
 
   auto const uploadStart = presentation::SteadyClock::now();
-  ctx.appliedConfig.wallpaperImage = lambda::imageFromDecodedRgba(*decoded, ctx.canvas.gpuDevice());
+  ctx.appliedConfig.wallpaperImage = lambdaui::imageFromDecodedRgba(*decoded, ctx.canvas.gpuDevice());
   LAMBDA_WINDOW_MANAGER_TRACE_TIMING("wallpaper-upload", uploadStart);
   if (presentation::timingTraceEnabled()) {
     std::fprintf(stderr,
@@ -186,4 +186,4 @@ bool pollWallpaperLoad(CompositorConfigWatchContext& ctx) {
   return true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

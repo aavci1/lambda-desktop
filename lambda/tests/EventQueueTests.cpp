@@ -43,33 +43,33 @@ struct TestPipe {
 } // namespace
 
 TEST_CASE("EventQueue snapshots first-class handlers registered during dispatch") {
-  lambda::Application app;
-  lambda::EventQueue& queue = app.eventQueue();
+  lambdaui::Application app;
+  lambdaui::EventQueue& queue = app.eventQueue();
 
   int primaryCalls = 0;
   int addedCalls = 0;
-  queue.on<lambda::InputEvent>([&](lambda::InputEvent const&) {
+  queue.on<lambdaui::InputEvent>([&](lambdaui::InputEvent const&) {
     ++primaryCalls;
     for (int i = 0; i < 64; ++i) {
-      queue.on<lambda::InputEvent>([&](lambda::InputEvent const&) {
+      queue.on<lambdaui::InputEvent>([&](lambdaui::InputEvent const&) {
         ++addedCalls;
       });
     }
   });
 
-  queue.post(lambda::InputEvent{.kind = lambda::InputEvent::Kind::KeyDown});
+  queue.post(lambdaui::InputEvent{.kind = lambdaui::InputEvent::Kind::KeyDown});
   queue.dispatch();
   CHECK(primaryCalls == 1);
   CHECK(addedCalls == 0);
 
-  queue.post(lambda::InputEvent{.kind = lambda::InputEvent::Kind::KeyDown});
+  queue.post(lambdaui::InputEvent{.kind = lambdaui::InputEvent::Kind::KeyDown});
   queue.dispatch();
   CHECK(primaryCalls == 2);
   CHECK(addedCalls == 64);
 }
 
 TEST_CASE("Application poll sources honor requested event masks") {
-  lambda::Application app;
+  lambdaui::Application app;
   TestPipe pipe;
   REQUIRE(pipe.open());
 
@@ -104,8 +104,8 @@ TEST_CASE("Application poll sources honor requested event masks") {
 }
 
 TEST_CASE("EventQueue snapshots custom handlers registered during dispatch") {
-  lambda::Application app;
-  lambda::EventQueue& queue = app.eventQueue();
+  lambdaui::Application app;
+  lambdaui::EventQueue& queue = app.eventQueue();
 
   int primaryCalls = 0;
   int addedCalls = 0;

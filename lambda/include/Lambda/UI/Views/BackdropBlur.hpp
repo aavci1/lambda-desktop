@@ -8,7 +8,7 @@
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/ViewModifiers.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 /// A rectangular backdrop-filter region. The renderer samples already-rendered
 /// window content, blurs it once per frame, then masks this region from that
@@ -25,4 +25,4 @@ struct BackdropBlur : ViewModifiers<BackdropBlur> {
   Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

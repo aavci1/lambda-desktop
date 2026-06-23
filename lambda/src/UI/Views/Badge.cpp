@@ -2,7 +2,7 @@
 #include <Lambda/UI/Hooks.hpp>
 #include <Lambda/UI/Views/Text.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -20,7 +20,7 @@ Badge::Style resolveStyle(Badge::Style const &style, Theme const &theme) {
 } // namespace
 
 Element Badge::body() const {
-    Badge::Style const resolved = resolveStyle(style, lambda::useEnvironment<ThemeKey>()());
+    Badge::Style const resolved = resolveStyle(style, lambdaui::useEnvironment<ThemeKey>()());
     return Text {
         .text = label,
         .font = resolved.font,
@@ -32,4 +32,4 @@ Element Badge::body() const {
         .cornerRadius(resolved.cornerRadius);
 }
 
-} // namespace lambda
+} // namespace lambdaui

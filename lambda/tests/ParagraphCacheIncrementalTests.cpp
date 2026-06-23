@@ -11,7 +11,7 @@
 
 #include <string>
 
-using namespace lambda;
+using namespace lambdaui;
 
 namespace {
 
@@ -74,7 +74,7 @@ TEST_CASE("Paragraph cache incremental: single-character delete") {
 
 // Topology-changing edits (new hard breaks, leading insert) can diverge between `tryIncrementalSplit`'s
 // rebuilt paragraph list and `splitIntoParagraphs` — reference layout uses the latter. Covered by
-// `LAMBDA_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT` once lists match.
+// `LAMBDAUI_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT` once lists match.
 
 TEST_CASE("Paragraph cache incremental: delete newline merges paragraphs") {
   CoreTextSystem sys;

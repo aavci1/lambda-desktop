@@ -4,8 +4,8 @@
 
 #include <Lambda/Platform/Linux/KmsOutput.hpp>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 void dispatchKmsInputEvent(WaylandServer& wayland, platform::KmsInputEvent const& event);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

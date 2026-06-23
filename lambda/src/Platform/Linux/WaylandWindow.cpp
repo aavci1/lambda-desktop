@@ -55,7 +55,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 class WaylandWindow;
 
@@ -1232,7 +1232,7 @@ public:
     if (wakePipe_[1] >= 0) close(wakePipe_[1]);
   }
 
-  void setLambdaWindow(::lambda::Window* window) override { lambdaWindow_ = window; }
+  void setLambdaWindow(::lambdaui::Window* window) override { lambdaWindow_ = window; }
 
   void show() override {
     updateCanvasDpi();
@@ -1240,7 +1240,7 @@ public:
     Application::instance().flushRedraw();
   }
 
-  std::unique_ptr<Canvas> createCanvas(::lambda::Window&) override {
+  std::unique_ptr<Canvas> createCanvas(::lambdaui::Window&) override {
     nativeSurface_ = WaylandNativeSurface{display_, surface_};
     auto* provider = Application::instance().platformApp().gpuSurfaceProvider();
     if (!provider) {
@@ -3049,7 +3049,7 @@ private:
   std::vector<std::unique_ptr<WaylandPopoverSurfaceState>> popovers_;
   std::uint64_t nextPopoverId_ = 1;
 
-  ::lambda::Window* lambdaWindow_ = nullptr;
+  ::lambdaui::Window* lambdaWindow_ = nullptr;
   unsigned int handle_ = 0;
   Size size_{};
   std::string title_;
@@ -3568,4 +3568,4 @@ std::unique_ptr<Window> createWindow(WindowConfig const& config) {
 }
 
 } // namespace platform
-} // namespace lambda
+} // namespace lambdaui

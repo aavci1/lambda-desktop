@@ -11,7 +11,7 @@
 
 #include <algorithm>
 
-namespace lambda {
+namespace lambdaui {
 
 Checkbox::Style resolveStyle(Checkbox::Style const &style, Theme const &theme) {
     return Checkbox::Style {
@@ -110,7 +110,7 @@ Element Checkbox::body() const {
         .child = ZStack {
             .horizontalAlignment = Alignment::Center,
             .verticalAlignment = Alignment::Center,
-            .children = lambda::children(
+            .children = lambdaui::children(
                 Rectangle {}
                     .fill([boxFillAnim] {
                         return boxFillAnim();
@@ -134,4 +134,4 @@ Element Checkbox::body() const {
     };
 }
 
-} // namespace lambda
+} // namespace lambdaui

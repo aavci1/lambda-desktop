@@ -20,7 +20,7 @@
 #include <optional>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 bool surfaceIsRenderable(WaylandServer::Impl::Surface const* surface) {
@@ -559,4 +559,4 @@ void WaylandServer::Impl::consumeSurfaceDamage(std::uint64_t surfaceId, std::uin
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

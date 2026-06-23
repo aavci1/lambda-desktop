@@ -20,7 +20,7 @@
 #include <memory>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 class Element;
 struct Popover;
@@ -121,4 +121,4 @@ struct ElementModifiers {
 };
 
 } // namespace detail
-} // namespace lambda
+} // namespace lambdaui

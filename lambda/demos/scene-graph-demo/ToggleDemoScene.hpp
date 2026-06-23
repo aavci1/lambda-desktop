@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::examples::scenegraphdemo {
+namespace lambdaui::examples::scenegraphdemo {
 
 using scenegraph::PathNode;
 using scenegraph::RectNode;
@@ -547,4 +547,4 @@ inline std::unique_ptr<SceneNode> buildToggleDemoScene(TextSystem &textSystem, T
     return root;
 }
 
-} // namespace lambda::examples::scenegraphdemo
+} // namespace lambdaui::examples::scenegraphdemo

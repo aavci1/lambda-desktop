@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 bool debugCompositorInput() {
@@ -50,4 +50,4 @@ void dispatchKmsInputEvent(WaylandServer& wayland, platform::KmsInputEvent const
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

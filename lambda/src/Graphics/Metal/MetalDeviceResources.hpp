@@ -15,7 +15,7 @@
 #import <QuartzCore/QuartzCore.h>
 #endif
 
-namespace lambda {
+namespace lambdaui {
 
 struct MetalFrameRecorder;
 
@@ -107,4 +107,4 @@ private:
   void ensureRoundedClipArenaCapacity(std::uint32_t roundedClipCount);
 };
 
-} // namespace lambda
+} // namespace lambdaui

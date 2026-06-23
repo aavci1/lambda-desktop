@@ -8,8 +8,8 @@ namespace lambda_editor {
 
 namespace {
 
-lambda::detail::TextEditSelection collapsedAt(int byte) noexcept {
-  return lambda::detail::TextEditSelection{.caretByte = byte, .anchorByte = byte};
+lambdaui::detail::TextEditSelection collapsedAt(int byte) noexcept {
+  return lambdaui::detail::TextEditSelection{.caretByte = byte, .anchorByte = byte};
 }
 
 std::string lowerAscii(std::string value) {
@@ -31,7 +31,7 @@ bool wholeWordMatch(std::string const& text, int start, int end) noexcept {
   return !isWordByte(text, start - 1) && !isWordByte(text, end);
 }
 
-std::optional<lambda::detail::TextEditSelection>
+std::optional<lambdaui::detail::TextEditSelection>
 matchSelectionAt(std::string const& text, int start, int length, FindOptions options) {
   if (length <= 0) {
     return std::nullopt;
@@ -43,10 +43,10 @@ matchSelectionAt(std::string const& text, int start, int length, FindOptions opt
   if (options.wholeWord && !wholeWordMatch(text, start, end)) {
     return std::nullopt;
   }
-  return lambda::detail::TextEditSelection{.caretByte = end, .anchorByte = start};
+  return lambdaui::detail::TextEditSelection{.caretByte = end, .anchorByte = start};
 }
 
-std::optional<lambda::detail::TextEditSelection>
+std::optional<lambdaui::detail::TextEditSelection>
 findPlainMatch(std::string const& text,
                std::string const& query,
                int startByte,
@@ -64,14 +64,14 @@ findPlainMatch(std::string const& text,
   return std::nullopt;
 }
 
-std::optional<lambda::detail::TextEditSelection>
+std::optional<lambdaui::detail::TextEditSelection>
 findPlainPreviousMatch(std::string const& text,
                        std::string const& query,
                        int beforeByte,
                        FindOptions options) {
   std::string const haystack = options.caseSensitive ? text : lowerAscii(text);
   std::string const needle = options.caseSensitive ? query : lowerAscii(query);
-  std::optional<lambda::detail::TextEditSelection> last;
+  std::optional<lambdaui::detail::TextEditSelection> last;
   std::size_t pos = haystack.find(needle);
   while (pos != std::string::npos) {
     int const start = static_cast<int>(pos);
@@ -101,7 +101,7 @@ std::optional<std::regex> makeRegex(std::string const& query, FindOptions option
   }
 }
 
-std::optional<lambda::detail::TextEditSelection>
+std::optional<lambdaui::detail::TextEditSelection>
 findRegexMatch(std::string const& text,
                std::regex const& pattern,
                int startByte,
@@ -123,12 +123,12 @@ findRegexMatch(std::string const& text,
   return std::nullopt;
 }
 
-std::optional<lambda::detail::TextEditSelection>
+std::optional<lambdaui::detail::TextEditSelection>
 findRegexPreviousMatch(std::string const& text,
                        std::regex const& pattern,
                        int beforeByte,
                        FindOptions options) {
-  std::optional<lambda::detail::TextEditSelection> last;
+  std::optional<lambdaui::detail::TextEditSelection> last;
   int cursor = 0;
   int const limit = std::clamp(beforeByte, 0, static_cast<int>(text.size()));
   while (cursor <= limit) {
@@ -202,8 +202,8 @@ std::optional<EditorSnapshot> EditorEditHistory::redo() {
   return current_;
 }
 
-std::string selectedText(std::string const& text, lambda::detail::TextEditSelection selection) {
-  auto const [start, end] = lambda::detail::clampSelection(text, selection).ordered();
+std::string selectedText(std::string const& text, lambdaui::detail::TextEditSelection selection) {
+  auto const [start, end] = lambdaui::detail::clampSelection(text, selection).ordered();
   if (start >= end) {
     return {};
   }
@@ -211,32 +211,32 @@ std::string selectedText(std::string const& text, lambda::detail::TextEditSelect
 }
 
 EditorSnapshot insertAtSelection(std::string const& text,
-                                 lambda::detail::TextEditSelection selection,
+                                 lambdaui::detail::TextEditSelection selection,
                                  std::string_view inserted) {
-  lambda::detail::TextEditMutation mutation =
-      lambda::detail::insertText(text, selection, inserted);
+  lambdaui::detail::TextEditMutation mutation =
+      lambdaui::detail::insertText(text, selection, inserted);
   return EditorSnapshot{.text = std::move(mutation.text), .selection = mutation.selection};
 }
 
 EditorSnapshot deleteSelectionOrForwardChar(std::string const& text,
-                                            lambda::detail::TextEditSelection selection) {
-  lambda::detail::TextEditMutation mutation =
-      lambda::detail::eraseSelectionOrChar(text, selection, true);
+                                            lambdaui::detail::TextEditSelection selection) {
+  lambdaui::detail::TextEditMutation mutation =
+      lambdaui::detail::eraseSelectionOrChar(text, selection, true);
   return EditorSnapshot{.text = std::move(mutation.text), .selection = mutation.selection};
 }
 
-std::optional<lambda::detail::TextEditSelection>
+std::optional<lambdaui::detail::TextEditSelection>
 findNextMatch(std::string const& text,
               std::string const& query,
-              lambda::detail::TextEditSelection selection,
+              lambdaui::detail::TextEditSelection selection,
               bool wrap,
               FindOptions options) {
   if (text.empty() || query.empty()) {
     return std::nullopt;
   }
 
-  lambda::detail::TextEditSelection clamped =
-      lambda::detail::clampSelection(text, selection);
+  lambdaui::detail::TextEditSelection clamped =
+      lambdaui::detail::clampSelection(text, selection);
   int const startByte = std::max(clamped.caretByte, clamped.anchorByte);
   if (options.regex) {
     std::optional<std::regex> pattern = makeRegex(query, options);
@@ -255,18 +255,18 @@ findNextMatch(std::string const& text,
   return wrap ? findPlainMatch(text, query, 0, options) : std::nullopt;
 }
 
-std::optional<lambda::detail::TextEditSelection>
+std::optional<lambdaui::detail::TextEditSelection>
 findPreviousMatch(std::string const& text,
                   std::string const& query,
-                  lambda::detail::TextEditSelection selection,
+                  lambdaui::detail::TextEditSelection selection,
                   bool wrap,
                   FindOptions options) {
   if (text.empty() || query.empty()) {
     return std::nullopt;
   }
 
-  lambda::detail::TextEditSelection clamped =
-      lambda::detail::clampSelection(text, selection);
+  lambdaui::detail::TextEditSelection clamped =
+      lambdaui::detail::clampSelection(text, selection);
   int const beforeByte = std::min(clamped.caretByte, clamped.anchorByte);
   if (options.regex) {
     std::optional<std::regex> pattern = makeRegex(query, options);
@@ -288,10 +288,10 @@ findPreviousMatch(std::string const& text,
 }
 
 bool selectionMatches(std::string const& text,
-                      lambda::detail::TextEditSelection selection,
+                      lambdaui::detail::TextEditSelection selection,
                       std::string const& query,
                       FindOptions options) {
-  auto const [start, end] = lambda::detail::clampSelection(text, selection).ordered();
+  auto const [start, end] = lambdaui::detail::clampSelection(text, selection).ordered();
   if (start >= end || query.empty()) {
     return false;
   }
@@ -312,7 +312,7 @@ bool selectionMatches(std::string const& text,
 }
 
 EditorSnapshot replaceSelection(std::string const& text,
-                                lambda::detail::TextEditSelection selection,
+                                lambdaui::detail::TextEditSelection selection,
                                 std::string_view replacement) {
   return insertAtSelection(text, selection, replacement);
 }
@@ -394,7 +394,7 @@ EditorSnapshot replaceAllMatches(std::string const& text,
   };
 }
 
-lambda::detail::TextEditSelection lineSelection(std::string const& text, int oneBasedLine) {
+lambdaui::detail::TextEditSelection lineSelection(std::string const& text, int oneBasedLine) {
   int targetLine = std::max(1, oneBasedLine);
   int line = 1;
   int byte = 0;
@@ -404,13 +404,13 @@ lambda::detail::TextEditSelection lineSelection(std::string const& text, int one
     }
     ++byte;
   }
-  byte = lambda::detail::utf8Clamp(text, byte);
+  byte = lambdaui::detail::utf8Clamp(text, byte);
   return collapsedAt(byte);
 }
 
 int lineNumberForSelection(std::string const& text,
-                           lambda::detail::TextEditSelection selection) noexcept {
-  int const caret = lambda::detail::utf8Clamp(text, selection.caretByte);
+                           lambdaui::detail::TextEditSelection selection) noexcept {
+  int const caret = lambdaui::detail::utf8Clamp(text, selection.caretByte);
   int line = 1;
   for (int i = 0; i < caret && i < static_cast<int>(text.size()); ++i) {
     if (text[static_cast<std::size_t>(i)] == '\n') {

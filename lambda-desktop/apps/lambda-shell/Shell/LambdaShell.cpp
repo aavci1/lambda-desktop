@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
       setenv("WAYLAND_DISPLAY", display.c_str(), 1);
     }
 
-    lambda::Application app(argc, argv);
+    lambdaui::Application app(argc, argv);
     app.setName("lambda-shell");
 
     lambda_shell::ShellModel model;

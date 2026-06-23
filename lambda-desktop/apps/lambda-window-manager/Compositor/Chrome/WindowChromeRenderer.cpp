@@ -7,7 +7,7 @@
 #include <Lambda/Graphics/Path.hpp>
 #include <Lambda/Graphics/TextLayoutOptions.hpp>
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #endif
 
@@ -15,7 +15,7 @@
 #include <cmath>
 #include <optional>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 Color withOpacity(Color color, float opacity) {
@@ -93,7 +93,7 @@ void drawGlassMaterialFrame(Canvas& canvas,
   float const right = std::max(0.f, frame.x + frame.width - (cutout.x + cutout.width));
   float const bottom = std::max(0.f, frame.y + frame.height - (cutout.y + cutout.height));
   if (blurRadius > 0.f) {
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
     if (!drawVulkanBackdropBlurFrame(&canvas, frame, frameRadius, cutout, blurRadius, Colors::transparent))
 #endif
     {
@@ -411,4 +411,4 @@ void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview, ChromeC
                   ShadowStyle::none());
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

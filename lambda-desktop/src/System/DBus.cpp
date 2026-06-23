@@ -17,7 +17,7 @@
 #include <systemd/sd-bus.h>
 #endif
 
-namespace lambda::dbus {
+namespace lambdaui::dbus {
 
 namespace {
 
@@ -2012,4 +2012,4 @@ BusEventPump& BusEventPump::operator=(BusEventPump&& other) noexcept {
   return *this;
 }
 
-} // namespace lambda::dbus
+} // namespace lambdaui::dbus

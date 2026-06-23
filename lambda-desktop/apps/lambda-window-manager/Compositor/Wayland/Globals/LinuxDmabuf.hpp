@@ -5,7 +5,7 @@
 
 struct wl_client;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kLinuxDmabufVersion = 5;
 
@@ -16,4 +16,4 @@ inline constexpr std::uint32_t kLinuxDmabufVersion = 5;
 void bindLinuxDmabuf(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 bool isSupportedDmabufFormat(std::uint32_t format);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

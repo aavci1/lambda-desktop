@@ -22,8 +22,8 @@ void handleSignal(int) {
   gRunning = false;
 }
 
-lambda::dbus::ObjectDefinition mergeDefinitions(lambda::dbus::ObjectDefinition first,
-                                                lambda::dbus::ObjectDefinition second) {
+lambdaui::dbus::ObjectDefinition mergeDefinitions(lambdaui::dbus::ObjectDefinition first,
+                                                lambdaui::dbus::ObjectDefinition second) {
   first.methods.insert(first.methods.end(),
                        std::make_move_iterator(second.methods.begin()),
                        std::make_move_iterator(second.methods.end()));
@@ -41,18 +41,18 @@ int main() {
   std::signal(SIGTERM, handleSignal);
 
   try {
-    auto bus = lambda::dbus::Bus::open(lambda::dbus::BusType::Session);
-    bus.requestName(lambda::system::PortalSettingsService::serviceName);
+    auto bus = lambdaui::dbus::Bus::open(lambdaui::dbus::BusType::Session);
+    bus.requestName(lambdaui::system::PortalSettingsService::serviceName);
 
-    lambda::system::PortalSettingsService settings(
+    lambdaui::system::PortalSettingsService settings(
         bus,
-        lambda::system::PortalSettingsService::stateFromShellConfig());
-    lambda::system::PortalAccountService account(bus);
-    lambda::system::PortalAppChooserService appChooser(bus);
-    lambda::system::PortalFileChooserService fileChooser(bus);
-    lambda::system::PortalInhibitService inhibit(bus);
-    lambda::system::PortalNotificationService notifications(bus);
-    lambda::system::PortalScreenCastService screenCast(bus);
+        lambdaui::system::PortalSettingsService::stateFromShellConfig());
+    lambdaui::system::PortalAccountService account(bus);
+    lambdaui::system::PortalAppChooserService appChooser(bus);
+    lambdaui::system::PortalFileChooserService fileChooser(bus);
+    lambdaui::system::PortalInhibitService inhibit(bus);
+    lambdaui::system::PortalNotificationService notifications(bus);
+    lambdaui::system::PortalScreenCastService screenCast(bus);
 
     auto portalDefinition = mergeDefinitions(settings.objectDefinition(), account.objectDefinition());
     portalDefinition = mergeDefinitions(std::move(portalDefinition), appChooser.objectDefinition());
@@ -61,12 +61,12 @@ int main() {
     portalDefinition =
         mergeDefinitions(std::move(portalDefinition), notifications.objectDefinition());
     portalDefinition = mergeDefinitions(std::move(portalDefinition), screenCast.objectDefinition());
-    auto portalSlot = bus.exportObject(lambda::system::PortalSettingsService::objectPath,
+    auto portalSlot = bus.exportObject(lambdaui::system::PortalSettingsService::objectPath,
                                        std::move(portalDefinition));
     auto notificationActionSlot = notifications.watchNotificationActions();
 
     std::cerr << "lambda-portal: exported portal backends"
-              << " on " << lambda::system::PortalSettingsService::objectPath << "\n";
+              << " on " << lambdaui::system::PortalSettingsService::objectPath << "\n";
 
     while (gRunning.load()) {
       (void)bus.waitAndProcess(1000);

@@ -1,6 +1,6 @@
 #include <Lambda/Graphics/Image.hpp>
 
-#if defined(LAMBDA_PLATFORM_LINUX_WAYLAND) || defined(LAMBDA_PLATFORM_LINUX_KMS)
+#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND) || defined(LAMBDAUI_PLATFORM_LINUX_KMS)
 #include <cairo.h>
 #include <librsvg/rsvg.h>
 #endif
@@ -34,7 +34,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -98,7 +98,7 @@ std::optional<DecodedImageRgba> decodeImageRgbaFromBytes(std::span<std::uint8_t 
   return result;
 }
 
-#if defined(LAMBDA_PLATFORM_LINUX_WAYLAND) || defined(LAMBDA_PLATFORM_LINUX_KMS)
+#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND) || defined(LAMBDAUI_PLATFORM_LINUX_KMS)
 std::optional<DecodedImageRgba> decodeSvgRgbaFromFile(std::filesystem::path const& path,
                                                       std::uint32_t maxLongEdge) {
   GError* error = nullptr;
@@ -316,7 +316,7 @@ bool Image::updatePixelsRegion(std::span<std::uint8_t const>,
 
 std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path, std::uint32_t maxLongEdge) {
   std::filesystem::path const imagePath{std::string(path)};
-#if defined(LAMBDA_PLATFORM_LINUX_WAYLAND) || defined(LAMBDA_PLATFORM_LINUX_KMS)
+#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND) || defined(LAMBDAUI_PLATFORM_LINUX_KMS)
   if (isSvgPath(imagePath)) {
     return decodeSvgRgbaFromFile(imagePath, maxLongEdge);
   }
@@ -379,4 +379,4 @@ std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice, std::ui
   return imageFromDecodedRgba(*decoded, gpuDevice);
 }
 
-} // namespace lambda
+} // namespace lambdaui

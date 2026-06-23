@@ -9,7 +9,7 @@
 #include <cstdlib>
 #include <memory>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -293,4 +293,4 @@ OverlayConfig::Placement overlayPlacementFromPopover(PopoverPlacement placement)
   return OverlayConfig::Placement::Below;
 }
 
-} // namespace lambda
+} // namespace lambdaui

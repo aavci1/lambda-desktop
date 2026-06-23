@@ -6,8 +6,8 @@
 
 #include <string>
 
-using namespace lambda;
-using namespace lambda::Reactive;
+using namespace lambdaui;
+using namespace lambdaui::Reactive;
 
 TEST_CASE("Reactive Bindable stores plain values") {
   Bindable<int> integer(42);

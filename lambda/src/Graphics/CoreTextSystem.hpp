@@ -5,7 +5,7 @@
 
 #include <memory>
 
-namespace lambda {
+namespace lambdaui {
 
 class CoreTextSystem;
 
@@ -68,4 +68,4 @@ private:
                                                   std::uint64_t preLo);
 };
 
-} // namespace lambda
+} // namespace lambdaui

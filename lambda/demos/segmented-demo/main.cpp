@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-using namespace lambda;
+using namespace lambdaui;
 
 namespace {
 

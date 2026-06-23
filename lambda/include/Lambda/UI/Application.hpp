@@ -23,7 +23,7 @@
 #include <Lambda/UI/Window.hpp>
 #include <Lambda/Reactive/Observer.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 class EventQueue;
 class TextSystem;
@@ -202,4 +202,4 @@ private:
   std::unique_ptr<Impl> d;
 };
 
-} // namespace lambda
+} // namespace lambdaui

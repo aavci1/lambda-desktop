@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void writeBigEndian(std::vector<std::uint8_t>& out, std::uint32_t value) {
@@ -332,4 +332,4 @@ ScreenshotSaveResult saveScreenshotPng(std::filesystem::path path,
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -15,7 +15,7 @@
 #include <optional>
 #include <utility>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 namespace detail {
 
@@ -144,4 +144,4 @@ inline std::optional<Point> localPointForNode(SceneNode const& node, Point point
   return std::nullopt;
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

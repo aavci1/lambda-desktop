@@ -15,7 +15,7 @@
 #include <tuple>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class ToastTone : std::uint8_t {
   Neutral,
@@ -113,4 +113,4 @@ struct ToastOverlay : ViewModifiers<ToastOverlay> {
 std::tuple<std::function<std::uint64_t(Toast)>, std::function<void(std::uint64_t)>, std::function<void()>, bool>
 useToast();
 
-} // namespace lambda
+} // namespace lambdaui

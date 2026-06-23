@@ -8,7 +8,7 @@
 #include <Lambda/UI/KeyCodes.hpp>
 #include <Lambda/UI/Input.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 /// A key combination that triggers an action.
 struct Shortcut {
@@ -47,4 +47,4 @@ inline constexpr Shortcut Find{keys::F, Modifiers::Meta};
 
 } // namespace shortcuts
 
-} // namespace lambda
+} // namespace lambdaui

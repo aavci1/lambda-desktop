@@ -163,7 +163,7 @@ std::optional<std::uint8_t> hexByte(std::string_view value, std::size_t offset) 
   return static_cast<std::uint8_t>((*high << 4) | *low);
 }
 
-std::optional<lambda::Color> parseHexColor(std::string_view value) {
+std::optional<lambdaui::Color> parseHexColor(std::string_view value) {
   if ((value.size() != 7u && value.size() != 9u) || value.front() != '#') return std::nullopt;
   auto r = hexByte(value, 1u);
   auto g = hexByte(value, 3u);
@@ -171,10 +171,10 @@ std::optional<lambda::Color> parseHexColor(std::string_view value) {
   auto a = value.size() == 9u ? hexByte(value, 7u) : std::optional<std::uint8_t>{static_cast<std::uint8_t>(255u)};
   if (!r || !g || !b || !a) return std::nullopt;
   float constexpr scale = 1.f / 255.f;
-  return lambda::Color{*r * scale, *g * scale, *b * scale, *a * scale};
+  return lambdaui::Color{*r * scale, *g * scale, *b * scale, *a * scale};
 }
 
-std::optional<lambda::Color> readTomlColor(toml::table const& table, char const* key) {
+std::optional<lambdaui::Color> readTomlColor(toml::table const& table, char const* key) {
   auto value = readTomlString(table, key);
   if (!value) return std::nullopt;
   return parseHexColor(*value);
@@ -184,7 +184,7 @@ std::uint8_t colorByte(float value) {
   return static_cast<std::uint8_t>(std::clamp(value, 0.f, 1.f) * 255.f + 0.5f);
 }
 
-std::string tomlColor(lambda::Color color) {
+std::string tomlColor(lambdaui::Color color) {
   std::ostringstream out;
   out << "\"#" << std::hex << std::nouppercase << std::setfill('0')
       << std::setw(2) << static_cast<int>(colorByte(color.r))
@@ -698,25 +698,25 @@ ShellDesktopSnapshot parseShellSnapshot(std::string_view json) {
 
   for (std::string_view object : jsonArrayObjects(json, "apps")) {
     AppRegistryEntry app;
-    app.appId = lambda::shell::jsonStringField(object, "id");
-    if (app.appId.empty()) app.appId = lambda::shell::jsonStringField(object, "appId");
-    app.name = lambda::shell::jsonStringField(object, "name");
-    app.icon = lambda::shell::jsonStringField(object, "icon");
-    app.command = lambda::shell::jsonStringField(object, "command");
+    app.appId = lambdaui::shell::jsonStringField(object, "id");
+    if (app.appId.empty()) app.appId = lambdaui::shell::jsonStringField(object, "appId");
+    app.name = lambdaui::shell::jsonStringField(object, "name");
+    app.icon = lambdaui::shell::jsonStringField(object, "icon");
+    app.command = lambdaui::shell::jsonStringField(object, "command");
     if (!app.appId.empty()) snapshot.apps.push_back(std::move(app));
   }
 
   for (std::string_view object : jsonArrayObjects(json, "windows")) {
     ShellWindowSnapshot window;
-    window.id = lambda::shell::jsonUintField(object, "id");
-    window.appId = lambda::shell::jsonStringField(object, "appId");
-    window.title = lambda::shell::jsonStringField(object, "title");
+    window.id = lambdaui::shell::jsonUintField(object, "id");
+    window.appId = lambdaui::shell::jsonStringField(object, "appId");
+    window.title = lambdaui::shell::jsonStringField(object, "title");
     window.focused = jsonBoolField(object, "focused");
-    window.minimized = lambda::shell::jsonStringField(object, "state") == "minimized";
+    window.minimized = lambdaui::shell::jsonStringField(object, "state") == "minimized";
     if (window.id != 0 || !window.appId.empty()) snapshot.windows.push_back(std::move(window));
   }
 
-  snapshot.activeWindowId = lambda::shell::jsonUintField(json, "activeWindowId");
+  snapshot.activeWindowId = lambdaui::shell::jsonUintField(json, "activeWindowId");
   return snapshot;
 }
 

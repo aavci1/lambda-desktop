@@ -6,7 +6,7 @@
 
 #include <Lambda/Graphics/TextSystem.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -103,4 +103,4 @@ CurrentMeasureContextScope::~CurrentMeasureContextScope() {
 
 } // namespace detail
 
-} // namespace lambda
+} // namespace lambdaui

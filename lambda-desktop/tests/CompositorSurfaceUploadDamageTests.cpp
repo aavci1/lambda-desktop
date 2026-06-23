@@ -6,8 +6,8 @@
 
 namespace {
 
-using lambda::compositor::SurfaceUploadDamageRect;
-using lambda::compositor::buildSurfaceUploadDamageRects;
+using lambdaui::compositor::SurfaceUploadDamageRect;
+using lambdaui::compositor::buildSurfaceUploadDamageRects;
 
 bool rectEquals(SurfaceUploadDamageRect actual, SurfaceUploadDamageRect expected) {
   return actual.x == expected.x &&

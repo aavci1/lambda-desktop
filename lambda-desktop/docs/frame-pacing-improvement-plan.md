@@ -68,9 +68,9 @@ Line numbers in the FP-* sections below describe the **original audit context** 
 
 ```sh
 # Wayland client path
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLAMBDA_PLATFORM=LINUX_WAYLAND -DLAMBDA_BUILD_TESTS=ON
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLAMBDAUI_PLATFORM=LINUX_WAYLAND -DLAMBDAUI_BUILD_TESTS=ON
 # Compositor / KMS path (run from a TTY; see lambda-desktop/docs/compositor-user-guide.md)
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLAMBDA_PLATFORM=LINUX_KMS -DLAMBDA_BUILD_TESTS=ON
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLAMBDAUI_PLATFORM=LINUX_KMS -DLAMBDAUI_BUILD_TESTS=ON
 
 cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
@@ -79,7 +79,7 @@ ctest --test-dir build --output-on-failure
 Use an ASan build for the resource-lifetime items (FP-10, FP-11, FP-12, FP-13):
 
 ```sh
-cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DLAMBDA_ENABLE_ASAN=ON -DLAMBDA_BUILD_TESTS=ON
+cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DLAMBDAUI_ENABLE_ASAN=ON -DLAMBDAUI_BUILD_TESTS=ON
 ```
 
 Measurement tooling that already exists — use it before and after every change:

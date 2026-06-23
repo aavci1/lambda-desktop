@@ -17,7 +17,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct CachedClientImage {
   struct DmabufEntry {
@@ -37,7 +37,7 @@ struct CachedClientImage {
   bool dmabufFallbackLogged = false;
   bool dmabufImported = false;
   std::vector<DmabufEntry> dmabufImages;
-  std::unique_ptr<lambda::VulkanFrameRecorder> recordedOps;
+  std::unique_ptr<lambdaui::VulkanFrameRecorder> recordedOps;
   std::uint64_t recordedSignature = 0;
   std::int32_t recordedX = 0;
   std::int32_t recordedY = 0;
@@ -63,4 +63,4 @@ void drawCommittedSurface(WaylandServer &wayland, Canvas &canvas, TextSystem &te
 
 void pruneSurfaceRenderState(SurfaceRenderState &state, std::unordered_set<std::uint64_t> const &liveSurfaceIds);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

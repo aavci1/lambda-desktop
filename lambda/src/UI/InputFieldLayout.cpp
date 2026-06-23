@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -27,4 +27,4 @@ float resolvedInputFieldHeight(Font const& font, Color textInkColor, float paddi
   return minBodyH;
 }
 
-} // namespace lambda
+} // namespace lambdaui

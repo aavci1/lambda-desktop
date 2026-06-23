@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 void recomputeTextLayoutMetrics(TextLayout &L) {
     if (L.runs.empty()) {
@@ -477,4 +477,4 @@ std::shared_ptr<TextLayout const> TextSystem::layoutBoxedImpl(AttributedString c
     return mut;
 }
 
-} // namespace lambda
+} // namespace lambdaui

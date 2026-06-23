@@ -11,7 +11,7 @@
 #include <optional>
 #include <string>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 struct PortalInhibitRequest {
   dbus::ObjectPath handle;
@@ -59,4 +59,4 @@ private:
   std::map<std::string, dbus::Slot> requestSlots_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

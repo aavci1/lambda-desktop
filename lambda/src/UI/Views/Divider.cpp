@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -20,7 +20,7 @@ Divider::Style resolveStyle(Divider::Style const &style, Theme const &theme) {
 } // namespace
 
 Element Divider::body() const {
-    Divider::Style const resolved = resolveStyle(style, lambda::useEnvironment<ThemeKey>()());
+    Divider::Style const resolved = resolveStyle(style, lambdaui::useEnvironment<ThemeKey>()());
     return Rectangle {}
         .size(orientation == Orientation::Horizontal ? 0.f : resolved.thickness,
               orientation == Orientation::Vertical ? 0.f : resolved.thickness)
@@ -28,4 +28,4 @@ Element Divider::body() const {
         .fill(FillStyle::solid(resolved.color));
 }
 
-} // namespace lambda
+} // namespace lambdaui

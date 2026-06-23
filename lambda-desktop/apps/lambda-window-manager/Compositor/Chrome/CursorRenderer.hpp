@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct CursorRenderState {
   CachedClientImage clientImage;
@@ -43,4 +43,4 @@ void drawCompositorCursor(WaylandServer& wayland,
                                              CursorRenderState const& cursorState,
                                              bool hardwareCursorEnabled);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

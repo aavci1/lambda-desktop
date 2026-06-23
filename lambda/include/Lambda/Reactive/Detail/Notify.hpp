@@ -10,9 +10,9 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 /// Runs observer callbacks with snapshot + deferred nested notifications (see Signal.cpp).
 void notifyObserverList(std::vector<std::pair<std::uint64_t, std::function<void()>>>& observers);
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

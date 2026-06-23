@@ -6,31 +6,31 @@
 #include <array>
 
 TEST_CASE("compositor snap geometry uses full output height minus title bar") {
-  lambda::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
+  lambdaui::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
 
-  auto left = lambda::compositor::snappedWindowGeometry(output, true);
+  auto left = lambdaui::compositor::snappedWindowGeometry(output, true);
   CHECK(left.x == 0);
-  CHECK(left.y == lambda::compositor::kCompositorTitleBarHeight);
+  CHECK(left.y == lambdaui::compositor::kCompositorTitleBarHeight);
   CHECK(left.width == 960);
   CHECK(left.height == 1052);
 
-  auto right = lambda::compositor::snappedWindowGeometry(output, false);
+  auto right = lambdaui::compositor::snappedWindowGeometry(output, false);
   CHECK(right.x == 960);
-  CHECK(right.y == lambda::compositor::kCompositorTitleBarHeight);
+  CHECK(right.y == lambdaui::compositor::kCompositorTitleBarHeight);
   CHECK(right.width == 960);
   CHECK(right.height == 1052);
 }
 
 TEST_CASE("compositor snap geometry can use a zero chrome inset") {
-  lambda::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
+  lambdaui::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
 
-  auto left = lambda::compositor::snappedWindowGeometry(output, true, 0);
+  auto left = lambdaui::compositor::snappedWindowGeometry(output, true, 0);
   CHECK(left.x == 0);
   CHECK(left.y == 0);
   CHECK(left.width == 960);
   CHECK(left.height == 1080);
 
-  auto maximized = lambda::compositor::maximizedWindowGeometry(output, 0);
+  auto maximized = lambdaui::compositor::maximizedWindowGeometry(output, 0);
   CHECK(maximized.x == 0);
   CHECK(maximized.y == 0);
   CHECK(maximized.width == 1920);
@@ -38,12 +38,12 @@ TEST_CASE("compositor snap geometry can use a zero chrome inset") {
 }
 
 TEST_CASE("compositor snap preview appears only within a small edge threshold") {
-  lambda::compositor::OutputGeometry const output{.width = 1280, .height = 720};
-  CHECK(lambda::compositor::snapPreviewGeometry({.x = 64, .y = 96, .width = 400, .height = 240}, output) == std::nullopt);
-  CHECK(lambda::compositor::snapPreviewGeometry({.x = 16, .y = 96, .width = 400, .height = 240}, output) == std::nullopt);
+  lambdaui::compositor::OutputGeometry const output{.width = 1280, .height = 720};
+  CHECK(lambdaui::compositor::snapPreviewGeometry({.x = 64, .y = 96, .width = 400, .height = 240}, output) == std::nullopt);
+  CHECK(lambdaui::compositor::snapPreviewGeometry({.x = 16, .y = 96, .width = 400, .height = 240}, output) == std::nullopt);
 
-  auto left = lambda::compositor::snapPreviewGeometry({
-      .x = lambda::compositor::kCompositorSnapEdgeThreshold,
+  auto left = lambdaui::compositor::snapPreviewGeometry({
+      .x = lambdaui::compositor::kCompositorSnapEdgeThreshold,
       .y = 96,
       .width = 400,
       .height = 240,
@@ -52,40 +52,40 @@ TEST_CASE("compositor snap preview appears only within a small edge threshold") 
   CHECK(left->x == 0);
   CHECK(left->width == 640);
 
-  auto right = lambda::compositor::snapPreviewGeometry({.x = 920, .y = 96, .width = 360, .height = 240}, output);
+  auto right = lambdaui::compositor::snapPreviewGeometry({.x = 920, .y = 96, .width = 360, .height = 240}, output);
   REQUIRE(right);
   CHECK(right->x == 640);
   CHECK(right->width == 640);
 
-  auto top = lambda::compositor::snapPreviewGeometry({
+  auto top = lambdaui::compositor::snapPreviewGeometry({
       .x = 280,
-      .y = lambda::compositor::kCompositorTitleBarHeight,
+      .y = lambdaui::compositor::kCompositorTitleBarHeight,
       .width = 500,
       .height = 320,
   }, output);
   REQUIRE(top);
   CHECK(top->x == 0);
-  CHECK(top->y == lambda::compositor::kCompositorTitleBarHeight);
+  CHECK(top->y == lambdaui::compositor::kCompositorTitleBarHeight);
   CHECK(top->width == 1280);
   CHECK(top->height == 692);
 }
 
 TEST_CASE("compositor snap preview supports quarter targets") {
-  lambda::compositor::OutputGeometry const output{.width = 1280, .height = 720};
+  lambdaui::compositor::OutputGeometry const output{.width = 1280, .height = 720};
 
-  auto topLeft = lambda::compositor::snapPreviewGeometry({
+  auto topLeft = lambdaui::compositor::snapPreviewGeometry({
       .x = 0,
-      .y = lambda::compositor::kCompositorTitleBarHeight,
+      .y = lambdaui::compositor::kCompositorTitleBarHeight,
       .width = 360,
       .height = 240,
   }, output);
   REQUIRE(topLeft);
   CHECK(topLeft->x == 0);
-  CHECK(topLeft->y == lambda::compositor::kCompositorTitleBarHeight);
+  CHECK(topLeft->y == lambdaui::compositor::kCompositorTitleBarHeight);
   CHECK(topLeft->width == 640);
   CHECK(topLeft->height == 346);
 
-  auto bottomRight = lambda::compositor::snapPreviewGeometry({
+  auto bottomRight = lambdaui::compositor::snapPreviewGeometry({
       .x = 920,
       .y = 480,
       .width = 360,
@@ -99,11 +99,11 @@ TEST_CASE("compositor snap preview supports quarter targets") {
 }
 
 TEST_CASE("compositor restored drag geometry keeps title bar under cursor") {
-  lambda::compositor::WindowGeometry const restored = lambda::compositor::restoredDragGeometry({
+  lambdaui::compositor::WindowGeometry const restored = lambdaui::compositor::restoredDragGeometry({
       .pointerX = 480.f,
       .pointerY = 80.f,
       .dragOffsetY = 20.f,
-      .snappedWindow = {.x = 0, .y = lambda::compositor::kCompositorTitleBarHeight, .width = 960, .height = 1052},
+      .snappedWindow = {.x = 0, .y = lambdaui::compositor::kCompositorTitleBarHeight, .width = 960, .height = 1052},
       .restoreWindow = {.x = 200, .y = 120, .width = 500, .height = 400},
       .output = {.width = 1920, .height = 1080},
   });
@@ -115,8 +115,8 @@ TEST_CASE("compositor restored drag geometry keeps title bar under cursor") {
 }
 
 TEST_CASE("compositor resize geometry clamps minimum size and adjusts anchored edges") {
-  using lambda::compositor::ResizeEdge;
-  auto resized = lambda::compositor::resizedWindowGeometry({
+  using lambdaui::compositor::ResizeEdge;
+  auto resized = lambdaui::compositor::resizedWindowGeometry({
       .startPointerX = 400.f,
       .startPointerY = 300.f,
       .pointerX = 700.f,
@@ -130,7 +130,7 @@ TEST_CASE("compositor resize geometry clamps minimum size and adjusts anchored e
   CHECK(resized.width == 940);
   CHECK(resized.height == 680);
 
-  auto minClamped = lambda::compositor::resizedWindowGeometry({
+  auto minClamped = lambdaui::compositor::resizedWindowGeometry({
       .startPointerX = 100.f,
       .startPointerY = 100.f,
       .pointerX = 800.f,
@@ -141,53 +141,53 @@ TEST_CASE("compositor resize geometry clamps minimum size and adjusts anchored e
   });
   CHECK(minClamped.x == 380);
   CHECK(minClamped.y == 260);
-  CHECK(minClamped.width == lambda::compositor::kCompositorMinWindowWidth);
-  CHECK(minClamped.height == lambda::compositor::kCompositorMinWindowHeight);
+  CHECK(minClamped.width == lambdaui::compositor::kCompositorMinWindowWidth);
+  CHECK(minClamped.height == lambdaui::compositor::kCompositorMinWindowHeight);
 }
 
 TEST_CASE("compositor maximized geometry uses the same top inset as snap") {
-  lambda::compositor::OutputGeometry const output{.width = 1366, .height = 768};
+  lambdaui::compositor::OutputGeometry const output{.width = 1366, .height = 768};
 
-  auto maximized = lambda::compositor::maximizedWindowGeometry(output);
+  auto maximized = lambdaui::compositor::maximizedWindowGeometry(output);
   CHECK(maximized.x == 0);
-  CHECK(maximized.y == lambda::compositor::kCompositorTitleBarHeight);
+  CHECK(maximized.y == lambdaui::compositor::kCompositorTitleBarHeight);
   CHECK(maximized.width == 1366);
   CHECK(maximized.height == 740);
 }
 
 TEST_CASE("compositor snap and maximize geometry keep the chrome ring inside target bounds") {
-  lambda::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
-  constexpr std::int32_t titleBar = lambda::compositor::kCompositorTitleBarHeight;
+  lambdaui::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
+  constexpr std::int32_t titleBar = lambdaui::compositor::kCompositorTitleBarHeight;
   constexpr std::int32_t ring = 4;
 
-  auto left = lambda::compositor::snappedWindowGeometry(output, true, titleBar, ring);
+  auto left = lambdaui::compositor::snappedWindowGeometry(output, true, titleBar, ring);
   CHECK(left.x == ring);
   CHECK(left.y == titleBar);
   CHECK(left.width == 952);
   CHECK(left.height == 1048);
-  auto leftFrame = lambda::compositor::windowFrameGeometryForContent(left, titleBar, ring);
+  auto leftFrame = lambdaui::compositor::windowFrameGeometryForContent(left, titleBar, ring);
   CHECK(leftFrame.x == 0);
   CHECK(leftFrame.y == 0);
   CHECK(leftFrame.width == 960);
   CHECK(leftFrame.height == 1080);
 
-  auto right = lambda::compositor::snappedWindowGeometry(output, false, titleBar, ring);
+  auto right = lambdaui::compositor::snappedWindowGeometry(output, false, titleBar, ring);
   CHECK(right.x == 964);
   CHECK(right.y == titleBar);
   CHECK(right.width == 952);
   CHECK(right.height == 1048);
-  auto rightFrame = lambda::compositor::windowFrameGeometryForContent(right, titleBar, ring);
+  auto rightFrame = lambdaui::compositor::windowFrameGeometryForContent(right, titleBar, ring);
   CHECK(rightFrame.x == 960);
   CHECK(rightFrame.y == 0);
   CHECK(rightFrame.width == 960);
   CHECK(rightFrame.height == 1080);
 
-  auto maximized = lambda::compositor::maximizedWindowGeometry(output, titleBar, ring);
+  auto maximized = lambdaui::compositor::maximizedWindowGeometry(output, titleBar, ring);
   CHECK(maximized.x == ring);
   CHECK(maximized.y == titleBar);
   CHECK(maximized.width == 1912);
   CHECK(maximized.height == 1048);
-  auto maximizedFrame = lambda::compositor::windowFrameGeometryForContent(maximized, titleBar, ring);
+  auto maximizedFrame = lambdaui::compositor::windowFrameGeometryForContent(maximized, titleBar, ring);
   CHECK(maximizedFrame.x == 0);
   CHECK(maximizedFrame.y == 0);
   CHECK(maximizedFrame.width == 1920);
@@ -195,38 +195,38 @@ TEST_CASE("compositor snap and maximize geometry keep the chrome ring inside tar
 }
 
 TEST_CASE("compositor snap and maximize geometry apply logical output origin") {
-  lambda::compositor::OutputGeometry const output{.x = 1920, .y = 80, .width = 1280, .height = 720};
+  lambdaui::compositor::OutputGeometry const output{.x = 1920, .y = 80, .width = 1280, .height = 720};
   constexpr std::int32_t titleBar = 40;
   constexpr std::int32_t ring = 4;
 
-  auto left = lambda::compositor::snappedWindowGeometry(output, true, titleBar, ring);
+  auto left = lambdaui::compositor::snappedWindowGeometry(output, true, titleBar, ring);
   CHECK(left.x == 1924);
   CHECK(left.y == 120);
   CHECK(left.width == 632);
   CHECK(left.height == 676);
-  auto leftFrame = lambda::compositor::windowFrameGeometryForContent(left, titleBar, ring);
+  auto leftFrame = lambdaui::compositor::windowFrameGeometryForContent(left, titleBar, ring);
   CHECK(leftFrame.x == 1920);
   CHECK(leftFrame.y == 80);
   CHECK(leftFrame.width == 640);
   CHECK(leftFrame.height == 720);
 
-  auto right = lambda::compositor::snappedWindowGeometry(output, false, titleBar, ring);
+  auto right = lambdaui::compositor::snappedWindowGeometry(output, false, titleBar, ring);
   CHECK(right.x == 2564);
   CHECK(right.y == 120);
   CHECK(right.width == 632);
   CHECK(right.height == 676);
-  auto rightFrame = lambda::compositor::windowFrameGeometryForContent(right, titleBar, ring);
+  auto rightFrame = lambdaui::compositor::windowFrameGeometryForContent(right, titleBar, ring);
   CHECK(rightFrame.x == 2560);
   CHECK(rightFrame.y == 80);
   CHECK(rightFrame.width == 640);
   CHECK(rightFrame.height == 720);
 
-  auto maximized = lambda::compositor::maximizedWindowGeometry(output, titleBar, ring);
+  auto maximized = lambdaui::compositor::maximizedWindowGeometry(output, titleBar, ring);
   CHECK(maximized.x == 1924);
   CHECK(maximized.y == 120);
   CHECK(maximized.width == 1272);
   CHECK(maximized.height == 676);
-  auto maximizedFrame = lambda::compositor::windowFrameGeometryForContent(maximized, titleBar, ring);
+  auto maximizedFrame = lambdaui::compositor::windowFrameGeometryForContent(maximized, titleBar, ring);
   CHECK(maximizedFrame.x == 1920);
   CHECK(maximizedFrame.y == 80);
   CHECK(maximizedFrame.width == 1280);
@@ -234,60 +234,60 @@ TEST_CASE("compositor snap and maximize geometry apply logical output origin") {
 }
 
 TEST_CASE("compositor snap edge detection uses the chrome ring as the visible window edge") {
-  lambda::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
-  constexpr std::int32_t titleBar = lambda::compositor::kCompositorTitleBarHeight;
+  lambdaui::compositor::OutputGeometry const output{.width = 1920, .height = 1080};
+  constexpr std::int32_t titleBar = lambdaui::compositor::kCompositorTitleBarHeight;
   constexpr std::int32_t ring = 4;
 
   auto leftTarget =
-      lambda::compositor::snapTargetForWindow({.x = ring, .y = 120, .width = 600, .height = 400},
+      lambdaui::compositor::snapTargetForWindow({.x = ring, .y = 120, .width = 600, .height = 400},
                                               output,
                                               titleBar,
                                               ring);
   REQUIRE(leftTarget);
-  CHECK(*leftTarget == lambda::compositor::SnapTarget::LeftHalf);
+  CHECK(*leftTarget == lambdaui::compositor::SnapTarget::LeftHalf);
 
   auto rightTarget =
-      lambda::compositor::snapTargetForWindow({.x = 1316, .y = 120, .width = 600, .height = 400},
+      lambdaui::compositor::snapTargetForWindow({.x = 1316, .y = 120, .width = 600, .height = 400},
                                               output,
                                               titleBar,
                                               ring);
   REQUIRE(rightTarget);
-  CHECK(*rightTarget == lambda::compositor::SnapTarget::RightHalf);
+  CHECK(*rightTarget == lambdaui::compositor::SnapTarget::RightHalf);
 }
 
 TEST_CASE("compositor snap edge detection applies logical output origin") {
-  lambda::compositor::OutputGeometry const output{.x = 1920, .y = 80, .width = 1280, .height = 720};
+  lambdaui::compositor::OutputGeometry const output{.x = 1920, .y = 80, .width = 1280, .height = 720};
   constexpr std::int32_t titleBar = 40;
   constexpr std::int32_t ring = 4;
 
   auto leftTarget =
-      lambda::compositor::snapTargetForWindow({.x = 1924, .y = 180, .width = 420, .height = 300},
+      lambdaui::compositor::snapTargetForWindow({.x = 1924, .y = 180, .width = 420, .height = 300},
                                               output,
                                               titleBar,
                                               ring);
   REQUIRE(leftTarget);
-  CHECK(*leftTarget == lambda::compositor::SnapTarget::LeftHalf);
+  CHECK(*leftTarget == lambdaui::compositor::SnapTarget::LeftHalf);
 
   auto bottomRightTarget =
-      lambda::compositor::snapTargetForWindow({.x = 3010, .y = 620, .width = 190, .height = 176},
+      lambdaui::compositor::snapTargetForWindow({.x = 3010, .y = 620, .width = 190, .height = 176},
                                               output,
                                               titleBar,
                                               ring);
   REQUIRE(bottomRightTarget);
-  CHECK(*bottomRightTarget == lambda::compositor::SnapTarget::BottomRightQuarter);
+  CHECK(*bottomRightTarget == lambdaui::compositor::SnapTarget::BottomRightQuarter);
 }
 
 TEST_CASE("compositor snap geometry uses output work area with reserved dock already removed") {
-  lambda::compositor::OutputGeometry const workArea{.width = 1920, .height = 1000};
+  lambdaui::compositor::OutputGeometry const workArea{.width = 1920, .height = 1000};
 
-  auto maximized = lambda::compositor::maximizedWindowGeometry(workArea, 40);
+  auto maximized = lambdaui::compositor::maximizedWindowGeometry(workArea, 40);
   CHECK(maximized.x == 0);
   CHECK(maximized.y == 40);
   CHECK(maximized.width == 1920);
   CHECK(maximized.height == 960);
 
-  auto bottomRight = lambda::compositor::snapTargetGeometry(workArea,
-                                                         lambda::compositor::SnapTarget::BottomRightQuarter,
+  auto bottomRight = lambdaui::compositor::snapTargetGeometry(workArea,
+                                                         lambdaui::compositor::SnapTarget::BottomRightQuarter,
                                                          40);
   CHECK(bottomRight.x == 960);
   CHECK(bottomRight.y == 520);
@@ -296,16 +296,16 @@ TEST_CASE("compositor snap geometry uses output work area with reserved dock alr
 }
 
 TEST_CASE("compositor drag geometry softly snaps near the center of the work area") {
-  lambda::compositor::OutputGeometry const workArea{.width = 1200, .height = 760};
-  lambda::compositor::WindowGeometry const nearCenter{.x = 397, .y = 246, .width = 400, .height = 300};
+  lambdaui::compositor::OutputGeometry const workArea{.width = 1200, .height = 760};
+  lambdaui::compositor::WindowGeometry const nearCenter{.x = 397, .y = 246, .width = 400, .height = 300};
 
-  auto centered = lambda::compositor::centerSnappedWindowGeometry(nearCenter, workArea, 40);
+  auto centered = lambdaui::compositor::centerSnappedWindowGeometry(nearCenter, workArea, 40);
   CHECK(centered.x == 400);
   CHECK(centered.y == 250);
   CHECK(centered.width == 400);
   CHECK(centered.height == 300);
 
-  auto outsideThreshold = lambda::compositor::centerSnappedWindowGeometry({
+  auto outsideThreshold = lambdaui::compositor::centerSnappedWindowGeometry({
       .x = 360,
       .y = 246,
       .width = 400,
@@ -316,10 +316,10 @@ TEST_CASE("compositor drag geometry softly snaps near the center of the work are
 }
 
 TEST_CASE("compositor drag geometry softly snaps near logical output center") {
-  lambda::compositor::OutputGeometry const workArea{.x = -640, .y = 80, .width = 1280, .height = 720};
-  lambda::compositor::WindowGeometry const nearCenter{.x = -203, .y = 306, .width = 400, .height = 300};
+  lambdaui::compositor::OutputGeometry const workArea{.x = -640, .y = 80, .width = 1280, .height = 720};
+  lambdaui::compositor::WindowGeometry const nearCenter{.x = -203, .y = 306, .width = 400, .height = 300};
 
-  auto centered = lambda::compositor::centerSnappedWindowGeometry(nearCenter, workArea, 40);
+  auto centered = lambdaui::compositor::centerSnappedWindowGeometry(nearCenter, workArea, 40);
   CHECK(centered.x == -200);
   CHECK(centered.y == 310);
   CHECK(centered.width == 400);
@@ -327,22 +327,22 @@ TEST_CASE("compositor drag geometry softly snaps near logical output center") {
 }
 
 TEST_CASE("compositor geometry stays valid on tiny outputs") {
-  lambda::compositor::OutputGeometry const output{.width = 120, .height = 80};
+  lambdaui::compositor::OutputGeometry const output{.width = 120, .height = 80};
 
-  auto left = lambda::compositor::snappedWindowGeometry(output, true);
-  CHECK(left.width == lambda::compositor::kCompositorMinWindowWidth);
-  CHECK(left.height == lambda::compositor::kCompositorMinWindowHeight);
-  CHECK(left.y == lambda::compositor::kCompositorTitleBarHeight);
+  auto left = lambdaui::compositor::snappedWindowGeometry(output, true);
+  CHECK(left.width == lambdaui::compositor::kCompositorMinWindowWidth);
+  CHECK(left.height == lambdaui::compositor::kCompositorMinWindowHeight);
+  CHECK(left.y == lambdaui::compositor::kCompositorTitleBarHeight);
 
-  auto maximized = lambda::compositor::maximizedWindowGeometry(output);
-  CHECK(maximized.width == lambda::compositor::kCompositorMinWindowWidth);
-  CHECK(maximized.height == lambda::compositor::kCompositorMinWindowHeight);
+  auto maximized = lambdaui::compositor::maximizedWindowGeometry(output);
+  CHECK(maximized.width == lambdaui::compositor::kCompositorMinWindowWidth);
+  CHECK(maximized.height == lambdaui::compositor::kCompositorMinWindowHeight);
 }
 
 TEST_CASE("compositor resize geometry clamps to logical output origin") {
-  using lambda::compositor::ResizeEdge;
+  using lambdaui::compositor::ResizeEdge;
 
-  auto resized = lambda::compositor::resizedWindowGeometry({
+  auto resized = lambdaui::compositor::resizedWindowGeometry({
       .startPointerX = 0.f,
       .startPointerY = 0.f,
       .pointerX = 0.f,
@@ -352,25 +352,25 @@ TEST_CASE("compositor resize geometry clamps to logical output origin") {
       .output = {.x = 1920, .y = 100, .width = 800, .height = 600},
   });
   CHECK(resized.x == 1920);
-  CHECK(resized.y == 100 + lambda::compositor::kCompositorTitleBarHeight);
+  CHECK(resized.y == 100 + lambdaui::compositor::kCompositorTitleBarHeight);
   CHECK(resized.width == 300);
   CHECK(resized.height == 200);
 }
 
 TEST_CASE("compositor snap preview rejects points outside the small edge threshold") {
-  lambda::compositor::OutputGeometry const output{.width = 1000, .height = 700};
+  lambdaui::compositor::OutputGeometry const output{.width = 1000, .height = 700};
 
-  auto left = lambda::compositor::snapPreviewGeometry({
-      .x = lambda::compositor::kCompositorSnapEdgeThreshold + 1,
+  auto left = lambdaui::compositor::snapPreviewGeometry({
+      .x = lambdaui::compositor::kCompositorSnapEdgeThreshold + 1,
       .y = 100,
       .width = 300,
       .height = 200,
   }, output);
   CHECK(left == std::nullopt);
 
-  auto top = lambda::compositor::snapPreviewGeometry({
+  auto top = lambdaui::compositor::snapPreviewGeometry({
       .x = 300,
-      .y = lambda::compositor::kCompositorTitleBarHeight + lambda::compositor::kCompositorSnapEdgeThreshold + 1,
+      .y = lambdaui::compositor::kCompositorTitleBarHeight + lambdaui::compositor::kCompositorSnapEdgeThreshold + 1,
       .width = 300,
       .height = 200,
   }, output);
@@ -378,8 +378,8 @@ TEST_CASE("compositor snap preview rejects points outside the small edge thresho
 }
 
 TEST_CASE("compositor popup geometry uses anchor gravity and parent-relative configure") {
-  lambda::compositor::PopupPositionerGeometry const positioner{
-      .parent = lambda::compositor::WindowGeometry{.x = 200, .y = 100, .width = 500, .height = 400},
+  lambdaui::compositor::PopupPositionerGeometry const positioner{
+      .parent = lambdaui::compositor::WindowGeometry{.x = 200, .y = 100, .width = 500, .height = 400},
       .output = {.width = 1280, .height = 720},
       .anchorRectX = 40,
       .anchorRectY = 30,
@@ -389,11 +389,11 @@ TEST_CASE("compositor popup geometry uses anchor gravity and parent-relative con
       .height = 180,
       .offsetX = 8,
       .offsetY = 6,
-      .anchor = lambda::compositor::PopupAnchor::BottomRight,
-      .gravity = lambda::compositor::PopupGravity::BottomLeft,
+      .anchor = lambdaui::compositor::PopupAnchor::BottomRight,
+      .gravity = lambdaui::compositor::PopupGravity::BottomLeft,
   };
 
-  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  auto popup = lambdaui::compositor::positionedPopupGeometry(positioner);
   CHECK(popup.window.x == 128);
   CHECK(popup.window.y == 160);
   CHECK(popup.window.width == 240);
@@ -405,8 +405,8 @@ TEST_CASE("compositor popup geometry uses anchor gravity and parent-relative con
 }
 
 TEST_CASE("compositor popup geometry slides to fit output when requested") {
-  lambda::compositor::PopupPositionerGeometry const positioner{
-      .parent = lambda::compositor::WindowGeometry{.x = 700, .y = 500, .width = 300, .height = 200},
+  lambdaui::compositor::PopupPositionerGeometry const positioner{
+      .parent = lambdaui::compositor::WindowGeometry{.x = 700, .y = 500, .width = 300, .height = 200},
       .output = {.width = 800, .height = 600},
       .anchorRectX = 280,
       .anchorRectY = 180,
@@ -414,13 +414,13 @@ TEST_CASE("compositor popup geometry slides to fit output when requested") {
       .anchorRectHeight = 40,
       .width = 220,
       .height = 160,
-      .anchor = lambda::compositor::PopupAnchor::BottomRight,
-      .gravity = lambda::compositor::PopupGravity::BottomRight,
-      .constraintAdjustment = lambda::compositor::PopupConstraintAdjustment::SlideX |
-                              lambda::compositor::PopupConstraintAdjustment::SlideY,
+      .anchor = lambdaui::compositor::PopupAnchor::BottomRight,
+      .gravity = lambdaui::compositor::PopupGravity::BottomRight,
+      .constraintAdjustment = lambdaui::compositor::PopupConstraintAdjustment::SlideX |
+                              lambdaui::compositor::PopupConstraintAdjustment::SlideY,
   };
 
-  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  auto popup = lambdaui::compositor::positionedPopupGeometry(positioner);
   CHECK(popup.window.x == 580);
   CHECK(popup.window.y == 440);
   CHECK(popup.configureX == -120);
@@ -428,8 +428,8 @@ TEST_CASE("compositor popup geometry slides to fit output when requested") {
 }
 
 TEST_CASE("compositor popup geometry constrains to logical output origin") {
-  lambda::compositor::PopupPositionerGeometry const positioner{
-      .parent = lambda::compositor::WindowGeometry{.x = 2620, .y = 600, .width = 300, .height = 200},
+  lambdaui::compositor::PopupPositionerGeometry const positioner{
+      .parent = lambdaui::compositor::WindowGeometry{.x = 2620, .y = 600, .width = 300, .height = 200},
       .output = {.x = 1920, .y = 100, .width = 800, .height = 600},
       .anchorRectX = 280,
       .anchorRectY = 180,
@@ -437,13 +437,13 @@ TEST_CASE("compositor popup geometry constrains to logical output origin") {
       .anchorRectHeight = 40,
       .width = 220,
       .height = 160,
-      .anchor = lambda::compositor::PopupAnchor::BottomRight,
-      .gravity = lambda::compositor::PopupGravity::BottomRight,
-      .constraintAdjustment = lambda::compositor::PopupConstraintAdjustment::SlideX |
-                              lambda::compositor::PopupConstraintAdjustment::SlideY,
+      .anchor = lambdaui::compositor::PopupAnchor::BottomRight,
+      .gravity = lambdaui::compositor::PopupGravity::BottomRight,
+      .constraintAdjustment = lambdaui::compositor::PopupConstraintAdjustment::SlideX |
+                              lambdaui::compositor::PopupConstraintAdjustment::SlideY,
   };
 
-  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  auto popup = lambdaui::compositor::positionedPopupGeometry(positioner);
   CHECK(popup.window.x == 2500);
   CHECK(popup.window.y == 540);
   CHECK(popup.configureX == -120);
@@ -451,8 +451,8 @@ TEST_CASE("compositor popup geometry constrains to logical output origin") {
 }
 
 TEST_CASE("compositor popup geometry leaves constrained boxes unchanged without adjustment flags") {
-  lambda::compositor::PopupPositionerGeometry const positioner{
-      .parent = lambda::compositor::WindowGeometry{.x = 700, .y = 500, .width = 300, .height = 200},
+  lambdaui::compositor::PopupPositionerGeometry const positioner{
+      .parent = lambdaui::compositor::WindowGeometry{.x = 700, .y = 500, .width = 300, .height = 200},
       .output = {.width = 800, .height = 600},
       .anchorRectX = 280,
       .anchorRectY = 180,
@@ -460,11 +460,11 @@ TEST_CASE("compositor popup geometry leaves constrained boxes unchanged without 
       .anchorRectHeight = 40,
       .width = 220,
       .height = 160,
-      .anchor = lambda::compositor::PopupAnchor::BottomRight,
-      .gravity = lambda::compositor::PopupGravity::BottomRight,
+      .anchor = lambdaui::compositor::PopupAnchor::BottomRight,
+      .gravity = lambdaui::compositor::PopupGravity::BottomRight,
   };
 
-  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  auto popup = lambdaui::compositor::positionedPopupGeometry(positioner);
   CHECK(popup.window.x == 1020);
   CHECK(popup.window.y == 720);
   CHECK(popup.configureX == 320);
@@ -472,8 +472,8 @@ TEST_CASE("compositor popup geometry leaves constrained boxes unchanged without 
 }
 
 TEST_CASE("compositor popup geometry flips when that fully satisfies constraints") {
-  lambda::compositor::PopupPositionerGeometry const positioner{
-      .parent = lambda::compositor::WindowGeometry{.x = 700, .y = 100, .width = 80, .height = 80},
+  lambdaui::compositor::PopupPositionerGeometry const positioner{
+      .parent = lambdaui::compositor::WindowGeometry{.x = 700, .y = 100, .width = 80, .height = 80},
       .output = {.width = 800, .height = 600},
       .anchorRectX = 0,
       .anchorRectY = 20,
@@ -481,12 +481,12 @@ TEST_CASE("compositor popup geometry flips when that fully satisfies constraints
       .anchorRectHeight = 20,
       .width = 100,
       .height = 80,
-      .anchor = lambda::compositor::PopupAnchor::Right,
-      .gravity = lambda::compositor::PopupGravity::Right,
-      .constraintAdjustment = lambda::compositor::PopupConstraintAdjustment::FlipX,
+      .anchor = lambdaui::compositor::PopupAnchor::Right,
+      .gravity = lambdaui::compositor::PopupGravity::Right,
+      .constraintAdjustment = lambdaui::compositor::PopupConstraintAdjustment::FlipX,
   };
 
-  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  auto popup = lambdaui::compositor::positionedPopupGeometry(positioner);
   CHECK(popup.window.x == 600);
   CHECK(popup.window.y == 90);
   CHECK(popup.configureX == -100);
@@ -494,17 +494,17 @@ TEST_CASE("compositor popup geometry flips when that fully satisfies constraints
 }
 
 TEST_CASE("compositor popup geometry resizes when slide and flip cannot satisfy constraints") {
-  lambda::compositor::PopupPositionerGeometry const positioner{
+  lambdaui::compositor::PopupPositionerGeometry const positioner{
       .output = {.width = 200, .height = 100},
       .anchorRectX = 100,
       .anchorRectY = 50,
       .width = 300,
       .height = 120,
-      .constraintAdjustment = lambda::compositor::PopupConstraintAdjustment::ResizeX |
-                              lambda::compositor::PopupConstraintAdjustment::ResizeY,
+      .constraintAdjustment = lambdaui::compositor::PopupConstraintAdjustment::ResizeX |
+                              lambdaui::compositor::PopupConstraintAdjustment::ResizeY,
   };
 
-  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  auto popup = lambdaui::compositor::positionedPopupGeometry(positioner);
   CHECK(popup.window.x == 0);
   CHECK(popup.window.y == 0);
   CHECK(popup.window.width == 200);
@@ -514,13 +514,13 @@ TEST_CASE("compositor popup geometry resizes when slide and flip cannot satisfy 
 }
 
 TEST_CASE("compositor popup geometry clamps empty size to one pixel") {
-  lambda::compositor::PopupPositionerGeometry const positioner{
+  lambdaui::compositor::PopupPositionerGeometry const positioner{
       .output = {.width = 100, .height = 100},
       .width = 0,
       .height = -10,
   };
 
-  auto popup = lambda::compositor::positionedPopupGeometry(positioner);
+  auto popup = lambdaui::compositor::positionedPopupGeometry(positioner);
   CHECK(popup.window.width == 1);
   CHECK(popup.window.height == 1);
   CHECK(popup.configureWidth == 1);
@@ -528,42 +528,42 @@ TEST_CASE("compositor popup geometry clamps empty size to one pixel") {
 }
 
 TEST_CASE("compositor xdg positioner validation mirrors wlroots request rules") {
-  CHECK(lambda::compositor::xdgPositionerSizeInputValid(1, 1));
-  CHECK_FALSE(lambda::compositor::xdgPositionerSizeInputValid(0, 1));
-  CHECK_FALSE(lambda::compositor::xdgPositionerSizeInputValid(1, 0));
-  CHECK_FALSE(lambda::compositor::xdgPositionerSizeInputValid(-1, 1));
+  CHECK(lambdaui::compositor::xdgPositionerSizeInputValid(1, 1));
+  CHECK_FALSE(lambdaui::compositor::xdgPositionerSizeInputValid(0, 1));
+  CHECK_FALSE(lambdaui::compositor::xdgPositionerSizeInputValid(1, 0));
+  CHECK_FALSE(lambdaui::compositor::xdgPositionerSizeInputValid(-1, 1));
 
-  CHECK(lambda::compositor::xdgPositionerAnchorRectInputValid(0, 0));
-  CHECK(lambda::compositor::xdgPositionerAnchorRectInputValid(32, 0));
-  CHECK_FALSE(lambda::compositor::xdgPositionerAnchorRectInputValid(-1, 0));
-  CHECK_FALSE(lambda::compositor::xdgPositionerAnchorRectInputValid(1, -1));
+  CHECK(lambdaui::compositor::xdgPositionerAnchorRectInputValid(0, 0));
+  CHECK(lambdaui::compositor::xdgPositionerAnchorRectInputValid(32, 0));
+  CHECK_FALSE(lambdaui::compositor::xdgPositionerAnchorRectInputValid(-1, 0));
+  CHECK_FALSE(lambdaui::compositor::xdgPositionerAnchorRectInputValid(1, -1));
 }
 
 TEST_CASE("compositor xdg positioner completeness follows wlroots post-validation rule") {
-  lambda::compositor::XdgPositionerRules complete{
+  lambdaui::compositor::XdgPositionerRules complete{
       .width = 64,
       .height = 32,
       .anchorRectWidth = 1,
       .anchorRectHeight = 0,
   };
-  CHECK(lambda::compositor::xdgPositionerComplete(complete));
+  CHECK(lambdaui::compositor::xdgPositionerComplete(complete));
 
   auto missingSize = complete;
   missingSize.width = 0;
-  CHECK_FALSE(lambda::compositor::xdgPositionerComplete(missingSize));
+  CHECK_FALSE(lambdaui::compositor::xdgPositionerComplete(missingSize));
 
   auto missingAnchorWidth = complete;
   missingAnchorWidth.anchorRectWidth = 0;
-  CHECK_FALSE(lambda::compositor::xdgPositionerComplete(missingAnchorWidth));
+  CHECK_FALSE(lambdaui::compositor::xdgPositionerComplete(missingAnchorWidth));
 }
 
 TEST_CASE("compositor popup screen geometry accumulates parent offsets") {
-  std::array<lambda::compositor::WindowGeometry, 2> const chain{{
+  std::array<lambdaui::compositor::WindowGeometry, 2> const chain{{
       {.x = 100, .y = 100, .width = 400, .height = 300},
       {.x = 50, .y = 200, .width = 150, .height = 180},
   }};
 
-  auto popup = lambda::compositor::popupScreenGeometry(chain);
+  auto popup = lambdaui::compositor::popupScreenGeometry(chain);
   REQUIRE(popup);
   CHECK(popup->x == 150);
   CHECK(popup->y == 300);
@@ -572,11 +572,11 @@ TEST_CASE("compositor popup screen geometry accumulates parent offsets") {
 }
 
 TEST_CASE("compositor popup screen geometry accepts a parentless root popup") {
-  std::array<lambda::compositor::WindowGeometry, 1> const chain{{
+  std::array<lambdaui::compositor::WindowGeometry, 1> const chain{{
       {.x = 320, .y = 180, .width = 240, .height = 160},
   }};
 
-  auto popup = lambda::compositor::popupScreenGeometry(chain);
+  auto popup = lambdaui::compositor::popupScreenGeometry(chain);
   REQUIRE(popup);
   CHECK(popup->x == 320);
   CHECK(popup->y == 180);
@@ -585,13 +585,13 @@ TEST_CASE("compositor popup screen geometry accepts a parentless root popup") {
 }
 
 TEST_CASE("compositor nested popup screen geometry accumulates every popup offset") {
-  std::array<lambda::compositor::WindowGeometry, 3> const chain{{
+  std::array<lambdaui::compositor::WindowGeometry, 3> const chain{{
       {.x = 100, .y = 100, .width = 400, .height = 300},
       {.x = 50, .y = 50, .width = 150, .height = 180},
       {.x = 40, .y = 30, .width = 120, .height = 90},
   }};
 
-  auto popup = lambda::compositor::popupScreenGeometry(chain);
+  auto popup = lambdaui::compositor::popupScreenGeometry(chain);
   REQUIRE(popup);
   CHECK(popup->x == 190);
   CHECK(popup->y == 180);
@@ -600,11 +600,11 @@ TEST_CASE("compositor nested popup screen geometry accumulates every popup offse
 }
 
 TEST_CASE("compositor popup screen geometry rejects invalid chain entries") {
-  CHECK_FALSE(lambda::compositor::popupScreenGeometry({}));
+  CHECK_FALSE(lambdaui::compositor::popupScreenGeometry({}));
 
-  std::array<lambda::compositor::WindowGeometry, 2> const invalidPopup{{
+  std::array<lambdaui::compositor::WindowGeometry, 2> const invalidPopup{{
       {.x = 100, .y = 100, .width = 400, .height = 300},
       {.x = 50, .y = 50, .width = 0, .height = 180},
   }};
-  CHECK_FALSE(lambda::compositor::popupScreenGeometry(invalidPopup));
+  CHECK_FALSE(lambdaui::compositor::popupScreenGeometry(invalidPopup));
 }

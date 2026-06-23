@@ -4,8 +4,8 @@
 
 struct wl_client;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 void bindPresentation(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

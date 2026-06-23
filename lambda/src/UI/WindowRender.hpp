@@ -6,7 +6,7 @@
 
 #include <optional>
 
-namespace lambda {
+namespace lambdaui {
 
 class Canvas;
 class OverlayManager;
@@ -23,4 +23,4 @@ void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
                        WindowBackground const& background,
                        TextCacheRingBuffer& textCacheRing);
 
-} // namespace lambda
+} // namespace lambdaui

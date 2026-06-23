@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class ImageFillMode : std::uint8_t {
   Stretch,
@@ -17,4 +17,4 @@ enum class ImageFillMode : std::uint8_t {
   Tile,
 };
 
-} // namespace lambda
+} // namespace lambdaui

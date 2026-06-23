@@ -583,7 +583,7 @@ std::string formatVolumeJobOperation(std::string operation) {
   return "Working";
 }
 
-std::string formatVolumeJobSubtitle(lambda::system::UDisks2JobSnapshot const& job) {
+std::string formatVolumeJobSubtitle(lambdaui::system::UDisks2JobSnapshot const& job) {
   std::string status = formatVolumeJobOperation(job.operation);
   if (job.progressValid) {
     int const percent = static_cast<int>(std::lround(std::clamp(job.progress, 0.0, 1.0) * 100.0));
@@ -592,7 +592,7 @@ std::string formatVolumeJobSubtitle(lambda::system::UDisks2JobSnapshot const& jo
   return status;
 }
 
-std::string volumeSubtitle(lambda::system::UDisks2VolumeSnapshot const& volume) {
+std::string volumeSubtitle(lambdaui::system::UDisks2VolumeSnapshot const& volume) {
   if (!volume.jobs.empty()) {
     return formatVolumeJobSubtitle(volume.jobs.front());
   }
@@ -611,14 +611,14 @@ std::string volumeSubtitle(lambda::system::UDisks2VolumeSnapshot const& volume) 
   return {};
 }
 
-lambda::IconName volumeIcon(lambda::system::UDisks2VolumeSnapshot const& volume) {
+lambdaui::IconName volumeIcon(lambdaui::system::UDisks2VolumeSnapshot const& volume) {
   if (volume.encrypted && !volume.unlocked && !volume.cleartext) {
-    return lambda::IconName::Lock;
+    return lambdaui::IconName::Lock;
   }
   if (volume.cleartext || volume.encrypted) {
-    return lambda::IconName::LockOpen;
+    return lambdaui::IconName::LockOpen;
   }
-  return lambda::IconName::DevicesOther;
+  return lambdaui::IconName::DevicesOther;
 }
 
 bool hasMountedDuplicate(std::vector<SidebarPlace> const& places, std::filesystem::path const& path) {
@@ -631,7 +631,7 @@ SidebarVolumeActionResult disabledVolumeAction(std::string message) {
   return {.error = std::move(message)};
 }
 
-SidebarVolumeActionResult volumeActionFromUDisks(lambda::system::UDisks2OperationResult const& result,
+SidebarVolumeActionResult volumeActionFromUDisks(lambdaui::system::UDisks2OperationResult const& result,
                                                  bool navigateToResultPath) {
   if (result.ok) {
     return {
@@ -713,9 +713,9 @@ std::vector<SidebarPlace> const& sidebarPlaces() {
   static std::vector<SidebarPlace> const places = [] {
     std::filesystem::path const home = homeDirectory();
     std::vector<SidebarPlace> built;
-    built.push_back({.id = "home", .label = "Home", .icon = lambda::IconName::Home, .path = home});
+    built.push_back({.id = "home", .label = "Home", .icon = lambdaui::IconName::Home, .path = home});
 
-    auto add = [&built](char const* id, char const* label, lambda::IconName icon, std::filesystem::path path) {
+    auto add = [&built](char const* id, char const* label, lambdaui::IconName icon, std::filesystem::path path) {
       for (auto const& existing : built) {
         if (existing.id == id) {
           return;
@@ -726,16 +726,16 @@ std::vector<SidebarPlace> const& sidebarPlaces() {
       }
     };
 
-    add("desktop", "Desktop", lambda::IconName::DesktopWindows, home / "Desktop");
+    add("desktop", "Desktop", lambdaui::IconName::DesktopWindows, home / "Desktop");
     if (std::filesystem::path const docs = pathFromEnv("XDG_DOCUMENTS_DIR"); !docs.empty()) {
-      add("documents", "Documents", lambda::IconName::Description, docs);
+      add("documents", "Documents", lambdaui::IconName::Description, docs);
     } else {
-      add("documents", "Documents", lambda::IconName::Description, home / "Documents");
+      add("documents", "Documents", lambdaui::IconName::Description, home / "Documents");
     }
     if (std::filesystem::path const dl = pathFromEnv("XDG_DOWNLOAD_DIR"); !dl.empty()) {
-      add("downloads", "Downloads", lambda::IconName::Download, dl);
+      add("downloads", "Downloads", lambdaui::IconName::Download, dl);
     } else {
-      add("downloads", "Downloads", lambda::IconName::Download, home / "Downloads");
+      add("downloads", "Downloads", lambdaui::IconName::Download, home / "Downloads");
     }
     return built;
   }();
@@ -743,7 +743,7 @@ std::vector<SidebarPlace> const& sidebarPlaces() {
 }
 
 std::vector<SidebarPlace> sidebarPlacesWithVolumes(std::vector<SidebarPlace> places,
-                                                   lambda::system::UDisks2Snapshot const& snapshot) {
+                                                   lambdaui::system::UDisks2Snapshot const& snapshot) {
   std::set<std::string> cleartextBackingDevices;
   for (auto const& volume : snapshot.volumes) {
     if (volume.cleartext && !volume.cryptoBackingDevice.empty() && volume.cryptoBackingDevice != "/") {
@@ -777,7 +777,7 @@ std::vector<SidebarPlace> sidebarPlacesWithVolumes(std::vector<SidebarPlace> pla
 
     places.push_back({
         .id = "volume:" + volume.path,
-        .label = lambda::system::formatUDisks2VolumeName(volume),
+        .label = lambdaui::system::formatUDisks2VolumeName(volume),
         .icon = volumeIcon(volume),
         .path = mountPath,
         .kind = SidebarPlaceKind::Volume,
@@ -801,7 +801,7 @@ std::vector<SidebarPlace> sidebarPlacesWithVolumes(std::vector<SidebarPlace> pla
 std::vector<SidebarPlace> sidebarPlacesWithMountedVolumes() {
   std::vector<SidebarPlace> places = sidebarPlaces();
   try {
-    auto client = lambda::system::UDisks2Client::connectSystem();
+    auto client = lambdaui::system::UDisks2Client::connectSystem();
     return sidebarPlacesWithVolumes(std::move(places), client.readSnapshot());
   } catch (...) {
     return places;
@@ -857,13 +857,13 @@ std::vector<SidebarVolumeCommand> sidebarVolumeContextCommands(SidebarPlace cons
   return commands;
 }
 
-SidebarVolumeActionBackend udisksSidebarVolumeActionBackend(lambda::system::UDisks2Client& client) {
+SidebarVolumeActionBackend udisksSidebarVolumeActionBackend(lambdaui::system::UDisks2Client& client) {
   return SidebarVolumeActionBackend{
       .mountFilesystem = [&client](std::string const& path) {
         return client.tryMountFilesystem(path);
       },
       .unmountFilesystem = [&client](std::string const& path, bool force) {
-        return client.tryUnmountFilesystem(path, lambda::system::UDisks2MountOptions{.force = force});
+        return client.tryUnmountFilesystem(path, lambdaui::system::UDisks2MountOptions{.force = force});
       },
       .ejectDrive = [&client](std::string const& path) {
         return client.tryEjectDrive(path);
@@ -943,7 +943,7 @@ SidebarVolumeActionResult performSidebarVolumeAction(SidebarPlace const& place,
   return disabledVolumeAction("Storage operation failed.");
 }
 
-std::vector<FilesAutoMountRequest> autoMountRequestsForVolumes(lambda::system::UDisks2Snapshot const& snapshot,
+std::vector<FilesAutoMountRequest> autoMountRequestsForVolumes(lambdaui::system::UDisks2Snapshot const& snapshot,
                                                                FilesPreferences const& preferences) {
   if (!preferences.autoMountRemovable) {
     return {};
@@ -959,7 +959,7 @@ std::vector<FilesAutoMountRequest> autoMountRequestsForVolumes(lambda::system::U
       continue;
     }
 
-    lambda::system::UDisks2MountOptions options;
+    lambdaui::system::UDisks2MountOptions options;
     if (preferences.autoMountReadOnly) {
       options.mountOptions = "ro";
     }
@@ -1525,17 +1525,17 @@ FileSelectionState moveSelectionByOffset(FileSelectionState state,
 FilePointerSelectionResult selectionForPointerTap(FileSelectionState state,
                                                   std::vector<FileEntry> const& entries,
                                                   int index,
-                                                  lambda::Modifiers modifiers) {
+                                                  lambdaui::Modifiers modifiers) {
   if (index < 0 || index >= static_cast<int>(entries.size())) {
     return {.selection = std::move(state), .activate = false};
   }
-  if (lambda::any(modifiers & lambda::Modifiers::Shift)) {
+  if (lambdaui::any(modifiers & lambdaui::Modifiers::Shift)) {
     return {
         .selection = rangeSelection(std::move(state), entries, index),
         .activate = false,
     };
   }
-  if (lambda::any(modifiers & lambda::Modifiers::Ctrl) || lambda::any(modifiers & lambda::Modifiers::Meta)) {
+  if (lambdaui::any(modifiers & lambdaui::Modifiers::Ctrl) || lambdaui::any(modifiers & lambdaui::Modifiers::Meta)) {
     return {
         .selection = toggleSelection(std::move(state), entries, index),
         .activate = false,

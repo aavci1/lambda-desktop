@@ -7,7 +7,7 @@
 #include <span>
 #include <vector>
 
-namespace lambda::layout {
+namespace lambdaui::layout {
 
 struct ScrollIndicatorMetrics {
   float x = 0.f;
@@ -48,4 +48,4 @@ ScrollIndicatorMetrics makeVerticalIndicator(Point const& offset, Size const& vi
 ScrollIndicatorMetrics makeHorizontalIndicator(Point const& offset, Size const& viewport,
                                                Size const& content, bool reserveTrailing);
 
-} // namespace lambda::layout
+} // namespace lambdaui::layout

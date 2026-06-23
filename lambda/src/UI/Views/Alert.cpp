@@ -16,7 +16,7 @@
 
 #include "UI/Views/AlertActionHelpers.hpp"
 
-namespace lambda {
+namespace lambdaui {
 
 Element Alert::body() const {
   auto theme = useEnvironment<ThemeKey>();
@@ -131,4 +131,4 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
   return {std::move(show), std::move(hideOverlay), isPresented};
 }
 
-} // namespace lambda
+} // namespace lambdaui

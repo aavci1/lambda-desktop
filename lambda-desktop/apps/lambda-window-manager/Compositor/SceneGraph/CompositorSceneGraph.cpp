@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <unordered_map>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 using RegionRect = CommittedSurfaceSnapshot::RegionRect;
@@ -1098,4 +1098,4 @@ ownCompositorSceneOverlayCandidate(platform::KmsAtomicPresenter::OverlayCandidat
       });
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

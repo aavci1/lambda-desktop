@@ -7,7 +7,7 @@
 #include <Lambda/Core/Geometry.hpp>
 #include <Lambda/Core/Identity.hpp>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 class SceneNode;
 
@@ -26,4 +26,4 @@ struct InteractionHitResult {
   Interaction const* interaction = nullptr;
 };
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

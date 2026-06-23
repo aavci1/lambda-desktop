@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -154,4 +154,4 @@ bool StrokeStyle::solidColor(Color* out) const {
   return true;
 }
 
-} // namespace lambda
+} // namespace lambdaui

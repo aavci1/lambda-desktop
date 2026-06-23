@@ -5,12 +5,12 @@
 #include "Compositor/CompositorPresentation.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 void applyCompositorRuntimeConfig(CompositorConfigWatchContext& ctx, bool forceOutputScale) {
   auto const configStart = presentation::SteadyClock::now();
   ctx.appliedConfig = applyCompositorConfig(ctx.effectiveConfig(), ctx.canvas);
-  lambda::setVulkanCanvasBackdropBlurBaseDownsample(&ctx.canvas,
+  lambdaui::setVulkanCanvasBackdropBlurBaseDownsample(&ctx.canvas,
                                                   ctx.appliedConfig.config.rendering.backdropBlurBaseDownsample);
   LAMBDA_WINDOW_MANAGER_TRACE_TIMING("apply-config", configStart);
   ctx.wayland.setShortcutBindings(ctx.appliedConfig.config.shortcutBindings);
@@ -51,4 +51,4 @@ bool maybeReloadCompositorConfig(CompositorConfigWatchContext& ctx) {
   return true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

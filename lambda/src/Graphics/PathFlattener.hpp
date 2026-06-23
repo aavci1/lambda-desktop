@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 /** Vertex layout for GPU path rendering (matches path shader). */
 struct PathVertex {
@@ -58,4 +58,4 @@ private:
                           float tol, int depth);
 };
 
-} // namespace lambda
+} // namespace lambdaui

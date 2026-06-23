@@ -16,7 +16,7 @@
 #include <string>
 #include <string_view>
 
-using namespace lambda;
+using namespace lambdaui;
 
 namespace {
 

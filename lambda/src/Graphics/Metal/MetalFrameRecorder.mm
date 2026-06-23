@@ -2,7 +2,7 @@
 
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
 
-namespace lambda {
+namespace lambdaui {
 
 MetalFrameRecorder::~MetalFrameRecorder() {
   clear();
@@ -135,4 +135,4 @@ void MetalFrameRecorder::clear() {
   glyphAtlasGeneration = 0;
 }
 
-} // namespace lambda
+} // namespace lambdaui

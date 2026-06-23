@@ -2,7 +2,7 @@
 
 #include <Lambda/UI/Views/Render.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 Element BackdropBlur::body() const {
   return Render{
@@ -12,4 +12,4 @@ Element BackdropBlur::body() const {
   };
 }
 
-} // namespace lambda
+} // namespace lambdaui

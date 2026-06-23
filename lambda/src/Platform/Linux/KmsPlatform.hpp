@@ -26,7 +26,7 @@ struct libseat;
 struct udev;
 struct udev_monitor;
 
-namespace lambda {
+namespace lambdaui {
 
 class KmsWindow;
 struct WindowConfig;
@@ -187,9 +187,9 @@ public:
   KmsWindow(KmsApplication& app, KmsConnector connector, WindowConfig const& config);
   ~KmsWindow() override;
 
-  void setLambdaWindow(::lambda::Window* window) override;
+  void setLambdaWindow(::lambdaui::Window* window) override;
   void show() override;
-  std::unique_ptr<Canvas> createCanvas(::lambda::Window& owner) override;
+  std::unique_ptr<Canvas> createCanvas(::lambdaui::Window& owner) override;
   void resize(Size const& newSize) override;
   void setFullscreen(bool fullscreen) override;
   void setTitle(std::string const& title) override;
@@ -235,7 +235,7 @@ private:
 
   KmsApplication& app_;
   KmsConnector connector_;
-  ::lambda::Window* lambdaWindow_ = nullptr;
+  ::lambdaui::Window* lambdaWindow_ = nullptr;
   Canvas* canvas_ = nullptr;
   unsigned int handle_ = 0;
   Size size_{};
@@ -251,4 +251,4 @@ private:
   bool cursorVisible_ = false;
 };
 
-} // namespace lambda
+} // namespace lambdaui

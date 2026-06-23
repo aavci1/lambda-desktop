@@ -12,8 +12,8 @@
 
 namespace {
 
-using namespace lambda;
-using namespace lambda::layout;
+using namespace lambdaui;
+using namespace lambdaui::layout;
 
 TEST_CASE("StackLayout: grow distributes extra space by flex weight") {
   std::array<StackMainAxisChild, 2> children{{

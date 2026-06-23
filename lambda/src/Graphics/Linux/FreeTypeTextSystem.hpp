@@ -6,7 +6,7 @@
 #include <memory>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 class FreeTypeTextSystem final : public TextSystem {
 public:
@@ -36,4 +36,4 @@ private:
   std::unique_ptr<Impl> d;
 };
 
-} // namespace lambda
+} // namespace lambdaui

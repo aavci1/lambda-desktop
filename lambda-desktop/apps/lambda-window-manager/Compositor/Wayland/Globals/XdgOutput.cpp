@@ -10,7 +10,7 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void xdgOutputManagerDestroy(wl_client*, wl_resource* resource) {
@@ -131,4 +131,4 @@ void sendXdgOutputUpdatesForOutputGeometry(WaylandServer::Impl* server, bool inc
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

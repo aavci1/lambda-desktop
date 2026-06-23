@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 std::uint32_t effectiveLayerWidth(WaylandServer::Impl::LayerSurface const* layerSurface) {
@@ -149,4 +149,4 @@ bool resetLayerSurfaceForUnmap(WaylandServer::Impl::LayerSurface* layerSurface) 
   return true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

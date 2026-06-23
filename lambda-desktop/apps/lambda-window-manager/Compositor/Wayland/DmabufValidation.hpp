@@ -7,7 +7,7 @@
 
 #include <drm_fourcc.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::array<std::uint32_t, 4> kSupportedSinglePlaneDmabufFormats{
     DRM_FORMAT_ARGB8888,
@@ -55,4 +55,4 @@ struct DmabufLayoutValidationResult {
     std::span<DmabufPlaneLayout const> planes,
     std::optional<std::uint64_t> planeByteSize = std::nullopt);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

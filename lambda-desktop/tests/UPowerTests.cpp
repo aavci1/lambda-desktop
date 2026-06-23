@@ -11,9 +11,9 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::pumpUntil;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::pumpUntil;
+using lambdaui::testing::dbus::startPrivateBus;
 
 constexpr char kDisplayDevicePath[] = "/org/freedesktop/UPower/devices/DisplayDevice";
 
@@ -42,40 +42,40 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
     return;
   }
 
-  auto service = lambda::dbus::Bus::openAddress(privateBus->address);
-  lambda::system::UPowerClient client(lambda::dbus::Bus::openAddress(privateBus->address));
-  service.requestName(lambda::system::UPowerClient::serviceName);
+  auto service = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  lambdaui::system::UPowerClient client(lambdaui::dbus::Bus::openAddress(privateBus->address));
+  service.requestName(lambdaui::system::UPowerClient::serviceName);
 
   bool onBattery = true;
   bool present = true;
   double percentage = 87.6;
-  std::uint32_t state = static_cast<std::uint32_t>(lambda::system::UPowerDeviceState::Discharging);
-  std::uint32_t warningLevel = static_cast<std::uint32_t>(lambda::system::UPowerWarningLevel::Low);
+  std::uint32_t state = static_cast<std::uint32_t>(lambdaui::system::UPowerDeviceState::Discharging);
+  std::uint32_t warningLevel = static_cast<std::uint32_t>(lambdaui::system::UPowerWarningLevel::Low);
   std::int64_t timeToEmpty = 7200;
   std::int64_t timeToFull = 0;
   std::string iconName = "battery-good-symbolic";
 
   auto managerSlot = service.exportObject(
-      lambda::system::UPowerClient::objectPath,
-      lambda::dbus::ObjectDefinition{
+      lambdaui::system::UPowerClient::objectPath,
+      lambdaui::dbus::ObjectDefinition{
           .methods = {
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::UPowerClient::interfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::UPowerClient::interfaceName,
                   .member = "GetDisplayDevice",
-                  .handler = [](lambda::dbus::Message&) {
-                    return lambda::dbus::MethodReply{
-                        .values = {lambda::dbus::ObjectPath{kDisplayDevicePath}},
+                  .handler = [](lambdaui::dbus::Message&) {
+                    return lambdaui::dbus::MethodReply{
+                        .values = {lambdaui::dbus::ObjectPath{kDisplayDevicePath}},
                     };
                   },
               },
           },
           .properties = {
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::UPowerClient::interfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::UPowerClient::interfaceName,
                   .name = "OnBattery",
                   .value = true,
                   .writable = false,
-                  .getter = [&] { return lambda::dbus::BasicValue(onBattery); },
+                  .getter = [&] { return lambdaui::dbus::BasicValue(onBattery); },
                   .setter = nullptr,
               },
           },
@@ -83,63 +83,63 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
 
   auto displaySlot = service.exportObject(
       kDisplayDevicePath,
-      lambda::dbus::ObjectDefinition{
+      lambdaui::dbus::ObjectDefinition{
           .methods = {},
           .properties = {
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::UPowerClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::UPowerClient::deviceInterfaceName,
                   .name = "IsPresent",
                   .value = true,
                   .writable = false,
-                  .getter = [&] { return lambda::dbus::BasicValue(present); },
+                  .getter = [&] { return lambdaui::dbus::BasicValue(present); },
                   .setter = nullptr,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::UPowerClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::UPowerClient::deviceInterfaceName,
                   .name = "Percentage",
                   .value = 0.0,
                   .writable = false,
-                  .getter = [&] { return lambda::dbus::BasicValue(percentage); },
+                  .getter = [&] { return lambdaui::dbus::BasicValue(percentage); },
                   .setter = nullptr,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::UPowerClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::UPowerClient::deviceInterfaceName,
                   .name = "State",
                   .value = std::uint32_t(0),
                   .writable = false,
-                  .getter = [&] { return lambda::dbus::BasicValue(state); },
+                  .getter = [&] { return lambdaui::dbus::BasicValue(state); },
                   .setter = nullptr,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::UPowerClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::UPowerClient::deviceInterfaceName,
                   .name = "TimeToEmpty",
                   .value = std::int64_t(0),
                   .writable = false,
-                  .getter = [&] { return lambda::dbus::BasicValue(timeToEmpty); },
+                  .getter = [&] { return lambdaui::dbus::BasicValue(timeToEmpty); },
                   .setter = nullptr,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::UPowerClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::UPowerClient::deviceInterfaceName,
                   .name = "WarningLevel",
                   .value = std::uint32_t(0),
                   .writable = false,
-                  .getter = [&] { return lambda::dbus::BasicValue(warningLevel); },
+                  .getter = [&] { return lambdaui::dbus::BasicValue(warningLevel); },
                   .setter = nullptr,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::UPowerClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::UPowerClient::deviceInterfaceName,
                   .name = "TimeToFull",
                   .value = std::int64_t(0),
                   .writable = false,
-                  .getter = [&] { return lambda::dbus::BasicValue(timeToFull); },
+                  .getter = [&] { return lambdaui::dbus::BasicValue(timeToFull); },
                   .setter = nullptr,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::UPowerClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::UPowerClient::deviceInterfaceName,
                   .name = "IconName",
                   .value = std::string{},
                   .writable = false,
-                  .getter = [&] { return lambda::dbus::BasicValue(iconName); },
+                  .getter = [&] { return lambdaui::dbus::BasicValue(iconName); },
                   .setter = nullptr,
               },
           },
@@ -163,12 +163,12 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
   CHECK(display.present);
   CHECK(display.onBattery);
   CHECK(display.percentage == doctest::Approx(87.6));
-  CHECK(display.state == lambda::system::UPowerDeviceState::Discharging);
-  CHECK(display.warningLevel == lambda::system::UPowerWarningLevel::Low);
+  CHECK(display.state == lambdaui::system::UPowerDeviceState::Discharging);
+  CHECK(display.warningLevel == lambdaui::system::UPowerWarningLevel::Low);
   CHECK(display.timeToEmptySeconds == 7200);
   CHECK(display.timeToFullSeconds == 0);
   CHECK(display.iconName == "battery-good-symbolic");
-  CHECK(lambda::system::formatUPowerBatteryStatus(display) == "88%");
+  CHECK(lambdaui::system::formatUPowerBatteryStatus(display) == "88%");
 
   int displayChanges = 0;
   auto displayChangedSlot = client.watchDisplayDeviceChanged([&] {
@@ -182,10 +182,10 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
 
   onBattery = false;
   service.emitPropertiesChanged(
-      lambda::system::UPowerClient::objectPath,
-      lambda::system::UPowerClient::interfaceName,
-      lambda::dbus::VariantDictionary{
-          .values = {{"OnBattery", lambda::dbus::BasicValue(onBattery)}},
+      lambdaui::system::UPowerClient::objectPath,
+      lambdaui::system::UPowerClient::interfaceName,
+      lambdaui::dbus::VariantDictionary{
+          .values = {{"OnBattery", lambdaui::dbus::BasicValue(onBattery)}},
       });
   service.flush();
   CHECK(pumpUntil(client.bus(),
@@ -193,19 +193,19 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
                   std::chrono::milliseconds(500)));
   CHECK(displayChanges == 0);
 
-  service.emitSignal(lambda::system::UPowerClient::objectPath,
-                     lambda::system::UPowerClient::interfaceName,
+  service.emitSignal(lambdaui::system::UPowerClient::objectPath,
+                     lambdaui::system::UPowerClient::interfaceName,
                      "DeviceAdded",
-                     {lambda::dbus::ObjectPath{"/org/freedesktop/UPower/devices/battery_BAT0"}});
+                     {lambdaui::dbus::ObjectPath{"/org/freedesktop/UPower/devices/battery_BAT0"}});
   service.flush();
   CHECK(pumpUntil(client.bus(),
                   [&] { return statusChanges == 2; },
                   std::chrono::milliseconds(500)));
 
-  service.emitSignal(lambda::system::UPowerClient::objectPath,
-                     lambda::system::UPowerClient::interfaceName,
+  service.emitSignal(lambdaui::system::UPowerClient::objectPath,
+                     lambdaui::system::UPowerClient::interfaceName,
                      "DeviceRemoved",
-                     {lambda::dbus::ObjectPath{"/org/freedesktop/UPower/devices/battery_BAT0"}});
+                     {lambdaui::dbus::ObjectPath{"/org/freedesktop/UPower/devices/battery_BAT0"}});
   service.flush();
   CHECK(pumpUntil(client.bus(),
                   [&] { return statusChanges == 3; },
@@ -213,10 +213,10 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
 
   onBattery = true;
   service.emitPropertiesChanged(
-      lambda::system::UPowerClient::objectPath,
-      lambda::system::UPowerClient::interfaceName,
-      lambda::dbus::VariantDictionary{
-          .values = {{"OnBattery", lambda::dbus::BasicValue(onBattery)}},
+      lambdaui::system::UPowerClient::objectPath,
+      lambdaui::system::UPowerClient::interfaceName,
+      lambdaui::dbus::VariantDictionary{
+          .values = {{"OnBattery", lambdaui::dbus::BasicValue(onBattery)}},
       });
   service.flush();
   CHECK(pumpUntil(client.bus(),
@@ -228,9 +228,9 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
   percentage = 64.2;
   service.emitPropertiesChanged(
       kDisplayDevicePath,
-      lambda::system::UPowerClient::deviceInterfaceName,
-      lambda::dbus::VariantDictionary{
-          .values = {{"Percentage", lambda::dbus::BasicValue(percentage)}},
+      lambdaui::system::UPowerClient::deviceInterfaceName,
+      lambdaui::dbus::VariantDictionary{
+          .values = {{"Percentage", lambdaui::dbus::BasicValue(percentage)}},
       });
   service.flush();
   CHECK(pumpUntil(client.bus(),
@@ -238,7 +238,7 @@ TEST_CASE("UPowerClient reads display device state and watches changes") {
                   std::chrono::milliseconds(500)));
 
   display = client.readDisplayDevice();
-  CHECK(lambda::system::formatUPowerBatteryStatus(display) == "64%");
+  CHECK(lambdaui::system::formatUPowerBatteryStatus(display) == "64%");
 }
 
 #endif

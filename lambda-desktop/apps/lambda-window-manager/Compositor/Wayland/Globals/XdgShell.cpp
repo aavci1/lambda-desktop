@@ -27,7 +27,7 @@
 #include <optional>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 namespace {
 
@@ -130,8 +130,8 @@ std::uint32_t sendToplevelConfigureInternal(WaylandServer::Impl* server,
   if (auto* surface = toplevel->xdgSurface->surface) {
     surface->lastConfigureSerial = serial;
     server->noteResizePacingActivity();
-    if (lambda::detail::resizeTraceMetadataEnabled()) {
-      surface->lastConfigureSentNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+    if (lambdaui::detail::resizeTraceMetadataEnabled()) {
+      surface->lastConfigureSentNsec = lambdaui::detail::resizeTraceTimestampNanoseconds();
       surface->lastConfigureAckNsec = 0;
     }
     surface->lastConfigureWidth = width;
@@ -1017,8 +1017,8 @@ void xdgSurfaceAckConfigure(wl_client*, wl_resource* resource, std::uint32_t ser
   WaylandServer::Impl::XdgConfigure const& ackedConfigure = *ackResult.ackedConfigure;
   if (auto* surface = xdgSurface->surface) {
     std::uint64_t now = 0;
-    if (lambda::detail::resizeTraceMetadataEnabled()) {
-      now = lambda::detail::resizeTraceTimestampNanoseconds();
+    if (lambdaui::detail::resizeTraceMetadataEnabled()) {
+      now = lambdaui::detail::resizeTraceTimestampNanoseconds();
       if (serial == surface->lastConfigureSerial) surface->lastConfigureAckNsec = now;
     }
     if (surface->resizeConfigureInFlight && ackResult.ackedResizeConfigure) {
@@ -1330,4 +1330,4 @@ void bindXdgDecorationManager(wl_client* client, void* data, std::uint32_t versi
   wl_resource_set_implementation(resource, &xdgDecorationManagerImpl, data, nullptr);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -5,7 +5,7 @@
 #include <doctest/doctest.h>
 #include <vector>
 
-using namespace lambda::Reactive;
+using namespace lambdaui::Reactive;
 
 TEST_CASE("Reactive Scope owns effects and cleanup callbacks") {
   Signal<int> source(0);

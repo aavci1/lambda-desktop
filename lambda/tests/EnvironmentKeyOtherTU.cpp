@@ -1,9 +1,9 @@
 #include "EnvironmentKeyTestSupport.hpp"
 
-namespace lambda::tests {
+namespace lambdaui::tests {
 
 std::uint16_t sharedEnvironmentTestKeyIndexFromOtherTranslationUnit() {
-  return EnvironmentKey<lambda::SharedEnvironmentTestKey>::slot().index();
+  return EnvironmentKey<lambdaui::SharedEnvironmentTestKey>::slot().index();
 }
 
-} // namespace lambda::tests
+} // namespace lambdaui::tests

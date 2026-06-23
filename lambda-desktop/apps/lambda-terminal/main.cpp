@@ -35,11 +35,11 @@ struct ScriptedResizeState {
   int step = 0;
   int maxSteps = 90;
   bool exitWhenDone = true;
-  std::vector<lambda::Size> sizes;
+  std::vector<lambdaui::Size> sizes;
   std::shared_ptr<std::FILE> log;
 };
 
-void installScriptedResize(lambda::Application& app, lambda::Window& window) {
+void installScriptedResize(lambdaui::Application& app, lambdaui::Window& window) {
   if (!envEnabled("LAMBDA_TERMINAL_SCRIPTED_RESIZE")) return;
 
   auto state = std::make_shared<ScriptedResizeState>();
@@ -64,9 +64,9 @@ void installScriptedResize(lambda::Application& app, lambda::Window& window) {
 
   int const intervalMs = envInt("LAMBDA_TERMINAL_SCRIPTED_RESIZE_INTERVAL_MS", 33);
   state->timerId = app.scheduleRepeatingTimer(std::chrono::milliseconds{intervalMs}, window.handle());
-  app.eventQueue().on<lambda::TimerEvent>([&app, &window, state](lambda::TimerEvent const& event) {
+  app.eventQueue().on<lambdaui::TimerEvent>([&app, &window, state](lambdaui::TimerEvent const& event) {
     if (state->timerId == 0 || event.timerId != state->timerId || state->sizes.empty()) return;
-    lambda::Size const size = state->sizes[static_cast<std::size_t>(state->step) % state->sizes.size()];
+    lambdaui::Size const size = state->sizes[static_cast<std::size_t>(state->step) % state->sizes.size()];
     window.resize(size);
     ++state->step;
     if (state->log) {
@@ -90,29 +90,29 @@ void installScriptedResize(lambda::Application& app, lambda::Window& window) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-  lambda::Application app(argc, argv);
+  lambdaui::Application app(argc, argv);
   app.setName("lambda-terminal");
   auto const preferences = lambda_terminal::loadTerminalPreferences();
   auto const profile = lambda_terminal::activeTerminalProfile(preferences.preferences);
   auto const initialWidth = static_cast<float>(envInt("LAMBDA_TERMINAL_WINDOW_WIDTH", 920));
   auto const initialHeight = static_cast<float>(envInt("LAMBDA_TERMINAL_WINDOW_HEIGHT", 560));
 
-  auto& window = app.createWindow<lambda::Window>({
+  auto& window = app.createWindow<lambdaui::Window>({
       .size = {initialWidth, initialHeight},
       .title = "Terminal",
-      .titlebar = lambda::WindowTitlebarMode::System,
+      .titlebar = lambdaui::WindowTitlebarMode::System,
       .resizable = true,
   });
   if (profile.config.blackGlassBackground) {
-    window.setBackground(lambda::WindowBackground::glassEffect(lambda::GlassEffectOptions{
+    window.setBackground(lambdaui::WindowBackground::glassEffect(lambdaui::GlassEffectOptions{
         .blurRadius = profile.config.blackGlassBlurRadius,
         .baseColor = profile.config.blackGlassTint,
         .tintColor = profile.config.blackGlassTint,
-        .borderColor = lambda::Color{1.f, 1.f, 1.f, 0.16f},
+        .borderColor = lambdaui::Color{1.f, 1.f, 1.f, 0.16f},
         .opacity = 1.f,
     }));
   } else {
-    window.setBackground(lambda::WindowBackground::solid(profile.config.blackGlassTint));
+    window.setBackground(lambdaui::WindowBackground::solid(profile.config.blackGlassTint));
   }
 
   lambda_terminal::installTerminalView(app, window, profile.config);

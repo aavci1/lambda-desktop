@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 class Element;
 class MountContext;
@@ -245,7 +245,7 @@ private:
 template<typename... Args>
 std::vector<Element> children(Args&&... args);
 
-} // namespace lambda
+} // namespace lambdaui
 
 #include <Lambda/UI/Detail/ElementTemplates.hpp>
 #include <Lambda/UI/Detail/ViewModifierInlines.hpp>

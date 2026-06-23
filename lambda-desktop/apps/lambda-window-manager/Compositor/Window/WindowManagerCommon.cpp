@@ -30,7 +30,7 @@
 #include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon.h>
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool isManagedToplevel(WaylandServer::Impl::Surface const* surface) {
   return surfaceIsXdgToplevel(surface);
@@ -269,7 +269,7 @@ WaylandServer::Impl::XdgPopup* popupForSurface(WaylandServer::Impl* server, Wayl
 
 bool popupTraceEnabled() {
   static bool const enabled = [] {
-    return lambda::debug::envNonZero(std::getenv("LAMBDA_WINDOW_MANAGER_POPUP_TRACE"));
+    return lambdaui::debug::envNonZero(std::getenv("LAMBDA_WINDOW_MANAGER_POPUP_TRACE"));
   }();
   return enabled;
 }
@@ -527,4 +527,4 @@ std::uint32_t resizeEdgesForContext(ChromeHitContext const& context, float x, fl
 }
 
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm

@@ -23,7 +23,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -867,4 +867,4 @@ Element Select::body() const {
     };
 }
 
-} // namespace lambda
+} // namespace lambdaui

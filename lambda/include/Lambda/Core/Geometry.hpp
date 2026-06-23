@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda {
+namespace lambdaui {
 
 struct Point {
   float x = 0;
@@ -227,4 +227,4 @@ struct Mat3 {
   bool operator==(Mat3 const&) const = default;
 };
 
-} // namespace lambda
+} // namespace lambdaui

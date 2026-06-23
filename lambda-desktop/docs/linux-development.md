@@ -55,13 +55,13 @@ Default Linux build:
 
 ```sh
 cmake -S . -B build -G Ninja \
-  -DLAMBDA_BUILD_TESTS=ON \
-  -DLAMBDA_BUILD_DEMOS=ON
+  -DLAMBDAUI_BUILD_TESTS=ON \
+  -DLAMBDAUI_BUILD_DEMOS=ON
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-On Linux, `LAMBDA_PLATFORM=AUTO` selects the Wayland framework backend and
+On Linux, `LAMBDAUI_PLATFORM=AUTO` selects the Wayland framework backend and
 `LAMBDA_BUILD_DESKTOP=ON` builds the Linux desktop suite by default.
 `lambda-window-manager` is a Linux-only KMS target built alongside that Wayland
 backend unless `LAMBDA_BUILD_WINDOW_MANAGER=OFF`, so day-to-day development
@@ -72,8 +72,8 @@ Dedicated KMS platform build:
 ```sh
 cmake -S . -B build-linux-kms -G Ninja \
   -DLAMBDA_PLATFORM=LINUX_KMS \
-  -DLAMBDA_BUILD_TESTS=ON \
-  -DLAMBDA_BUILD_DEMOS=OFF
+  -DLAMBDAUI_BUILD_TESTS=ON \
+  -DLAMBDAUI_BUILD_DEMOS=OFF
 cmake --build build-linux-kms
 ```
 

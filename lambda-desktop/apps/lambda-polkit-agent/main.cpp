@@ -22,14 +22,14 @@ int main() {
   std::signal(SIGTERM, handleSignal);
 
   try {
-    auto bus = lambda::dbus::Bus::open(lambda::dbus::BusType::System);
+    auto bus = lambdaui::dbus::Bus::open(lambdaui::dbus::BusType::System);
 
-    lambda::system::PolkitAuthenticationAgentService agent(bus);
+    lambdaui::system::PolkitAuthenticationAgentService agent(bus);
     auto agentSlot = agent.exportObject();
     agent.registerAgent();
 
     std::cerr << "lambda-polkit-agent: registered "
-              << lambda::system::PolkitAuthenticationAgentService::agentInterfaceName
+              << lambdaui::system::PolkitAuthenticationAgentService::agentInterfaceName
               << " on " << agent.objectPath() << "\n";
 
     while (gRunning.load()) {

@@ -9,7 +9,7 @@
 #include <optional>
 #include <string>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 struct PortalAccountState {
   std::string id;
@@ -50,4 +50,4 @@ private:
   std::optional<PortalAccountRequest> lastRequest_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

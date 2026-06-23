@@ -11,7 +11,7 @@
 #include <memory>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -431,4 +431,4 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
   return group;
 }
 
-} // namespace lambda
+} // namespace lambdaui

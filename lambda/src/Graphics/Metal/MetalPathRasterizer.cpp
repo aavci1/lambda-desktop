@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -236,4 +236,4 @@ void metalPathRasterizeToMesh(Path const& path, FillStyle const& fs, StrokeStyle
   }
 }
 
-} // namespace lambda
+} // namespace lambdaui

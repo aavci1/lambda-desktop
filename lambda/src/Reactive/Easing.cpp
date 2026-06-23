@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda::Easing {
+namespace lambdaui::Easing {
 
 float linear(float t) {
   return t;
@@ -46,4 +46,4 @@ std::function<float(float)> spring(float stiffness, float damping) {
   };
 }
 
-} // namespace lambda::Easing
+} // namespace lambdaui::Easing

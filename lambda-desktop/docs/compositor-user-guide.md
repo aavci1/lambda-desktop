@@ -4,14 +4,14 @@ This guide covers the current Linux KMS compositor as it exists in this reposito
 
 ## Build
 
-Configure one Linux build. On Linux, `LAMBDA_PLATFORM=AUTO` selects the Wayland
+Configure one Linux build. On Linux, `LAMBDAUI_PLATFORM=AUTO` selects the Wayland
 framework backend and `LAMBDA_BUILD_DESKTOP=ON` builds the desktop suite,
 including the KMS-only `lambda-window-manager` target by default.
 
 ```sh
 cmake -S . -B build -G Ninja \
-  -DLAMBDA_BUILD_TESTS=ON \
-  -DLAMBDA_BUILD_DEMOS=ON
+  -DLAMBDAUI_BUILD_TESTS=ON \
+  -DLAMBDAUI_BUILD_DEMOS=ON
 cmake --build build
 ```
 

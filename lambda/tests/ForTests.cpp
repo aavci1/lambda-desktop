@@ -21,26 +21,26 @@
 
 namespace {
 
-class FakeTextSystem final : public lambda::TextSystem {
+class FakeTextSystem final : public lambdaui::TextSystem {
 public:
-  std::shared_ptr<lambda::TextLayout const>
-  layout(lambda::AttributedString const&, float, lambda::TextLayoutOptions const&) override {
-    return std::make_shared<lambda::TextLayout>();
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(lambdaui::AttributedString const&, float, lambdaui::TextLayoutOptions const&) override {
+    return std::make_shared<lambdaui::TextLayout>();
   }
 
-  std::shared_ptr<lambda::TextLayout const>
-  layout(std::string_view, lambda::Font const&, lambda::Color const&, float,
-         lambda::TextLayoutOptions const&) override {
-    return std::make_shared<lambda::TextLayout>();
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(std::string_view, lambdaui::Font const&, lambdaui::Color const&, float,
+         lambdaui::TextLayoutOptions const&) override {
+    return std::make_shared<lambdaui::TextLayout>();
   }
 
-  lambda::Size measure(lambda::AttributedString const&, float,
-                     lambda::TextLayoutOptions const&) override {
+  lambdaui::Size measure(lambdaui::AttributedString const&, float,
+                     lambdaui::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
-  lambda::Size measure(std::string_view, lambda::Font const&, lambda::Color const&, float,
-                     lambda::TextLayoutOptions const&) override {
+  lambdaui::Size measure(std::string_view, lambdaui::Font const&, lambdaui::Color const&, float,
+                     lambdaui::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
@@ -49,7 +49,7 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
-                                           lambda::Point& outBearing) override {
+                                           lambdaui::Point& outBearing) override {
     outWidth = 0;
     outHeight = 0;
     outBearing = {};
@@ -57,12 +57,12 @@ public:
   }
 };
 
-lambda::EnvironmentBinding testEnvironment() {
-  return lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(lambda::Theme::light());
+lambdaui::EnvironmentBinding testEnvironment() {
+  return lambdaui::EnvironmentBinding{}.withValue<lambdaui::ThemeKey>(lambdaui::Theme::light());
 }
 
-lambda::scenegraph::SceneNode const& rootGroup(lambda::scenegraph::SceneGraph const& sceneGraph) {
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+lambdaui::scenegraph::SceneNode const& rootGroup(lambdaui::scenegraph::SceneGraph const& sceneGraph) {
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   return sceneGraph.root();
 }
 
@@ -70,29 +70,29 @@ lambda::scenegraph::SceneNode const& rootGroup(lambda::scenegraph::SceneGraph co
 
 TEST_CASE("For preserves row scopes and scene nodes across reorder") {
   struct Root {
-    lambda::Reactive::Signal<std::vector<int>> items;
+    lambdaui::Reactive::Signal<std::vector<int>> items;
     int* created = nullptr;
     int* disposed = nullptr;
 
-    lambda::Element body() const {
-      return lambda::For(
+    lambdaui::Element body() const {
+      return lambdaui::For(
           items,
           [](int value) { return value; },
           [created = created, disposed = disposed](int value,
-                                                   lambda::Reactive::Signal<std::size_t> index) {
-            auto local = lambda::useState(value * 10);
+                                                   lambdaui::Reactive::Signal<std::size_t> index) {
+            auto local = lambdaui::useState(value * 10);
             (void)local;
             ++*created;
-            lambda::Reactive::onCleanup([disposed] {
+            lambdaui::Reactive::onCleanup([disposed] {
               ++*disposed;
             });
 
-            lambda::Reactive::Bindable<float> width{[index] {
+            lambdaui::Reactive::Bindable<float> width{[index] {
               return 20.f + static_cast<float>(index.get());
             }};
-            return lambda::Element{lambda::Rectangle{}}
+            return lambdaui::Element{lambdaui::Rectangle{}}
                 .size(std::move(width), 8.f)
-                .fill(lambda::Colors::blue);
+                .fill(lambdaui::Colors::blue);
           },
           2.f);
     }
@@ -100,14 +100,14 @@ TEST_CASE("For preserves row scopes and scene nodes across reorder") {
 
   int created = 0;
   int disposed = 0;
-  lambda::Reactive::Signal<std::vector<int>> items{{1, 2, 3}};
+  lambdaui::Reactive::Signal<std::vector<int>> items{{1, 2, 3}};
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{items, &created, &disposed}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{items, &created, &disposed}),
       textSystem,
       testEnvironment(),
-      lambda::Size{240.f, 160.f},
+      lambdaui::Size{240.f, 160.f},
   };
 
   root.mount(sceneGraph);
@@ -155,38 +155,38 @@ TEST_CASE("For preserves row scopes and scene nodes across reorder") {
 
 TEST_CASE("For empty stack child stays mounted and lays out inserted rows") {
   struct Root {
-    lambda::Reactive::Signal<std::vector<int>> items;
+    lambdaui::Reactive::Signal<std::vector<int>> items;
 
-    lambda::Element body() const {
-      return lambda::VStack{
+    lambdaui::Element body() const {
+      return lambdaui::VStack{
           .spacing = 12.f,
-          .children = lambda::children(
-              lambda::Element{lambda::Rectangle{}}
+          .children = lambdaui::children(
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(lambda::Colors::red),
-              lambda::For(
+                  .fill(lambdaui::Colors::red),
+              lambdaui::For(
                   items,
                   [](int value) { return value; },
                   [](int) {
-                    return lambda::Element{lambda::Rectangle{}}
+                    return lambdaui::Element{lambdaui::Rectangle{}}
                         .size(20.f, 8.f)
-                        .fill(lambda::Colors::blue);
+                        .fill(lambdaui::Colors::blue);
                   }),
-              lambda::Element{lambda::Rectangle{}}
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(lambda::Colors::green)),
+                  .fill(lambdaui::Colors::green)),
       };
     }
   };
 
-  lambda::Reactive::Signal<std::vector<int>> items{{}};
+  lambdaui::Reactive::Signal<std::vector<int>> items{{}};
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{items}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{items}),
       textSystem,
       testEnvironment(),
-      lambda::Size{240.f, 160.f},
+      lambdaui::Size{240.f, 160.f},
   };
 
   root.mount(sceneGraph);
@@ -207,51 +207,51 @@ TEST_CASE("For empty stack child stays mounted and lays out inserted rows") {
 
 TEST_CASE("For measures retained rows without rebuilding factory output") {
   struct Root {
-    lambda::Reactive::Signal<std::vector<int>> items;
+    lambdaui::Reactive::Signal<std::vector<int>> items;
     int* factoryCalls = nullptr;
 
-    lambda::Element body() const {
-      return lambda::VStack{
+    lambdaui::Element body() const {
+      return lambdaui::VStack{
           .spacing = 12.f,
-          .children = lambda::children(
-              lambda::Element{lambda::Rectangle{}}
+          .children = lambdaui::children(
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(lambda::Colors::red),
-              lambda::For(
+                  .fill(lambdaui::Colors::red),
+              lambdaui::For(
                   items,
                   [](int value) { return value; },
                   [factoryCalls = factoryCalls](int) {
                     ++*factoryCalls;
-                    return lambda::Element{lambda::Rectangle{}}
+                    return lambdaui::Element{lambdaui::Rectangle{}}
                         .size(20.f, 8.f)
-                        .fill(lambda::Colors::blue);
+                        .fill(lambdaui::Colors::blue);
                   },
                   2.f),
-              lambda::Element{lambda::Rectangle{}}
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(20.f, 10.f)
-                  .fill(lambda::Colors::green)),
+                  .fill(lambdaui::Colors::green)),
       };
     }
   };
 
   int factoryCalls = 0;
   int measureOnlyFactoryCalls = 0;
-  lambda::Reactive::Signal<std::vector<int>> items{{1, 2}};
+  lambdaui::Reactive::Signal<std::vector<int>> items{{1, 2}};
   FakeTextSystem textSystem;
 
   {
-    auto measuredOnly = lambda::For(
+    auto measuredOnly = lambdaui::For(
         items,
         [](int value) { return value; },
         [&measureOnlyFactoryCalls](int) {
           ++measureOnlyFactoryCalls;
-          return lambda::Element{lambda::Rectangle{}}
+          return lambdaui::Element{lambdaui::Rectangle{}}
               .size(20.f, 8.f)
-              .fill(lambda::Colors::blue);
+              .fill(lambdaui::Colors::blue);
         },
         2.f);
-    lambda::MeasureContext measureContext{textSystem, testEnvironment()};
-    lambda::LayoutConstraints constraints{
+    lambdaui::MeasureContext measureContext{textSystem, testEnvironment()};
+    lambdaui::LayoutConstraints constraints{
         .maxWidth = 240.f,
         .maxHeight = 160.f,
         .minWidth = 0.f,
@@ -265,13 +265,13 @@ TEST_CASE("For measures retained rows without rebuilding factory output") {
   }
   CHECK(measureOnlyFactoryCalls == 2);
 
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(
           std::in_place, Root{items, &factoryCalls}),
       textSystem,
       testEnvironment(),
-      lambda::Size{240.f, 160.f},
+      lambdaui::Size{240.f, 160.f},
   };
 
   root.mount(sceneGraph);
@@ -283,7 +283,7 @@ TEST_CASE("For measures retained rows without rebuilding factory output") {
   CHECK(mounted.children()[1]->size().height == doctest::Approx(18.f));
   CHECK(mounted.children()[2]->position().y == doctest::Approx(52.f));
 
-  root.resize(lambda::Size{260.f, 180.f}, sceneGraph);
+  root.resize(lambdaui::Size{260.f, 180.f}, sceneGraph);
 
   auto const& resized = rootGroup(sceneGraph);
   REQUIRE(resized.children().size() == 3);

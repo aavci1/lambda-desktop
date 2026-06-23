@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 struct StatusNotifierItemRegistration {
   std::string serviceName;
@@ -141,4 +141,4 @@ private:
   dbus::Bus bus_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

@@ -21,7 +21,7 @@
 #include <vector>
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -1126,4 +1126,4 @@ void Runtime::handleWindowEvent(WindowEvent const& event) {
   }
 }
 
-} // namespace lambda
+} // namespace lambdaui

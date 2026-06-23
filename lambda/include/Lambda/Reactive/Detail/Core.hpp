@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::Reactive {
+namespace lambdaui::Reactive {
 
 struct EffectState;
 
@@ -790,7 +790,7 @@ struct EffectState final : detail::Computation {
     detail::clearFlag(flags, detail::Pending);
     detail::clearFlag(flags, detail::Dirty);
     {
-      ::lambda::detail::TransitionScopeSuspension transitionScope;
+      ::lambdaui::detail::TransitionScopeSuspension transitionScope;
       detail::ObserverContext context(this);
       fn();
     }
@@ -852,7 +852,7 @@ inline void flushEffects() {
   [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::FlushEffects};
   [[maybe_unused]] std::size_t flushIterations = 0;
   while (!sEffectQueue.empty()) {
-#if !defined(NDEBUG) || defined(LAMBDA_TESTING)
+#if !defined(NDEBUG) || defined(LAMBDAUI_TESTING)
     constexpr std::size_t kMaxEffectFlushIterations = 10000;
     if (++flushIterations > kMaxEffectFlushIterations) {
       std::fprintf(stderr,
@@ -914,4 +914,4 @@ auto makeComputed(Fn&& fn) {
   return Computed<Value>(std::forward<Fn>(fn));
 }
 
-} // namespace lambda::Reactive
+} // namespace lambdaui::Reactive

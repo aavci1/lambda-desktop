@@ -43,27 +43,27 @@ struct ScopedTempDir {
   }
 };
 
-class FakeTextSystem final : public lambda::TextSystem {
+class FakeTextSystem final : public lambdaui::TextSystem {
 public:
-  std::shared_ptr<lambda::TextLayout const>
-  layout(lambda::AttributedString const& text, float maxWidth,
-         lambda::TextLayoutOptions const& options) override {
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(lambdaui::AttributedString const& text, float maxWidth,
+         lambdaui::TextLayoutOptions const& options) override {
     return makeLayout(text.utf8, maxWidth, options);
   }
 
-  std::shared_ptr<lambda::TextLayout const>
-  layout(std::string_view text, lambda::Font const&, lambda::Color const&, float maxWidth,
-         lambda::TextLayoutOptions const& options) override {
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(std::string_view text, lambdaui::Font const&, lambdaui::Color const&, float maxWidth,
+         lambdaui::TextLayoutOptions const& options) override {
     return makeLayout(text, maxWidth, options);
   }
 
-  lambda::Size measure(lambda::AttributedString const& text, float maxWidth,
-                       lambda::TextLayoutOptions const& options) override {
+  lambdaui::Size measure(lambdaui::AttributedString const& text, float maxWidth,
+                       lambdaui::TextLayoutOptions const& options) override {
     return measuredSize(text.utf8, maxWidth, options);
   }
 
-  lambda::Size measure(std::string_view text, lambda::Font const&, lambda::Color const&,
-                       float maxWidth, lambda::TextLayoutOptions const& options) override {
+  lambdaui::Size measure(std::string_view text, lambdaui::Font const&, lambdaui::Color const&,
+                       float maxWidth, lambdaui::TextLayoutOptions const& options) override {
     return measuredSize(text, maxWidth, options);
   }
 
@@ -74,7 +74,7 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
-                                           lambda::Point& outBearing) override {
+                                           lambdaui::Point& outBearing) override {
     outWidth = 0;
     outHeight = 0;
     outBearing = {};
@@ -82,8 +82,8 @@ public:
   }
 
 private:
-  static lambda::Size measuredSize(std::string_view text, float maxWidth,
-                                   lambda::TextLayoutOptions const&) {
+  static lambdaui::Size measuredSize(std::string_view text, float maxWidth,
+                                   lambdaui::TextLayoutOptions const&) {
     float width = std::max(4.f, static_cast<float>(text.size()) * 7.f);
     if (maxWidth > 0.f) {
       width = std::min(width, maxWidth);
@@ -91,26 +91,26 @@ private:
     return {width, 16.f};
   }
 
-  static std::shared_ptr<lambda::TextLayout const>
-  makeLayout(std::string_view text, float maxWidth, lambda::TextLayoutOptions const& options) {
-    auto layout = std::make_shared<lambda::TextLayout>();
+  static std::shared_ptr<lambdaui::TextLayout const>
+  makeLayout(std::string_view text, float maxWidth, lambdaui::TextLayoutOptions const& options) {
+    auto layout = std::make_shared<lambdaui::TextLayout>();
     layout->measuredSize = measuredSize(text, maxWidth, options);
     return layout;
   }
 };
 
-lambda::EnvironmentBinding testEnvironment() {
-  return lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(lambda::Theme::light());
+lambdaui::EnvironmentBinding testEnvironment() {
+  return lambdaui::EnvironmentBinding{}.withValue<lambdaui::ThemeKey>(lambdaui::Theme::light());
 }
 
 struct FileDialogRoot {
-  lambda::FileDialogMode mode = lambda::FileDialogMode::Open;
+  lambdaui::FileDialogMode mode = lambdaui::FileDialogMode::Open;
   std::filesystem::path initialDirectory;
   std::string initialName;
   std::vector<std::filesystem::path>* accepted = nullptr;
 
-  lambda::Element body() const {
-    return lambda::FileDialog{
+  lambdaui::Element body() const {
+    return lambdaui::FileDialog{
                .mode = mode,
                .initialDirectory = initialDirectory,
                .initialName = initialName,
@@ -136,27 +136,27 @@ void makeOpenDialogFixture(ScopedTempDir& temp) {
   writeFile(temp.path / "child" / "nested.txt");
 }
 
-bool hasTapInteraction(lambda::scenegraph::Interaction const& interaction) {
-  auto const& data = lambda::interactionData(interaction);
+bool hasTapInteraction(lambdaui::scenegraph::Interaction const& interaction) {
+  auto const& data = lambdaui::interactionData(interaction);
   return static_cast<bool>(data.onTap) || static_cast<bool>(data.onTapWithModifiers);
 }
 
-void dispatchTap(lambda::scenegraph::Interaction const& interaction) {
+void dispatchTap(lambdaui::scenegraph::Interaction const& interaction) {
   // Copy the handler before invoking: tapping a row can navigate and unmount
   // the node that owns the handler, destroying the closure mid-call.
-  auto const& data = lambda::interactionData(interaction);
+  auto const& data = lambdaui::interactionData(interaction);
   if (data.onTapWithModifiers) {
     auto handler = data.onTapWithModifiers;
-    handler(lambda::MouseButton::Left, lambda::Modifiers::None);
+    handler(lambdaui::MouseButton::Left, lambdaui::Modifiers::None);
   } else if (data.onTap) {
     auto handler = data.onTap;
-    handler(lambda::MouseButton::Left);
+    handler(lambdaui::MouseButton::Left);
   }
 }
 
-void tap(lambda::scenegraph::SceneGraph& sceneGraph, lambda::Point point) {
-  auto hit = lambda::scenegraph::hitTestInteraction(
-      sceneGraph, point, [](lambda::scenegraph::Interaction const& interaction) {
+void tap(lambdaui::scenegraph::SceneGraph& sceneGraph, lambdaui::Point point) {
+  auto hit = lambdaui::scenegraph::hitTestInteraction(
+      sceneGraph, point, [](lambdaui::scenegraph::Interaction const& interaction) {
         return hasTapInteraction(interaction);
       });
   INFO("tap point: " << point.x << ", " << point.y);
@@ -164,11 +164,11 @@ void tap(lambda::scenegraph::SceneGraph& sceneGraph, lambda::Point point) {
   dispatchTap(*hit->interaction);
 }
 
-constexpr lambda::Point kFirstEntry{220.f, 84.f};
-constexpr lambda::Point kSecondEntry{220.f, 122.f};
-constexpr lambda::Point kBackButton{27.f, 26.f};
-constexpr lambda::Point kForwardButton{58.f, 26.f};
-constexpr lambda::Point kPrimaryButton{610.f, 392.f};
+constexpr lambdaui::Point kFirstEntry{220.f, 84.f};
+constexpr lambdaui::Point kSecondEntry{220.f, 122.f};
+constexpr lambdaui::Point kBackButton{27.f, 26.f};
+constexpr lambdaui::Point kForwardButton{58.f, 26.f};
+constexpr lambdaui::Point kPrimaryButton{610.f, 392.f};
 
 } // namespace
 
@@ -178,15 +178,15 @@ TEST_CASE("FileDialog open navigation supports Back Forward and primary activati
   std::vector<std::filesystem::path> accepted;
   FakeTextSystem textSystem;
 
-  auto runScenario = [&](std::vector<lambda::Point> taps,
+  auto runScenario = [&](std::vector<lambdaui::Point> taps,
                          std::filesystem::path const& expected) {
     accepted.clear();
-    lambda::scenegraph::SceneGraph sceneGraph;
-    lambda::MountRoot root{
-        std::make_unique<lambda::TypedRootHolder<FileDialogRoot>>(
+    lambdaui::scenegraph::SceneGraph sceneGraph;
+    lambdaui::MountRoot root{
+        std::make_unique<lambdaui::TypedRootHolder<FileDialogRoot>>(
             std::in_place,
             FileDialogRoot{
-                .mode = lambda::FileDialogMode::Open,
+                .mode = lambdaui::FileDialogMode::Open,
                 .initialDirectory = temp.path,
                 .accepted = &accepted,
             }),
@@ -195,7 +195,7 @@ TEST_CASE("FileDialog open navigation supports Back Forward and primary activati
         {640.f, 420.f}};
     root.mount(sceneGraph);
     root.resize({640.f, 420.f}, sceneGraph);
-    for (lambda::Point point : taps) {
+    for (lambdaui::Point point : taps) {
       tap(sceneGraph, point);
     }
     REQUIRE(accepted.size() == 1);
@@ -212,12 +212,12 @@ TEST_CASE("FileDialog save accepts initial name without a filename field") {
   ScopedTempDir temp{"lambda-file-dialog-save"};
   std::vector<std::filesystem::path> accepted;
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<FileDialogRoot>>(
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<FileDialogRoot>>(
           std::in_place,
           FileDialogRoot{
-              .mode = lambda::FileDialogMode::Save,
+              .mode = lambdaui::FileDialogMode::Save,
               .initialDirectory = temp.path,
               .initialName = "draft.txt",
               .accepted = &accepted,

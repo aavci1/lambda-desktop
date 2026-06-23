@@ -11,7 +11,7 @@
 #include <optional>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 struct Transition {
   float duration = 0.25f;
@@ -61,4 +61,4 @@ private:
 
 } // namespace detail
 
-} // namespace lambda
+} // namespace lambdaui

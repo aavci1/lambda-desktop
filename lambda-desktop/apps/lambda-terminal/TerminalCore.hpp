@@ -71,8 +71,8 @@ struct TerminalAttributes {
 };
 
 struct TerminalResolvedCellStyle {
-  lambda::Color foreground;
-  lambda::Color background;
+  lambdaui::Color foreground;
+  lambdaui::Color background;
   TerminalAttributes attributes;
 
   constexpr bool operator==(TerminalResolvedCellStyle const&) const = default;
@@ -87,7 +87,7 @@ struct TerminalConfig {
   bool bracketedPaste = true;
   bool blackGlassBackground = true;
   float blackGlassBlurRadius = 64.f;
-  lambda::Color blackGlassTint{0.f, 0.f, 0.f, 0.58f};
+  lambdaui::Color blackGlassTint{0.f, 0.f, 0.f, 0.58f};
 
   constexpr bool operator==(TerminalConfig const&) const = default;
 };
@@ -167,7 +167,7 @@ struct TerminalMouseEvent {
   bool motion = false;
   int column = 1;
   int row = 1;
-  lambda::Modifiers modifiers = lambda::Modifiers::None;
+  lambdaui::Modifiers modifiers = lambdaui::Modifiers::None;
 };
 
 struct TerminalSearchMatch {
@@ -220,8 +220,8 @@ private:
   std::vector<std::string> alternateVisible_;
 };
 
-[[nodiscard]] std::string encodeTerminalKey(lambda::KeyCode key,
-                                            lambda::Modifiers modifiers = lambda::Modifiers::None,
+[[nodiscard]] std::string encodeTerminalKey(lambdaui::KeyCode key,
+                                            lambdaui::Modifiers modifiers = lambdaui::Modifiers::None,
                                             TerminalInputMode mode = {});
 [[nodiscard]] std::string encodeTerminalFocusEvent(bool focused, TerminalInputMode mode = {});
 [[nodiscard]] std::string encodeTerminalKeypadKey(TerminalKeypadKey key, TerminalInputMode mode = {});
@@ -230,8 +230,8 @@ private:
                                               TerminalSelection selection);
 [[nodiscard]] std::string terminalPastePayload(std::string_view clipboardText,
                                                TerminalConfig const& config);
-[[nodiscard]] bool isTerminalCopyShortcut(lambda::KeyCode key, lambda::Modifiers modifiers);
-[[nodiscard]] bool isTerminalPasteShortcut(lambda::KeyCode key, lambda::Modifiers modifiers);
+[[nodiscard]] bool isTerminalCopyShortcut(lambdaui::KeyCode key, lambdaui::Modifiers modifiers);
+[[nodiscard]] bool isTerminalPasteShortcut(lambdaui::KeyCode key, lambdaui::Modifiers modifiers);
 [[nodiscard]] std::string encodeSgrMouseEvent(TerminalMouseEvent event);
 [[nodiscard]] TerminalBufferCoordinate terminalMouseCell(float x,
                                                         float y,
@@ -252,10 +252,10 @@ private:
                                                                     std::size_t& byteLength);
 [[nodiscard]] int terminalCodepointWidth(std::uint32_t codepoint);
 [[nodiscard]] int terminalDisplayWidth(std::string_view utf8);
-[[nodiscard]] lambda::Color terminalIndexedColor(std::uint8_t index);
-[[nodiscard]] lambda::Color terminalTrueColor(std::uint8_t red, std::uint8_t green, std::uint8_t blue);
-[[nodiscard]] TerminalResolvedCellStyle resolveTerminalCellStyle(lambda::Color foreground,
-                                                                 lambda::Color background,
+[[nodiscard]] lambdaui::Color terminalIndexedColor(std::uint8_t index);
+[[nodiscard]] lambdaui::Color terminalTrueColor(std::uint8_t red, std::uint8_t green, std::uint8_t blue);
+[[nodiscard]] TerminalResolvedCellStyle resolveTerminalCellStyle(lambdaui::Color foreground,
+                                                                 lambdaui::Color background,
                                                                  TerminalAttributes attributes);
 [[nodiscard]] TerminalConfig defaultTerminalConfig();
 [[nodiscard]] TerminalConfig parseTerminalConfigToml(std::string_view tomlText);

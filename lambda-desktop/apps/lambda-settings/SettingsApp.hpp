@@ -55,7 +55,7 @@ enum class SettingsSection {
 
 namespace {
 
-using namespace lambda;
+using namespace lambdaui;
 
 struct ChromeInsets {
   float leading = 0.f;

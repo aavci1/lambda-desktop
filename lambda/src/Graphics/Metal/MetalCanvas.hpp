@@ -6,7 +6,7 @@
 #include <memory>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 class Image;
 struct MetalRenderTargetSpec;
@@ -56,4 +56,4 @@ bool requestNextFrameCaptureForCanvas(Canvas* canvas);
 bool takeCapturedFrameForCanvas(Canvas* canvas, std::vector<std::uint8_t>& out, std::uint32_t& width,
                                 std::uint32_t& height);
 
-} // namespace lambda
+} // namespace lambdaui

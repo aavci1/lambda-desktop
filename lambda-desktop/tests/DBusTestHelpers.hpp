@@ -12,7 +12,7 @@
 #include <unistd.h>
 #include <utility>
 
-namespace lambda::testing::dbus {
+namespace lambdaui::testing::dbus {
 
 inline std::string trimLine(std::string line) {
   while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
@@ -84,11 +84,11 @@ inline std::optional<PrivateBus> startPrivateBus() {
 #endif
 }
 
-inline void pollBus(lambda::dbus::Bus& bus, int timeoutMs) {
+inline void pollBus(lambdaui::dbus::Bus& bus, int timeoutMs) {
   (void)bus.waitAndProcess(timeoutMs);
 }
 
-inline bool pumpUntil(lambda::dbus::Bus& bus,
+inline bool pumpUntil(lambdaui::dbus::Bus& bus,
                       std::function<bool()> done,
                       std::chrono::milliseconds timeout) {
   auto const deadline = std::chrono::steady_clock::now() + timeout;
@@ -98,4 +98,4 @@ inline bool pumpUntil(lambda::dbus::Bus& bus,
   return done();
 }
 
-} // namespace lambda::testing::dbus
+} // namespace lambdaui::testing::dbus

@@ -27,8 +27,8 @@
 
 namespace {
 
-using namespace lambda;
-using namespace lambda::scenegraph;
+using namespace lambdaui;
+using namespace lambdaui::scenegraph;
 
 class DummyImage final : public Image {
   public:
@@ -576,18 +576,18 @@ TEST_CASE("subtree visual bounds are cached and invalidated by subtree mutations
     CountingBoundsNode* childNode = child.get();
     root->appendChild(std::move(child));
 
-    CHECK(lambda::scenegraph::detail::subtreeLocalVisualBounds(*root) ==
+    CHECK(lambdaui::scenegraph::detail::subtreeLocalVisualBounds(*root) ==
           Rect::sharp(0.f, 0.f, 25.f, 10.f));
     CHECK(rootBoundsCalls == 1);
     CHECK(childBoundsCalls == 1);
 
-    CHECK(lambda::scenegraph::detail::subtreeLocalVisualBounds(*root) ==
+    CHECK(lambdaui::scenegraph::detail::subtreeLocalVisualBounds(*root) ==
           Rect::sharp(0.f, 0.f, 25.f, 10.f));
     CHECK(rootBoundsCalls == 1);
     CHECK(childBoundsCalls == 1);
 
     childNode->setPosition(Point {30.f, 0.f});
-    CHECK(lambda::scenegraph::detail::subtreeLocalVisualBounds(*root) ==
+    CHECK(lambdaui::scenegraph::detail::subtreeLocalVisualBounds(*root) ==
           Rect::sharp(0.f, 0.f, 35.f, 10.f));
     CHECK(rootBoundsCalls == 2);
     CHECK(childBoundsCalls == 2);
@@ -598,8 +598,8 @@ TEST_CASE("SceneNode setBounds position changes dirty the owning subtree") {
     auto child = std::make_unique<SceneNode>(Rect {5.f, 6.f, 20.f, 20.f});
     SceneNode* childNode = child.get();
     root->appendChild(std::move(child));
-    lambda::scenegraph::detail::SceneNodeAccess::clearSubtreeDirty(*childNode);
-    lambda::scenegraph::detail::SceneNodeAccess::clearSubtreeDirty(*root);
+    lambdaui::scenegraph::detail::SceneNodeAccess::clearSubtreeDirty(*childNode);
+    lambdaui::scenegraph::detail::SceneNodeAccess::clearSubtreeDirty(*root);
 
     childNode->setBounds(Rect {12.f, 18.f, 20.f, 20.f});
 
@@ -628,7 +628,7 @@ TEST_CASE("Scenegraph hit testing rejects cached visual bounds before walking de
     root->appendChild(std::move(group));
     SceneGraph graph {std::move(root)};
 
-    (void)lambda::scenegraph::detail::subtreeLocalVisualBounds(graph.root());
+    (void)lambdaui::scenegraph::detail::subtreeLocalVisualBounds(graph.root());
     rootBoundsCalls = 0;
     groupBoundsCalls = 0;
     leafBoundsCalls = 0;

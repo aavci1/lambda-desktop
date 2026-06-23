@@ -1,17 +1,17 @@
-# Lambda v5 Codebase Conventions
+# lambdaui Workspace Conventions
 
 This document describes the current repository layout and coding patterns.
 
 ## Project Identity
 
-- **Name / version:** Lambda v5 (`CMakeLists.txt`: `project(lambda VERSION 5.0.0 ...)`).
-- **Platform:** `LAMBDA_PLATFORM` selects one backend at build time: `MACOS`, `LINUX_WAYLAND`, or `LINUX_KMS`. `AUTO` picks macOS on Apple hosts and Wayland on Unix hosts.
+- **Name / version:** lambdaui v5 (`lambda/CMakeLists.txt`: `project(lambdaui VERSION 5.0.0 ...)`).
+- **Platform:** `LAMBDAUI_PLATFORM` selects one backend at build time: `MACOS`, `LINUX_WAYLAND`, or `LINUX_KMS`. `AUTO` picks macOS on Apple hosts and Wayland on Unix hosts.
 - **Language:** C++23, extensions off.
 - **Minimum macOS:** 12.0.
-- **Framework:** Shared library target `lambda`.
-- **Demos:** Optional executable targets in [`lambda/demos/CMakeLists.txt`](../lambda/demos/CMakeLists.txt), enabled with `LAMBDA_BUILD_DEMOS=ON`.
+- **Framework:** Shared library target `lambdaui`, also exposed as `lambdaui::lambdaui`.
+- **Demos:** Optional executable targets in [`lambda/demos/CMakeLists.txt`](../lambda/demos/CMakeLists.txt), enabled with `LAMBDAUI_BUILD_DEMOS=ON`.
 - **Desktop suite:** Linux-only targets under [`lambda-desktop/`](../lambda-desktop), enabled with `LAMBDA_BUILD_DESKTOP=ON`.
-- **Standalone app:** `solitaire-app`, enabled with `LAMBDA_BUILD_SOLITAIRE=ON`.
+- **Standalone app:** `lambda-solitaire`, currently sourced from `solitaire-app/` before the repo split, enabled with `LAMBDA_BUILD_SOLITAIRE=ON`.
 
 ## Build System
 
@@ -19,11 +19,11 @@ This document describes the current repository layout and coding patterns.
 - C is enabled for vendored `libtess2`; Objective-C and Objective-C++ are enabled only for the macOS backend.
 - Framework public includes come from `lambda/include/`; framework private implementation helpers come from `lambda/src/`.
 - Desktop-only public includes come from `lambda-desktop/include/`; desktop private implementation helpers come from `lambda-desktop/src/`.
-- The `lambda` target builds with `-Wall -Wextra -Wpedantic`.
+- The `lambdaui` target builds with common non-fatal compiler warnings when `LAMBDAUI_ENABLE_WARNINGS=ON`.
 - Metal shaders compile through `xcrun metal`, `metallib`, and `xxd` into an embedded shader header.
 - Dependencies live at their lowest owning product: `libtess2` belongs to the framework, `tomlplusplus` belongs to `lambda-desktop`, and `libvterm` belongs to `lambda-terminal`.
-- `lambda_add_app()` in `lambda/cmake/LambdaApp.cmake` creates terminal-style executables, copies runtime fonts next to the binary, and emits Linux `.desktop` metadata. It does not create macOS bundles.
-- `solitaire-app/` owns its macOS `.app` bundle, icon conversion, entitlements, and packaging helper locally because it is the only current product that needs that shape.
+- `lambdaui_add_app()` in `lambda/cmake/LambdaApp.cmake` creates terminal-style executables, copies runtime fonts next to the binary, and emits Linux `.desktop` metadata. It does not create macOS bundles.
+- `solitaire-app/` owns the `lambda-solitaire` macOS `.app` bundle, icon conversion, entitlements, and packaging helper locally because it is the only current product that needs that shape.
 
 ## Directory Layout
 
@@ -57,7 +57,7 @@ This document describes the current repository layout and coding patterns.
 | `lambda-desktop/docs/` | Linux desktop roadmap, compositor docs, and runbooks |
 | `lambda-desktop/scripts/` | Linux desktop verification scripts |
 | `lambda-desktop/tools/` | Linux desktop developer verification tools |
-| `solitaire-app/` | Standalone cross-platform Solitaire app |
+| `solitaire-app/` | Standalone cross-platform `lambda-solitaire` app |
 | `lambda/demos/` | Sample apps |
 | `lambda/tests/` | Framework tests |
 | `lambda/bench/` | Framework benchmarks |
@@ -65,9 +65,9 @@ This document describes the current repository layout and coding patterns.
 
 ## Namespace
 
-- Public API lives in `lambda`.
-- Reactive primitives live in `lambda::Reactive`.
-- `lambda::detail` is reserved for implementation helpers not meant as app-facing API.
+- Public API lives in `lambdaui`.
+- Reactive primitives live in `lambdaui::Reactive`.
+- `lambdaui::detail` is reserved for implementation helpers not meant as app-facing API.
 
 ## Public And Private Headers
 
@@ -130,7 +130,7 @@ Lambda v5 mounts UI once and updates retained scene nodes through reactive depen
 
 ## Platform Abstraction
 
-`platform::Window` is private to `lambda/src/UI/Platform`. Portable UI code calls `lambda::platform::createWindow(WindowConfig)`, which is implemented by exactly one platform translation unit in a build.
+`platform::Window` is private to `lambda/src/UI/Platform`. Portable UI code calls `lambdaui::platform::createWindow(WindowConfig)`, which is implemented by exactly one platform translation unit in a build.
 
 ## Includes
 
@@ -141,4 +141,4 @@ Lambda v5 mounts UI once and updates retained scene nodes through reactive depen
 
 ## Examples
 
-Demos are intentionally small and are registered by `lambda_add_demo()` in [`lambda/demos/CMakeLists.txt`](../lambda/demos/CMakeLists.txt).
+Demos are intentionally small and are registered by `lambdaui_add_demo()` in [`lambda/demos/CMakeLists.txt`](../lambda/demos/CMakeLists.txt).

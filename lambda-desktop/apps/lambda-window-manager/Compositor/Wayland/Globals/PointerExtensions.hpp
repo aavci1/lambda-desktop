@@ -6,7 +6,7 @@
 
 struct wl_client;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 void bindRelativePointerManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 void bindPointerConstraints(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
@@ -15,4 +15,4 @@ bool applyPointerConstraintsPendingState(WaylandServer::Impl* server,
                                          WaylandServer::Impl::Surface* surface,
                                          bool includeLivePendingState);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

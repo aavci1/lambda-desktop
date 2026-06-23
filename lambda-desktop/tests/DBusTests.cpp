@@ -15,9 +15,9 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::pumpUntil;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::pumpUntil;
+using lambdaui::testing::dbus::startPrivateBus;
 
 struct TestPipe {
   int readFd = -1;
@@ -43,24 +43,24 @@ struct TestPipe {
   }
 };
 
-std::shared_ptr<lambda::dbus::ArrayValue> arrayValue(std::string elementSignature,
-                                                     std::vector<lambda::dbus::BasicValue> values) {
-  return std::make_shared<lambda::dbus::ArrayValue>(
-      lambda::dbus::ArrayValue{.elementSignature = std::move(elementSignature), .values = std::move(values)});
+std::shared_ptr<lambdaui::dbus::ArrayValue> arrayValue(std::string elementSignature,
+                                                     std::vector<lambdaui::dbus::BasicValue> values) {
+  return std::make_shared<lambdaui::dbus::ArrayValue>(
+      lambdaui::dbus::ArrayValue{.elementSignature = std::move(elementSignature), .values = std::move(values)});
 }
 
-std::shared_ptr<lambda::dbus::StructValue> structValue(std::string signature,
-                                                       std::vector<lambda::dbus::BasicValue> fields) {
-  return std::make_shared<lambda::dbus::StructValue>(
-      lambda::dbus::StructValue{.signature = std::move(signature), .fields = std::move(fields)});
+std::shared_ptr<lambdaui::dbus::StructValue> structValue(std::string signature,
+                                                       std::vector<lambdaui::dbus::BasicValue> fields) {
+  return std::make_shared<lambdaui::dbus::StructValue>(
+      lambdaui::dbus::StructValue{.signature = std::move(signature), .fields = std::move(fields)});
 }
 
-std::shared_ptr<lambda::dbus::DictionaryValue>
+std::shared_ptr<lambdaui::dbus::DictionaryValue>
 dictionaryValue(std::string keySignature,
                 std::string valueSignature,
-                std::vector<lambda::dbus::DictionaryEntry> entries) {
-  return std::make_shared<lambda::dbus::DictionaryValue>(
-      lambda::dbus::DictionaryValue{.keySignature = std::move(keySignature),
+                std::vector<lambdaui::dbus::DictionaryEntry> entries) {
+  return std::make_shared<lambdaui::dbus::DictionaryValue>(
+      lambdaui::dbus::DictionaryValue{.keySignature = std::move(keySignature),
                                     .valueSignature = std::move(valueSignature),
                                     .entries = std::move(entries)});
 }
@@ -80,64 +80,64 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
     return;
   }
 
-  auto service = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
+  auto service = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
   std::string const serviceName =
       "org.lambda.DBusTest" + std::to_string(static_cast<unsigned long long>(getpid()));
   service.requestName(serviceName);
 
   std::string storedMode = "ready";
-  std::optional<lambda::dbus::VariantDictionary> observedOptions;
+  std::optional<lambdaui::dbus::VariantDictionary> observedOptions;
   TestPipe fdPipe;
   REQUIRE(fdPipe.open());
   auto objectSlot = service.exportObject(
       "/org/lambda/DBusTest",
-      lambda::dbus::ObjectDefinition{
+      lambdaui::dbus::ObjectDefinition{
           .methods = {
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = "org.lambda.DBusTest",
                   .member = "Echo",
-                  .handler = [](lambda::dbus::Message& message) {
-                    return lambda::dbus::MethodReply{.values = {message.readString()}};
+                  .handler = [](lambdaui::dbus::Message& message) {
+                    return lambdaui::dbus::MethodReply{.values = {message.readString()}};
                   },
               },
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = "org.lambda.DBusTest",
                   .member = "Fail",
-                  .handler = [](lambda::dbus::Message&) {
-                    return lambda::dbus::MethodReply::error("org.lambda.DBusTest.Failed", "expected failure");
+                  .handler = [](lambdaui::dbus::Message&) {
+                    return lambdaui::dbus::MethodReply::error("org.lambda.DBusTest.Failed", "expected failure");
                   },
               },
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = "org.lambda.DBusTest",
                   .member = "RoundTripOptions",
-                  .handler = [&observedOptions](lambda::dbus::Message& message) {
+                  .handler = [&observedOptions](lambdaui::dbus::Message& message) {
                     auto options = message.readVariantDictionary();
                     observedOptions = options;
-                    return lambda::dbus::MethodReply{
-                        .values = {lambda::dbus::BasicValue(std::make_shared<lambda::dbus::VariantDictionary>(
+                    return lambdaui::dbus::MethodReply{
+                        .values = {lambdaui::dbus::BasicValue(std::make_shared<lambdaui::dbus::VariantDictionary>(
                             std::move(options)))},
                     };
                   },
               },
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = "org.lambda.DBusTest",
                   .member = "GetWriteFd",
-                  .handler = [&fdPipe](lambda::dbus::Message&) {
-                    return lambda::dbus::MethodReply{
-                        .values = {lambda::dbus::UnixFd::borrow(fdPipe.writeFd)},
+                  .handler = [&fdPipe](lambdaui::dbus::Message&) {
+                    return lambdaui::dbus::MethodReply{
+                        .values = {lambdaui::dbus::UnixFd::borrow(fdPipe.writeFd)},
                     };
                   },
               },
           },
           .properties = {
-              lambda::dbus::ExportedProperty{
+              lambdaui::dbus::ExportedProperty{
                   .interface = "org.lambda.DBusTest",
                   .name = "Mode",
                   .value = std::string("ready"),
                   .writable = true,
-                  .getter = [&storedMode] { return lambda::dbus::BasicValue(storedMode); },
-                  .setter = [&storedMode](lambda::dbus::BasicValue const& value) {
+                  .getter = [&storedMode] { return lambdaui::dbus::BasicValue(storedMode); },
+                  .setter = [&storedMode](lambdaui::dbus::BasicValue const& value) {
                     storedMode = std::get<std::string>(value);
                   },
               },
@@ -151,7 +151,7 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
     }
   });
 
-  auto peerReply = client.call(lambda::dbus::MethodCall{
+  auto peerReply = client.call(lambdaui::dbus::MethodCall{
       .destination = serviceName,
       .path = "/org/lambda/DBusTest",
       .interface = "org.freedesktop.DBus.Peer",
@@ -159,7 +159,7 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   });
   CHECK(peerReply.valid());
 
-  auto introspectReply = client.call(lambda::dbus::MethodCall{
+  auto introspectReply = client.call(lambdaui::dbus::MethodCall{
       .destination = serviceName,
       .path = "/org/lambda/DBusTest",
       .interface = "org.freedesktop.DBus.Introspectable",
@@ -176,7 +176,7 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   CHECK(xml.find("<property name=\"Mode\" type=\"s\" access=\"readwrite\"/>") != std::string::npos);
   CHECK(xml.find("<signal name=\"PropertiesChanged\">") != std::string::npos);
 
-  auto echoReply = client.call(lambda::dbus::MethodCall{
+  auto echoReply = client.call(lambdaui::dbus::MethodCall{
       .destination = serviceName,
       .path = "/org/lambda/DBusTest",
       .interface = "org.lambda.DBusTest",
@@ -187,14 +187,14 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
 
   std::string asyncPayload;
   bool asyncDone = false;
-  auto pendingEcho = client.callAsync(lambda::dbus::MethodCall{
+  auto pendingEcho = client.callAsync(lambdaui::dbus::MethodCall{
                                          .destination = serviceName,
                                          .path = "/org/lambda/DBusTest",
                                          .interface = "org.lambda.DBusTest",
                                          .member = "Echo",
                                          .arguments = {std::string("async")},
                                      },
-                                     [&](lambda::dbus::AsyncMethodReply reply) {
+                                     [&](lambdaui::dbus::AsyncMethodReply reply) {
                                        CHECK(reply.ok());
                                        asyncPayload = reply.message.readString();
                                        asyncDone = true;
@@ -206,13 +206,13 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   bool asyncErrorDone = false;
   std::string asyncErrorName;
   std::string asyncErrorMessage;
-  auto pendingError = client.callAsync(lambda::dbus::MethodCall{
+  auto pendingError = client.callAsync(lambdaui::dbus::MethodCall{
                                           .destination = serviceName,
                                           .path = "/org/lambda/DBusTest",
                                           .interface = "org.lambda.DBusTest",
                                           .member = "Fail",
                                       },
-                                      [&](lambda::dbus::AsyncMethodReply reply) {
+                                      [&](lambdaui::dbus::AsyncMethodReply reply) {
                                         CHECK_FALSE(reply.ok());
                                         CHECK(reply.message.valid());
                                         asyncErrorName = reply.errorName.value_or("");
@@ -225,14 +225,14 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   CHECK(asyncErrorMessage == "expected failure");
 
   bool canceledCallbackCalled = false;
-  auto canceled = client.callAsync(lambda::dbus::MethodCall{
+  auto canceled = client.callAsync(lambdaui::dbus::MethodCall{
                                       .destination = serviceName,
                                       .path = "/org/lambda/DBusTest",
                                       .interface = "org.lambda.DBusTest",
                                       .member = "Echo",
                                       .arguments = {std::string("cancel")},
                                   },
-                                  [&](lambda::dbus::AsyncMethodReply) {
+                                  [&](lambdaui::dbus::AsyncMethodReply) {
                                     canceledCallbackCalled = true;
                                   });
   CHECK(canceled.valid());
@@ -244,17 +244,17 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   }
   CHECK_FALSE(canceledCallbackCalled);
 
-  lambda::dbus::VariantDictionary nestedOptions;
+  lambdaui::dbus::VariantDictionary nestedOptions;
   nestedOptions.values["token"] = std::string("nested-token");
-  lambda::dbus::VariantDictionary requestOptions;
+  lambdaui::dbus::VariantDictionary requestOptions;
   requestOptions.values["modal"] = true;
-  requestOptions.values["metadata"] = std::make_shared<lambda::dbus::VariantDictionary>(nestedOptions);
+  requestOptions.values["metadata"] = std::make_shared<lambdaui::dbus::VariantDictionary>(nestedOptions);
   requestOptions.values["labels"] = dictionaryValue(
       "s",
       "s",
       {
-          lambda::dbus::DictionaryEntry{.key = std::string("open"), .value = std::string("Open")},
-          lambda::dbus::DictionaryEntry{.key = std::string("cancel"), .value = std::string("Cancel")},
+          lambdaui::dbus::DictionaryEntry{.key = std::string("open"), .value = std::string("Open")},
+          lambdaui::dbus::DictionaryEntry{.key = std::string("cancel"), .value = std::string("Cancel")},
       });
   auto filterRules = arrayValue("(us)",
                                 {structValue("us",
@@ -272,51 +272,51 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
                                std::string("Encoding"),
                                choiceItems,
                                std::string("utf8")})});
-  auto optionReply = client.call(lambda::dbus::MethodCall{
+  auto optionReply = client.call(lambdaui::dbus::MethodCall{
       .destination = serviceName,
       .path = "/org/lambda/DBusTest",
       .interface = "org.lambda.DBusTest",
       .member = "RoundTripOptions",
-      .arguments = {std::make_shared<lambda::dbus::VariantDictionary>(requestOptions)},
+      .arguments = {std::make_shared<lambdaui::dbus::VariantDictionary>(requestOptions)},
   });
   auto roundTrippedOptions = optionReply.readVariantDictionary();
   REQUIRE(observedOptions);
   CHECK(std::get<bool>(observedOptions->values["modal"]));
   auto const observedNested =
-      std::get<std::shared_ptr<lambda::dbus::VariantDictionary>>(observedOptions->values["metadata"]);
+      std::get<std::shared_ptr<lambdaui::dbus::VariantDictionary>>(observedOptions->values["metadata"]);
   REQUIRE(observedNested);
   CHECK(std::get<std::string>(observedNested->values["token"]) == "nested-token");
   auto const roundTrippedLabels =
-      std::get<std::shared_ptr<lambda::dbus::DictionaryValue>>(roundTrippedOptions.values["labels"]);
+      std::get<std::shared_ptr<lambdaui::dbus::DictionaryValue>>(roundTrippedOptions.values["labels"]);
   REQUIRE(roundTrippedLabels);
-  CHECK(lambda::dbus::signatureFor(lambda::dbus::BasicValue(roundTrippedLabels)) == "a{ss}");
+  CHECK(lambdaui::dbus::signatureFor(lambdaui::dbus::BasicValue(roundTrippedLabels)) == "a{ss}");
   CHECK(roundTrippedLabels->entries.size() == 2);
   CHECK(std::get<std::string>(roundTrippedLabels->entries[0].key) == "open");
   CHECK(std::get<std::string>(roundTrippedLabels->entries[0].value) == "Open");
   auto const roundTrippedFilter =
-      std::get<std::shared_ptr<lambda::dbus::StructValue>>(roundTrippedOptions.values["current_filter"]);
+      std::get<std::shared_ptr<lambdaui::dbus::StructValue>>(roundTrippedOptions.values["current_filter"]);
   REQUIRE(roundTrippedFilter);
-  CHECK(lambda::dbus::signatureFor(lambda::dbus::BasicValue(roundTrippedFilter)) == "(sa(us))");
+  CHECK(lambdaui::dbus::signatureFor(lambdaui::dbus::BasicValue(roundTrippedFilter)) == "(sa(us))");
   REQUIRE(roundTrippedFilter->fields.size() == 2);
   CHECK(std::get<std::string>(roundTrippedFilter->fields[0]) == "Text files");
   auto const roundTrippedRules =
-      std::get<std::shared_ptr<lambda::dbus::ArrayValue>>(roundTrippedFilter->fields[1]);
+      std::get<std::shared_ptr<lambdaui::dbus::ArrayValue>>(roundTrippedFilter->fields[1]);
   REQUIRE(roundTrippedRules);
   CHECK(roundTrippedRules->elementSignature == "(us)");
   REQUIRE(roundTrippedRules->values.size() == 1);
   auto const roundTrippedChoices =
-      std::get<std::shared_ptr<lambda::dbus::ArrayValue>>(roundTrippedOptions.values["choices"]);
+      std::get<std::shared_ptr<lambdaui::dbus::ArrayValue>>(roundTrippedOptions.values["choices"]);
   REQUIRE(roundTrippedChoices);
   CHECK(roundTrippedChoices->elementSignature == "(ssa(ss)s)");
   REQUIRE(roundTrippedChoices->values.size() == 1);
   auto const roundTrippedChoice =
-      std::get<std::shared_ptr<lambda::dbus::StructValue>>(roundTrippedChoices->values[0]);
+      std::get<std::shared_ptr<lambdaui::dbus::StructValue>>(roundTrippedChoices->values[0]);
   REQUIRE(roundTrippedChoice);
   REQUIRE(roundTrippedChoice->fields.size() == 4);
   CHECK(std::get<std::string>(roundTrippedChoice->fields[0]) == "encoding");
   CHECK(std::get<std::string>(roundTrippedChoice->fields[3]) == "utf8");
 
-  auto fdReply = client.call(lambda::dbus::MethodCall{
+  auto fdReply = client.call(lambdaui::dbus::MethodCall{
       .destination = serviceName,
       .path = "/org/lambda/DBusTest",
       .interface = "org.lambda.DBusTest",
@@ -332,7 +332,7 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
     CHECK(std::string(fdBuffer, fdPayload.size()) == fdPayload);
   }
 
-  auto mode = client.getProperty(lambda::dbus::PropertyAddress{
+  auto mode = client.getProperty(lambdaui::dbus::PropertyAddress{
                                      .destination = serviceName,
                                      .path = "/org/lambda/DBusTest",
                                      .interface = "org.lambda.DBusTest",
@@ -341,7 +341,7 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
                                  "s");
   CHECK(std::get<std::string>(mode) == "ready");
 
-  client.setProperty(lambda::dbus::PropertyAddress{
+  client.setProperty(lambdaui::dbus::PropertyAddress{
                          .destination = serviceName,
                          .path = "/org/lambda/DBusTest",
                          .interface = "org.lambda.DBusTest",
@@ -351,13 +351,13 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   CHECK(storedMode == "updated");
 
   std::string signalPayload;
-  auto signalSlot = client.matchSignal(lambda::dbus::SignalMatch{
+  auto signalSlot = client.matchSignal(lambdaui::dbus::SignalMatch{
                                            .sender = serviceName,
                                            .path = "/org/lambda/DBusTest",
                                            .interface = "org.lambda.DBusTest",
                                            .member = "Changed",
                                        },
-                                       [&signalPayload](lambda::dbus::Message& message) {
+                                       [&signalPayload](lambdaui::dbus::Message& message) {
                                          signalPayload = message.readString();
                                        });
 
@@ -365,23 +365,23 @@ TEST_CASE("DBus supports calls signals properties and exported objects") {
   service.flush();
   CHECK(pumpUntil(client, [&] { return signalPayload == "done"; }, std::chrono::milliseconds(500)));
 
-  lambda::dbus::PropertiesChanged propertiesChanged;
+  lambdaui::dbus::PropertiesChanged propertiesChanged;
   auto propertiesChangedSlot = client.matchSignal(
-      lambda::dbus::SignalMatch{
+      lambdaui::dbus::SignalMatch{
           .sender = serviceName,
           .path = "/org/lambda/DBusTest",
           .interface = "org.freedesktop.DBus.Properties",
           .member = "PropertiesChanged",
       },
-      [&propertiesChanged](lambda::dbus::Message& message) {
-        propertiesChanged = lambda::dbus::readPropertiesChanged(message);
+      [&propertiesChanged](lambdaui::dbus::Message& message) {
+        propertiesChanged = lambdaui::dbus::readPropertiesChanged(message);
       });
-  lambda::dbus::VariantDictionary changedProperties;
+  lambdaui::dbus::VariantDictionary changedProperties;
   changedProperties.values["Mode"] = std::string("changed");
   service.emitPropertiesChanged("/org/lambda/DBusTest",
                                 "org.lambda.DBusTest",
                                 std::move(changedProperties),
-                                lambda::dbus::StringArray{{"LegacyMode"}});
+                                lambdaui::dbus::StringArray{{"LegacyMode"}});
   service.flush();
   CHECK(pumpUntil(client,
                   [&] { return propertiesChanged.interface == "org.lambda.DBusTest"; },
@@ -400,32 +400,32 @@ TEST_CASE("DBus event pump services calls through Application poll sources") {
     return;
   }
 
-  lambda::Application app;
-  auto service = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
+  lambdaui::Application app;
+  auto service = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
   std::string const serviceName =
       "org.lambda.DBusPumpTest" + std::to_string(static_cast<unsigned long long>(getpid()));
   service.requestName(serviceName);
   auto objectSlot = service.exportObject(
       "/org/lambda/DBusPumpTest",
-      lambda::dbus::ObjectDefinition{
+      lambdaui::dbus::ObjectDefinition{
           .methods = {
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = "org.lambda.DBusPumpTest",
                   .member = "Echo",
-                  .handler = [](lambda::dbus::Message& message) {
-                    return lambda::dbus::MethodReply{.values = {message.readString()}};
+                  .handler = [](lambdaui::dbus::Message& message) {
+                    return lambdaui::dbus::MethodReply{.values = {message.readString()}};
                   },
               },
           },
       });
-  lambda::dbus::BusEventPump pump(app, service);
+  lambdaui::dbus::BusEventPump pump(app, service);
 
   std::atomic<bool> callDone = false;
   std::atomic<bool> callSucceeded = false;
   std::thread clientThread([&] {
     try {
-      auto reply = client.call(lambda::dbus::MethodCall{
+      auto reply = client.call(lambdaui::dbus::MethodCall{
           .destination = serviceName,
           .path = "/org/lambda/DBusPumpTest",
           .interface = "org.lambda.DBusPumpTest",

@@ -128,15 +128,15 @@ void ShellConnection::sendLine(std::string const& line) const {
 }
 
 void ShellConnection::sendHello(std::uint64_t requestId) const {
-  sendLine(lambda::shell::serializeShellHello(1, "0.2.0", {"dock", "command-launcher"}, requestId));
+  sendLine(lambdaui::shell::serializeShellHello(1, "0.2.0", {"dock", "command-launcher"}, requestId));
 }
 
 void ShellConnection::claimLauncherModal(std::uint64_t requestId) const {
-  sendLine(lambda::shell::serializeClaimCommandLauncherModal(requestId));
+  sendLine(lambdaui::shell::serializeClaimCommandLauncherModal(requestId));
 }
 
 void ShellConnection::releaseLauncherModal(std::uint64_t requestId) const {
-  sendLine(lambda::shell::serializeReleaseCommandLauncherModal(requestId));
+  sendLine(lambdaui::shell::serializeReleaseCommandLauncherModal(requestId));
 }
 
 void ShellConnection::dispatchReadable(LineHandler handler) {
@@ -170,7 +170,7 @@ void ShellConnection::dispatchReadable(LineHandler handler) {
   }
 }
 
-#ifdef LAMBDA_TESTING
+#ifdef LAMBDAUI_TESTING
 void ShellConnection::adoptFdForTesting(int fd) {
   if (fd_ >= 0) {
     close(fd_);

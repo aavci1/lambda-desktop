@@ -2,7 +2,7 @@
 #include <Lambda/UI/Theme.hpp>
 #include <Lambda/UI/UI.hpp>
 
-using namespace lambda;
+using namespace lambdaui;
 
 struct HelloRoot {
   auto body() const {

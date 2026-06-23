@@ -10,7 +10,7 @@
 #include <wayland-server-core.h>
 #include <wayland-util.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void backgroundEffectManagerDestroy(wl_client*, wl_resource* resource) {
@@ -260,4 +260,4 @@ void bindBackgroundEffectManager(wl_client* client, void* data, std::uint32_t ve
       EXT_BACKGROUND_EFFECT_MANAGER_V1_CAPABILITY_BLUR);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

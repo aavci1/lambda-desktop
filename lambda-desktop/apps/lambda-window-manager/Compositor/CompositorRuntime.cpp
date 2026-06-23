@@ -55,7 +55,7 @@
 #include <linux/input-event-codes.h>
 #include <vulkan/vulkan.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 using namespace presentation;
 
 namespace {
@@ -151,11 +151,11 @@ struct SyntheticPointerMotion {
     return millisecondsUntilCeil(nextAt, now, intervalMs);
   }
 
-  bool emitDue(lambda::platform::KmsDevice& device, SteadyClock::time_point now) {
+  bool emitDue(lambdaui::platform::KmsDevice& device, SteadyClock::time_point now) {
     if (!enabled || now < nextAt) return false;
     if (hasStartPosition && !startPositionEmitted) {
-      lambda::platform::KmsInputEvent event{
-          .kind = lambda::platform::KmsInputEvent::Kind::PointerPosition,
+      lambdaui::platform::KmsInputEvent event{
+          .kind = lambdaui::platform::KmsInputEvent::Kind::PointerPosition,
           .x = startX,
           .y = startY,
           .timeMs = monotonicMilliseconds32(now),
@@ -167,8 +167,8 @@ struct SyntheticPointerMotion {
       return true;
     }
     if (remaining <= 0) return false;
-    lambda::platform::KmsInputEvent event{
-        .kind = lambda::platform::KmsInputEvent::Kind::PointerMotion,
+    lambdaui::platform::KmsInputEvent event{
+        .kind = lambdaui::platform::KmsInputEvent::Kind::PointerMotion,
         .dx = dx,
         .dy = dy,
         .timeMs = monotonicMilliseconds32(now),
@@ -230,20 +230,20 @@ struct SyntheticChromeInteraction {
     return millisecondsUntilCeil(nextAt, now, intervalMs);
   }
 
-  bool emitDue(lambda::platform::KmsDevice& device, WaylandServer& wayland, SteadyClock::time_point now) {
+  bool emitDue(lambdaui::platform::KmsDevice& device, WaylandServer& wayland, SteadyClock::time_point now) {
     if (!enabled || stage == Stage::Done || now < nextAt) return false;
     std::uint32_t const timeMs = monotonicMilliseconds32(now);
     auto emitPosition = [&](double x, double y) {
-      device.emitInputEventForDiagnostics(lambda::platform::KmsInputEvent{
-          .kind = lambda::platform::KmsInputEvent::Kind::PointerPosition,
+      device.emitInputEventForDiagnostics(lambdaui::platform::KmsInputEvent{
+          .kind = lambdaui::platform::KmsInputEvent::Kind::PointerPosition,
           .x = x,
           .y = y,
           .timeMs = timeMs,
       });
     };
     auto emitButton = [&](bool pressed) {
-      device.emitInputEventForDiagnostics(lambda::platform::KmsInputEvent{
-          .kind = lambda::platform::KmsInputEvent::Kind::PointerButton,
+      device.emitInputEventForDiagnostics(lambdaui::platform::KmsInputEvent{
+          .kind = lambdaui::platform::KmsInputEvent::Kind::PointerButton,
           .button = BTN_LEFT,
           .pressed = pressed,
           .timeMs = timeMs,
@@ -929,7 +929,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                    "lambda-window-manager: CPU trace logging to %s (set LAMBDA_WINDOW_MANAGER_CPU_TRACE=0 to disable)\n",
                    diagnostics::cpuTracePath());
     }
-    auto device = lambda::platform::KmsDevice::open();
+    auto device = lambdaui::platform::KmsDevice::open();
     auto outputs = device->outputs();
     if (outputs.empty()) {
       std::fprintf(stderr, "lambda-window-manager: no connected KMS outputs\n");
@@ -951,7 +951,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       return 1;
     }
 
-    lambda::platform::KmsOutput const& output = outputs[*outputIndex];
+    lambdaui::platform::KmsOutput const& output = outputs[*outputIndex];
     diagnostics::crashLog("runtime-output name=%s physical=%ux%u refresh_millihz=%u scale=%.3f",
                           output.name().c_str(),
                           output.width(),
@@ -974,17 +974,17 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     bool useVulkanPresentationCompletion = false;
     std::vector<VulkanDisplayPendingFrameCallbacks> vulkanDisplayPendingFrameCallbacks;
 
-    lambda::configureVulkanCanvasRuntime(device->requiredVulkanInstanceExtensions(), device->cacheDir());
-    auto& vulkan = lambda::VulkanContext::instance();
+    lambdaui::configureVulkanCanvasRuntime(device->requiredVulkanInstanceExtensions(), device->cacheDir());
+    auto& vulkan = lambdaui::VulkanContext::instance();
     vulkan.addRequiredDeviceExtension(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
     vulkan.addRequiredDeviceExtension(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
     vulkan.addRequiredDeviceExtension(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
     vulkan.addRequiredDeviceExtension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
     auto timingStart = SteadyClock::now();
-    VkInstance instance = lambda::ensureSharedVulkanInstance();
+    VkInstance instance = lambdaui::ensureSharedVulkanInstance();
     LAMBDA_WINDOW_MANAGER_TRACE_TIMING("ensure-vulkan-instance", timingStart);
 
-    static lambda::FreeTypeTextSystem textSystem;
+    static lambdaui::FreeTypeTextSystem textSystem;
 
     auto effectiveConfig = [&] {
       CompositorConfig config = loadedConfig.config;
@@ -1006,7 +1006,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                                                                           : "presenter vulkan-display");
     if (auto* atomicPresenter = presenter->atomicPresenter()) {
       std::vector<DmabufFormatModifierPreference> preferences;
-      for (lambda::platform::KmsDmabufFormatModifier const& pair :
+      for (lambdaui::platform::KmsDmabufFormatModifier const& pair :
            atomicPresenter->overlayDmabufFormatModifierPreferences()) {
         preferences.push_back(DmabufFormatModifierPreference{
             .format = pair.format,
@@ -1015,8 +1015,8 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
       wayland.setDmabufFormatModifierPreferences(std::move(preferences));
     }
-    lambda::Canvas& canvasRef = presenter->canvas();
-    lambda::Canvas* canvas = &canvasRef;
+    lambdaui::Canvas& canvasRef = presenter->canvas();
+    lambdaui::Canvas* canvas = &canvasRef;
     LAMBDA_WINDOW_MANAGER_TRACE_TIMING("create-presenter", canvasStart);
 
     std::fprintf(stderr,
@@ -1094,7 +1094,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
     }
 
     VtSwitchShortcutState vtSwitchShortcut;
-    device->setInputHandler([&](lambda::platform::KmsInputEvent const& event) {
+    device->setInputHandler([&](lambdaui::platform::KmsInputEvent const& event) {
       try {
         inputActivityThisLoop = true;
         VtSwitchShortcutResult const vtSwitch = handleVtSwitchShortcut(vtSwitchShortcut, event);
@@ -1161,7 +1161,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
                          "lambda-window-manager: hardware cursor motion fast path failed; using frame redraw fallback\n");
             hardwareCursorMotionFastPathFailureLogged = true;
           }
-        } else if (hardwareCursorFastPathEnabled && event.kind == lambda::platform::KmsInputEvent::Kind::PointerMotion) {
+        } else if (hardwareCursorFastPathEnabled && event.kind == lambdaui::platform::KmsInputEvent::Kind::PointerMotion) {
           LAMBDA_WINDOW_MANAGER_TRACE_PACING("hardware-cursor-motion-fast-path unavailable hardwareVisible=%d\n",
                                              cursorState.hardwareVisible ? 1 : 0);
         }
@@ -1221,7 +1221,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       std::vector<std::uint8_t> pixels;
       std::uint32_t width = 0;
       std::uint32_t height = 0;
-      if (!lambda::takeCapturedFrameForCanvas(canvas, pixels, width, height)) {
+      if (!lambdaui::takeCapturedFrameForCanvas(canvas, pixels, width, height)) {
         ++frameCapturePollAttempts;
         if (frameCapturePollAttempts > 120) {
           std::fprintf(stderr, "lambda-window-manager: screenshot capture did not produce a frame\n");
@@ -2192,7 +2192,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       bool snapCaptureThisFrame = !frameCaptureInFlight && snapFrameCapture.wantsFrame(wayland);
       bool const screenshotCaptureThisFrame = !frameCaptureInFlight && screenshotPending.has_value();
       bool frameCapturePending = screenshotCaptureThisFrame || snapCaptureThisFrame;
-      if (frameCapturePending && !lambda::requestNextFrameCaptureForCanvas(canvas)) {
+      if (frameCapturePending && !lambdaui::requestNextFrameCaptureForCanvas(canvas)) {
         if (screenshotCaptureThisFrame) {
           std::fprintf(stderr, "lambda-window-manager: screenshots are not supported by this presenter\n");
         }
@@ -2221,7 +2221,7 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
       }
       renderFrameCtx.committedSurfaces = cachedCommittedSurfaces;
       renderFrameCtx.softwareCursorSnapshot = cachedSoftwareCursor;
-      lambda::compositor::renderCompositorFrame(renderFrameCtx, frameTime, renderStart, presentationTiming, renderAheadFrame);
+      lambdaui::compositor::renderCompositorFrame(renderFrameCtx, frameTime, renderStart, presentationTiming, renderAheadFrame);
       if (atomicRenderedFrame.ready) {
         if ((atomicRenderedFrame.overlayOnly || atomicRenderedFrame.directScanout) && presenter->atomicPresenter()) {
           if (atomicRenderedFrame.directScanout) {
@@ -2868,4 +2868,4 @@ int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options) {
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

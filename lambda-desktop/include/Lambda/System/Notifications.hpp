@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 enum class NotificationCloseReason : std::uint32_t {
   Expired = 1,
@@ -170,4 +170,4 @@ private:
   dbus::Bus bus_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

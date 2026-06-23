@@ -28,7 +28,7 @@ struct ClockSnapshot {
   bool operator==(ClockSnapshot const&) const = default;
 };
 
-inline lambda::Color withAlpha(lambda::Color color, float alpha) {
+inline lambdaui::Color withAlpha(lambdaui::Color color, float alpha) {
   color.a = alpha;
   return color;
 }
@@ -56,12 +56,12 @@ inline ClockSnapshot readClock(double dayOffset = 0.0) {
   };
 }
 
-inline lambda::Signal<ClockSnapshot> useClock() {
-  auto clock = lambda::useState(readClock());
+inline lambdaui::Signal<ClockSnapshot> useClock() {
+  auto clock = lambdaui::useState(readClock());
 
   double dayOffset = 0.0;
   int lastRawSecond = clock.peek().rawSecondOfDay;
-  lambda::useFrame([clock, dayOffset, lastRawSecond](lambda::AnimationTick const&) mutable {
+  lambdaui::useFrame([clock, dayOffset, lastRawSecond](lambdaui::AnimationTick const&) mutable {
     ClockSnapshot next = readClock(dayOffset);
     if (next.rawSecondOfDay < lastRawSecond) {
       dayOffset += 24.0 * 60.0 * 60.0;
@@ -76,27 +76,27 @@ inline lambda::Signal<ClockSnapshot> useClock() {
   return clock;
 }
 
-inline lambda::Point polar(lambda::Point center, float radius, float degrees) {
+inline lambdaui::Point polar(lambdaui::Point center, float radius, float degrees) {
   float const radians = degrees * kPi / 180.f;
-  return lambda::Point{
+  return lambdaui::Point{
       center.x + std::sin(radians) * radius,
       center.y - std::cos(radians) * radius,
   };
 }
 
-inline lambda::Size measureClock(lambda::LayoutConstraints const& constraints) {
+inline lambdaui::Size measureClock(lambdaui::LayoutConstraints const& constraints) {
   float const width = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 640.f;
   float const height = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : width;
-  return lambda::Size{std::max(1.f, width), std::max(1.f, height)};
+  return lambdaui::Size{std::max(1.f, width), std::max(1.f, height)};
 }
 
 struct ClockGeometry {
   float side = 1.f;
-  lambda::Point center{};
+  lambdaui::Point center{};
   float radius = 1.f;
 };
 
-inline ClockGeometry clockGeometry(lambda::Rect frame) {
+inline ClockGeometry clockGeometry(lambdaui::Rect frame) {
   float const side = std::max(1.f, std::min(frame.width, frame.height));
   return ClockGeometry{
       .side = side,
@@ -105,56 +105,56 @@ inline ClockGeometry clockGeometry(lambda::Rect frame) {
   };
 }
 
-inline void drawClockFace(lambda::Canvas& canvas, lambda::Rect frame, lambda::Theme const& theme) {
+inline void drawClockFace(lambdaui::Canvas& canvas, lambdaui::Rect frame, lambdaui::Theme const& theme) {
   ClockGeometry const geometry = clockGeometry(frame);
-  lambda::Point const center = geometry.center;
+  lambdaui::Point const center = geometry.center;
   float const radius = geometry.radius;
 
-  lambda::Color const face = theme.elevatedBackgroundColor;
-  lambda::Color const ring = theme.separatorColor;
-  lambda::Color const major = theme.labelColor;
-  lambda::Color const minor = theme.tertiaryLabelColor;
+  lambdaui::Color const face = theme.elevatedBackgroundColor;
+  lambdaui::Color const ring = theme.separatorColor;
+  lambdaui::Color const major = theme.labelColor;
+  lambdaui::Color const minor = theme.tertiaryLabelColor;
 
-  canvas.drawCircle(center, radius + 14.f, lambda::FillStyle::solid(withAlpha(theme.accentColor, 0.07f)),
-                    lambda::StrokeStyle::none());
-  canvas.drawCircle(center, radius, lambda::FillStyle::solid(face),
-                    lambda::StrokeStyle::solid(withAlpha(ring, 0.95f), 2.f));
-  canvas.drawCircle(center, radius * 0.76f, lambda::FillStyle::none(),
-                    lambda::StrokeStyle::solid(withAlpha(ring, 0.45f), 1.f));
+  canvas.drawCircle(center, radius + 14.f, lambdaui::FillStyle::solid(withAlpha(theme.accentColor, 0.07f)),
+                    lambdaui::StrokeStyle::none());
+  canvas.drawCircle(center, radius, lambdaui::FillStyle::solid(face),
+                    lambdaui::StrokeStyle::solid(withAlpha(ring, 0.95f), 2.f));
+  canvas.drawCircle(center, radius * 0.76f, lambdaui::FillStyle::none(),
+                    lambdaui::StrokeStyle::solid(withAlpha(ring, 0.45f), 1.f));
 
   for (int i = 0; i < 60; ++i) {
     bool const isHour = (i % 5) == 0;
     float const degrees = static_cast<float>(i) * 6.f;
     float const outer = radius - 16.f;
     float const inner = radius - (isHour ? 42.f : 28.f);
-    lambda::StrokeStyle stroke = lambda::StrokeStyle::solid(isHour ? major : minor, isHour ? 3.f : 1.25f);
-    stroke.cap = lambda::StrokeCap::Round;
+    lambdaui::StrokeStyle stroke = lambdaui::StrokeStyle::solid(isHour ? major : minor, isHour ? 3.f : 1.25f);
+    stroke.cap = lambdaui::StrokeCap::Round;
     canvas.drawLine(polar(center, inner, degrees), polar(center, outer, degrees), stroke);
   }
 
-  lambda::Font const numberFont{.size = 24.f, .weight = 650.f};
+  lambdaui::Font const numberFont{.size = 24.f, .weight = 650.f};
   struct NumberMark {
     char const* text;
     float degrees;
   };
   NumberMark const numbers[]{{"12", 0.f}, {"3", 90.f}, {"6", 180.f}, {"9", 270.f}};
   for (NumberMark const& mark : numbers) {
-    auto layout = lambda::Application::instance().textSystem().layout(
+    auto layout = lambdaui::Application::instance().textSystem().layout(
         mark.text, numberFont, theme.secondaryLabelColor, 0.f);
-    lambda::Size const measured = layout->measuredSize;
-    lambda::Point const p = polar(center, radius * 0.62f, mark.degrees);
+    lambdaui::Size const measured = layout->measuredSize;
+    lambdaui::Point const p = polar(center, radius * 0.62f, mark.degrees);
     canvas.drawTextLayout(*layout, {p.x - measured.width * 0.5f, p.y - measured.height * 0.5f});
   }
 }
 
-struct ClockFace : lambda::ViewModifiers<ClockFace> {
+struct ClockFace : lambdaui::ViewModifiers<ClockFace> {
   auto body() const {
-    auto theme = lambda::useEnvironment<lambda::ThemeKey>();
-    return lambda::Render{
-        .measureFn = [](lambda::LayoutConstraints const& constraints, lambda::LayoutHints const&) {
+    auto theme = lambdaui::useEnvironment<lambdaui::ThemeKey>();
+    return lambdaui::Render{
+        .measureFn = [](lambdaui::LayoutConstraints const& constraints, lambdaui::LayoutHints const&) {
           return measureClock(constraints);
         },
-        .draw = [theme](lambda::Canvas& canvas, lambda::Rect frame) {
+        .draw = [theme](lambdaui::Canvas& canvas, lambdaui::Rect frame) {
           drawClockFace(canvas, frame, theme.evaluate());
         },
     }
@@ -162,11 +162,11 @@ struct ClockFace : lambda::ViewModifiers<ClockFace> {
   }
 };
 
-struct ClockHands : lambda::ViewModifiers<ClockHands> {
-  lambda::Reactive::Bindable<ClockSnapshot> clock{readClock()};
+struct ClockHands : lambdaui::ViewModifiers<ClockHands> {
+  lambdaui::Reactive::Bindable<ClockSnapshot> clock{readClock()};
 
   auto body() const {
-    auto theme = lambda::useEnvironment<lambda::ThemeKey>();
+    auto theme = lambdaui::useEnvironment<lambdaui::ThemeKey>();
     auto clockBinding = clock;
 
     auto secondTarget = [clockBinding] {
@@ -179,39 +179,39 @@ struct ClockHands : lambda::ViewModifiers<ClockHands> {
       return static_cast<float>(clockBinding.evaluate().seconds / 120.0);
     };
     auto secondSpring = [] {
-      return lambda::Transition::spring(980.f, 16.f, 0.46f);
+      return lambdaui::Transition::spring(980.f, 16.f, 0.46f);
     };
     auto slowHandSpring = [] {
-      return lambda::Transition::spring(360.f, 28.f, 0.36f);
+      return lambdaui::Transition::spring(360.f, 28.f, 0.36f);
     };
 
-    auto second = lambda::useAnimated(secondTarget, secondSpring);
-    auto minute = lambda::useAnimated(minuteTarget, slowHandSpring);
-    auto hour = lambda::useAnimated(hourTarget, slowHandSpring);
+    auto second = lambdaui::useAnimated(secondTarget, secondSpring);
+    auto minute = lambdaui::useAnimated(minuteTarget, slowHandSpring);
+    auto hour = lambdaui::useAnimated(hourTarget, slowHandSpring);
 
-    return lambda::Render{
-        .measureFn = [](lambda::LayoutConstraints const& constraints, lambda::LayoutHints const&) {
+    return lambdaui::Render{
+        .measureFn = [](lambdaui::LayoutConstraints const& constraints, lambdaui::LayoutHints const&) {
           return measureClock(constraints);
         },
-        .draw = [theme, hour, minute, second](lambda::Canvas& canvas, lambda::Rect frame) {
-          lambda::Theme const currentTheme = theme.evaluate();
+        .draw = [theme, hour, minute, second](lambdaui::Canvas& canvas, lambdaui::Rect frame) {
+          lambdaui::Theme const currentTheme = theme.evaluate();
           ClockGeometry const geometry = clockGeometry(frame);
           float const hourWidth = std::max(5.f, geometry.side * 0.018f);
           float const minuteWidth = std::max(4.f, geometry.side * 0.013f);
           float const secondWidth = std::max(2.f, geometry.side * 0.006f);
 
-          auto drawHand = [&](float degrees, lambda::Color color, float width, float length, float tail) {
+          auto drawHand = [&](float degrees, lambdaui::Color color, float width, float length, float tail) {
             float const radians = std::fmod(degrees, 360.f) * kPi / 180.f;
             canvas.save();
             canvas.translate(geometry.center);
             canvas.rotate(radians);
-            canvas.drawRect(lambda::Rect{-width * 0.5f, -length, width, length + tail},
-                            lambda::CornerRadius{width * 0.5f},
-                            lambda::FillStyle::solid(color),
-                            lambda::StrokeStyle::none(),
-                            lambda::ShadowStyle{.radius = 5.f,
+            canvas.drawRect(lambdaui::Rect{-width * 0.5f, -length, width, length + tail},
+                            lambdaui::CornerRadius{width * 0.5f},
+                            lambdaui::FillStyle::solid(color),
+                            lambdaui::StrokeStyle::none(),
+                            lambdaui::ShadowStyle{.radius = 5.f,
                                               .offset = {1.5f, 2.5f},
-                                              .color = lambda::Color{0.f, 0.f, 0.f, 0.18f}});
+                                              .color = lambdaui::Color{0.f, 0.f, 0.f, 0.18f}});
             canvas.restore();
           };
 
@@ -224,8 +224,8 @@ struct ClockHands : lambda::ViewModifiers<ClockHands> {
 
           float const dotRadius = geometry.radius * 0.043f;
           canvas.drawCircle(geometry.center, dotRadius,
-                            lambda::FillStyle::solid(currentTheme.dangerColor),
-                            lambda::StrokeStyle::none());
+                            lambdaui::FillStyle::solid(currentTheme.dangerColor),
+                            lambdaui::StrokeStyle::none());
         },
     }
         .flex(1.f);
@@ -236,13 +236,13 @@ struct ClockHands : lambda::ViewModifiers<ClockHands> {
   }
 };
 
-struct Clock : lambda::ViewModifiers<Clock> {
-  lambda::Reactive::Bindable<ClockSnapshot> clock{readClock()};
+struct Clock : lambdaui::ViewModifiers<Clock> {
+  lambdaui::Reactive::Bindable<ClockSnapshot> clock{readClock()};
 
   auto body() const {
     auto clockBinding = clock;
-    return lambda::ZStack{
-        .children = lambda::children(
+    return lambdaui::ZStack{
+        .children = lambdaui::children(
             ClockFace{},
             ClockHands{.clock = clockBinding}.flex(1.f)
         ),

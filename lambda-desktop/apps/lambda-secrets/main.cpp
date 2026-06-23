@@ -22,15 +22,15 @@ int main() {
   std::signal(SIGTERM, handleSignal);
 
   try {
-    auto bus = lambda::dbus::Bus::open(lambda::dbus::BusType::Session);
-    bus.requestName(lambda::system::SecretsService::serviceName);
+    auto bus = lambdaui::dbus::Bus::open(lambdaui::dbus::BusType::Session);
+    bus.requestName(lambdaui::system::SecretsService::serviceName);
 
-    lambda::system::SecretsService secrets(bus);
+    lambdaui::system::SecretsService secrets(bus);
     auto exports = secrets.exportObjects();
 
     std::cerr << "lambda-secrets: exported "
-              << lambda::system::SecretsService::serviceInterfaceName
-              << " on " << lambda::system::SecretsService::objectPath << "\n";
+              << lambdaui::system::SecretsService::serviceInterfaceName
+              << " on " << lambdaui::system::SecretsService::objectPath << "\n";
 
     while (gRunning.load()) {
       (void)bus.waitAndProcess(1000);

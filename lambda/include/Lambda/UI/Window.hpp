@@ -22,7 +22,7 @@
 #include <Lambda/Graphics/Styles.hpp>
 #include <Lambda/UI/WindowChrome.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 struct RootHolder;
 class Element;
@@ -358,4 +358,4 @@ typename EnvironmentKey<T>::Value Window::environmentValue() const {
   return environmentBinding().value<T>();
 }
 
-} // namespace lambda
+} // namespace lambdaui

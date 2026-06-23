@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Centered application dialog shell with a title bar, close affordance, content area, and
 /// optional footer row. The content and footer are supplied by the application.
@@ -88,4 +88,4 @@ struct Dialog : ViewModifiers<Dialog> {
   Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

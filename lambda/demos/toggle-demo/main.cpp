@@ -13,7 +13,7 @@
 #include <cstdio>
 #include <string>
 
-using namespace lambda;
+using namespace lambdaui;
 
 namespace {
 

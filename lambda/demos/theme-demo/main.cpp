@@ -16,7 +16,7 @@
 #include <string_view>
 #include <vector>
 
-using namespace lambda;
+using namespace lambdaui;
 
 namespace {
 
@@ -721,7 +721,7 @@ struct ThemeDemoPage {
                     .children = children(
                         accentDot(theme.accentColor),
                         Text {
-                            .text = "lambda::Theme — Lambda Studio",
+                            .text = "lambdaui::Theme — Lambda Studio",
                             .font = monoFont(theme, 11.f),
                             .color = Color::tertiary(),
                         }
@@ -756,7 +756,7 @@ struct ThemeDemoPage {
                 },
                 Text {
                     .text = "A C++23 UI framework for macOS. Every token in this document is a direct "
-                            "`lambda::Theme` field, and every card is composed from native Lambda views.",
+                            "`lambdaui::Theme` field, and every card is composed from native Lambda views.",
                     .font = Font::title3(),
                     .color = Color::secondary(),
                     .wrapping = TextWrapping::Wrap,
@@ -939,7 +939,7 @@ struct ThemeDemoPage {
         };
 
         Element buttonsCard = componentCard(
-            theme, "Button — lambda::Button",
+            theme, "Button — lambdaui::Button",
             Grid {
                 .columns = static_cast<std::size_t>(narrow ? 2 : 4),
                 .horizontalSpacing = theme.space2,
@@ -951,7 +951,7 @@ struct ThemeDemoPage {
         );
 
         Element badgesCard = componentCard(
-            theme, "Badge — lambda::Text + bubble",
+            theme, "Badge — lambdaui::Text + bubble",
             Grid {
                 .columns = static_cast<std::size_t>(narrow ? 2 : 4),
                 .horizontalSpacing = theme.space2,
@@ -968,7 +968,7 @@ struct ThemeDemoPage {
         );
 
         Element toggleCard = componentCard(
-            theme, "Toggle & Checkbox — lambda::Toggle · lambda::Checkbox",
+            theme, "Toggle & Checkbox — lambdaui::Toggle · lambdaui::Checkbox",
             VStack {
                 .spacing = theme.space3,
                 .alignment = Alignment::Start,
@@ -981,7 +981,7 @@ struct ThemeDemoPage {
         );
 
         Element sliderCard = componentCard(
-            theme, "Slider — lambda::Slider",
+            theme, "Slider — lambdaui::Slider",
             VStack {
                 .spacing = theme.space4,
                 .alignment = Alignment::Start,
@@ -993,7 +993,7 @@ struct ThemeDemoPage {
         );
 
         Element textFieldCard = componentCard(
-            theme, "TextField — lambda::TextInput",
+            theme, "TextField — lambdaui::TextInput",
             VStack {
                 .spacing = theme.space3,
                 .alignment = Alignment::Start,
@@ -1085,7 +1085,7 @@ struct ThemeDemoPage {
                     .color = Color::tertiary(),
                 },
                 Text {
-                    .text = "Lambda v4 · lambda::Theme",
+                    .text = "Lambda v4 · lambdaui::Theme",
                     .font = Font::subheadline(),
                     .color = Color::tertiary(),
                 },

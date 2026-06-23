@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace lambda {
+namespace lambdaui {
 
 struct InternalTextLayoutLeaf : ViewModifiers<InternalTextLayoutLeaf> {
   std::shared_ptr<TextLayout const> layout;
@@ -21,4 +21,4 @@ struct InternalTextLayoutLeaf : ViewModifiers<InternalTextLayoutLeaf> {
   }
 };
 
-} // namespace lambda
+} // namespace lambdaui

@@ -4,7 +4,7 @@
 #include <cassert>
 #include <cmath>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 TraversalContext::TraversalContext() {
   frames_.push_back(Frame{});
@@ -182,4 +182,4 @@ void TraversalContext::popCompositeKeyTail() {
   savedChildIndices_.pop_back();
 }
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

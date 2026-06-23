@@ -1,10 +1,10 @@
 #include <Lambda/Graphics/VulkanContext.hpp>
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 
 #include "Graphics/Vulkan/VulkanContextPrivate.hpp"
 
-namespace lambda {
+namespace lambdaui {
 
 VulkanContext& VulkanContext::instance() {
   static VulkanContext context;
@@ -51,6 +51,6 @@ void VulkanContext::ensureInitialized() {
   detail::vulkanContextEnsureInitialized();
 }
 
-} // namespace lambda
+} // namespace lambdaui
 
-#endif // LAMBDA_VULKAN
+#endif // LAMBDAUI_VULKAN

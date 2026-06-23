@@ -7,7 +7,7 @@
 
 #include <memory>
 
-namespace lambda {
+namespace lambdaui {
 
 struct RootHolder;
 class TextSystem;
@@ -43,4 +43,4 @@ private:
   bool mounted_ = false;
 };
 
-} // namespace lambda
+} // namespace lambdaui

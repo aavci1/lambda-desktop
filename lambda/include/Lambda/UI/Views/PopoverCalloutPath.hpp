@@ -9,7 +9,7 @@
 #include <Lambda/Graphics/Path.hpp>
 #include <Lambda/UI/Views/PopoverPlacement.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Single closed path: merged rounded card + callout triangle. Coordinates are in the popover
 /// element's local space (0,0) top-left of the measured bounds.
@@ -21,4 +21,4 @@ namespace lambda {
 Path buildPopoverCalloutPath(PopoverPlacement placement, CornerRadius cornerRadius, bool arrow,
                              float aw, float ah, Rect cardRect, Size total);
 
-} // namespace lambda
+} // namespace lambdaui

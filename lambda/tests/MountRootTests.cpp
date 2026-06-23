@@ -33,26 +33,26 @@
 
 namespace {
 
-class FakeTextSystem final : public lambda::TextSystem {
+class FakeTextSystem final : public lambdaui::TextSystem {
 public:
-  std::shared_ptr<lambda::TextLayout const>
-  layout(lambda::AttributedString const&, float, lambda::TextLayoutOptions const&) override {
-    return std::make_shared<lambda::TextLayout>();
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(lambdaui::AttributedString const&, float, lambdaui::TextLayoutOptions const&) override {
+    return std::make_shared<lambdaui::TextLayout>();
   }
 
-  std::shared_ptr<lambda::TextLayout const>
-  layout(std::string_view, lambda::Font const&, lambda::Color const&, float,
-         lambda::TextLayoutOptions const&) override {
-    return std::make_shared<lambda::TextLayout>();
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(std::string_view, lambdaui::Font const&, lambdaui::Color const&, float,
+         lambdaui::TextLayoutOptions const&) override {
+    return std::make_shared<lambdaui::TextLayout>();
   }
 
-  lambda::Size measure(lambda::AttributedString const&, float,
-                     lambda::TextLayoutOptions const&) override {
+  lambdaui::Size measure(lambdaui::AttributedString const&, float,
+                     lambdaui::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
-  lambda::Size measure(std::string_view, lambda::Font const&, lambda::Color const&, float,
-                     lambda::TextLayoutOptions const&) override {
+  lambdaui::Size measure(std::string_view, lambdaui::Font const&, lambdaui::Color const&, float,
+                     lambdaui::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
@@ -61,7 +61,7 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
-                                           lambda::Point& outBearing) override {
+                                           lambdaui::Point& outBearing) override {
     outWidth = 0;
     outHeight = 0;
     outBearing = {};
@@ -69,26 +69,26 @@ public:
   }
 };
 
-class MeasuringTextSystem final : public lambda::TextSystem {
+class MeasuringTextSystem final : public lambdaui::TextSystem {
 public:
-  std::shared_ptr<lambda::TextLayout const>
-  layout(lambda::AttributedString const&, float, lambda::TextLayoutOptions const&) override {
-    return std::make_shared<lambda::TextLayout>();
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(lambdaui::AttributedString const&, float, lambdaui::TextLayoutOptions const&) override {
+    return std::make_shared<lambdaui::TextLayout>();
   }
 
-  std::shared_ptr<lambda::TextLayout const>
-  layout(std::string_view, lambda::Font const&, lambda::Color const&, float,
-         lambda::TextLayoutOptions const&) override {
-    return std::make_shared<lambda::TextLayout>();
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(std::string_view, lambdaui::Font const&, lambdaui::Color const&, float,
+         lambdaui::TextLayoutOptions const&) override {
+    return std::make_shared<lambdaui::TextLayout>();
   }
 
-  lambda::Size measure(lambda::AttributedString const&, float,
-                     lambda::TextLayoutOptions const&) override {
+  lambdaui::Size measure(lambdaui::AttributedString const&, float,
+                     lambdaui::TextLayoutOptions const&) override {
     return {80.f, 16.f};
   }
 
-  lambda::Size measure(std::string_view text, lambda::Font const&, lambda::Color const&, float,
-                     lambda::TextLayoutOptions const&) override {
+  lambdaui::Size measure(std::string_view text, lambdaui::Font const&, lambdaui::Color const&, float,
+                     lambdaui::TextLayoutOptions const&) override {
     return {std::max(24.f, static_cast<float>(text.size()) * 6.f), 16.f};
   }
 
@@ -97,7 +97,7 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
-                                           lambda::Point& outBearing) override {
+                                           lambdaui::Point& outBearing) override {
     outWidth = 0;
     outHeight = 0;
     outBearing = {};
@@ -105,41 +105,41 @@ public:
   }
 };
 
-lambda::EnvironmentBinding testEnvironment() {
-  return lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(lambda::Theme::light());
+lambdaui::EnvironmentBinding testEnvironment() {
+  return lambdaui::EnvironmentBinding{}.withValue<lambdaui::ThemeKey>(lambdaui::Theme::light());
 }
 
-lambda::Color solidColor(lambda::scenegraph::RectNode const& rect) {
-  lambda::Color color{};
+lambdaui::Color solidColor(lambdaui::scenegraph::RectNode const& rect) {
+  lambdaui::Color color{};
   CHECK(rect.fill().solidColor(&color));
   return color;
 }
 
 struct IntrinsicBox {
-  lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const&,
-                     lambda::LayoutHints const&, lambda::TextSystem&) const {
+  lambdaui::Size measure(lambdaui::MeasureContext& ctx, lambdaui::LayoutConstraints const&,
+                     lambdaui::LayoutHints const&, lambdaui::TextSystem&) const {
     ctx.advanceChildSlot();
     return {24.f, 12.f};
   }
 
-  std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext&) const {
-    return std::make_unique<lambda::scenegraph::RectNode>(
-        lambda::Rect{0.f, 0.f, 24.f, 12.f});
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext&) const {
+    return std::make_unique<lambdaui::scenegraph::RectNode>(
+        lambdaui::Rect{0.f, 0.f, 24.f, 12.f});
   }
 };
 
 struct StretchBox {
-  lambda::Size intrinsic{24.f, 12.f};
+  lambdaui::Size intrinsic{24.f, 12.f};
 
-  lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const&,
-                     lambda::LayoutHints const&, lambda::TextSystem&) const {
+  lambdaui::Size measure(lambdaui::MeasureContext& ctx, lambdaui::LayoutConstraints const&,
+                     lambdaui::LayoutHints const&, lambdaui::TextSystem&) const {
     ctx.advanceChildSlot();
     return intrinsic;
   }
 
-  std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext& ctx) const {
-    auto sizeFor = [intrinsic = intrinsic](lambda::LayoutConstraints const& constraints) {
-      lambda::Size size{
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext& ctx) const {
+    auto sizeFor = [intrinsic = intrinsic](lambdaui::LayoutConstraints const& constraints) {
+      lambdaui::Size size{
           std::isfinite(constraints.maxWidth) ? constraints.maxWidth : intrinsic.width,
           std::isfinite(constraints.maxHeight) ? constraints.maxHeight : intrinsic.height,
       };
@@ -148,20 +148,20 @@ struct StretchBox {
       return size;
     };
 
-    lambda::Size const initialSize = sizeFor(ctx.constraints());
-    auto group = std::make_unique<lambda::scenegraph::SceneNode>(
-        lambda::Rect{0.f, 0.f, initialSize.width, initialSize.height});
+    lambdaui::Size const initialSize = sizeFor(ctx.constraints());
+    auto group = std::make_unique<lambdaui::scenegraph::SceneNode>(
+        lambdaui::Rect{0.f, 0.f, initialSize.width, initialSize.height});
     auto* rawGroup = group.get();
     rawGroup->setRelayout([rawGroup, sizeFor = std::move(sizeFor)](
-                              lambda::LayoutConstraints const& constraints) {
+                              lambdaui::LayoutConstraints const& constraints) {
       rawGroup->setSize(sizeFor(constraints));
     });
     return group;
   }
 };
 
-lambda::LayoutConstraints fixedConstraints(lambda::Size size) {
-  return lambda::LayoutConstraints{
+lambdaui::LayoutConstraints fixedConstraints(lambdaui::Size size) {
+  return lambdaui::LayoutConstraints{
       .maxWidth = std::max(0.f, size.width),
       .maxHeight = std::max(0.f, size.height),
       .minWidth = std::max(0.f, size.width),
@@ -170,28 +170,28 @@ lambda::LayoutConstraints fixedConstraints(lambda::Size size) {
 }
 
 struct RelayoutProbeFrame {
-  lambda::Element child;
+  lambdaui::Element child;
   int* relayouts = nullptr;
 
-  lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const&,
-                     lambda::LayoutHints const&, lambda::TextSystem&) const {
+  lambdaui::Size measure(lambdaui::MeasureContext& ctx, lambdaui::LayoutConstraints const&,
+                     lambdaui::LayoutHints const&, lambdaui::TextSystem&) const {
     ctx.advanceChildSlot();
     return {100.f, 100.f};
   }
 
-  std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext& ctx) const {
-    auto group = std::make_unique<lambda::scenegraph::SceneNode>(
-        lambda::Rect{0.f, 0.f, 100.f, 100.f});
-    lambda::MountContext childCtx = ctx.childWithSharedScope(fixedConstraints({100.f, 100.f}), ctx.hints());
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext& ctx) const {
+    auto group = std::make_unique<lambdaui::scenegraph::SceneNode>(
+        lambdaui::Rect{0.f, 0.f, 100.f, 100.f});
+    lambdaui::MountContext childCtx = ctx.childWithSharedScope(fixedConstraints({100.f, 100.f}), ctx.hints());
     auto childNode = child.mount(childCtx);
-    lambda::scenegraph::SceneNode* rawChild = childNode.get();
+    lambdaui::scenegraph::SceneNode* rawChild = childNode.get();
     if (childNode) {
       group->appendChild(std::move(childNode));
     }
     auto* rawGroup = group.get();
     rawGroup->setLayoutConstraints(ctx.constraints());
     rawGroup->setRelayout([rawGroup, rawChild, relayouts = relayouts](
-                              lambda::LayoutConstraints const&) {
+                              lambdaui::LayoutConstraints const&) {
       if (relayouts) {
         ++*relayouts;
       }
@@ -205,25 +205,25 @@ struct RelayoutProbeFrame {
 };
 
 struct RelayoutPassthroughFrame {
-  lambda::Element child;
+  lambdaui::Element child;
 
-  lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const& constraints,
-                     lambda::LayoutHints const& hints, lambda::TextSystem& textSystem) const {
+  lambdaui::Size measure(lambdaui::MeasureContext& ctx, lambdaui::LayoutConstraints const& constraints,
+                     lambdaui::LayoutHints const& hints, lambdaui::TextSystem& textSystem) const {
     return child.measure(ctx, constraints, hints, textSystem);
   }
 
-  std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext& ctx) const {
-    auto group = std::make_unique<lambda::scenegraph::SceneNode>();
-    lambda::MountContext childCtx = ctx.childWithSharedScope(ctx.constraints(), ctx.hints());
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext& ctx) const {
+    auto group = std::make_unique<lambdaui::scenegraph::SceneNode>();
+    lambdaui::MountContext childCtx = ctx.childWithSharedScope(ctx.constraints(), ctx.hints());
     auto childNode = child.mount(childCtx);
-    lambda::scenegraph::SceneNode* rawChild = childNode.get();
+    lambdaui::scenegraph::SceneNode* rawChild = childNode.get();
     if (childNode) {
       group->setSize(childNode->size());
       group->appendChild(std::move(childNode));
     }
-    lambda::scenegraph::SceneNode* rawGroup = group.get();
+    lambdaui::scenegraph::SceneNode* rawGroup = group.get();
     rawGroup->setLayoutConstraints(ctx.constraints());
-    rawGroup->setRelayout([rawGroup, rawChild](lambda::LayoutConstraints const& constraints) {
+    rawGroup->setRelayout([rawGroup, rawChild](lambdaui::LayoutConstraints const& constraints) {
       if (rawChild) {
         rawChild->relayout(constraints);
         rawGroup->setSize(rawChild->size());
@@ -235,18 +235,18 @@ struct RelayoutPassthroughFrame {
 
 struct DeepRelayoutNode {
   int depth = 0;
-  lambda::Reactive::Signal<float> width;
+  lambdaui::Reactive::Signal<float> width;
 
-  lambda::Element body() const {
+  lambdaui::Element body() const {
     if (depth <= 0) {
-      return lambda::Element{lambda::Rectangle{}}
+      return lambdaui::Element{lambdaui::Rectangle{}}
           .size([width = width] {
                   return width.get();
                 },
                 10.f);
     }
-    return lambda::Element{RelayoutPassthroughFrame{
-        .child = lambda::Element{DeepRelayoutNode{depth - 1, width}},
+    return lambdaui::Element{RelayoutPassthroughFrame{
+        .child = lambdaui::Element{DeepRelayoutNode{depth - 1, width}},
     }};
   }
 };
@@ -259,97 +259,97 @@ TEST_CASE("MountRoot mounts a static root once") {
   struct Root {
     int* bodyCalls = nullptr;
 
-    lambda::Element body() const {
+    lambdaui::Element body() const {
       ++*bodyCalls;
-      return lambda::Element{lambda::Rectangle{}}
+      return lambdaui::Element{lambdaui::Rectangle{}}
           .size(20.f, 30.f)
-          .fill(lambda::Colors::red);
+          .fill(lambdaui::Colors::red);
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
   CHECK(root.mounted());
   CHECK(bodyCalls == 1);
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
-  auto const& rect = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
-  CHECK(rect.size() == lambda::Size{20.f, 30.f});
-  CHECK(solidColor(rect) == lambda::Colors::red);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Rect);
+  auto const& rect = static_cast<lambdaui::scenegraph::RectNode const&>(sceneGraph.root());
+  CHECK(rect.size() == lambdaui::Size{20.f, 30.f});
+  CHECK(solidColor(rect) == lambdaui::Colors::red);
 }
 
 TEST_CASE("Popover body mounts callout chrome and reserves arrow depth") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::Popover{
-          .content = lambda::Element{lambda::Rectangle{}}
+    lambdaui::Element body() const {
+      return lambdaui::Popover{
+          .content = lambdaui::Element{lambdaui::Rectangle{}}
                          .size(100.f, 20.f)
-                         .fill(lambda::Colors::blue),
-          .placement = lambda::PopoverPlacement::Below,
+                         .fill(lambdaui::Colors::blue),
+          .placement = lambdaui::PopoverPlacement::Below,
           .arrow = true,
       };
     }
   };
 
-  lambda::Theme const theme = lambda::Theme::light();
+  lambdaui::Theme const theme = lambdaui::Theme::light();
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
-      lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(theme),
-      lambda::Size{300.f, 200.f},
+      lambdaui::EnvironmentBinding{}.withValue<lambdaui::ThemeKey>(theme),
+      lambdaui::Size{300.f, 200.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   CHECK(sceneGraph.root().size().width == doctest::Approx(100.f + 2.f * theme.space3));
   CHECK(sceneGraph.root().size().height ==
-        doctest::Approx(20.f + 2.f * theme.space3 + lambda::PopoverCalloutShape::kArrowH));
+        doctest::Approx(20.f + 2.f * theme.space3 + lambdaui::PopoverCalloutShape::kArrowH));
   REQUIRE(sceneGraph.root().children().size() == 2);
-  CHECK(sceneGraph.root().children()[0]->kind() == lambda::scenegraph::SceneNodeKind::Path);
+  CHECK(sceneGraph.root().children()[0]->kind() == lambdaui::scenegraph::SceneNodeKind::Path);
   CHECK(sceneGraph.root().children()[1]->position().y ==
-        doctest::Approx(lambda::PopoverCalloutShape::kArrowH + theme.space3));
+        doctest::Approx(lambdaui::PopoverCalloutShape::kArrowH + theme.space3));
 }
 
 TEST_CASE("Popover body follows resolved overlay placement from environment") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::Popover{
-          .content = lambda::Element{lambda::Rectangle{}}
+    lambdaui::Element body() const {
+      return lambdaui::Popover{
+          .content = lambdaui::Element{lambdaui::Rectangle{}}
                          .size(100.f, 20.f)
-                         .fill(lambda::Colors::blue),
-          .placement = lambda::PopoverPlacement::Below,
+                         .fill(lambdaui::Colors::blue),
+          .placement = lambdaui::PopoverPlacement::Below,
           .arrow = true,
       };
     }
   };
 
-  lambda::Theme const theme = lambda::Theme::light();
+  lambdaui::Theme const theme = lambdaui::Theme::light();
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
-      lambda::EnvironmentBinding{}
-          .withValue<lambda::ThemeKey>(theme)
-          .withValue<lambda::ResolvedOverlayPlacementKey>(
-              std::optional<lambda::OverlayConfig::Placement>{lambda::OverlayConfig::Placement::Above}),
-      lambda::Size{300.f, 200.f},
+      lambdaui::EnvironmentBinding{}
+          .withValue<lambdaui::ThemeKey>(theme)
+          .withValue<lambdaui::ResolvedOverlayPlacementKey>(
+              std::optional<lambdaui::OverlayConfig::Placement>{lambdaui::OverlayConfig::Placement::Above}),
+      lambdaui::Size{300.f, 200.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   REQUIRE(sceneGraph.root().children().size() == 2);
   CHECK(sceneGraph.root().children()[1]->position().y == doctest::Approx(theme.space3));
 }
@@ -360,62 +360,62 @@ TEST_CASE("composite child body is materialized once across measure and mount") 
   struct Probe {
     int* bodyCalls = nullptr;
 
-    lambda::Element body() const {
+    lambdaui::Element body() const {
       ++*bodyCalls;
-      return lambda::Rectangle{}.size(20.f, 10.f);
+      return lambdaui::Rectangle{}.size(20.f, 10.f);
     }
   };
 
   struct Root {
     int* bodyCalls = nullptr;
 
-    lambda::Element body() const {
-      return lambda::VStack{
-          .children = lambda::children(Probe{bodyCalls}),
+    lambdaui::Element body() const {
+      return lambdaui::VStack{
+          .children = lambdaui::children(Probe{bodyCalls}),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
   CHECK(bodyCalls == 1);
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   REQUIRE(sceneGraph.root().children().size() == 1);
-  CHECK(sceneGraph.root().children()[0]->size() == lambda::Size{20.f, 10.f});
+  CHECK(sceneGraph.root().children()[0]->size() == lambdaui::Size{20.f, 10.f});
 }
 
 TEST_CASE("interaction hooks attach reactive signals to mounted interaction data") {
   struct Root {
-    lambda::Element body() const {
-      lambda::Reactive::Signal<bool> hovered = lambda::useHover();
-      lambda::Reactive::Signal<bool> pressed = lambda::usePress();
-      lambda::Reactive::Signal<bool> focused = lambda::useFocus();
-      lambda::Reactive::Signal<bool> keyboardFocused = lambda::useKeyboardFocus();
-      return lambda::Rectangle{}
+    lambdaui::Element body() const {
+      lambdaui::Reactive::Signal<bool> hovered = lambdaui::useHover();
+      lambdaui::Reactive::Signal<bool> pressed = lambdaui::usePress();
+      lambdaui::Reactive::Signal<bool> focused = lambdaui::useFocus();
+      lambdaui::Reactive::Signal<bool> keyboardFocused = lambdaui::useKeyboardFocus();
+      return lambdaui::Rectangle{}
           .size(20.f, 10.f)
           .fill([hovered, pressed, focused, keyboardFocused] {
             if (keyboardFocused.get()) {
-              return lambda::Colors::yellow;
+              return lambdaui::Colors::yellow;
             }
             if (focused.get()) {
-              return lambda::Colors::blue;
+              return lambdaui::Colors::blue;
             }
             if (pressed.get()) {
-              return lambda::Colors::green;
+              return lambdaui::Colors::green;
             }
             if (hovered.get()) {
-              return lambda::Colors::red;
+              return lambdaui::Colors::red;
             }
-            return lambda::Colors::black;
+            return lambdaui::Colors::black;
           })
           .focusable(true)
           .onTap([] {});
@@ -423,101 +423,101 @@ TEST_CASE("interaction hooks attach reactive signals to mounted interaction data
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
-  auto const& rect = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
-  auto const* interaction = lambda::interactionData(rect);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Rect);
+  auto const& rect = static_cast<lambdaui::scenegraph::RectNode const&>(sceneGraph.root());
+  auto const* interaction = lambdaui::interactionData(rect);
   REQUIRE(interaction != nullptr);
-  CHECK(solidColor(rect) == lambda::Colors::black);
+  CHECK(solidColor(rect) == lambdaui::Colors::black);
 
   interaction->hoverSignal.set(true);
-  CHECK(solidColor(rect) == lambda::Colors::red);
+  CHECK(solidColor(rect) == lambdaui::Colors::red);
   interaction->hoverSignal.set(false);
-  CHECK(solidColor(rect) == lambda::Colors::black);
+  CHECK(solidColor(rect) == lambdaui::Colors::black);
 
   interaction->pressSignal.set(true);
-  CHECK(solidColor(rect) == lambda::Colors::green);
+  CHECK(solidColor(rect) == lambdaui::Colors::green);
   interaction->pressSignal.set(false);
-  CHECK(solidColor(rect) == lambda::Colors::black);
+  CHECK(solidColor(rect) == lambdaui::Colors::black);
 
   interaction->focusSignal.set(true);
-  CHECK(solidColor(rect) == lambda::Colors::blue);
+  CHECK(solidColor(rect) == lambdaui::Colors::blue);
   interaction->focusSignal.set(false);
-  CHECK(solidColor(rect) == lambda::Colors::black);
+  CHECK(solidColor(rect) == lambdaui::Colors::black);
 
   interaction->keyboardFocusSignal.set(true);
-  CHECK(solidColor(rect) == lambda::Colors::yellow);
+  CHECK(solidColor(rect) == lambdaui::Colors::yellow);
   interaction->keyboardFocusSignal.set(false);
-  CHECK(solidColor(rect) == lambda::Colors::black);
+  CHECK(solidColor(rect) == lambdaui::Colors::black);
 }
 
 TEST_CASE("modifier envelopes honor fixed viewport constraints") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::Element{IntrinsicBox{}}
+    lambdaui::Element body() const {
+      return lambdaui::Element{IntrinsicBox{}}
           .onTap([] {});
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
-  CHECK(sceneGraph.root().size() == lambda::Size{200.f, 100.f});
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Rect);
+  CHECK(sceneGraph.root().size() == lambdaui::Size{200.f, 100.f});
   REQUIRE(sceneGraph.root().children().size() == 1);
-  CHECK(sceneGraph.root().children()[0]->size() == lambda::Size{24.f, 12.f});
+  CHECK(sceneGraph.root().children()[0]->size() == lambdaui::Size{24.f, 12.f});
 }
 
 TEST_CASE("HStack flex children honor assigned main-axis size with explicit modifiers") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::HStack{
+    lambdaui::Element body() const {
+      return lambdaui::HStack{
           .spacing = 12.f,
-          .alignment = lambda::Alignment::Center,
-          .children = lambda::children(
-              lambda::Element{lambda::Rectangle{}}
+          .alignment = lambdaui::Alignment::Center,
+          .children = lambdaui::children(
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(56.f, 54.f)
-                  .fill(lambda::Colors::red)
+                  .fill(lambdaui::Colors::red)
                   .flex(2.f, 1.f, 0.f),
-              lambda::Rectangle{}.size(56.f, 76.f),
-              lambda::Element{lambda::Rectangle{}}
+              lambdaui::Rectangle{}.size(56.f, 76.f),
+              lambdaui::Element{lambdaui::Rectangle{}}
                   .size(56.f, 40.f)
-                  .fill(lambda::Colors::blue)
+                  .fill(lambdaui::Colors::blue)
                   .flex(1.f, 1.f, 0.f),
-              lambda::Rectangle{}.size(56.f, 54.f)),
+              lambdaui::Rectangle{}.size(56.f, 54.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{704.f, 100.f},
+      lambdaui::Size{704.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 4);
   CHECK(group.children()[0]->size().width == doctest::Approx(370.666f).epsilon(0.001));
@@ -528,30 +528,30 @@ TEST_CASE("HStack flex children honor assigned main-axis size with explicit modi
 
 TEST_CASE("Spacer as composite expands to fill main axis in HStack") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::HStack{
+    lambdaui::Element body() const {
+      return lambdaui::HStack{
           .spacing = 0.f,
-          .alignment = lambda::Alignment::Stretch,
-          .children = lambda::children(
-              lambda::Rectangle{}.size(20.f, 10.f),
-              lambda::Spacer{},
-              lambda::Rectangle{}.size(30.f, 10.f)),
+          .alignment = lambdaui::Alignment::Stretch,
+          .children = lambdaui::children(
+              lambdaui::Rectangle{}.size(20.f, 10.f),
+              lambdaui::Spacer{},
+              lambdaui::Rectangle{}.size(30.f, 10.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 40.f},
+      lambdaui::Size{200.f, 40.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 3);
   CHECK(group.children()[0]->size().width == doctest::Approx(20.f));
@@ -563,29 +563,29 @@ TEST_CASE("Spacer as composite expands to fill main axis in HStack") {
 
 TEST_CASE("Spacer as composite respects user-set minMainSize override") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::HStack{
+    lambdaui::Element body() const {
+      return lambdaui::HStack{
           .spacing = 0.f,
-          .alignment = lambda::Alignment::Stretch,
-          .children = lambda::children(
-              lambda::Spacer{}.minMainSize(40.f),
-              lambda::Rectangle{}.size(10.f, 10.f)),
+          .alignment = lambdaui::Alignment::Stretch,
+          .children = lambdaui::children(
+              lambdaui::Spacer{}.minMainSize(40.f),
+              lambdaui::Rectangle{}.size(10.f, 10.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{30.f, 40.f},
+      lambdaui::Size{30.f, 40.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 2);
   CHECK(group.children()[0]->size().width == doctest::Approx(40.f));
@@ -594,17 +594,17 @@ TEST_CASE("Spacer as composite respects user-set minMainSize override") {
 
 TEST_CASE("Grid expands row tracks when flex assigns extra height") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::VStack{
+    lambdaui::Element body() const {
+      return lambdaui::VStack{
           .spacing = 0.f,
-          .alignment = lambda::Alignment::Stretch,
-          .children = lambda::children(
-              lambda::Grid{
+          .alignment = lambdaui::Alignment::Stretch,
+          .children = lambdaui::children(
+              lambdaui::Grid{
                   .columns = 1,
                   .horizontalSpacing = 0.f,
                   .verticalSpacing = 8.f,
-                  .verticalAlignment = lambda::Alignment::Stretch,
-                  .children = lambda::children(
+                  .verticalAlignment = lambdaui::Alignment::Stretch,
+                  .children = lambdaui::children(
                       StretchBox{{20.f, 10.f}},
                       StretchBox{{20.f, 160.f}},
                       StretchBox{{20.f, 10.f}},
@@ -615,19 +615,19 @@ TEST_CASE("Grid expands row tracks when flex assigns extra height") {
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 400.f},
+      lambdaui::Size{100.f, 400.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   REQUIRE(sceneGraph.root().children().size() == 1);
-  lambda::scenegraph::SceneNode const& gridNode = *sceneGraph.root().children()[0];
+  lambdaui::scenegraph::SceneNode const& gridNode = *sceneGraph.root().children()[0];
   CHECK(gridNode.size().height == doctest::Approx(400.f));
   REQUIRE(gridNode.children().size() == 4);
 
@@ -643,46 +643,46 @@ TEST_CASE("Grid expands row tracks when flex assigns extra height") {
 
 TEST_CASE("reactive size changes relayout ancestor stack alignment") {
   struct Root {
-    lambda::Reactive::Signal<float> barHeight;
+    lambdaui::Reactive::Signal<float> barHeight;
 
-    lambda::Element body() const {
-      return lambda::ZStack{
-          .horizontalAlignment = lambda::Alignment::Center,
-          .verticalAlignment = lambda::Alignment::Center,
-          .children = lambda::children(
-              lambda::Rectangle{}.size(100.f, 100.f),
-              lambda::HStack{
+    lambdaui::Element body() const {
+      return lambdaui::ZStack{
+          .horizontalAlignment = lambdaui::Alignment::Center,
+          .verticalAlignment = lambdaui::Alignment::Center,
+          .children = lambdaui::children(
+              lambdaui::Rectangle{}.size(100.f, 100.f),
+              lambdaui::HStack{
                   .spacing = 8.f,
-                  .alignment = lambda::Alignment::Center,
-                  .children = lambda::children(
-                      lambda::Rectangle{}.size(
+                  .alignment = lambdaui::Alignment::Center,
+                  .children = lambdaui::children(
+                      lambdaui::Rectangle{}.size(
                           20.f,
                           [barHeight = barHeight] {
                             return barHeight.get();
                           }),
-                      lambda::Rectangle{}.size(20.f, 20.f)),
+                      lambdaui::Rectangle{}.size(20.f, 20.f)),
               }),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<float> barHeight{20.f};
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{barHeight}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<float> barHeight{20.f};
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{barHeight}),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 100.f},
+      lambdaui::Size{100.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   auto const& zstack = sceneGraph.root();
   REQUIRE(zstack.children().size() == 2);
   auto const& row = *zstack.children()[1];
-  REQUIRE(row.kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(row.kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   REQUIRE(row.children().size() == 2);
   CHECK(row.position().y == doctest::Approx(40.f));
   CHECK(row.children()[1]->position().y == doctest::Approx(0.f));
@@ -696,23 +696,23 @@ TEST_CASE("reactive size changes relayout ancestor stack alignment") {
 
 TEST_CASE("reactive size relayout propagates through a 32-level scene tree") {
   FakeTextSystem textSystem;
-  lambda::Reactive::Scope scope;
-  lambda::MeasureContext measureContext{textSystem, testEnvironment()};
-  lambda::MountContext context{
+  lambdaui::Reactive::Scope scope;
+  lambdaui::MeasureContext measureContext{textSystem, testEnvironment()};
+  lambdaui::MountContext context{
       scope,
       textSystem,
       measureContext,
-      lambda::LayoutConstraints{
+      lambdaui::LayoutConstraints{
           .maxWidth = std::numeric_limits<float>::infinity(),
           .maxHeight = std::numeric_limits<float>::infinity(),
           .minWidth = 0.f,
           .minHeight = 0.f,
       },
   };
-  lambda::Reactive::Signal<float> width{20.f};
-  lambda::Element root{DeepRelayoutNode{32, width}};
+  lambdaui::Reactive::Signal<float> width{20.f};
+  lambdaui::Element root{DeepRelayoutNode{32, width}};
 
-  std::unique_ptr<lambda::scenegraph::SceneNode> node = root.mount(context);
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> node = root.mount(context);
 
   REQUIRE(node);
   CHECK(node->size().width == doctest::Approx(20.f));
@@ -724,26 +724,26 @@ TEST_CASE("reactive size relayout propagates through a 32-level scene tree") {
 
 TEST_CASE("reactive size relayout stops at unchanged ancestors") {
   struct Root {
-    lambda::Reactive::Signal<float> barHeight;
+    lambdaui::Reactive::Signal<float> barHeight;
     int* outerRelayouts = nullptr;
 
-    lambda::Element body() const {
+    lambdaui::Element body() const {
       return RelayoutProbeFrame{
-          .child = lambda::Element{lambda::ZStack{
-              .horizontalAlignment = lambda::Alignment::Center,
-              .verticalAlignment = lambda::Alignment::Center,
-              .children = lambda::children(
-                  lambda::Rectangle{}.size(100.f, 100.f),
-                  lambda::HStack{
+          .child = lambdaui::Element{lambdaui::ZStack{
+              .horizontalAlignment = lambdaui::Alignment::Center,
+              .verticalAlignment = lambdaui::Alignment::Center,
+              .children = lambdaui::children(
+                  lambdaui::Rectangle{}.size(100.f, 100.f),
+                  lambdaui::HStack{
                       .spacing = 8.f,
-                      .alignment = lambda::Alignment::Center,
-                      .children = lambda::children(
-                          lambda::Rectangle{}.size(
+                      .alignment = lambdaui::Alignment::Center,
+                      .children = lambdaui::children(
+                          lambdaui::Rectangle{}.size(
                               20.f,
                               [barHeight = barHeight] {
                                 return barHeight.get();
                               }),
-                          lambda::Rectangle{}.size(20.f, 20.f)),
+                          lambdaui::Rectangle{}.size(20.f, 20.f)),
                   }),
           }},
           .relayouts = outerRelayouts,
@@ -752,15 +752,15 @@ TEST_CASE("reactive size relayout stops at unchanged ancestors") {
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<float> barHeight{20.f};
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<float> barHeight{20.f};
   int outerRelayouts = 0;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(
           std::in_place, Root{barHeight, &outerRelayouts}),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 100.f},
+      lambdaui::Size{100.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -770,20 +770,20 @@ TEST_CASE("reactive size relayout stops at unchanged ancestors") {
 }
 
 TEST_CASE("MountContext childWithOwnScope creates a scoped owner") {
-  lambda::Reactive::Scope rootScope;
+  lambdaui::Reactive::Scope rootScope;
   FakeTextSystem textSystem;
-  lambda::MeasureContext measureContext{textSystem, testEnvironment()};
-  lambda::MountContext rootContext{
+  lambdaui::MeasureContext measureContext{textSystem, testEnvironment()};
+  lambdaui::MountContext rootContext{
       rootScope,
       textSystem,
       measureContext,
-      lambda::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
+      lambdaui::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
   };
 
   int childCleanups = 0;
   {
-    lambda::MountContext childContext =
-        rootContext.childWithOwnScope(lambda::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
+    lambdaui::MountContext childContext =
+        rootContext.childWithOwnScope(lambdaui::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
     CHECK(&childContext.owner() != &rootContext.owner());
     childContext.owner().onCleanup([&childCleanups] {
       ++childCleanups;
@@ -796,18 +796,18 @@ TEST_CASE("MountContext childWithOwnScope creates a scoped owner") {
 }
 
 TEST_CASE("MountContext childWithSharedScope reuses parent owner") {
-  lambda::Reactive::Scope rootScope;
+  lambdaui::Reactive::Scope rootScope;
   FakeTextSystem textSystem;
-  lambda::MeasureContext measureContext{textSystem, testEnvironment()};
-  lambda::MountContext rootContext{
+  lambdaui::MeasureContext measureContext{textSystem, testEnvironment()};
+  lambdaui::MountContext rootContext{
       rootScope,
       textSystem,
       measureContext,
-      lambda::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
+      lambdaui::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
   };
 
-  lambda::MountContext childContext =
-      rootContext.childWithSharedScope(lambda::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
+  lambdaui::MountContext childContext =
+      rootContext.childWithSharedScope(lambdaui::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
   CHECK(&childContext.owner() == &rootContext.owner());
 }
 
@@ -817,10 +817,10 @@ TEST_CASE("MountRoot resize relayouts without remounting root state") {
   struct Root {
     int* bodyCalls = nullptr;
 
-    lambda::Element body() const {
+    lambdaui::Element body() const {
       ++*bodyCalls;
-      auto width = lambda::useState(20.f);
-      return lambda::Element{lambda::Rectangle{}}
+      auto width = lambdaui::useState(20.f);
+      return lambdaui::Element{lambdaui::Rectangle{}}
           .width([width] {
             return width.get();
           })
@@ -832,25 +832,25 @@ TEST_CASE("MountRoot resize relayouts without remounting root state") {
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
-  auto const* interaction = lambda::interactionData(sceneGraph.root());
+  auto const* interaction = lambdaui::interactionData(sceneGraph.root());
   REQUIRE(interaction != nullptr);
   REQUIRE(interaction->onTap);
-  interaction->onTap(lambda::MouseButton::Left);
-  CHECK(sceneGraph.root().size() == lambda::Size{64.f, 10.f});
+  interaction->onTap(lambdaui::MouseButton::Left);
+  CHECK(sceneGraph.root().size() == lambdaui::Size{64.f, 10.f});
 
-  root.resize(lambda::Size{320.f, 180.f}, sceneGraph);
+  root.resize(lambdaui::Size{320.f, 180.f}, sceneGraph);
 
   CHECK(bodyCalls == 1);
-  CHECK(sceneGraph.root().size() == lambda::Size{64.f, 10.f});
+  CHECK(sceneGraph.root().size() == lambdaui::Size{64.f, 10.f});
 }
 
 TEST_CASE("MountRoot resize updates viewport-sized root without remount") {
@@ -859,28 +859,28 @@ TEST_CASE("MountRoot resize updates viewport-sized root without remount") {
   struct Root {
     int* bodyCalls = nullptr;
 
-    lambda::Element body() const {
+    lambdaui::Element body() const {
       ++*bodyCalls;
-      return lambda::Rectangle{};
+      return lambdaui::Rectangle{};
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
-  CHECK(sceneGraph.root().size() == lambda::Size{200.f, 100.f});
+  CHECK(sceneGraph.root().size() == lambdaui::Size{200.f, 100.f});
 
-  root.resize(lambda::Size{320.f, 180.f}, sceneGraph);
+  root.resize(lambdaui::Size{320.f, 180.f}, sceneGraph);
 
   CHECK(bodyCalls == 1);
-  CHECK(sceneGraph.root().size() == lambda::Size{320.f, 180.f});
+  CHECK(sceneGraph.root().size() == lambdaui::Size{320.f, 180.f});
 }
 
 TEST_CASE("MountRoot repeated resize applies each viewport synchronously without remount") {
@@ -889,27 +889,27 @@ TEST_CASE("MountRoot repeated resize applies each viewport synchronously without
   struct Root {
     int* bodyCalls = nullptr;
 
-    lambda::Element body() const {
+    lambdaui::Element body() const {
       ++*bodyCalls;
-      return lambda::VStack{
-          .children = lambda::children(lambda::Rectangle{}, lambda::Rectangle{}),
+      return lambdaui::VStack{
+          .children = lambdaui::children(lambdaui::Rectangle{}, lambdaui::Rectangle{}),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
   for (int i = 0; i < 64; ++i) {
-    lambda::Size const next{200.f + static_cast<float>(i * 3),
+    lambdaui::Size const next{200.f + static_cast<float>(i * 3),
                           100.f + static_cast<float>(i * 2)};
     root.resize(next, sceneGraph);
     CHECK(sceneGraph.root().size() == next);
@@ -920,35 +920,35 @@ TEST_CASE("MountRoot repeated resize applies each viewport synchronously without
 
 TEST_CASE("centered stack text keeps intrinsic width while resizing") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::VStack{
-          .alignment = lambda::Alignment::Center,
-          .children = lambda::children(lambda::Text{
+    lambdaui::Element body() const {
+      return lambdaui::VStack{
+          .alignment = lambdaui::Alignment::Center,
+          .children = lambdaui::children(lambdaui::Text{
               .text = "Title",
-              .font = lambda::Font::largeTitle(),
+              .font = lambdaui::Font::largeTitle(),
           }),
       };
     }
   };
 
   MeasuringTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   REQUIRE(sceneGraph.root().children().size() == 1);
   auto const& title = *sceneGraph.root().children()[0];
   CHECK(title.size().width == doctest::Approx(30.f));
   CHECK(title.position().x == doctest::Approx(85.f));
 
-  root.resize(lambda::Size{320.f, 100.f}, sceneGraph);
+  root.resize(lambdaui::Size{320.f, 100.f}, sceneGraph);
 
   CHECK(title.size().width == doctest::Approx(30.f));
   CHECK(title.position().x == doctest::Approx(145.f));
@@ -956,43 +956,43 @@ TEST_CASE("centered stack text keeps intrinsic width while resizing") {
 
 TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::ScrollView{
-          .axis = lambda::ScrollAxis::Vertical,
-          .children = lambda::children(
-              lambda::Element{lambda::VStack{
+    lambdaui::Element body() const {
+      return lambdaui::ScrollView{
+          .axis = lambdaui::ScrollAxis::Vertical,
+          .children = lambdaui::children(
+              lambdaui::Element{lambdaui::VStack{
                   .spacing = 16.f,
-                  .alignment = lambda::Alignment::Stretch,
-                  .children = lambda::children(
-                      lambda::Text{.text = "Alert demo", .font = lambda::Font::largeTitle()},
-                      lambda::Text{.text = "Modal alerts via useAlert().",
-                                 .font = lambda::Font::body(),
-                                 .wrapping = lambda::TextWrapping::Wrap},
-                      lambda::Text{.text = "Tap a button to open an alert.",
-                                 .font = lambda::Font::footnote(),
-                                 .wrapping = lambda::TextWrapping::Wrap}),
+                  .alignment = lambdaui::Alignment::Stretch,
+                  .children = lambdaui::children(
+                      lambdaui::Text{.text = "Alert demo", .font = lambdaui::Font::largeTitle()},
+                      lambdaui::Text{.text = "Modal alerts via useAlert().",
+                                 .font = lambdaui::Font::body(),
+                                 .wrapping = lambdaui::TextWrapping::Wrap},
+                      lambdaui::Text{.text = "Tap a button to open an alert.",
+                                 .font = lambdaui::Font::footnote(),
+                                 .wrapping = lambdaui::TextWrapping::Wrap}),
               }}.padding(24.f)),
       };
     }
   };
 
   MeasuringTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{800.f, 800.f},
+      lambdaui::Size{800.f, 800.f},
   };
 
   root.mount(sceneGraph);
 
-  auto const& viewport = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
+  auto const& viewport = static_cast<lambdaui::scenegraph::RectNode const&>(sceneGraph.root());
   auto const& content = *viewport.children()[0];
-  REQUIRE(content.kind() == lambda::scenegraph::SceneNodeKind::Group);
-  auto const& paddedStack = static_cast<lambda::scenegraph::RectNode const&>(*content.children()[0]);
+  REQUIRE(content.kind() == lambdaui::scenegraph::SceneNodeKind::Group);
+  auto const& paddedStack = static_cast<lambdaui::scenegraph::RectNode const&>(*content.children()[0]);
   auto const& stack = *paddedStack.children()[0];
-  REQUIRE(stack.kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(stack.kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   REQUIRE(stack.children().size() == 3);
   float const firstY = stack.children()[0]->position().y;
   float const secondY = stack.children()[1]->position().y;
@@ -1001,7 +1001,7 @@ TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
   CHECK(secondY > firstY);
   CHECK(thirdY > secondY);
 
-  root.resize(lambda::Size{900.f, 700.f}, sceneGraph);
+  root.resize(lambdaui::Size{900.f, 700.f}, sceneGraph);
 
   CHECK(stack.children()[0]->position().y == doctest::Approx(firstY));
   CHECK(stack.children()[1]->position().y == doctest::Approx(secondY));
@@ -1010,52 +1010,52 @@ TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
 
 TEST_CASE("modifier-wrapped root ScrollView keeps viewport height after resize") {
   struct Root {
-    lambda::Reactive::Signal<lambda::Point> offset;
-    lambda::Reactive::Signal<lambda::Size> viewport;
-    lambda::Reactive::Signal<lambda::Size> content;
+    lambdaui::Reactive::Signal<lambdaui::Point> offset;
+    lambdaui::Reactive::Signal<lambdaui::Size> viewport;
+    lambdaui::Reactive::Signal<lambdaui::Size> content;
 
-    lambda::Element body() const {
-      return lambda::ScrollView{
-          .axis = lambda::ScrollAxis::Vertical,
+    lambdaui::Element body() const {
+      return lambdaui::ScrollView{
+          .axis = lambdaui::ScrollAxis::Vertical,
           .scrollOffset = offset,
           .viewportSize = viewport,
           .contentSize = content,
-          .children = lambda::children(
-              lambda::Rectangle{}.size(80.f, 100.f),
-              lambda::Rectangle{}.size(80.f, 100.f)),
-      }.fill(lambda::Colors::red);
+          .children = lambdaui::children(
+              lambdaui::Rectangle{}.size(80.f, 100.f),
+              lambdaui::Rectangle{}.size(80.f, 100.f)),
+      }.fill(lambdaui::Colors::red);
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 0.f}};
-  lambda::Reactive::Signal<lambda::Size> viewport{lambda::Size{}};
-  lambda::Reactive::Signal<lambda::Size> content{lambda::Size{}};
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<lambdaui::Point> offset{lambdaui::Point{0.f, 0.f}};
+  lambdaui::Reactive::Signal<lambdaui::Size> viewport{lambdaui::Size{}};
+  lambdaui::Reactive::Signal<lambdaui::Size> content{lambdaui::Size{}};
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(
           std::in_place, Root{offset, viewport, content}),
       textSystem,
       testEnvironment(),
-      lambda::Size{80.f, 80.f},
+      lambdaui::Size{80.f, 80.f},
   };
 
   root.mount(sceneGraph);
-  root.resize(lambda::Size{80.f, 60.f}, sceneGraph);
+  root.resize(lambdaui::Size{80.f, 60.f}, sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
-  auto const& wrapper = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Rect);
+  auto const& wrapper = static_cast<lambdaui::scenegraph::RectNode const&>(sceneGraph.root());
   REQUIRE(wrapper.children().size() == 1);
-  auto const& scrollViewport = static_cast<lambda::scenegraph::RectNode const&>(*wrapper.children()[0]);
-  CHECK(wrapper.size() == lambda::Size{80.f, 60.f});
-  CHECK(scrollViewport.size() == lambda::Size{80.f, 60.f});
+  auto const& scrollViewport = static_cast<lambdaui::scenegraph::RectNode const&>(*wrapper.children()[0]);
+  CHECK(wrapper.size() == lambdaui::Size{80.f, 60.f});
+  CHECK(scrollViewport.size() == lambdaui::Size{80.f, 60.f});
   CHECK(viewport.get().height == doctest::Approx(60.f));
   CHECK(content.get().height == doctest::Approx(200.f));
 
-  auto const* scrollInteraction = lambda::interactionData(scrollViewport);
+  auto const* scrollInteraction = lambdaui::interactionData(scrollViewport);
   REQUIRE(scrollInteraction != nullptr);
   REQUIRE(scrollInteraction->onScroll);
-  scrollInteraction->onScroll(lambda::Vec2{0.f, -12.f});
+  scrollInteraction->onScroll(lambdaui::Vec2{0.f, -12.f});
 
   CHECK(offset.get().y == doctest::Approx(12.f));
   REQUIRE(scrollViewport.children().size() >= 1);
@@ -1064,50 +1064,50 @@ TEST_CASE("modifier-wrapped root ScrollView keeps viewport height after resize")
 
 TEST_CASE("ScrollView resize preserves child positions when already scrolled") {
   struct Root {
-    lambda::Reactive::Signal<lambda::Point> offset;
+    lambdaui::Reactive::Signal<lambdaui::Point> offset;
 
-    lambda::Element body() const {
-      return lambda::ScrollView{
-          .axis = lambda::ScrollAxis::Vertical,
+    lambdaui::Element body() const {
+      return lambdaui::ScrollView{
+          .axis = lambdaui::ScrollAxis::Vertical,
           .scrollOffset = offset,
-          .children = lambda::children(
-              lambda::Rectangle{}.size(80.f, 80.f),
-              lambda::Rectangle{}.size(80.f, 80.f)),
+          .children = lambdaui::children(
+              lambdaui::Rectangle{}.size(80.f, 80.f),
+              lambdaui::Rectangle{}.size(80.f, 80.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 20.f}};
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{offset}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<lambdaui::Point> offset{lambdaui::Point{0.f, 20.f}};
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{offset}),
       textSystem,
       testEnvironment(),
-      lambda::Size{80.f, 80.f},
+      lambdaui::Size{80.f, 80.f},
   };
 
   root.mount(sceneGraph);
 
-  auto const& viewport = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
+  auto const& viewport = static_cast<lambdaui::scenegraph::RectNode const&>(sceneGraph.root());
   REQUIRE(viewport.children().size() >= 1);
   auto const& content = *viewport.children()[0];
-  REQUIRE(content.kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(content.kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   REQUIRE(content.children().size() == 2);
   CHECK(content.position().y == doctest::Approx(-20.f));
   CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
   CHECK(content.children()[1]->position().y == doctest::Approx(80.f));
 
-  root.resize(lambda::Size{80.f, 60.f}, sceneGraph);
+  root.resize(lambdaui::Size{80.f, 60.f}, sceneGraph);
 
   CHECK(content.position().y == doctest::Approx(-20.f));
   CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
   CHECK(content.children()[1]->position().y == doctest::Approx(80.f));
 
-  auto const* scrollInteraction = lambda::interactionData(viewport);
+  auto const* scrollInteraction = lambdaui::interactionData(viewport);
   REQUIRE(scrollInteraction != nullptr);
   REQUIRE(scrollInteraction->onScroll);
-  scrollInteraction->onScroll(lambda::Vec2{0.f, -12.f});
+  scrollInteraction->onScroll(lambdaui::Vec2{0.f, -12.f});
 
   CHECK(content.position().y == doctest::Approx(-32.f));
   CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
@@ -1116,34 +1116,34 @@ TEST_CASE("ScrollView resize preserves child positions when already scrolled") {
 
 TEST_CASE("ScaleAroundCenter relayout keeps reactive scale binding alive") {
   struct Root {
-    lambda::Reactive::Signal<float> scale;
+    lambdaui::Reactive::Signal<float> scale;
 
-    lambda::Element body() const {
-      return lambda::ScaleAroundCenter{
-          .scale = lambda::Reactive::Bindable<float>{[scale = scale] {
+    lambdaui::Element body() const {
+      return lambdaui::ScaleAroundCenter{
+          .scale = lambdaui::Reactive::Bindable<float>{[scale = scale] {
             return scale.get();
           }},
-          .child = lambda::Element{lambda::Rectangle{}}
+          .child = lambdaui::Element{lambdaui::Rectangle{}}
                        .size(20.f, 10.f)
-                       .fill(lambda::Colors::red),
+                       .fill(lambdaui::Colors::red),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<float> scale{0.96f};
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{scale}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<float> scale{0.96f};
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{scale}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
   scale.set(0.92f);
 
-  root.resize(lambda::Size{320.f, 180.f}, sceneGraph);
+  root.resize(lambdaui::Size{320.f, 180.f}, sceneGraph);
 
   CHECK(sceneGraph.root().size().width >= 20.f);
   CHECK(sceneGraph.root().size().height >= 10.f);
@@ -1151,24 +1151,24 @@ TEST_CASE("ScaleAroundCenter relayout keeps reactive scale binding alive") {
 
 TEST_CASE("element transform modifiers compose in call order") {
   struct TranslateThenRotate {
-    lambda::Element body() const {
-      return lambda::Rectangle{}
+    lambdaui::Element body() const {
+      return lambdaui::Rectangle{}
           .size(10.f, 10.f)
           .translate(10.f, 0.f)
           .rotate(1.5707963267948966f);
     }
   };
   struct RotateThenTranslate {
-    lambda::Element body() const {
-      return lambda::Rectangle{}
+    lambdaui::Element body() const {
+      return lambdaui::Rectangle{}
           .size(10.f, 10.f)
           .rotate(1.5707963267948966f)
           .translate(10.f, 0.f);
     }
   };
   struct RepeatedTranslate {
-    lambda::Element body() const {
-      return lambda::Rectangle{}
+    lambdaui::Element body() const {
+      return lambdaui::Rectangle{}
           .size(10.f, 10.f)
           .translate(10.f, 2.f)
           .translate(3.f, 4.f);
@@ -1176,39 +1176,39 @@ TEST_CASE("element transform modifiers compose in call order") {
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph translateThenRotateGraph;
-  lambda::scenegraph::SceneGraph rotateThenTranslateGraph;
-  lambda::scenegraph::SceneGraph repeatedTranslateGraph;
+  lambdaui::scenegraph::SceneGraph translateThenRotateGraph;
+  lambdaui::scenegraph::SceneGraph rotateThenTranslateGraph;
+  lambdaui::scenegraph::SceneGraph repeatedTranslateGraph;
 
-  lambda::MountRoot translateThenRotateRoot{
-      std::make_unique<lambda::TypedRootHolder<TranslateThenRotate>>(std::in_place),
+  lambdaui::MountRoot translateThenRotateRoot{
+      std::make_unique<lambdaui::TypedRootHolder<TranslateThenRotate>>(std::in_place),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 100.f},
+      lambdaui::Size{100.f, 100.f},
   };
-  lambda::MountRoot rotateThenTranslateRoot{
-      std::make_unique<lambda::TypedRootHolder<RotateThenTranslate>>(std::in_place),
+  lambdaui::MountRoot rotateThenTranslateRoot{
+      std::make_unique<lambdaui::TypedRootHolder<RotateThenTranslate>>(std::in_place),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 100.f},
+      lambdaui::Size{100.f, 100.f},
   };
-  lambda::MountRoot repeatedTranslateRoot{
-      std::make_unique<lambda::TypedRootHolder<RepeatedTranslate>>(std::in_place),
+  lambdaui::MountRoot repeatedTranslateRoot{
+      std::make_unique<lambdaui::TypedRootHolder<RepeatedTranslate>>(std::in_place),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 100.f},
+      lambdaui::Size{100.f, 100.f},
   };
 
   translateThenRotateRoot.mount(translateThenRotateGraph);
   rotateThenTranslateRoot.mount(rotateThenTranslateGraph);
   repeatedTranslateRoot.mount(repeatedTranslateGraph);
 
-  lambda::Point const sample{1.f, 0.f};
-  lambda::Point const tr =
+  lambdaui::Point const sample{1.f, 0.f};
+  lambdaui::Point const tr =
       translateThenRotateGraph.root().transform().apply(sample);
-  lambda::Point const rt =
+  lambdaui::Point const rt =
       rotateThenTranslateGraph.root().transform().apply(sample);
-  lambda::Point const repeated =
+  lambdaui::Point const repeated =
       repeatedTranslateGraph.root().transform().apply({0.f, 0.f});
 
   CHECK(tr.x == doctest::Approx(10.f).epsilon(0.001));
@@ -1221,12 +1221,12 @@ TEST_CASE("element transform modifiers compose in call order") {
 
 TEST_CASE("reactive element transform modifiers update mounted node") {
   struct Root {
-    lambda::Reactive::Signal<float> dx;
+    lambdaui::Reactive::Signal<float> dx;
 
-    lambda::Element body() const {
-      return lambda::Rectangle{}
+    lambdaui::Element body() const {
+      return lambdaui::Rectangle{}
           .size(10.f, 10.f)
-          .translate(lambda::Reactive::Bindable<float>{[dx = dx] {
+          .translate(lambdaui::Reactive::Bindable<float>{[dx = dx] {
             return dx.get();
           }},
                      0.f);
@@ -1234,13 +1234,13 @@ TEST_CASE("reactive element transform modifiers update mounted node") {
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<float> dx{0.f};
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{dx}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<float> dx{0.f};
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{dx}),
       textSystem,
       testEnvironment(),
-      lambda::Size{100.f, 100.f},
+      lambdaui::Size{100.f, 100.f},
   };
 
   root.mount(sceneGraph);
@@ -1253,11 +1253,11 @@ TEST_CASE("reactive element transform modifiers update mounted node") {
 
 TEST_CASE("TextInput fills finite assigned stack width") {
   struct Root {
-    lambda::Element body() const {
-      auto value = lambda::useState(std::string{"hello"});
-      return lambda::VStack{
-          .alignment = lambda::Alignment::Start,
-          .children = lambda::children(lambda::TextInput{
+    lambdaui::Element body() const {
+      auto value = lambdaui::useState(std::string{"hello"});
+      return lambdaui::VStack{
+          .alignment = lambdaui::Alignment::Start,
+          .children = lambdaui::children(lambdaui::TextInput{
               .value = value,
               .multiline = true,
               .multilineHeight = {.fixed = 40.f},
@@ -1267,61 +1267,61 @@ TEST_CASE("TextInput fills finite assigned stack width") {
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{180.f, 100.f},
+      lambdaui::Size{180.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   REQUIRE(sceneGraph.root().children().size() == 1);
   CHECK(sceneGraph.root().children()[0]->size().width == doctest::Approx(180.f));
 }
 
 TEST_CASE("ScrollView mount emits overlay indicators for overflowing content") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::ScrollView{
-          .axis = lambda::ScrollAxis::Vertical,
-          .children = lambda::children(
-              lambda::Rectangle{}.size(60.f, 30.f),
-              lambda::Rectangle{}.size(60.f, 30.f)),
+    lambdaui::Element body() const {
+      return lambdaui::ScrollView{
+          .axis = lambdaui::ScrollAxis::Vertical,
+          .children = lambdaui::children(
+              lambdaui::Rectangle{}.size(60.f, 30.f),
+              lambdaui::Rectangle{}.size(60.f, 30.f)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{80.f, 40.f},
+      lambdaui::Size{80.f, 40.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
-  auto const& viewport = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Rect);
+  auto const& viewport = static_cast<lambdaui::scenegraph::RectNode const&>(sceneGraph.root());
   CHECK(viewport.clipsContents());
   REQUIRE(viewport.children().size() == 2);
-  REQUIRE(viewport.children()[0]->kind() == lambda::scenegraph::SceneNodeKind::Group);
-  REQUIRE(viewport.children()[1]->kind() == lambda::scenegraph::SceneNodeKind::Rect);
+  REQUIRE(viewport.children()[0]->kind() == lambdaui::scenegraph::SceneNodeKind::Group);
+  REQUIRE(viewport.children()[1]->kind() == lambdaui::scenegraph::SceneNodeKind::Rect);
 
-  auto const& overlay = static_cast<lambda::scenegraph::RectNode const&>(*viewport.children()[1]);
+  auto const& overlay = static_cast<lambdaui::scenegraph::RectNode const&>(*viewport.children()[1]);
   CHECK(overlay.opacity() == doctest::Approx(0.f));
   REQUIRE(overlay.children().size() == 1);
   CHECK(overlay.children()[0]->bounds().x == doctest::Approx(73.f));
   float const initialIndicatorY = overlay.children()[0]->bounds().y;
 
-  auto const* scrollInteraction = lambda::interactionData(viewport);
+  auto const* scrollInteraction = lambdaui::interactionData(viewport);
   REQUIRE(scrollInteraction != nullptr);
   REQUIRE(scrollInteraction->onScroll);
-  scrollInteraction->onScroll(lambda::Vec2{0.f, -12.f});
+  scrollInteraction->onScroll(lambdaui::Vec2{0.f, -12.f});
 
   CHECK(viewport.children()[0]->position().y == doctest::Approx(-12.f));
   CHECK(overlay.opacity() == doctest::Approx(0.f));
@@ -1330,15 +1330,15 @@ TEST_CASE("ScrollView mount emits overlay indicators for overflowing content") {
 
 TEST_CASE("ScrollView updates content size when mounted content grows reactively") {
   struct Root {
-    lambda::Reactive::Signal<float> childHeight;
-    lambda::Reactive::Signal<lambda::Size> contentSize;
+    lambdaui::Reactive::Signal<float> childHeight;
+    lambdaui::Reactive::Signal<lambdaui::Size> contentSize;
 
-    lambda::Element body() const {
-      return lambda::ScrollView{
-          .axis = lambda::ScrollAxis::Vertical,
+    lambdaui::Element body() const {
+      return lambdaui::ScrollView{
+          .axis = lambdaui::ScrollAxis::Vertical,
           .contentSize = contentSize,
-          .children = lambda::children(
-              lambda::Rectangle{}.size(60.f, [childHeight = childHeight] {
+          .children = lambdaui::children(
+              lambdaui::Rectangle{}.size(60.f, [childHeight = childHeight] {
                 return childHeight.get();
               })),
       };
@@ -1346,15 +1346,15 @@ TEST_CASE("ScrollView updates content size when mounted content grows reactively
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<float> childHeight{30.f};
-  lambda::Reactive::Signal<lambda::Size> contentSize{};
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<float> childHeight{30.f};
+  lambdaui::Reactive::Signal<lambdaui::Size> contentSize{};
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(
           std::in_place, Root{.childHeight = childHeight, .contentSize = contentSize}),
       textSystem,
       testEnvironment(),
-      lambda::Size{80.f, 40.f},
+      lambdaui::Size{80.f, 40.f},
   };
 
   root.mount(sceneGraph);
@@ -1363,81 +1363,81 @@ TEST_CASE("ScrollView updates content size when mounted content grows reactively
   childHeight = 90.f;
 
   CHECK(contentSize.peek().height == doctest::Approx(90.f));
-  auto const* scrollInteraction = lambda::interactionData(sceneGraph.root());
+  auto const* scrollInteraction = lambdaui::interactionData(sceneGraph.root());
   REQUIRE(scrollInteraction != nullptr);
-  scrollInteraction->onScroll(lambda::Vec2{0.f, -50.f});
+  scrollInteraction->onScroll(lambdaui::Vec2{0.f, -50.f});
   REQUIRE(sceneGraph.root().children().size() >= 1);
   CHECK(sceneGraph.root().children()[0]->position().y == doctest::Approx(-50.f));
 }
 
 TEST_CASE("MountRoot keeps Bindable effects scoped to the mount") {
   struct Root {
-    lambda::Reactive::Signal<bool> hot;
+    lambdaui::Reactive::Signal<bool> hot;
 
-    lambda::Element body() const {
-      return lambda::Element{lambda::Rectangle{}}
+    lambdaui::Element body() const {
+      return lambdaui::Element{lambdaui::Rectangle{}}
           .size(10.f, 10.f)
           .fill([hot = hot] {
-            return hot() ? lambda::Colors::red : lambda::Colors::blue;
+            return hot() ? lambdaui::Colors::red : lambdaui::Colors::blue;
           });
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<bool> hot{true};
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{hot}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<bool> hot{true};
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{hot}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Rect);
-  auto const& rect = static_cast<lambda::scenegraph::RectNode const&>(sceneGraph.root());
-  CHECK(solidColor(rect) == lambda::Colors::red);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Rect);
+  auto const& rect = static_cast<lambdaui::scenegraph::RectNode const&>(sceneGraph.root());
+  CHECK(solidColor(rect) == lambdaui::Colors::red);
 
   hot.set(false);
-  CHECK(solidColor(rect) == lambda::Colors::blue);
+  CHECK(solidColor(rect) == lambdaui::Colors::blue);
 
   root.unmount(sceneGraph);
   CHECK_FALSE(root.mounted());
-  CHECK(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  CHECK(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   hot.set(true);
 }
 
 TEST_CASE("nested body component bindings inherit the root redraw callback") {
   struct Child {
-    lambda::Reactive::Signal<bool> hot;
+    lambdaui::Reactive::Signal<bool> hot;
 
-    lambda::Element body() const {
-      return lambda::Element{lambda::Rectangle{}}
+    lambdaui::Element body() const {
+      return lambdaui::Element{lambdaui::Rectangle{}}
           .size(10.f, 10.f)
           .fill([hot = hot] {
-            return hot() ? lambda::Colors::red : lambda::Colors::blue;
+            return hot() ? lambdaui::Colors::red : lambdaui::Colors::blue;
           });
     }
   };
 
   struct Root {
-    lambda::Reactive::Signal<bool> hot;
+    lambdaui::Reactive::Signal<bool> hot;
 
-    lambda::Element body() const {
-      return lambda::Element{Child{hot}};
+    lambdaui::Element body() const {
+      return lambdaui::Element{Child{hot}};
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::Reactive::Signal<bool> hot{true};
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::Reactive::Signal<bool> hot{true};
   int redraws = 0;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{hot}),
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{hot}),
       textSystem,
       testEnvironment(),
-      lambda::Size{200.f, 100.f},
+      lambdaui::Size{200.f, 100.f},
       [&] { ++redraws; },
   };
 
@@ -1450,36 +1450,36 @@ TEST_CASE("nested body component bindings inherit the root redraw callback") {
 
 TEST_CASE("container mounting composes slot origin with explicit child position") {
   struct Root {
-    lambda::Element body() const {
-      return lambda::ZStack{
-          .horizontalAlignment = lambda::Alignment::Start,
-          .verticalAlignment = lambda::Alignment::Start,
-          .children = lambda::children(
-              lambda::Rectangle{}
+    lambdaui::Element body() const {
+      return lambdaui::ZStack{
+          .horizontalAlignment = lambdaui::Alignment::Start,
+          .verticalAlignment = lambdaui::Alignment::Start,
+          .children = lambdaui::children(
+              lambdaui::Rectangle{}
                   .size(44.f, 26.f)
-                  .fill(lambda::Colors::blue),
-              lambda::Rectangle{}
+                  .fill(lambdaui::Colors::blue),
+              lambdaui::Rectangle{}
                   .size(18.f, 18.f)
                   .position(22.f, 4.f)
-                  .fill(lambda::Colors::red)),
+                  .fill(lambdaui::Colors::red)),
       };
     }
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
       testEnvironment(),
-      lambda::Size{44.f, 26.f},
+      lambdaui::Size{44.f, 26.f},
   };
 
   root.mount(sceneGraph);
 
-  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().kind() == lambdaui::scenegraph::SceneNodeKind::Group);
   auto const& group = sceneGraph.root();
   REQUIRE(group.children().size() == 2);
-  CHECK(group.children()[0]->position() == lambda::Point{0.f, 0.f});
-  CHECK(group.children()[1]->position() == lambda::Point{22.f, 4.f});
+  CHECK(group.children()[0]->position() == lambdaui::Point{0.f, 0.f});
+  CHECK(group.children()[1]->position() == lambdaui::Point{22.f, 4.f});
 }

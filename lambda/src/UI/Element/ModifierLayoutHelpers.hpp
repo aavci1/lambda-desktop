@@ -5,7 +5,7 @@
 #include <cmath>
 #include <optional>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 inline bool modifierAxisStretches(std::optional<Alignment> const& alignment) {
   return alignment.has_value() && *alignment == Alignment::Stretch;
@@ -65,4 +65,4 @@ inline bool hasResolvedModifierHeight(LayoutConstraints const& constraints,
   return modifierStackAssignedHeight(constraints, hints) > 0.f || hasExplicitHeight;
 }
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

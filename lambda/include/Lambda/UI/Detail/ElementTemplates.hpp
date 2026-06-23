@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace detail {
 
@@ -138,4 +138,4 @@ std::vector<Element> children(Args&&... args) {
   return v;
 }
 
-} // namespace lambda
+} // namespace lambdaui

@@ -25,7 +25,7 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
@@ -500,14 +500,14 @@ bool clearMatchedConfigureCommit(WaylandServer::Impl::Surface* surface) {
 }
 
 void traceConfigureCommitLag(char const* event, WaylandServer::Impl::Surface const* surface) {
-  if (!surface || !lambda::detail::resizeTraceEnabled() || surface->lastConfigureSerial == 0) return;
+  if (!surface || !lambdaui::detail::resizeTraceEnabled() || surface->lastConfigureSerial == 0) return;
   std::int32_t const committedWidth = committedDisplayWidth(surface);
   std::int32_t const committedHeight = committedDisplayHeight(surface);
   if (!surface->awaitingConfigureCommit && committedWidth == surface->lastConfigureWidth &&
       committedHeight == surface->lastConfigureHeight) {
     return;
   }
-  std::uint64_t const now = lambda::detail::resizeTraceTimestampNanoseconds();
+  std::uint64_t const now = lambdaui::detail::resizeTraceTimestampNanoseconds();
   double const lagMs = surface->lastConfigureSentNsec > 0
                            ? static_cast<double>(now - surface->lastConfigureSentNsec) / 1'000'000.0
                            : 0.0;
@@ -1192,8 +1192,8 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
           appendCommittedBufferDamage(surface);
           bumpSurfaceSerial(surface);
           serialBumped = true;
-          if (lambda::detail::resizeTraceMetadataEnabled()) {
-            surface->lastCommitNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+          if (lambdaui::detail::resizeTraceMetadataEnabled()) {
+            surface->lastCommitNsec = lambdaui::detail::resizeTraceTimestampNanoseconds();
           }
           traceResizeSurface("commit-damage-shm", surface);
         }
@@ -1211,8 +1211,8 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
         appendCommittedBufferDamage(surface);
         bumpSurfaceSerial(surface);
         serialBumped = true;
-        if (lambda::detail::resizeTraceMetadataEnabled()) {
-          surface->lastCommitNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+        if (lambdaui::detail::resizeTraceMetadataEnabled()) {
+          surface->lastCommitNsec = lambdaui::detail::resizeTraceTimestampNanoseconds();
         }
         traceResizeSurface("commit-damage-dmabuf", surface);
       }
@@ -1270,8 +1270,8 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
         surface->dmabufBuffer = nullptr;
         appendCommittedBufferDamage(surface);
         bumpSurfaceSerial(surface);
-        if (lambda::detail::resizeTraceMetadataEnabled()) {
-          surface->lastCommitNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+        if (lambdaui::detail::resizeTraceMetadataEnabled()) {
+          surface->lastCommitNsec = lambdaui::detail::resizeTraceTimestampNanoseconds();
         }
         traceResizeSurface("commit-shm", surface);
         traceCrashSurfaceCommit(surface, "shm", 1u, static_cast<std::uint32_t>(shmBuffer->format));
@@ -1303,8 +1303,8 @@ void commitSurfacePendingState(WaylandServer::Impl::Surface* surface,
         surface->dmabufBuffer = dmabufBuffer;
         appendCommittedBufferDamage(surface);
         bumpSurfaceSerial(surface);
-        if (lambda::detail::resizeTraceMetadataEnabled()) {
-          surface->lastCommitNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+        if (lambdaui::detail::resizeTraceMetadataEnabled()) {
+          surface->lastCommitNsec = lambdaui::detail::resizeTraceTimestampNanoseconds();
         }
         traceResizeSurface("commit-dmabuf", surface);
         traceCrashSurfaceCommit(surface, "dmabuf", 2u, dmabufBuffer->format);
@@ -1526,4 +1526,4 @@ wl_resource* WaylandServer::Impl::createSurface(wl_client* client, std::uint32_t
   return resource;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

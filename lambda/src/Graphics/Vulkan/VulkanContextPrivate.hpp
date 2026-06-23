@@ -7,7 +7,7 @@
 struct VmaAllocator_T;
 using VmaAllocator = VmaAllocator_T*;
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 VkInstance vulkanContextInstance() noexcept;
 VkPhysicalDevice vulkanContextPhysicalDevice() noexcept;
@@ -21,4 +21,4 @@ void vulkanContextAddRequiredInstanceExtension(char const* name);
 void vulkanContextAddRequiredDeviceExtension(char const* name);
 void vulkanContextEnsureInitialized();
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

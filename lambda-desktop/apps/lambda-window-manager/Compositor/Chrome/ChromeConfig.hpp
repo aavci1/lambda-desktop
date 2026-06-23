@@ -5,7 +5,7 @@
 
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct GlassEffectConfig {
   float blurRadius = 64.f;
@@ -52,4 +52,4 @@ struct ChromeConfig {
   Color unfocusedShadowColor = Color{20.f / 255.f, 30.f / 255.f, 60.f / 255.f, 0.32f};
 };
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

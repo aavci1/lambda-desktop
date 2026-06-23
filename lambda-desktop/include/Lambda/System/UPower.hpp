@@ -10,7 +10,7 @@
 #include <functional>
 #include <string>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 enum class UPowerDeviceState : std::uint32_t {
   Unknown = 0,
@@ -82,4 +82,4 @@ private:
 
 [[nodiscard]] std::string formatUPowerBatteryStatus(UPowerDisplayDevice const& device);
 
-} // namespace lambda::system
+} // namespace lambdaui::system

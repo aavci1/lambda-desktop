@@ -11,7 +11,7 @@
 #include <string>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 void focusSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, std::uint32_t timeMs);
 
@@ -193,4 +193,4 @@ void bindActivation(wl_client* client, void* data, std::uint32_t version, std::u
   wl_resource_set_implementation(resource, &activationImpl, data, nullptr);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

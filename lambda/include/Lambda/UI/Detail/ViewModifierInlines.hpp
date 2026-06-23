@@ -2,7 +2,7 @@
 
 #include <Lambda/UI/ViewModifiers.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 template<typename Derived>
 Element ViewModifiers<Derived>::padding(Reactive::Bindable<float> all) && {
@@ -306,4 +306,4 @@ Element ViewModifiers<Derived>::environment(
       .template environment<Key>(std::move(signal));
 }
 
-} // namespace lambda
+} // namespace lambdaui

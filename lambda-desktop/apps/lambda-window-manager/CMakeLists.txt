@@ -2,7 +2,7 @@ if(NOT UNIX OR APPLE)
   message(FATAL_ERROR "lambda-window-manager is only supported on Linux.")
 endif()
 
-include(${LAMBDA_FRAMEWORK_CMAKE_DIR}/LambdaWaylandProtocols.cmake)
+include(${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaWaylandProtocols.cmake)
 find_package(PkgConfig REQUIRED)
 find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
@@ -49,29 +49,29 @@ lambda_wayland_server_protocols(lambda_wayland_server_protocols
 file(GLOB_RECURSE LAMBDA_WINDOW_MANAGER_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/Compositor/*.cpp")
 
-lambda_add_app(lambda-window-manager
+lambdaui_add_app(lambda-window-manager
   APP_NAME "Lambda Window Manager"
   BUNDLE_IDENTIFIER "io.lambda.window-manager"
   COMMENT "Window manager for Lambda Desktop"
   SOURCES
     ${LAMBDA_WINDOW_MANAGER_SOURCES}
-    ${LAMBDA_FRAMEWORK_PROTOCOL_DIR}/wayland/tablet-v2-tool-interface-stub.c
-    ${PROJECT_SOURCE_DIR}/lambda-desktop/apps/lambda-shell/Shell/ShellAppRegistry.cpp
-    ${PROJECT_SOURCE_DIR}/lambda-desktop/apps/lambda-shell/Shell/ShellIpc.cpp
-    ${LAMBDA_FRAMEWORK_SOURCE_DIR}/Platform/Linux/KmsApplication.cpp
-    ${LAMBDA_FRAMEWORK_SOURCE_DIR}/Platform/Linux/KmsInput.cpp
-    ${LAMBDA_FRAMEWORK_SOURCE_DIR}/Platform/Linux/KmsOutput.cpp
-    ${LAMBDA_FRAMEWORK_SOURCE_DIR}/Platform/Linux/KmsWindow.cpp)
+    ${LAMBDAUI_FRAMEWORK_PROTOCOL_DIR}/wayland/tablet-v2-tool-interface-stub.c
+    ${LAMBDA_DESKTOP_SOURCE_DIR}/apps/lambda-shell/Shell/ShellAppRegistry.cpp
+    ${LAMBDA_DESKTOP_SOURCE_DIR}/apps/lambda-shell/Shell/ShellIpc.cpp
+    ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}/Platform/Linux/KmsApplication.cpp
+    ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}/Platform/Linux/KmsInput.cpp
+    ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}/Platform/Linux/KmsOutput.cpp
+    ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}/Platform/Linux/KmsWindow.cpp)
 
 target_include_directories(lambda-window-manager PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${PROJECT_SOURCE_DIR}/lambda-desktop/apps/lambda-shell
-  ${LAMBDA_FRAMEWORK_SOURCE_DIR}
-  ${LAMBDA_FRAMEWORK_PROTOCOL_DIR}/wayland
+  ${LAMBDA_DESKTOP_SOURCE_DIR}/apps/lambda-shell
+  ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}
+  ${LAMBDAUI_FRAMEWORK_PROTOCOL_DIR}/wayland
   ${LAMBDA_WAYLAND_PROTOCOL_DIR})
 target_compile_options(lambda-window-manager PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(lambda-window-manager PRIVATE
-  lambda
+  lambdaui
   lambda_wayland_server_protocols
   tomlplusplus::tomlplusplus
   PkgConfig::WAYLAND_SERVER

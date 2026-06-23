@@ -3,7 +3,7 @@
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/Theme.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spec, Theme const& theme) {
   return ResolvedInputFieldChrome{
@@ -23,4 +23,4 @@ ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spe
   };
 }
 
-} // namespace lambda
+} // namespace lambdaui

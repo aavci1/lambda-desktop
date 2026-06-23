@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Owning glyph arenas for layouts produced on the slow path or by `cloneTextLayout`. Spans in `runs`
 /// point into these vectors.
@@ -59,7 +59,7 @@ struct TextLayout {
 
   /// Keeps backing storage alive for non-owning spans in `runs` (paragraph layout variant glyph arenas).
   /// Holds `std::shared_ptr` to internal variant storage as type-erased `void`; do not dereference from API code.
-  lambda::detail::SmallVector<std::shared_ptr<void>, 8> variantRefs;
+  lambdaui::detail::SmallVector<std::shared_ptr<void>, 8> variantRefs;
 
   /// Slow-path / cloned owning storage when spans point here instead of into `variantRefs`.
   std::unique_ptr<TextLayoutStorage> ownedStorage;
@@ -75,4 +75,4 @@ void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAf
 /// Deep copy of a layout (mutable). Copies glyph data into `ownedStorage`; clears `variantRefs`.
 std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src);
 
-} // namespace lambda
+} // namespace lambdaui

@@ -17,7 +17,7 @@
 #include <functional>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 /// UTF-8 text in a view box. Size follows layout constraints; use \ref Element modifiers for
 /// interaction, padding, frames, backgrounds, and flex.
@@ -58,4 +58,4 @@ struct Text : ViewModifiers<Text> {
   }
 };
 
-} // namespace lambda
+} // namespace lambdaui

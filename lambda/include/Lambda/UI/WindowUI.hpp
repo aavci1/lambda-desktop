@@ -10,7 +10,7 @@
 
 #include <type_traits>
 
-namespace lambda {
+namespace lambdaui {
 
 template<typename C>
 void Window::setView(C&& component) {
@@ -23,4 +23,4 @@ void Window::setView() {
   setViewRoot(std::make_unique<TypedRootHolder<C>>(std::in_place));
 }
 
-} // namespace lambda
+} // namespace lambdaui

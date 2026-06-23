@@ -8,7 +8,7 @@
 #include <Lambda/Core/Color.hpp>
 #include <Lambda/Graphics/Font.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 /**
  * Resolved row height for single-line inputs (\ref TextInput, \ref Picker trigger, etc.).
@@ -19,4 +19,4 @@ namespace lambda {
  */
 float resolvedInputFieldHeight(Font const& font, Color textInkColor, float paddingV, float explicitHeight);
 
-} // namespace lambda
+} // namespace lambdaui

@@ -6,8 +6,8 @@
 
 #include "Window.hpp"
 
-namespace lambda::platform {
+namespace lambdaui::platform {
 
 std::unique_ptr<Window> createWindow(WindowConfig const& config);
 
-} // namespace lambda::platform
+} // namespace lambdaui::platform

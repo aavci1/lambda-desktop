@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 enum class PortalFileChooserKind {
   OpenFile,
@@ -58,4 +58,4 @@ private:
   std::map<std::string, dbus::Slot> requestSlots_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

@@ -11,7 +11,7 @@
 struct VmaAllocation_T;
 using VmaAllocation = VmaAllocation_T *;
 
-namespace lambda {
+namespace lambdaui {
 
 class Image;
 
@@ -115,4 +115,4 @@ struct VulkanPathVertex {
   float clipEntries[kVulkanRoundedClipEntryCount][4]{};
 };
 
-} // namespace lambda
+} // namespace lambdaui

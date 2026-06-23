@@ -20,7 +20,7 @@
 #include <filesystem>
 #include <string>
 
-namespace lambda::compositor::diagnostics {
+namespace lambdaui::compositor::diagnostics {
 namespace {
 
 std::atomic<int> gCrashLogFd{-1};
@@ -181,4 +181,4 @@ void crashLogSignalSafe(char const* message) noexcept {
   fsync(fd);
 }
 
-} // namespace lambda::compositor::diagnostics
+} // namespace lambdaui::compositor::diagnostics

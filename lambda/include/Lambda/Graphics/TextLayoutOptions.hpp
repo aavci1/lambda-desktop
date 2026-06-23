@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class HorizontalAlignment : std::uint8_t { Leading, Center, Trailing };
 
@@ -43,4 +43,4 @@ struct TextLayoutOptions {
   bool suppressCacheStats = false;
 };
 
-} // namespace lambda
+} // namespace lambdaui

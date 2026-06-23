@@ -12,7 +12,7 @@
 
 #include <functional>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Horizontal slider for a bounded numeric \ref value. Supports pointer drag, scroll wheel where
 /// applicable, arrow keys with optional \c step snapping, and focus styling.
@@ -59,4 +59,4 @@ struct Slider : ViewModifiers<Slider> {
   Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

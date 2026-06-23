@@ -12,7 +12,7 @@
 #include <optional>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 struct CommandDescriptor {
   /// Stable, namespaced command id. If empty, the registration key is used.
@@ -53,4 +53,4 @@ struct CommandDescriptor {
 
 using ActionDescriptor = CommandDescriptor;
 
-} // namespace lambda
+} // namespace lambdaui

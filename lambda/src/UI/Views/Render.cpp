@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -132,4 +132,4 @@ std::unique_ptr<scenegraph::SceneNode> Render::mount(MountContext& ctx) const {
   return node;
 }
 
-} // namespace lambda
+} // namespace lambdaui

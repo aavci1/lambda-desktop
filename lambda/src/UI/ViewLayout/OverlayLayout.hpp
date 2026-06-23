@@ -6,7 +6,7 @@
 #include <Lambda/UI/Views/PopoverCalloutPath.hpp>
 #include <Lambda/UI/Views/PopoverCalloutShape.hpp>
 
-namespace lambda::layout {
+namespace lambdaui::layout {
 
 struct PopoverCalloutLayout {
   Size totalSize{};
@@ -25,4 +25,4 @@ PopoverCalloutLayout layoutPopoverCallout(PopoverCalloutShape const& value, Size
 
 Rect resolveOverlayFrame(Size windowSize, OverlayConfig const& config, Rect contentBounds);
 
-} // namespace lambda::layout
+} // namespace lambdaui::layout

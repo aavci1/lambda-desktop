@@ -12,7 +12,7 @@
 #include <functional>
 #include <memory>
 
-namespace lambda {
+namespace lambdaui {
 
 class MountContext;
 namespace scenegraph {
@@ -50,4 +50,4 @@ struct Render : ViewModifiers<Render> {
   }
 };
 
-} // namespace lambda
+} // namespace lambdaui

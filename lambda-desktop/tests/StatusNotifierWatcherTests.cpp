@@ -15,9 +15,9 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::pumpUntil;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::pumpUntil;
+using lambdaui::testing::dbus::startPrivateBus;
 
 template <typename Callback>
 class ScopeExit {
@@ -33,26 +33,26 @@ bool contains(std::vector<std::string> const& values, std::string const& needle)
   return std::find(values.begin(), values.end(), needle) != values.end();
 }
 
-lambda::dbus::ByteArray bytes(std::vector<std::uint8_t> values) {
-  return lambda::dbus::ByteArray{.values = std::move(values)};
+lambdaui::dbus::ByteArray bytes(std::vector<std::uint8_t> values) {
+  return lambdaui::dbus::ByteArray{.values = std::move(values)};
 }
 
-std::shared_ptr<lambda::dbus::StructValue>
+std::shared_ptr<lambdaui::dbus::StructValue>
 pixmapStruct(std::int32_t width, std::int32_t height, std::vector<std::uint8_t> data) {
-  return std::make_shared<lambda::dbus::StructValue>(
-      lambda::dbus::StructValue{.signature = "iiay",
+  return std::make_shared<lambdaui::dbus::StructValue>(
+      lambdaui::dbus::StructValue{.signature = "iiay",
                                 .fields = {width, height, bytes(std::move(data))}});
 }
 
-std::shared_ptr<lambda::dbus::ArrayValue>
-pixmapArray(std::vector<lambda::dbus::BasicValue> values) {
-  return std::make_shared<lambda::dbus::ArrayValue>(
-      lambda::dbus::ArrayValue{.elementSignature = "(iiay)", .values = std::move(values)});
+std::shared_ptr<lambdaui::dbus::ArrayValue>
+pixmapArray(std::vector<lambdaui::dbus::BasicValue> values) {
+  return std::make_shared<lambdaui::dbus::ArrayValue>(
+      lambdaui::dbus::ArrayValue{.elementSignature = "(iiay)", .values = std::move(values)});
 }
 
-std::shared_ptr<lambda::dbus::StructValue> tooltipValue() {
-  return std::make_shared<lambda::dbus::StructValue>(
-      lambda::dbus::StructValue{
+std::shared_ptr<lambdaui::dbus::StructValue> tooltipValue() {
+  return std::make_shared<lambdaui::dbus::StructValue>(
+      lambdaui::dbus::StructValue{
           .signature = "sa(iiay)ss",
           .fields = {std::string("software-update"),
                      pixmapArray({pixmapStruct(1, 1, {0xff, 0x00, 0x00, 0xff})}),
@@ -61,13 +61,13 @@ std::shared_ptr<lambda::dbus::StructValue> tooltipValue() {
       });
 }
 
-lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updater",
+lambdaui::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updater",
                                                        std::string iconName = "software-update",
                                                        std::string status = "Active") {
-  return lambda::dbus::ObjectDefinition{
+  return lambdaui::dbus::ObjectDefinition{
       .methods = {},
       .properties = {
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "Category",
               .value = std::string("ApplicationStatus"),
@@ -75,7 +75,7 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "Id",
               .value = std::string("lambda-updater"),
@@ -83,7 +83,7 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "Title",
               .value = std::move(title),
@@ -91,7 +91,7 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "Status",
               .value = std::move(status),
@@ -99,7 +99,7 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "IconName",
               .value = std::move(iconName),
@@ -107,7 +107,7 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "IconPixmap",
               .value = pixmapArray({pixmapStruct(2, 1, {0x10, 0x20, 0x30, 0x40,
@@ -116,7 +116,7 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "OverlayIconName",
               .value = std::string(""),
@@ -124,7 +124,7 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "OverlayIconPixmap",
               .value = pixmapArray({pixmapStruct(1, 1, {0x01, 0x02, 0x03, 0x04})}),
@@ -132,7 +132,7 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "AttentionIconName",
               .value = std::string("dialog-warning"),
@@ -140,7 +140,7 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "AttentionIconPixmap",
               .value = pixmapArray({pixmapStruct(1, 1, {0xaa, 0xbb, 0xcc, 0xdd})}),
@@ -148,7 +148,7 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "ToolTip",
               .value = tooltipValue(),
@@ -156,15 +156,15 @@ lambda::dbus::ObjectDefinition fakeStatusNotifierItem(std::string title = "Updat
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "Menu",
-              .value = lambda::dbus::ObjectPath{"/Menu"},
+              .value = lambdaui::dbus::ObjectPath{"/Menu"},
               .writable = false,
               .getter = nullptr,
               .setter = nullptr,
           },
-          lambda::dbus::ExportedProperty{
+          lambdaui::dbus::ExportedProperty{
               .interface = "org.kde.StatusNotifierItem",
               .name = "ItemIsMenu",
               .value = false,
@@ -191,11 +191,11 @@ TEST_CASE("StatusNotifierWatcherService registers hosts and items") {
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto observer = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::StatusNotifierWatcherService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto observer = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::StatusNotifierWatcherService::serviceName);
 
-  lambda::system::StatusNotifierWatcherService watcher(serviceBus);
+  lambdaui::system::StatusNotifierWatcherService watcher(serviceBus);
   auto objectSlot = watcher.exportObject();
   auto ownerSlot = watcher.watchNameOwners();
 
@@ -216,58 +216,58 @@ TEST_CASE("StatusNotifierWatcherService registers hosts and items") {
   std::string registeredItem;
   std::string unregisteredItem;
   auto hostSignalSlot = observer.matchSignal(
-      lambda::dbus::SignalMatch{
-          .sender = lambda::system::StatusNotifierWatcherService::serviceName,
-          .path = lambda::system::StatusNotifierWatcherService::objectPath,
-          .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+      lambdaui::dbus::SignalMatch{
+          .sender = lambdaui::system::StatusNotifierWatcherService::serviceName,
+          .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+          .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
           .member = "StatusNotifierHostRegistered",
       },
-      [&](lambda::dbus::Message&) {
+      [&](lambdaui::dbus::Message&) {
         ++hostRegisteredSignals;
       });
   auto itemRegisteredSlot = observer.matchSignal(
-      lambda::dbus::SignalMatch{
-          .sender = lambda::system::StatusNotifierWatcherService::serviceName,
-          .path = lambda::system::StatusNotifierWatcherService::objectPath,
-          .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+      lambdaui::dbus::SignalMatch{
+          .sender = lambdaui::system::StatusNotifierWatcherService::serviceName,
+          .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+          .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
           .member = "StatusNotifierItemRegistered",
       },
-      [&](lambda::dbus::Message& message) {
+      [&](lambdaui::dbus::Message& message) {
         registeredItem = message.readString();
       });
   auto itemUnregisteredSlot = observer.matchSignal(
-      lambda::dbus::SignalMatch{
-          .sender = lambda::system::StatusNotifierWatcherService::serviceName,
-          .path = lambda::system::StatusNotifierWatcherService::objectPath,
-          .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+      lambdaui::dbus::SignalMatch{
+          .sender = lambdaui::system::StatusNotifierWatcherService::serviceName,
+          .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+          .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
           .member = "StatusNotifierItemUnregistered",
       },
-      [&](lambda::dbus::Message& message) {
+      [&](lambdaui::dbus::Message& message) {
         unregisteredItem = message.readString();
       });
 
-  CHECK(std::get<std::int32_t>(observer.getProperty(lambda::dbus::PropertyAddress{
-                                .destination = lambda::system::StatusNotifierWatcherService::serviceName,
-                                .path = lambda::system::StatusNotifierWatcherService::objectPath,
-                                .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+  CHECK(std::get<std::int32_t>(observer.getProperty(lambdaui::dbus::PropertyAddress{
+                                .destination = lambdaui::system::StatusNotifierWatcherService::serviceName,
+                                .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+                                .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
                                 .name = "ProtocolVersion",
                             },
-                            "i")) == lambda::system::StatusNotifierWatcherService::protocolVersion);
-  CHECK(std::get<bool>(observer.getProperty(lambda::dbus::PropertyAddress{
-                         .destination = lambda::system::StatusNotifierWatcherService::serviceName,
-                         .path = lambda::system::StatusNotifierWatcherService::objectPath,
-                         .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+                            "i")) == lambdaui::system::StatusNotifierWatcherService::protocolVersion);
+  CHECK(std::get<bool>(observer.getProperty(lambdaui::dbus::PropertyAddress{
+                         .destination = lambdaui::system::StatusNotifierWatcherService::serviceName,
+                         .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+                         .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
                          .name = "IsStatusNotifierHostRegistered",
                      },
                      "b")) == false);
 
   std::string const hostName = "org.freedesktop.StatusNotifierHost.lambda-test";
-  auto hostBus = lambda::dbus::Bus::openAddress(privateBus->address);
+  auto hostBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
   hostBus.requestName(hostName);
-  auto hostReply = hostBus.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::StatusNotifierWatcherService::serviceName,
-      .path = lambda::system::StatusNotifierWatcherService::objectPath,
-      .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+  auto hostReply = hostBus.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::StatusNotifierWatcherService::serviceName,
+      .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+      .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
       .member = "RegisterStatusNotifierHost",
       .arguments = {hostName},
   });
@@ -276,22 +276,22 @@ TEST_CASE("StatusNotifierWatcherService registers hosts and items") {
   CHECK(pumpUntil(observer,
                   [&] { return hostRegisteredSignals == 1; },
                   std::chrono::milliseconds(500)));
-  CHECK(std::get<bool>(observer.getProperty(lambda::dbus::PropertyAddress{
-                         .destination = lambda::system::StatusNotifierWatcherService::serviceName,
-                         .path = lambda::system::StatusNotifierWatcherService::objectPath,
-                         .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+  CHECK(std::get<bool>(observer.getProperty(lambdaui::dbus::PropertyAddress{
+                         .destination = lambdaui::system::StatusNotifierWatcherService::serviceName,
+                         .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+                         .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
                          .name = "IsStatusNotifierHostRegistered",
                      },
                      "b")) == true);
 
   std::string const itemName = "org.freedesktop.StatusNotifierItem.lambda-test-1";
   {
-    auto itemBus = lambda::dbus::Bus::openAddress(privateBus->address);
+    auto itemBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
     itemBus.requestName(itemName);
-    auto itemReply = itemBus.call(lambda::dbus::MethodCall{
-        .destination = lambda::system::StatusNotifierWatcherService::serviceName,
-        .path = lambda::system::StatusNotifierWatcherService::objectPath,
-        .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+    auto itemReply = itemBus.call(lambdaui::dbus::MethodCall{
+        .destination = lambdaui::system::StatusNotifierWatcherService::serviceName,
+        .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+        .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
         .member = "RegisterStatusNotifierItem",
         .arguments = {itemName},
     });
@@ -301,45 +301,45 @@ TEST_CASE("StatusNotifierWatcherService registers hosts and items") {
                     [&] { return registeredItem == itemName; },
                     std::chrono::milliseconds(500)));
 
-    auto items = std::get<lambda::dbus::StringArray>(observer.getProperty(
-        lambda::dbus::PropertyAddress{
-            .destination = lambda::system::StatusNotifierWatcherService::serviceName,
-            .path = lambda::system::StatusNotifierWatcherService::objectPath,
-            .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+    auto items = std::get<lambdaui::dbus::StringArray>(observer.getProperty(
+        lambdaui::dbus::PropertyAddress{
+            .destination = lambdaui::system::StatusNotifierWatcherService::serviceName,
+            .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+            .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
             .name = "RegisteredStatusNotifierItems",
         },
         "as")).values;
     CHECK(contains(items, itemName));
 
-    auto allReply = observer.call(lambda::dbus::MethodCall{
-        .destination = lambda::system::StatusNotifierWatcherService::serviceName,
-        .path = lambda::system::StatusNotifierWatcherService::objectPath,
+    auto allReply = observer.call(lambdaui::dbus::MethodCall{
+        .destination = lambdaui::system::StatusNotifierWatcherService::serviceName,
+        .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
         .interface = "org.freedesktop.DBus.Properties",
         .member = "GetAll",
-        .arguments = {std::string(lambda::system::StatusNotifierWatcherService::interfaceName)},
+        .arguments = {std::string(lambdaui::system::StatusNotifierWatcherService::interfaceName)},
     });
     auto all = allReply.readVariantDictionary();
-    auto allItems = std::get<lambda::dbus::StringArray>(
+    auto allItems = std::get<lambdaui::dbus::StringArray>(
         all.values.at("RegisteredStatusNotifierItems")).values;
     CHECK(contains(allItems, itemName));
     CHECK(std::get<bool>(all.values.at("IsStatusNotifierHostRegistered")) == true);
     CHECK(std::get<std::int32_t>(all.values.at("ProtocolVersion")) ==
-          lambda::system::StatusNotifierWatcherService::protocolVersion);
+          lambdaui::system::StatusNotifierWatcherService::protocolVersion);
   }
 
   CHECK(pumpUntil(observer,
                   [&] { return unregisteredItem == itemName; },
                   std::chrono::milliseconds(1000)));
 
-  auto pathItemBus = lambda::dbus::Bus::openAddress(privateBus->address);
+  auto pathItemBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
   std::string const pathItemName = pathItemBus.uniqueName();
   registeredItem.clear();
-  auto pathReply = pathItemBus.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::StatusNotifierWatcherService::serviceName,
-      .path = lambda::system::StatusNotifierWatcherService::objectPath,
-      .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+  auto pathReply = pathItemBus.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::StatusNotifierWatcherService::serviceName,
+      .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+      .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
       .member = "RegisterStatusNotifierItem",
-      .arguments = {std::string(lambda::system::StatusNotifierWatcherService::defaultItemObjectPath)},
+      .arguments = {std::string(lambdaui::system::StatusNotifierWatcherService::defaultItemObjectPath)},
   });
   CHECK(pathReply.valid());
   serviceBus.flush();
@@ -349,7 +349,7 @@ TEST_CASE("StatusNotifierWatcherService registers hosts and items") {
   REQUIRE(watcher.items().size() == 1);
   CHECK(watcher.items()[0].serviceName == pathItemName);
   CHECK(watcher.items()[0].objectPath ==
-        lambda::system::StatusNotifierWatcherService::defaultItemObjectPath);
+        lambdaui::system::StatusNotifierWatcherService::defaultItemObjectPath);
 }
 
 TEST_CASE("StatusNotifierWatcherClient reads and watches registered items") {
@@ -359,10 +359,10 @@ TEST_CASE("StatusNotifierWatcherClient reads and watches registered items") {
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::StatusNotifierWatcherService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::StatusNotifierWatcherService::serviceName);
 
-  lambda::system::StatusNotifierWatcherService watcher(serviceBus);
+  lambdaui::system::StatusNotifierWatcherService watcher(serviceBus);
   auto objectSlot = watcher.exportObject();
   auto ownerSlot = watcher.watchNameOwners();
 
@@ -379,8 +379,8 @@ TEST_CASE("StatusNotifierWatcherClient reads and watches registered items") {
     }
   });
 
-  auto client = lambda::system::StatusNotifierWatcherClient(
-      lambda::dbus::Bus::openAddress(privateBus->address));
+  auto client = lambdaui::system::StatusNotifierWatcherClient(
+      lambdaui::dbus::Bus::openAddress(privateBus->address));
   client.registerHost("org.freedesktop.StatusNotifierHost.lambda-test-client");
   CHECK(watcher.isHostRegistered());
 
@@ -390,12 +390,12 @@ TEST_CASE("StatusNotifierWatcherClient reads and watches registered items") {
   });
 
   std::string const itemName = "org.freedesktop.StatusNotifierItem.lambda-test-client";
-  auto itemBus = lambda::dbus::Bus::openAddress(privateBus->address);
+  auto itemBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
   itemBus.requestName(itemName);
-  auto itemReply = itemBus.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::StatusNotifierWatcherService::serviceName,
-      .path = lambda::system::StatusNotifierWatcherService::objectPath,
-      .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+  auto itemReply = itemBus.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::StatusNotifierWatcherService::serviceName,
+      .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+      .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
       .member = "RegisterStatusNotifierItem",
       .arguments = {itemName},
   });
@@ -419,10 +419,10 @@ TEST_CASE("StatusNotifierWatcherClient reads StatusNotifierItem properties") {
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::StatusNotifierWatcherService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::StatusNotifierWatcherService::serviceName);
 
-  lambda::system::StatusNotifierWatcherService watcher(serviceBus);
+  lambdaui::system::StatusNotifierWatcherService watcher(serviceBus);
   auto watcherSlot = watcher.exportObject();
   auto ownerSlot = watcher.watchNameOwners();
 
@@ -440,14 +440,14 @@ TEST_CASE("StatusNotifierWatcherClient reads StatusNotifierItem properties") {
   });
 
   std::string const itemName = "org.freedesktop.StatusNotifierItem.lambda-properties";
-  auto itemBus = lambda::dbus::Bus::openAddress(privateBus->address);
+  auto itemBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
   itemBus.requestName(itemName);
   auto itemSlot = itemBus.exportObject("/StatusNotifierItem", fakeStatusNotifierItem());
 
-  auto registerReply = itemBus.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::StatusNotifierWatcherService::serviceName,
-      .path = lambda::system::StatusNotifierWatcherService::objectPath,
-      .interface = lambda::system::StatusNotifierWatcherService::interfaceName,
+  auto registerReply = itemBus.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::StatusNotifierWatcherService::serviceName,
+      .path = lambdaui::system::StatusNotifierWatcherService::objectPath,
+      .interface = lambdaui::system::StatusNotifierWatcherService::interfaceName,
       .member = "RegisterStatusNotifierItem",
       .arguments = {itemName},
   });
@@ -466,14 +466,14 @@ TEST_CASE("StatusNotifierWatcherClient reads StatusNotifierItem properties") {
     }
   });
 
-  auto client = lambda::system::StatusNotifierWatcherClient(
-      lambda::dbus::Bus::openAddress(privateBus->address));
+  auto client = lambdaui::system::StatusNotifierWatcherClient(
+      lambdaui::dbus::Bus::openAddress(privateBus->address));
   auto addresses = client.registeredItemAddresses();
   REQUIRE(addresses.size() == 1);
   CHECK(addresses.front().id == itemName);
   CHECK(addresses.front().serviceName == itemName);
   CHECK(addresses.front().objectPath ==
-        lambda::system::StatusNotifierWatcherService::defaultItemObjectPath);
+        lambdaui::system::StatusNotifierWatcherService::defaultItemObjectPath);
 
   auto properties = client.readItemProperties(addresses.front());
   CHECK(properties.propertiesAvailable);
@@ -508,13 +508,13 @@ TEST_CASE("StatusNotifierWatcherClient reads StatusNotifierItem properties") {
   itemBus.emitPropertiesChanged(
       "/StatusNotifierItem",
       "org.kde.StatusNotifierItem",
-      lambda::dbus::VariantDictionary{.values = {{"Title", std::string("Updater ready")}}},
+      lambdaui::dbus::VariantDictionary{.values = {{"Title", std::string("Updater ready")}}},
       {});
   itemBus.flush();
   CHECK(pumpUntil(client.bus(), [&] { return propertyRefreshes == 1; }, std::chrono::milliseconds(500)));
 
   auto encodedAddress =
-      lambda::system::parseStatusNotifierItemAddress("org.example.Tray/CustomItem");
+      lambdaui::system::parseStatusNotifierItemAddress("org.example.Tray/CustomItem");
   CHECK(encodedAddress.serviceName == "org.example.Tray");
   CHECK(encodedAddress.objectPath == "/CustomItem");
 }

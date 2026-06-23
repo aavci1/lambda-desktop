@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kOutputVersion = 4;
 
@@ -52,4 +52,4 @@ struct OutputLayoutBox {
   return outputActive && resourceBelongsToSurfaceClient;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

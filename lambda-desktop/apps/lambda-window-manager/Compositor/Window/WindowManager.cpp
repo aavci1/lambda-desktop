@@ -33,7 +33,7 @@
 #include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using wm::activeDragSnapTarget;
 using wm::clearSnapPreview;
@@ -743,4 +743,4 @@ bool WaylandServer::Impl::quitShellApp(std::string const& appId) {
   return found;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

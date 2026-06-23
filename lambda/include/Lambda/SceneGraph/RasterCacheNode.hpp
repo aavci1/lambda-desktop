@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 class RasterCacheNode final : public SceneNode {
 public:
@@ -41,4 +41,4 @@ private:
 #endif
 };
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

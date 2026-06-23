@@ -137,7 +137,7 @@ Clean layering: `Reactive` → `SceneGraph` (pure retained tree) → `UI` (Eleme
 ## Lower-priority / housekeeping
 
 - **No `-Wall -Wextra` (let alone `-Werror`)** in `CMakeLists.txt` / `cmake/`; only opt-in ASan (`cmake/LambdaApp.cmake:181`). For a codebase this disciplined, turning these on (even non-fatal) is cheap insurance.
-- The `prepare()`/`prepareSubtree()` Vulkan/Metal blocks in `SceneRenderer.cpp` share a fair amount of structure behind `#if LAMBDA_METAL` / `#if LAMBDA_VULKAN`; not a bug, but a candidate for a small backend-agnostic capture helper if it keeps growing.
+- The `prepare()`/`prepareSubtree()` Vulkan/Metal blocks in `SceneRenderer.cpp` share a fair amount of structure behind `#if LAMBDAUI_METAL` / `#if LAMBDAUI_VULKAN`; not a bug, but a candidate for a small backend-agnostic capture helper if it keeps growing.
 
 ---
 

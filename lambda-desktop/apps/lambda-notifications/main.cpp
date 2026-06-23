@@ -38,7 +38,7 @@ bool dndFromEnvironment() {
   return raw[0] == '1' || raw[0] == 't' || raw[0] == 'T' || raw[0] == 'y' || raw[0] == 'Y';
 }
 
-int waitTimeoutForNextExpiration(lambda::system::NotificationsService const& notifications) {
+int waitTimeoutForNextExpiration(lambdaui::system::NotificationsService const& notifications) {
   auto const deadline = notifications.nextExpirationDeadline();
   if (!deadline) {
     return 1000;
@@ -59,16 +59,16 @@ int main() {
   std::signal(SIGTERM, handleSignal);
 
   try {
-    auto bus = lambda::dbus::Bus::open(lambda::dbus::BusType::Session);
-    bus.requestName(lambda::system::NotificationsService::serviceName);
+    auto bus = lambdaui::dbus::Bus::open(lambdaui::dbus::BusType::Session);
+    bus.requestName(lambdaui::system::NotificationsService::serviceName);
 
-    lambda::system::NotificationsService notifications(bus, historyLimitFromEnvironment());
+    lambdaui::system::NotificationsService notifications(bus, historyLimitFromEnvironment());
     notifications.setDoNotDisturb(dndFromEnvironment());
     auto notificationSlot = notifications.exportObject();
 
     std::cerr << "lambda-notifications: exported "
-              << lambda::system::NotificationsService::interfaceName
-              << " on " << lambda::system::NotificationsService::objectPath << "\n";
+              << lambdaui::system::NotificationsService::interfaceName
+              << " on " << lambdaui::system::NotificationsService::objectPath << "\n";
 
     while (gRunning.load()) {
       (void)notifications.expireDueNotifications();

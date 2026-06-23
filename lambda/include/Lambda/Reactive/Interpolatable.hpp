@@ -10,7 +10,7 @@
 
 #include <concepts>
 
-namespace lambda {
+namespace lambdaui {
 
 inline float lerp(float a, float b, float t) {
   return a + (b - a) * t;
@@ -42,4 +42,4 @@ concept Interpolatable = requires(T a, T b, float t) {
   { lerp(a, b, t) } -> std::same_as<T>;
 };
 
-} // namespace lambda
+} // namespace lambdaui

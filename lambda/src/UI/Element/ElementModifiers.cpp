@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -460,4 +460,4 @@ Element Element::windowResizeRegion(WindowResizeEdge edge) && {
   return std::move(*this);
 }
 
-} // namespace lambda
+} // namespace lambdaui

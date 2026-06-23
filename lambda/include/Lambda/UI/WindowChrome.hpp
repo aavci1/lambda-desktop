@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class WindowTitlebarMode : std::uint8_t {
   /// Use the platform/compositor default titlebar and controls.
@@ -44,4 +44,4 @@ struct WindowChromeMetrics {
   bool operator==(WindowChromeMetrics const& other) const = default;
 };
 
-} // namespace lambda
+} // namespace lambdaui

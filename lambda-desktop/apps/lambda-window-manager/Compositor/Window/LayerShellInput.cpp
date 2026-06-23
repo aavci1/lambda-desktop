@@ -4,7 +4,7 @@
 #include "Compositor/Wayland/WaylandServerImpl.hpp"
 #include "wlr-layer-shell-unstable-v1-server-protocol.h"
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using wm::previousFocusedToplevel;
 using wm::raiseSurface;
@@ -37,4 +37,4 @@ void WaylandServer::Impl::releaseCommandLauncherModal(std::uint32_t timeMs) {
   commandLauncherModalSurface_ = nullptr;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

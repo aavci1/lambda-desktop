@@ -8,7 +8,7 @@
 #include <vector>
 
 TEST_CASE("data-device DnD action masks validate protocol bits") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   CHECK(validDndActionMask(WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE));
   CHECK(validDndActionMask(WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY));
@@ -30,7 +30,7 @@ TEST_CASE("data-device DnD action masks validate protocol bits") {
 }
 
 TEST_CASE("data-device DnD action negotiation honors preference then fallback order") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   std::uint32_t const all = WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY |
                             WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE |
@@ -60,7 +60,7 @@ TEST_CASE("data-device DnD action negotiation honors preference then fallback or
 }
 
 TEST_CASE("data-device DnD offer request validation enforces DnD finish rules") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   CHECK(dataOfferAcceptsDndActions(true));
   CHECK_FALSE(dataOfferAcceptsDndActions(false));
@@ -78,7 +78,7 @@ TEST_CASE("data-device DnD offer request validation enforces DnD finish rules") 
 }
 
 TEST_CASE("data-device source lifecycle validation enforces DnD action ordering") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   CHECK(dataSourceCanSetDndActions(false, false));
   CHECK_FALSE(dataSourceCanSetDndActions(true, false));
@@ -95,7 +95,7 @@ TEST_CASE("data-device source lifecycle validation enforces DnD action ordering"
 }
 
 TEST_CASE("data-device drag icon validation requires an unassigned surface role") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   CHECK(dataDeviceCanUseDragIconSurface(false, false));
   CHECK(dataDeviceCanUseDragIconSurface(false, true));
@@ -104,7 +104,7 @@ TEST_CASE("data-device drag icon validation requires an unassigned surface role"
 }
 
 TEST_CASE("data-device drop cleanup preserves offers after completed drops") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   DndClearPlan const cancelled = dndClearPlanAfterDrop(false);
   CHECK(cancelled.destroyOffer);
@@ -120,7 +120,7 @@ TEST_CASE("data-device drop cleanup preserves offers after completed drops") {
 }
 
 TEST_CASE("data-device offer destruction cancels only unfinished completed drops") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   CHECK(dataOfferShouldCancelSourceOnDestroy(true, true, false));
   CHECK_FALSE(dataOfferShouldCancelSourceOnDestroy(false, true, false));
@@ -129,8 +129,8 @@ TEST_CASE("data-device offer destruction cancels only unfinished completed drops
 }
 
 TEST_CASE("selection devices clear destroyed seat resource references") {
-  using namespace lambda::compositor;
-  using WaylandServer = lambda::compositor::WaylandServer;
+  using namespace lambdaui::compositor;
+  using WaylandServer = lambdaui::compositor::WaylandServer;
 
   auto* seat = reinterpret_cast<wl_resource*>(std::uintptr_t{1});
   auto* otherSeat = reinterpret_cast<wl_resource*>(std::uintptr_t{2});

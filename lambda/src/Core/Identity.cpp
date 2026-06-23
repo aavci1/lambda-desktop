@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <thread>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -370,4 +370,4 @@ bool keySharesPrefix(ComponentKey const& a, ComponentKey const& b) noexcept {
   return a.sharesPrefix(b);
 }
 
-} // namespace lambda
+} // namespace lambdaui

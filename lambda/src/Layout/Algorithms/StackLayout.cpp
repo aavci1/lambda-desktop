@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace lambda::layout {
+namespace lambdaui::layout {
 
 namespace {
 
@@ -210,4 +210,4 @@ StackLayoutResult layoutStack(StackAxis axis, Alignment crossAlignment,
   return result;
 }
 
-} // namespace lambda::layout
+} // namespace lambdaui::layout

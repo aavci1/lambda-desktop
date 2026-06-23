@@ -12,7 +12,7 @@
 #include <string_view>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 enum class NetworkManagerState : std::uint32_t {
   Unknown = 0,
@@ -233,4 +233,4 @@ private:
 [[nodiscard]] std::string formatNetworkStatus(NetworkManagerSnapshot const& snapshot);
 [[nodiscard]] std::string formatWifiStatus(NetworkManagerSnapshot const& snapshot);
 
-} // namespace lambda::system
+} // namespace lambdaui::system

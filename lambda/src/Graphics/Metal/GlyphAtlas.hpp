@@ -13,7 +13,7 @@
 #import <Metal/Metal.h>
 #endif
 
-namespace lambda {
+namespace lambdaui {
 
 struct GlyphKey {
   std::uint32_t fontId = 0;
@@ -104,4 +104,4 @@ private:
   std::function<bool()> beforeGrow_{};
 };
 
-} // namespace lambda
+} // namespace lambdaui

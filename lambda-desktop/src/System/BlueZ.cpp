@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -457,4 +457,4 @@ std::string formatBluetoothStatus(BlueZSnapshot const& snapshot) {
   return std::to_string(connectedNames.size()) + " devices";
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

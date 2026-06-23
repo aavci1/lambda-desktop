@@ -27,21 +27,21 @@ struct ShellDockView {
   std::function<void(std::string const&, DockStatusAction)> onStatusAction;
   bool fullWidth = false;
 
-  lambda::Element body() const {
+  lambdaui::Element body() const {
     auto const items = model.dockItemsSignal();
     auto const timeText = model.timeTextSignal();
     auto const clockWidth = model.dockClockWidthSignal();
     auto const itemSize = model.dockItemSizeSignal();
     auto const systemStatus = model.systemStatusSignal();
-    lambda::Reactive::Bindable<int> widthBinding{[items, clockWidth, itemSize] {
+    lambdaui::Reactive::Bindable<int> widthBinding{[items, clockWidth, itemSize] {
       return dockWidth(items(), clockWidth(), itemSize());
     }};
-    return lambda::Element{LambdaDock{DockProps{
+    return lambdaui::Element{LambdaDock{DockProps{
         .items = items,
         .timeText = timeText,
         .clockWidth = clockWidth,
         .itemSize = itemSize,
-        .system = lambda::Reactive::Bindable<SystemStatus>{[systemStatus] { return systemStatus(); }},
+        .system = lambdaui::Reactive::Bindable<SystemStatus>{[systemStatus] { return systemStatus(); }},
         .hoverIndex = -1,
         .fullWidth = fullWidth,
         .width = widthBinding,
@@ -64,8 +64,8 @@ struct ShellDockMenuView {
   std::function<void(DockItem const&)> onQuitItem;
   std::function<void()> onDismiss;
 
-  lambda::Element body() const {
-    return lambda::Element{LambdaDockMenu{DockMenuProps{
+  lambdaui::Element body() const {
+    return lambdaui::Element{LambdaDockMenu{DockMenuProps{
         .item = item,
         .surfaceWidth = surfaceWidth,
         .surfaceHeight = surfaceHeight,
@@ -87,8 +87,8 @@ struct ShellSessionMenuView {
   std::function<void(std::string const&)> onAction;
   std::function<void()> onDismiss;
 
-  lambda::Element body() const {
-    return lambda::Element{LambdaSessionMenu{SessionMenuProps{
+  lambdaui::Element body() const {
+    return lambdaui::Element{LambdaSessionMenu{SessionMenuProps{
         .surfaceWidth = surfaceWidth,
         .surfaceHeight = surfaceHeight,
         .menuX = menuX,
@@ -107,46 +107,46 @@ struct ShellNotificationBannerView {
   std::function<void(std::uint64_t)> onDismiss;
   std::function<void(std::uint64_t, std::string const&)> onAction;
 
-  lambda::Element body() const {
+  lambdaui::Element body() const {
     float const surfaceWidth = std::max(1.f, width);
     float const surfaceHeight = std::max(1.f, height);
     float const contentX = 16.f;
     float const textWidth = std::max(1.f, surfaceWidth - 64.f);
     std::string const appLabel = notification.appId.empty() ? std::string("Notification") : notification.appId;
 
-    std::vector<lambda::Element> layers;
-    layers.push_back(lambda::Rectangle{}
+    std::vector<lambdaui::Element> layers;
+    layers.push_back(lambdaui::Rectangle{}
                          .size(surfaceWidth, surfaceHeight)
-                         .fill(lambda::FillStyle::solid(lambda::VisualTokens::elevatedSurface))
-                         .stroke(lambda::StrokeStyle::solid(lambda::VisualTokens::border, 1.f))
+                         .fill(lambdaui::FillStyle::solid(lambdaui::VisualTokens::elevatedSurface))
+                         .stroke(lambdaui::StrokeStyle::solid(lambdaui::VisualTokens::border, 1.f))
                          .cornerRadius(12.f));
-    layers.push_back(lambda::Text{
+    layers.push_back(lambdaui::Text{
         .text = appLabel,
-        .font = lambda::Font{.family = "", .size = 11.f, .weight = 640.f},
-        .color = lambda::VisualTokens::secondaryText,
-        .horizontalAlignment = lambda::HorizontalAlignment::Leading,
-        .verticalAlignment = lambda::VerticalAlignment::Center,
-        .wrapping = lambda::TextWrapping::NoWrap,
+        .font = lambdaui::Font{.family = "", .size = 11.f, .weight = 640.f},
+        .color = lambdaui::VisualTokens::secondaryText,
+        .horizontalAlignment = lambdaui::HorizontalAlignment::Leading,
+        .verticalAlignment = lambdaui::VerticalAlignment::Center,
+        .wrapping = lambdaui::TextWrapping::NoWrap,
         .maxLines = 1,
     }.size(textWidth, 16.f).position(contentX, 10.f));
-    layers.push_back(lambda::Text{
+    layers.push_back(lambdaui::Text{
         .text = notification.title.empty() ? appLabel : notification.title,
-        .font = lambda::Font{.family = "", .size = 15.f, .weight = 680.f},
-        .color = lambda::VisualTokens::primaryText,
-        .horizontalAlignment = lambda::HorizontalAlignment::Leading,
-        .verticalAlignment = lambda::VerticalAlignment::Center,
-        .wrapping = lambda::TextWrapping::NoWrap,
+        .font = lambdaui::Font{.family = "", .size = 15.f, .weight = 680.f},
+        .color = lambdaui::VisualTokens::primaryText,
+        .horizontalAlignment = lambdaui::HorizontalAlignment::Leading,
+        .verticalAlignment = lambdaui::VerticalAlignment::Center,
+        .wrapping = lambdaui::TextWrapping::NoWrap,
         .maxLines = 1,
     }.size(textWidth, 22.f).position(contentX, 28.f));
     float const actionRowHeight = (!notification.actions.empty() && onAction) ? 36.f : 0.f;
     if (showPreview && !notification.body.empty()) {
-      layers.push_back(lambda::Text{
+      layers.push_back(lambdaui::Text{
           .text = notification.body,
-          .font = lambda::Font{.family = "", .size = 13.f, .weight = 460.f},
-          .color = lambda::VisualTokens::secondaryText,
-          .horizontalAlignment = lambda::HorizontalAlignment::Leading,
-          .verticalAlignment = lambda::VerticalAlignment::Top,
-          .wrapping = lambda::TextWrapping::Wrap,
+          .font = lambdaui::Font{.family = "", .size = 13.f, .weight = 460.f},
+          .color = lambdaui::VisualTokens::secondaryText,
+          .horizontalAlignment = lambdaui::HorizontalAlignment::Leading,
+          .verticalAlignment = lambdaui::VerticalAlignment::Top,
+          .wrapping = lambdaui::TextWrapping::Wrap,
           .maxLines = 2,
       }.size(std::max(1.f, surfaceWidth - 32.f), std::max(18.f, 36.f - actionRowHeight * 0.45f))
           .position(contentX, 54.f));
@@ -161,15 +161,15 @@ struct ShellNotificationBannerView {
       float const buttonY = surfaceHeight - 38.f;
       for (std::size_t index = 0; index < actionCount; ++index) {
         auto const action = notification.actions[index];
-        layers.push_back(lambda::Element{lambda::Button{
+        layers.push_back(lambdaui::Element{lambdaui::Button{
                              .label = action.label.empty() ? action.key : action.label,
-                             .variant = lambda::ButtonVariant::Secondary,
-                             .style = lambda::Button::Style{
-                                 .font = lambda::Font{.family = "", .size = 12.f, .weight = 620.f},
+                             .variant = lambdaui::ButtonVariant::Secondary,
+                             .style = lambdaui::Button::Style{
+                                 .font = lambdaui::Font{.family = "", .size = 12.f, .weight = 620.f},
                                  .paddingH = 8.f,
                                  .paddingV = 5.f,
                                  .cornerRadius = 8.f,
-                                 .accentColor = lambda::VisualTokens::accent,
+                                 .accentColor = lambdaui::VisualTokens::accent,
                              },
                              .onTap = [callback = onAction, id = notification.id, key = action.key] {
                                callback(id, key);
@@ -181,21 +181,21 @@ struct ShellNotificationBannerView {
     }
 
     if (onDismiss) {
-      layers.push_back(lambda::Element{lambda::IconButton{
-                           .icon = lambda::IconName::Close,
-                           .style = lambda::IconButton::Style{
+      layers.push_back(lambdaui::Element{lambdaui::IconButton{
+                           .icon = lambdaui::IconName::Close,
+                           .style = lambdaui::IconButton::Style{
                                .size = 28.f,
                                .weight = 560.f,
-                               .color = lambda::VisualTokens::secondaryText,
+                               .color = lambdaui::VisualTokens::secondaryText,
                            },
                            .onTap = [callback = onDismiss, id = notification.id] { callback(id); },
                        }}
                            .position(surfaceWidth - 40.f, 10.f));
     }
 
-    return lambda::ZStack{
-        .horizontalAlignment = lambda::Alignment::Start,
-        .verticalAlignment = lambda::Alignment::Start,
+    return lambdaui::ZStack{
+        .horizontalAlignment = lambdaui::Alignment::Start,
+        .verticalAlignment = lambdaui::Alignment::Start,
         .children = std::move(layers),
     }.size(surfaceWidth, surfaceHeight);
   }
@@ -205,9 +205,9 @@ struct ShellLauncherView {
   ShellModel& model;
   std::function<void(DockItem const&)> onActivateResult;
   std::function<void()> onDismiss;
-  std::function<void(lambda::KeyCode, lambda::Modifiers)> onKeyDown;
+  std::function<void(lambdaui::KeyCode, lambdaui::Modifiers)> onKeyDown;
 
-  lambda::Element body() const {
+  lambdaui::Element body() const {
     auto const results = model.launcherResultsSignal();
     auto const query = model.querySignal();
     auto const highlighted = model.highlightedSignal();
@@ -217,21 +217,21 @@ struct ShellLauncherView {
     auto const launcherHeight = model.launcherHeightSignal();
 
     auto buildLauncher = [this, results, query, highlighted, launcherWidth, launcherHeight] {
-      lambda::Reactive::Bindable<float> widthBinding{
+      lambdaui::Reactive::Bindable<float> widthBinding{
           [launcherWidth] { return std::max(1.f, launcherWidth()); }};
-      lambda::Reactive::Bindable<float> heightBinding{
+      lambdaui::Reactive::Bindable<float> heightBinding{
           [launcherHeight] { return std::max(1.f, launcherHeight()); }};
-      lambda::Reactive::Bindable<int> widthIntBinding{
+      lambdaui::Reactive::Bindable<int> widthIntBinding{
           [widthBinding] { return static_cast<int>(std::max(1.f, widthBinding.evaluate())); }};
-      lambda::Reactive::Bindable<int> heightIntBinding{
+      lambdaui::Reactive::Bindable<int> heightIntBinding{
           [heightBinding] { return static_cast<int>(std::max(1.f, heightBinding.evaluate())); }};
-      lambda::Reactive::Bindable<int> clampedHighlight{[results, highlighted] {
+      lambdaui::Reactive::Bindable<int> clampedHighlight{[results, highlighted] {
         auto const items = results();
         if (items.empty()) return 0;
         return std::clamp(highlighted.evaluate(), 0, static_cast<int>(items.size()) - 1);
       }};
 
-      auto root = lambda::Element{LambdaCommandLauncher{CommandLauncherProps{
+      auto root = lambdaui::Element{LambdaCommandLauncher{CommandLauncherProps{
           .results = results,
           .query = query,
           .highlighted = clampedHighlight,
@@ -248,11 +248,11 @@ struct ShellLauncherView {
       return root;
     };
 
-    return lambda::Show(
+    return lambdaui::Show(
         uiVisible,
         buildLauncher,
         [] {
-          return lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent);
+          return lambdaui::Rectangle{}.size(1.f, 1.f).fill(lambdaui::Colors::transparent);
         });
   }
 };

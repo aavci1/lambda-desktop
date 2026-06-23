@@ -12,7 +12,7 @@ namespace lambda_files::trace {
 
 inline bool enabled() {
   static bool const value = [] {
-    return lambda::debug::envNonZero(std::getenv("LAMBDA_FILES_TRACE"));
+    return lambdaui::debug::envNonZero(std::getenv("LAMBDA_FILES_TRACE"));
   }();
   return value;
 }

@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class PathWinding {
   CounterClockwise,  // Solid shapes
@@ -97,4 +97,4 @@ private:
   void updateBounds() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

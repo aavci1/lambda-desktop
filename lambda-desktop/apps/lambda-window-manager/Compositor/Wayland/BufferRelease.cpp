@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 bool isRetainedDmabuf(PendingBufferReleaseRecord const& record,
@@ -28,4 +28,4 @@ BufferReleasePlan planBufferReleases(std::span<PendingBufferReleaseRecord const>
   return plan;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

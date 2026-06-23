@@ -11,7 +11,7 @@
 #include <functional>
 #include <memory>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 class RenderNode final : public SceneNode {
   public:
@@ -40,4 +40,4 @@ class RenderNode final : public SceneNode {
     Purity purity_ = Purity::Unknown;
 };
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

@@ -25,7 +25,7 @@ struct ShellTrayStatusWatcher;
 
 class ShellController {
 public:
-  ShellController(lambda::Application& app, ShellModel& model);
+  ShellController(lambdaui::Application& app, ShellModel& model);
   ~ShellController();
 
   bool connectIpc();
@@ -33,7 +33,7 @@ public:
                              std::vector<AppRegistryEntry> apps,
                              ShellConfig config);
   void createProductionWindows();
-  void setupPreviewWindow(lambda::Window& window, float width, float height);
+  void setupPreviewWindow(lambdaui::Window& window, float width, float height);
 
   void openLauncher();
   void closeLauncher();
@@ -83,7 +83,7 @@ private:
   void openSessionMenu();
   void syncSessionMenuOverlay();
   void closeSessionMenu();
-  void handleLauncherKey(lambda::InputEvent const& event);
+  void handleLauncherKey(lambdaui::InputEvent const& event);
   std::uint64_t nextRequestId();
 
   std::function<void(DockItem const&)> makeActivateCallback();
@@ -95,7 +95,7 @@ private:
   void applyShellConfigToModel();
   bool saveShellConfig(ShellConfig const& config);
 
-  lambda::Application& app_;
+  lambdaui::Application& app_;
   ShellModel& model_;
   ShellConnection ipc_;
   std::optional<unsigned int> dockHandle_;
@@ -103,10 +103,10 @@ private:
   std::optional<unsigned int> launcherHandle_;
   std::optional<unsigned int> notificationHandle_;
   std::optional<unsigned int> previewHandle_;
-  lambda::Window* dockWindow_ = nullptr;
-  lambda::Window* dockMenuWindow_ = nullptr;
-  lambda::Window* launcherWindow_ = nullptr;
-  lambda::Window* notificationWindow_ = nullptr;
+  lambdaui::Window* dockWindow_ = nullptr;
+  lambdaui::Window* dockMenuWindow_ = nullptr;
+  lambdaui::Window* launcherWindow_ = nullptr;
+  lambdaui::Window* notificationWindow_ = nullptr;
   float previewWidth_ = 960.f;
   float previewHeight_ = 620.f;
   bool launcherModalClaimed_ = false;
@@ -139,13 +139,13 @@ private:
   std::atomic<bool> volumeAdjustmentWorkerRunning_{false};
 };
 
-lambda::WindowConfig dockWindowConfig(int width,
+lambdaui::WindowConfig dockWindowConfig(int width,
                                       int itemSize = kDockIconSize,
                                       int bottomGap = kDockBottom,
                                       int cornerRadius = kDockCornerRadius,
                                       DockMaterialConfig material = {},
                                       bool fullWidth = false);
-lambda::WindowConfig dockMenuWindowConfig();
-lambda::WindowConfig launcherWindowConfig();
+lambdaui::WindowConfig dockMenuWindowConfig();
+lambdaui::WindowConfig launcherWindowConfig();
 
 } // namespace lambda_shell

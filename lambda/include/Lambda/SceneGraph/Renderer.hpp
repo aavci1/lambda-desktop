@@ -12,7 +12,7 @@
 
 #include <memory>
 
-namespace lambda {
+namespace lambdaui {
 
 class Canvas;
 class Image;
@@ -59,4 +59,4 @@ class Renderer {
 };
 
 } // namespace scenegraph
-} // namespace lambda
+} // namespace lambdaui

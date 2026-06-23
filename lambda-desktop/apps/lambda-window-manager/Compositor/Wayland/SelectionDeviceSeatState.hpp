@@ -6,7 +6,7 @@
 #include <memory>
 #include <span>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct SelectionDeviceSeatCleanup {
   std::size_t dataDevicesCleared = 0;
@@ -71,4 +71,4 @@ inline SelectionDeviceSeatCleanup clearSelectionDeviceSeatResources(WaylandServe
       seatResource);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -3,11 +3,11 @@
 struct wl_display;
 struct wl_surface;
 
-namespace lambda {
+namespace lambdaui {
 
 struct WaylandNativeSurface {
   wl_display* display = nullptr;
   wl_surface* surface = nullptr;
 };
 
-} // namespace lambda
+} // namespace lambdaui

@@ -7,7 +7,7 @@
 #include <optional>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct SceneDamageResult {
   bool fullOutput = false;
@@ -41,4 +41,4 @@ SceneDamageResult updateSceneDamage(SceneDamageState& state,
                                     std::int32_t outputHeight,
                                     bool forceFullDamage = false);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

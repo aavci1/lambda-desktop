@@ -33,7 +33,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 struct ContentHash {
   std::uint64_t hi = 0;
@@ -971,15 +971,15 @@ struct LayoutSlot {
   float maxWidthExact = 0.f;
   std::int32_t maxLines = 0;
   std::shared_ptr<TextLayout const> unboxed;
-  lambda::detail::SmallVector<BoxSlot, 4> boxes;
+  lambdaui::detail::SmallVector<BoxSlot, 4> boxes;
 };
 
 struct FramesetterEntry {
   CFAttributedStringRef attrString = nullptr;
   CTFramesetterRef framesetter = nullptr;
-  lambda::detail::SmallVector<MeasureSlot, 4> measures;
-  lambda::detail::SmallVector<LayoutSlot, 4> layouts;
-  lambda::detail::SmallVector<std::uint32_t, 4> fontIds;
+  lambdaui::detail::SmallVector<MeasureSlot, 4> measures;
+  lambdaui::detail::SmallVector<LayoutSlot, 4> layouts;
+  lambdaui::detail::SmallVector<std::uint32_t, 4> fontIds;
   std::uint64_t lastTouchFrame = 0;
   std::uint32_t approxBytes = 0;
 };
@@ -1018,12 +1018,12 @@ struct ParagraphLayoutVariant {
 
 struct ShapedParagraph {
   CTTypesetterRef typesetter = nullptr;
-  lambda::detail::SmallVector<std::uint32_t, 4> fontIds;
+  lambdaui::detail::SmallVector<std::uint32_t, 4> fontIds;
   std::uint32_t byteLength = 0;
   CFIndex utf16Length = 0;
   std::uint32_t approxBytes = 0;
   std::uint64_t lastTouchFrame = 0;
-  lambda::detail::SmallVector<std::shared_ptr<ParagraphLayoutVariant>, 2> variants{};
+  lambdaui::detail::SmallVector<std::shared_ptr<ParagraphLayoutVariant>, 2> variants{};
 };
 
 static std::shared_ptr<void> typeErasedVariantRef(std::shared_ptr<ParagraphLayoutVariant> const& v) noexcept {
@@ -1252,7 +1252,7 @@ private:
 // Deleted: AssemblyCache (replaced by LastLayoutMemo in CoreTextSystem::Impl)
 // PLACEHOLDER_FOR_ASSEMBLY_CACHE_END
 
-static LayoutMemoKey computeLayoutMemoKey(lambda::detail::SmallVector<ParagraphHash, 32> const& hashes,
+static LayoutMemoKey computeLayoutMemoKey(lambdaui::detail::SmallVector<ParagraphHash, 32> const& hashes,
                                           std::uint32_t maxWidthQ1, TextLayoutOptions const& opt) {
   XXH3_state_t st{};
   XXH3_128bits_reset(&st);
@@ -1346,12 +1346,12 @@ struct CoreTextSystem::Impl {
                               std::uint32_t runStart, std::uint32_t runEnd, std::uint32_t byteStart,
                               TextLayoutOptions const& opt);
 
-  lambda::detail::SmallVector<Paragraph, 32> splitIntoParagraphs(
+  lambdaui::detail::SmallVector<Paragraph, 32> splitIntoParagraphs(
       CoreTextSystem& sys, AttributedString const& text, std::vector<ResolvedStyle> const& resolved,
       TextLayoutOptions const& opt);
 
   struct IncrementalSplitResult {
-    lambda::detail::SmallVector<Paragraph, 32> paragraphs;
+    lambdaui::detail::SmallVector<Paragraph, 32> paragraphs;
     std::size_t firstChanged = 0;        ///< First dirty paragraph index in the NEW list.
     std::size_t lastChangedExcl = 0;     ///< Exclusive end of dirty range in the NEW list.
     std::size_t firstChangedOld = 0;     ///< First dirty paragraph index in the OLD list.
@@ -1376,7 +1376,7 @@ struct CoreTextSystem::Impl {
   std::shared_ptr<TextLayout const> layoutViaParagraphCache(
       CoreTextSystem& sys, AttributedString const& text, float maxWidth,
       TextLayoutOptions const& options, std::vector<ResolvedStyle> const& resolved,
-      lambda::detail::SmallVector<Paragraph, 32>&& paragraphs, IncrementalSplitResult const* incr = nullptr,
+      lambdaui::detail::SmallVector<Paragraph, 32>&& paragraphs, IncrementalSplitResult const* incr = nullptr,
       bool noMemoSideEffects = false);
 
   std::shared_ptr<ParagraphLayoutVariant> buildParagraphVariant(
@@ -1608,7 +1608,7 @@ struct CoreTextSystem::Impl {
                        .end = static_cast<std::uint32_t>(utf8.size()),
                        .font = font,
                        .color = color});
-    lambda::detail::SmallVector<ResolvedStyle, 4> resolved;
+    lambdaui::detail::SmallVector<ResolvedStyle, 4> resolved;
     accumulateInheritance(resolved, as);
     return createCFAttributed(sys, as, {resolved.data(), resolved.size()}, options);
   }
@@ -2249,10 +2249,10 @@ static bool paragraphCachePredicate(AttributedString const& text, TextLayoutOpti
   return true;
 }
 
-lambda::detail::SmallVector<Paragraph, 32> CoreTextSystem::Impl::splitIntoParagraphs(
+lambdaui::detail::SmallVector<Paragraph, 32> CoreTextSystem::Impl::splitIntoParagraphs(
     CoreTextSystem& sys, AttributedString const& text, std::vector<ResolvedStyle> const& resolved,
     TextLayoutOptions const& opt) {
-  lambda::detail::SmallVector<Paragraph, 32> out;
+  lambdaui::detail::SmallVector<Paragraph, 32> out;
   char const* const bytes = text.utf8.data();
   std::uint32_t const n = static_cast<std::uint32_t>(text.utf8.size());
   std::uint32_t seg = 0;
@@ -2488,10 +2488,10 @@ ShapedParagraph CoreTextSystem::Impl::shapeParagraphForCache(CoreTextSystem& sys
 
 std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     CoreTextSystem& sys, AttributedString const& text, float maxWidth, TextLayoutOptions const& options,
-    std::vector<ResolvedStyle> const& resolved, lambda::detail::SmallVector<Paragraph, 32>&& paragraphs,
+    std::vector<ResolvedStyle> const& resolved, lambdaui::detail::SmallVector<Paragraph, 32>&& paragraphs,
     IncrementalSplitResult const* incr, bool const noMemoSideEffects) {
-#if defined(LAMBDA_PARAGRAPH_CACHE_PARALLEL_ASSERT) && !defined(NDEBUG)
-  lambda::detail::SmallVector<Paragraph, 32> parallelRefParagraphs;
+#if defined(LAMBDAUI_PARAGRAPH_CACHE_PARALLEL_ASSERT) && !defined(NDEBUG)
+  lambdaui::detail::SmallVector<Paragraph, 32> parallelRefParagraphs;
   if (incr != nullptr) {
     parallelRefParagraphs = paragraphs;
   }
@@ -2504,7 +2504,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
   // check would always miss.  Skip the O(N) phashes build and hash computation entirely.
   if (!noMemoSideEffects) {
     if (incr == nullptr) {
-      lambda::detail::SmallVector<ParagraphHash, 32> phashes;
+      lambdaui::detail::SmallVector<ParagraphHash, 32> phashes;
       phashes.reserve(paraCount);
       for (std::size_t i = 0; i < paraCount; ++i) {
         phashes.push_back(paragraphs[i].hash);
@@ -2740,14 +2740,14 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     recomputeTextLayoutMetrics(*out);
   }
 
-#if defined(LAMBDA_DISABLE_VARIANT_REFS)
+#if defined(LAMBDAUI_DISABLE_VARIANT_REFS)
   // Deep-copy glyphs into owned storage (rollback when variant reference-counting is disabled).
   std::shared_ptr<TextLayout const> const result = cloneTextLayout(*out);
 #else
   std::shared_ptr<TextLayout const> const result = std::const_pointer_cast<TextLayout const>(out);
 #endif
 
-#if defined(LAMBDA_PARAGRAPH_CACHE_PARALLEL_ASSERT) && !defined(NDEBUG)
+#if defined(LAMBDAUI_PARAGRAPH_CACHE_PARALLEL_ASSERT) && !defined(NDEBUG)
   if (!noMemoSideEffects && canIncrAssemble && incr != nullptr) {
     std::string dump;
     auto const ref =
@@ -2898,7 +2898,7 @@ Size CoreTextSystem::measure(std::string_view utf8, Font const& font, Color cons
                        .end = static_cast<std::uint32_t>(utf8.size()),
                        .font = font,
                        .color = color});
-    lambda::detail::SmallVector<ResolvedStyle, 4> resolved;
+    lambdaui::detail::SmallVector<ResolvedStyle, 4> resolved;
     accumulateInheritance(resolved, as);
     return d->insertFramesetterMiss(h, as, {resolved.data(), resolved.size()}, options, *this);
   }();
@@ -3018,7 +3018,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
                        .end = static_cast<std::uint32_t>(utf8.size()),
                        .font = font,
                        .color = color});
-    lambda::detail::SmallVector<ResolvedStyle, 4> resolved;
+    lambdaui::detail::SmallVector<ResolvedStyle, 4> resolved;
     accumulateInheritance(resolved, as);
     return d->insertFramesetterMiss(h, as, {resolved.data(), resolved.size()}, options, *this);
   }();
@@ -3326,4 +3326,4 @@ std::shared_ptr<TextLayout const> paragraphCacheFullAssemblyForTest(
 
 } // namespace detail
 
-} // namespace lambda
+} // namespace lambdaui

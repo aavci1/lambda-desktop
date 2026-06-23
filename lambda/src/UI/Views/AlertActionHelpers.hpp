@@ -3,7 +3,7 @@
 #include <functional>
 #include <utility>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 inline std::function<void()> wrapDismissThenInvoke(std::function<void()> dismiss,
                                                    std::function<void()> action) {
@@ -19,4 +19,4 @@ inline std::function<void()> wrapDismissThenInvoke(std::function<void()> dismiss
   };
 }
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

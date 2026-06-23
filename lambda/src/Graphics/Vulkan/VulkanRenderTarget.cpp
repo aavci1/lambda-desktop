@@ -8,7 +8,7 @@
 #include <memory>
 #include <stdexcept>
 
-namespace lambda::platform {
+namespace lambdaui::platform {
 
 namespace {
 
@@ -40,4 +40,4 @@ std::unique_ptr<RenderTarget> createRenderTarget(VulkanRenderTargetSpec const& s
   return std::make_unique<VulkanRenderTarget>(spec);
 }
 
-} // namespace lambda::platform
+} // namespace lambdaui::platform

@@ -8,7 +8,7 @@
 #include <cmath>
 #include <optional>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 constexpr std::int32_t kMinimumRegionSize = 2;
@@ -127,9 +127,9 @@ std::optional<ScreenshotSelectionOverlay> WaylandServer::Impl::screenshotSelecti
   };
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool handleScreenshotSelectionPointerMotion(WaylandServer::Impl* server,
                                             double dx,
@@ -203,4 +203,4 @@ bool handleScreenshotSelectionKey(WaylandServer::Impl* server,
   return true;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm

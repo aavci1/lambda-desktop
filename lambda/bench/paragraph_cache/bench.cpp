@@ -22,9 +22,9 @@ constexpr int kParas = 5000;
 constexpr int kCharsPerPara = 80;
 
 #if defined(__APPLE__)
-using BenchTextSystem = lambda::CoreTextSystem;
+using BenchTextSystem = lambdaui::CoreTextSystem;
 #else
-using BenchTextSystem = lambda::FreeTypeTextSystem;
+using BenchTextSystem = lambdaui::FreeTypeTextSystem;
 #endif
 
 std::string makeDocument() {
@@ -46,8 +46,8 @@ double secondsSince(std::chrono::steady_clock::time_point t0) {
   return std::chrono::duration<double>(t1 - t0).count();
 }
 
-lambda::Font makeBenchFont() {
-  lambda::Font f{};
+lambdaui::Font makeBenchFont() {
+  lambdaui::Font f{};
 #if defined(__APPLE__)
   f.family = ".AppleSystemUIFont";
 #else
@@ -73,7 +73,7 @@ void enableParagraphCache() {
 } // namespace
 
 int main() {
-  using namespace lambda;
+  using namespace lambdaui;
   std::string const doc = makeDocument();
   Font f = makeBenchFont();
   AttributedString const as = AttributedString::plain(doc, f, Colors::black);

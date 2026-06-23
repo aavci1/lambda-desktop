@@ -16,7 +16,7 @@
 #include <string_view>
 #include <unordered_set>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 struct ThemeCursor {
@@ -558,4 +558,4 @@ bool moveCurrentHardwareCursor(WaylandServer& wayland,
                            static_cast<std::int32_t>(std::lround(wayland.pointerY() * outputScale)));
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

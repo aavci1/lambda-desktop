@@ -9,7 +9,7 @@
 
 #include <simd/simd.h>
 
-namespace lambda {
+namespace lambdaui {
 
 /// GPU instance payload for rect/line SDF shaders (matches `RectInstance` in `CanvasShaders.metal`).
 struct MetalRectInstance {
@@ -199,4 +199,4 @@ struct MetalScissorState {
   std::uint32_t scissorH = 0;
 };
 
-} // namespace lambda
+} // namespace lambdaui

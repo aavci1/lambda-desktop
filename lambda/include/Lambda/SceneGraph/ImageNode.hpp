@@ -9,11 +9,11 @@
 
 #include <memory>
 
-namespace lambda {
+namespace lambdaui {
 class Image;
 }
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 class ImageNode final : public SceneNode {
   public:
@@ -34,4 +34,4 @@ class ImageNode final : public SceneNode {
     ImageFillMode fillMode_ = ImageFillMode::Cover;
 };
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

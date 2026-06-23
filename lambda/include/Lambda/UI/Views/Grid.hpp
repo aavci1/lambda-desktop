@@ -11,7 +11,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Fixed-column grid: children flow left-to-right, top-to-bottom (row-major).
 /// Use `.colSpan(...)` or `.rowSpan(...)` on child elements to occupy multiple adjacent tracks.
@@ -44,4 +44,4 @@ struct Grid : ViewModifiers<Grid> {
 
 };
 
-} // namespace lambda
+} // namespace lambdaui

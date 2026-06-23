@@ -14,7 +14,7 @@
 #include <memory>
 #include <unordered_map>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -306,4 +306,4 @@ useToast() {
   return {std::move(show), std::move(dismiss), std::move(clear), !registry->overlays.empty()};
 }
 
-} // namespace lambda
+} // namespace lambdaui

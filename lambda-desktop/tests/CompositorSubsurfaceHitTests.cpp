@@ -39,7 +39,7 @@ TEST_CASE("nested subsurface coordinates accumulate") {
 }
 
 TEST_CASE("subsurface position is pending until the subsurface commits") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::Subsurface subsurface;
   subsurface.x = 4;
@@ -57,7 +57,7 @@ TEST_CASE("subsurface position is pending until the subsurface commits") {
 }
 
 TEST_CASE("subsurface sibling placement is pending until parent commit") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::Surface parent;
   WaylandServer::Impl::Surface childSurfaceA;
@@ -98,7 +98,7 @@ TEST_CASE("subsurface sibling placement is pending until parent commit") {
 }
 
 TEST_CASE("subsurface synchronization follows ancestor chain") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::Surface parentSurface;
   WaylandServer::Impl::Surface childSurface;
@@ -120,7 +120,7 @@ TEST_CASE("subsurface synchronization follows ancestor chain") {
 }
 
 TEST_CASE("synchronized subsurface commit caches pending surface state") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::Surface surface;
   WaylandServer::Impl::Subsurface subsurface;
@@ -160,7 +160,7 @@ TEST_CASE("synchronized subsurface commit caches pending surface state") {
 }
 
 TEST_CASE("subsurface commit caches while an ancestor is synchronized") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::Surface parentSurface;
   WaylandServer::Impl::Surface childSurface;

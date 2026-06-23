@@ -6,7 +6,7 @@
 #include <Lambda/UI/Views/ScrollView.hpp>
 #include <Lambda/UI/Views/VStack.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -97,4 +97,4 @@ Element ListView::body() const {
     };
 }
 
-} // namespace lambda
+} // namespace lambdaui

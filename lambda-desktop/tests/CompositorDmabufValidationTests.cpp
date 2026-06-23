@@ -7,7 +7,7 @@
 #include <limits>
 
 TEST_CASE("dmabuf layout validation accepts supported single-plane rgb buffers") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   std::array planes{
       DmabufPlaneLayout{
@@ -26,7 +26,7 @@ TEST_CASE("dmabuf layout validation accepts supported single-plane rgb buffers")
 }
 
 TEST_CASE("dmabuf layout validation rejects incomplete and unsupported plane sets") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   std::array missingPlane0{
       DmabufPlaneLayout{
@@ -47,7 +47,7 @@ TEST_CASE("dmabuf layout validation rejects incomplete and unsupported plane set
 }
 
 TEST_CASE("dmabuf layout validation rejects invalid dimensions formats and strides") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   std::array planes{
       DmabufPlaneLayout{.index = 0, .offset = 0, .stride = 32},
@@ -62,7 +62,7 @@ TEST_CASE("dmabuf layout validation rejects invalid dimensions formats and strid
 }
 
 TEST_CASE("dmabuf layout validation checks required byte span against fd size") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   std::array planes{
       DmabufPlaneLayout{
@@ -88,7 +88,7 @@ TEST_CASE("dmabuf layout validation checks required byte span against fd size") 
 }
 
 TEST_CASE("dmabuf validation rejects flags the renderer does not implement") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   CHECK(areDmabufBufferFlagsSupported(0));
   CHECK_FALSE(areDmabufBufferFlagsSupported(1));

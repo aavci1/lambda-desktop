@@ -6,7 +6,7 @@
 
 struct wl_client;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 class WaylandServer;
 
@@ -24,4 +24,4 @@ inline constexpr std::uint32_t kXdgDecorationManagerVersion = 1;
 void bindXdgWmBase(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 void bindXdgDecorationManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

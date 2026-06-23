@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kCursorShapeVersion = 1;
 
@@ -24,4 +24,4 @@ inline constexpr std::uint32_t kCursorShapeVersion = 1;
   return false;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

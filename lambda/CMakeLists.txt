@@ -4,7 +4,7 @@ if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSIO
   set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(lambdaui-workspace VERSION 5.0.0 LANGUAGES CXX C)
+project(lambdaui VERSION 5.0.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,7 +13,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(GNUInstallDirs)
 include(FetchContent)
 
-set(LAMBDAUI_FRAMEWORK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lambda")
+set(LAMBDAUI_FRAMEWORK_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(LAMBDAUI_FRAMEWORK_INCLUDE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/include")
 set(LAMBDAUI_FRAMEWORK_SOURCE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/src")
 set(LAMBDAUI_FRAMEWORK_CMAKE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/cmake")
@@ -131,7 +131,6 @@ endif()
 
 FetchContent_Declare(libtess2
   GIT_REPOSITORY https://github.com/memononen/libtess2.git
-  # Pinned for reproducible builds (master as of 2025-10-16).
   GIT_TAG 8dbd6483e920311a58c9af10a10beb278efebc36
 )
 FetchContent_MakeAvailable(libtess2)
@@ -150,14 +149,13 @@ endif()
 set_target_properties(libtess2 PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
 set_target_properties(libtess2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(libtess2 PUBLIC
-  $<BUILD_INTERFACE:${libtess2_SOURCE_DIR}/Include>
-)
+  $<BUILD_INTERFACE:${libtess2_SOURCE_DIR}/Include>)
 
 option(LAMBDAUI_ENABLE_DEFAULT_EVENT_LOGGING
   "Print built-in Application event handlers to stdout (disable for quiet or embedded builds)."
   OFF)
 option(LAMBDAUI_ENABLE_ASAN
-  "Build Lambda targets with AddressSanitizer instrumentation."
+  "Build LambdaUI targets with AddressSanitizer instrumentation."
   OFF)
 option(LAMBDAUI_ENABLE_WARNINGS
   "Build LambdaUI core with common non-fatal compiler warnings."
@@ -172,65 +170,25 @@ option(LAMBDAUI_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT
   "Debug: compare incremental vs full paragraph-cache assembly (non-NDEBUG only)."
   OFF)
 
-option(LAMBDAUI_BUILD_DEMOS "Build standalone demos under lambda/demos/." OFF)
+option(LAMBDAUI_BUILD_DEMOS "Build standalone demos under demos/." OFF)
 option(LAMBDAUI_BUILD_TESTS "Build unit and integration tests." OFF)
-option(LAMBDAUI_BUILD_BENCHMARKS "Build micro-benchmarks in lambda/bench/." OFF)
-option(LAMBDA_BUILD_TOOLS "Build developer verification tools under lambda-desktop/tools/." ON)
-option(LAMBDA_BUILD_SOLITAIRE "Build the standalone Solitaire app." ON)
+option(LAMBDAUI_BUILD_BENCHMARKS "Build micro-benchmarks in bench/." OFF)
 
-set(LAMBDA_BUILD_DESKTOP_DEFAULT OFF)
-if(UNIX AND NOT APPLE)
-  set(LAMBDA_BUILD_DESKTOP_DEFAULT ON)
-endif()
-option(LAMBDA_BUILD_DESKTOP
-  "Build the Linux-only Lambda Desktop app suite and services."
-  ${LAMBDA_BUILD_DESKTOP_DEFAULT})
-
-if(LAMBDA_BUILD_DESKTOP)
-  if(NOT UNIX OR APPLE)
-    message(FATAL_ERROR "LAMBDA_BUILD_DESKTOP requires a Linux host.")
-  endif()
-endif()
-
-set(LAMBDA_BUILD_WINDOW_MANAGER_DEFAULT OFF)
-if(UNIX AND NOT APPLE)
-  set(LAMBDA_BUILD_WINDOW_MANAGER_DEFAULT ON)
-endif()
-option(LAMBDA_BUILD_WINDOW_MANAGER
-  "Build the Linux KMS lambda-window-manager executable."
-  ${LAMBDA_BUILD_WINDOW_MANAGER_DEFAULT})
-
-add_subdirectory(lambda/src)
+add_subdirectory(src)
 
 if(LAMBDAUI_ENABLE_WARNINGS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   target_compile_options(lambdaui PRIVATE -Wall -Wextra)
 endif()
 
-if(LAMBDA_BUILD_DESKTOP)
-  set(LAMBDA_DESKTOP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lambda-desktop")
-  add_subdirectory(lambda-desktop)
-endif()
-
-if(LAMBDA_BUILD_SOLITAIRE)
-  add_subdirectory(solitaire-app)
-endif()
-
 if(LAMBDAUI_BUILD_DEMOS)
-  add_subdirectory(lambda/demos)
+  add_subdirectory(demos)
 endif()
 
 if(LAMBDAUI_BUILD_TESTS)
   enable_testing()
-  add_subdirectory(lambda/tests)
-  if(LAMBDA_BUILD_DESKTOP)
-    add_subdirectory(lambda-desktop/tests)
-  endif()
+  add_subdirectory(tests)
 endif()
 
 if(LAMBDAUI_BUILD_BENCHMARKS)
-  add_subdirectory(lambda/bench)
-endif()
-
-if(LAMBDA_BUILD_TOOLS AND LAMBDA_BUILD_DESKTOP)
-  add_subdirectory(lambda-desktop/tools)
+  add_subdirectory(bench)
 endif()

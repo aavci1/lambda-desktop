@@ -16,9 +16,9 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::pumpUntil;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::pumpUntil;
+using lambdaui::testing::dbus::startPrivateBus;
 
 template <typename Callback>
 class ScopeExit {
@@ -30,22 +30,22 @@ private:
   Callback callback_;
 };
 
-std::shared_ptr<lambda::dbus::VariantDictionary> button(std::string label, std::string action) {
-  auto value = std::make_shared<lambda::dbus::VariantDictionary>();
+std::shared_ptr<lambdaui::dbus::VariantDictionary> button(std::string label, std::string action) {
+  auto value = std::make_shared<lambdaui::dbus::VariantDictionary>();
   value->values["label"] = std::move(label);
   value->values["action"] = std::move(action);
   return value;
 }
 
-std::shared_ptr<lambda::dbus::ArrayValue>
-buttons(std::vector<lambda::dbus::BasicValue> values) {
-  return std::make_shared<lambda::dbus::ArrayValue>(
-      lambda::dbus::ArrayValue{.elementSignature = "a{sv}", .values = std::move(values)});
+std::shared_ptr<lambdaui::dbus::ArrayValue>
+buttons(std::vector<lambdaui::dbus::BasicValue> values) {
+  return std::make_shared<lambdaui::dbus::ArrayValue>(
+      lambdaui::dbus::ArrayValue{.elementSignature = "a{sv}", .values = std::move(values)});
 }
 
-std::shared_ptr<lambda::dbus::VariantDictionary>
+std::shared_ptr<lambdaui::dbus::VariantDictionary>
 notification(std::string title, std::string body) {
-  auto value = std::make_shared<lambda::dbus::VariantDictionary>();
+  auto value = std::make_shared<lambdaui::dbus::VariantDictionary>();
   value->values["title"] = std::move(title);
   value->values["body"] = std::move(body);
   value->values["buttons"] = buttons({button("Open", "open")});
@@ -67,15 +67,15 @@ TEST_CASE("PortalNotificationService routes notifications through notification d
     return;
   }
 
-  auto notificationBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto portalBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
-  notificationBus.requestName(lambda::system::NotificationsService::serviceName);
-  portalBus.requestName(lambda::system::PortalNotificationService::serviceName);
+  auto notificationBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto portalBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  notificationBus.requestName(lambdaui::system::NotificationsService::serviceName);
+  portalBus.requestName(lambdaui::system::PortalNotificationService::serviceName);
 
-  lambda::system::NotificationsService notifications(notificationBus, 4);
+  lambdaui::system::NotificationsService notifications(notificationBus, 4);
   auto notificationSlot = notifications.exportObject();
-  lambda::system::PortalNotificationService portalNotifications(portalBus);
+  lambdaui::system::PortalNotificationService portalNotifications(portalBus);
   auto portalSlot = portalNotifications.exportObject();
   auto actionWatchSlot = portalNotifications.watchNotificationActions();
 
@@ -105,30 +105,30 @@ TEST_CASE("PortalNotificationService routes notifications through notification d
     }
   });
 
-  auto version = client.getProperty(lambda::dbus::PropertyAddress{
-                                       .destination = lambda::system::PortalNotificationService::serviceName,
-                                       .path = lambda::system::PortalNotificationService::objectPath,
-                                       .interface = lambda::system::PortalNotificationService::interfaceName,
+  auto version = client.getProperty(lambdaui::dbus::PropertyAddress{
+                                       .destination = lambdaui::system::PortalNotificationService::serviceName,
+                                       .path = lambdaui::system::PortalNotificationService::objectPath,
+                                       .interface = lambdaui::system::PortalNotificationService::interfaceName,
                                        .name = "version",
                                    },
                                    "u");
   CHECK(std::get<std::uint32_t>(version) == 2);
-  auto supported = client.getProperty(lambda::dbus::PropertyAddress{
-                                          .destination = lambda::system::PortalNotificationService::serviceName,
-                                          .path = lambda::system::PortalNotificationService::objectPath,
-                                          .interface = lambda::system::PortalNotificationService::interfaceName,
+  auto supported = client.getProperty(lambdaui::dbus::PropertyAddress{
+                                          .destination = lambdaui::system::PortalNotificationService::serviceName,
+                                          .path = lambdaui::system::PortalNotificationService::objectPath,
+                                          .interface = lambdaui::system::PortalNotificationService::interfaceName,
                                           .name = "SupportedOptions",
                                       },
                                       "a{sv}");
   bool const supportedOptionsShape =
-      std::holds_alternative<std::shared_ptr<lambda::dbus::VariantDictionary>>(supported) ||
-      std::holds_alternative<lambda::dbus::EmptyVariantDictionary>(supported);
+      std::holds_alternative<std::shared_ptr<lambdaui::dbus::VariantDictionary>>(supported) ||
+      std::holds_alternative<lambdaui::dbus::EmptyVariantDictionary>(supported);
   CHECK(supportedOptionsShape);
 
-  auto addReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalNotificationService::serviceName,
-      .path = lambda::system::PortalNotificationService::objectPath,
-      .interface = lambda::system::PortalNotificationService::interfaceName,
+  auto addReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalNotificationService::serviceName,
+      .path = lambdaui::system::PortalNotificationService::objectPath,
+      .interface = lambdaui::system::PortalNotificationService::interfaceName,
       .member = "AddNotification",
       .arguments = {std::string("org.lambda.TestApp"),
                     std::string("build"),
@@ -144,10 +144,10 @@ TEST_CASE("PortalNotificationService routes notifications through notification d
   CHECK(notifications.history().front().actions[0].key == "open");
   CHECK(notifications.history().front().actions[0].label == "Open");
 
-  auto replaceReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalNotificationService::serviceName,
-      .path = lambda::system::PortalNotificationService::objectPath,
-      .interface = lambda::system::PortalNotificationService::interfaceName,
+  auto replaceReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalNotificationService::serviceName,
+      .path = lambdaui::system::PortalNotificationService::objectPath,
+      .interface = lambdaui::system::PortalNotificationService::interfaceName,
       .member = "AddNotification",
       .arguments = {std::string("org.lambda.TestApp"),
                     std::string("build"),
@@ -162,17 +162,17 @@ TEST_CASE("PortalNotificationService routes notifications through notification d
   std::string invokedPortalId;
   std::string invokedAction;
   auto actionSlot = client.matchSignal(
-      lambda::dbus::SignalMatch{
-          .sender = lambda::system::PortalNotificationService::serviceName,
-          .path = lambda::system::PortalNotificationService::objectPath,
-          .interface = lambda::system::PortalNotificationService::interfaceName,
+      lambdaui::dbus::SignalMatch{
+          .sender = lambdaui::system::PortalNotificationService::serviceName,
+          .path = lambdaui::system::PortalNotificationService::objectPath,
+          .interface = lambdaui::system::PortalNotificationService::interfaceName,
           .member = "ActionInvoked",
       },
-      [&](lambda::dbus::Message& message) {
+      [&](lambdaui::dbus::Message& message) {
         invokedAppId = message.readString();
         invokedPortalId = message.readString();
         invokedAction = message.readString();
-        auto parameters = std::get<std::shared_ptr<lambda::dbus::ArrayValue>>(message.readBasic("av"));
+        auto parameters = std::get<std::shared_ptr<lambdaui::dbus::ArrayValue>>(message.readBasic("av"));
         REQUIRE(parameters);
         CHECK(parameters->values.empty());
       });
@@ -187,10 +187,10 @@ TEST_CASE("PortalNotificationService routes notifications through notification d
                   },
                   std::chrono::milliseconds(500)));
 
-  auto removeReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalNotificationService::serviceName,
-      .path = lambda::system::PortalNotificationService::objectPath,
-      .interface = lambda::system::PortalNotificationService::interfaceName,
+  auto removeReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalNotificationService::serviceName,
+      .path = lambdaui::system::PortalNotificationService::objectPath,
+      .interface = lambdaui::system::PortalNotificationService::interfaceName,
       .member = "RemoveNotification",
       .arguments = {std::string("org.lambda.TestApp"), std::string("build")},
   });

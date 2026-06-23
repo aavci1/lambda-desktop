@@ -7,7 +7,7 @@
 #include <utility>
 #include <variant>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -498,4 +498,4 @@ dbus::Slot StatusNotifierWatcherClient::watchItemProperties(StatusNotifierItemAd
       });
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

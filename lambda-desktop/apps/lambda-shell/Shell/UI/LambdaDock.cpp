@@ -24,7 +24,7 @@
 #include <unordered_map>
 #include <utility>
 
-using namespace lambda;
+using namespace lambdaui;
 
 namespace lambda_shell {
 namespace {

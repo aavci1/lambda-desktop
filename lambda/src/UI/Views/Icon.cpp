@@ -3,7 +3,7 @@
 #include <Lambda/UI/Views/Icon.hpp>
 #include <Lambda/UI/Views/Text.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 std::string encodeUtf8(char32_t cp) {
     if (cp > 0x10FFFFu || (cp >= 0xD800u && cp <= 0xDFFFu)) {
@@ -58,4 +58,4 @@ Element Icon::body() const {
         .size(s, s);
 }
 
-} // namespace lambda
+} // namespace lambdaui

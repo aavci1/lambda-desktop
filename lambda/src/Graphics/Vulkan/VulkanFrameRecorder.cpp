@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -14,7 +14,7 @@ bool hasRecorderResources(VulkanFrameRecorderResources const& resources) noexcep
          resources.preparedRectDescriptor;
 }
 
-#if defined(LAMBDA_TESTING)
+#if defined(LAMBDAUI_TESTING)
 VulkanFrameRecorderRetireHook gRetireHookForTesting;
 #endif
 
@@ -58,7 +58,7 @@ void retireVulkanFrameRecorderResources(VulkanFrameRecorderResources resources) 
   if (!hasRecorderResources(resources)) {
     return;
   }
-#if defined(LAMBDA_TESTING)
+#if defined(LAMBDAUI_TESTING)
   if (gRetireHookForTesting && gRetireHookForTesting(resources)) {
     return;
   }
@@ -69,7 +69,7 @@ void retireVulkanFrameRecorderResources(VulkanFrameRecorderResources resources) 
   destroyVulkanFrameRecorderResourcesNow(resources);
 }
 
-#if defined(LAMBDA_TESTING)
+#if defined(LAMBDAUI_TESTING)
 void setVulkanFrameRecorderRetireHookForTesting(VulkanFrameRecorderRetireHook hook) {
   gRetireHookForTesting = std::move(hook);
 }
@@ -180,4 +180,4 @@ void VulkanFrameRecorder::clear() {
   replayable = true;
 }
 
-} // namespace lambda
+} // namespace lambdaui

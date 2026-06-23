@@ -18,7 +18,7 @@
 
   void clipRect(Rect rect, CornerRadius const &cornerRadius, bool) override {
     Rect r = transformedBounds(rect);
-    Rect const effective = lambda::intersectRects(state_.clip, r);
+    Rect const effective = lambdaui::intersectRects(state_.clip, r);
     state_.clip = effective;
     if (!cornerRadius.isZero() && r.width > 0.f && r.height > 0.f) {
       float const sx = std::hypot(state_.transform.m[0], state_.transform.m[1]);

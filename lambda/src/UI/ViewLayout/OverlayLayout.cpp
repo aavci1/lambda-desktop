@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda::layout {
+namespace lambdaui::layout {
 
 namespace {
 
@@ -202,4 +202,4 @@ Rect resolveOverlayFrame(Size win, OverlayConfig const& cfg, Rect contentBounds)
   return Rect{x, y, contentBounds.width, contentBounds.height};
 }
 
-} // namespace lambda::layout
+} // namespace lambdaui::layout

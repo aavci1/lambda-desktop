@@ -7,7 +7,7 @@
 
 #include <vector>
 
-using namespace lambda::Reactive;
+using namespace lambdaui::Reactive;
 
 TEST_CASE("Reactive Effect runs once per source write") {
   Signal<int> source(1);
@@ -208,8 +208,8 @@ TEST_CASE("Reactive Effect flush caps runaway self scheduling in test builds") {
 
 TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {
   Signal<int> trigger(0);
-  lambda::Animated<float> readAnimation{0.f};
-  lambda::Animated<float> writeAnimation{0.f};
+  lambdaui::Animated<float> readAnimation{0.f};
+  lambdaui::Animated<float> writeAnimation{0.f};
   int runs = 0;
   float observed = -1.f;
 
@@ -226,7 +226,7 @@ TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {
   CHECK_FALSE(writeAnimation.isRunning());
 
   {
-    lambda::WithTransition transition{lambda::Transition::linear(10.f)};
+    lambdaui::WithTransition transition{lambdaui::Transition::linear(10.f)};
     readAnimation = 1.f;
     CHECK(readAnimation.isRunning());
     CHECK(readAnimation.get() == doctest::Approx(0.f));
@@ -240,10 +240,10 @@ TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {
   CHECK(writeAnimation.get() == doctest::Approx(5.f));
 
   Signal<int> localTrigger(0);
-  lambda::Animated<float> scopedWrite{0.f};
+  lambdaui::Animated<float> scopedWrite{0.f};
   Effect scopedEffect([&] {
     if (localTrigger.get() > 0) {
-      lambda::WithTransition transition{lambda::Transition::linear(10.f)};
+      lambdaui::WithTransition transition{lambdaui::Transition::linear(10.f)};
       scopedWrite = 8.f;
     }
   });

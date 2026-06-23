@@ -41,7 +41,7 @@
 namespace lambda_terminal {
 namespace {
 
-using namespace lambda;
+using namespace lambdaui;
 
 constexpr float kCellWidth = 8.4f;
 constexpr float kLineHeight = 18.f;
@@ -1410,7 +1410,7 @@ struct TerminalApp {
 
 } // namespace
 
-void installTerminalView(lambda::Application& app, lambda::Window& window, TerminalConfig config) {
+void installTerminalView(lambdaui::Application& app, lambdaui::Window& window, TerminalConfig config) {
   auto session = std::make_shared<TerminalSession>(app, window, std::move(config));
   session->installAutotestTextObserverFromEnv();
   window.setView<TerminalApp>({.session = std::move(session)});

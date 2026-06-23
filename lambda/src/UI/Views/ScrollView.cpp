@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -548,4 +548,4 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   return viewportNode;
 }
 
-} // namespace lambda
+} // namespace lambdaui

@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kActivationTokenTimeoutMs = 30'000;
 
@@ -65,4 +65,4 @@ inline constexpr std::uint32_t kActivationTokenTimeoutMs = 30'000;
                                             token);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

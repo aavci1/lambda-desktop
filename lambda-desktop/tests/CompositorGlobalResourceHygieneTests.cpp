@@ -11,7 +11,7 @@
 
 #include <doctest/doctest.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 TEST_CASE("core globals cap resources at implemented protocol versions") {
   CHECK(kCompositorVersion == 5);
@@ -78,4 +78,4 @@ TEST_CASE("remaining globals cap resources at implemented protocol versions") {
   CHECK(backgroundEffectResourceVersion(5) == 4);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

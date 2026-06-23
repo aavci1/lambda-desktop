@@ -3,7 +3,7 @@
 #include <Lambda/Graphics/TextLayoutOptions.hpp>
 #include <doctest/doctest.h>
 
-using namespace lambda;
+using namespace lambdaui;
 
 TEST_CASE("FreeTypeTextSystem reports line boxes from resolved line height") {
   FreeTypeTextSystem textSystem([] {

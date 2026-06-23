@@ -1,4 +1,4 @@
-lambda_add_app(lambda-shell
+lambdaui_add_app(lambda-shell
   APP_NAME "Lambda Shell"
   BUNDLE_IDENTIFIER "io.lambda.shell"
   COMMENT "Desktop shell for Lambda Desktop"
@@ -21,7 +21,7 @@ target_include_directories(lambda-shell PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(lambda-shell PRIVATE tomlplusplus::tomlplusplus)
 
-if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND OR LAMBDAUI_PLATFORM_LINUX_KMS)
   find_package(PkgConfig QUIET)
   if(PkgConfig_FOUND)
     pkg_check_modules(LIBPULSE QUIET IMPORTED_TARGET libpulse)

@@ -14,7 +14,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 enum class CompositorSceneNodeKind : std::uint8_t {
   Background,
@@ -126,4 +126,4 @@ void closeCompositorSceneOverlayCandidate(platform::KmsAtomicPresenter::OverlayC
 [[nodiscard]] std::shared_ptr<platform::KmsAtomicPresenter::OverlayCandidate>
 ownCompositorSceneOverlayCandidate(platform::KmsAtomicPresenter::OverlayCandidate candidate);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

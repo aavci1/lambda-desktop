@@ -195,9 +195,9 @@ struct ShellStatusModuleState {
 struct DockMaterialConfig {
   float blurRadius = 72.f;
   float opacity = 1.f;
-  lambda::Color baseColor{1.f, 1.f, 1.f, 97.f * (1.f / 255.f)};
-  lambda::Color tintColor{1.f, 1.f, 1.f, 6.f * (1.f / 255.f)};
-  lambda::Color borderColor{1.f, 1.f, 1.f, 153.f * (1.f / 255.f)};
+  lambdaui::Color baseColor{1.f, 1.f, 1.f, 97.f * (1.f / 255.f)};
+  lambdaui::Color tintColor{1.f, 1.f, 1.f, 6.f * (1.f / 255.f)};
+  lambdaui::Color borderColor{1.f, 1.f, 1.f, 153.f * (1.f / 255.f)};
 
   bool operator==(DockMaterialConfig const&) const = default;
 };
@@ -206,7 +206,7 @@ struct ShellConfig {
   std::string iconTheme;
   std::string symbolicIconTheme;
   std::string colorScheme = "no-preference";
-  lambda::Color accentColor = lambda::Color::rgb(0, 122, 255);
+  lambdaui::Color accentColor = lambdaui::Color::rgb(0, 122, 255);
   bool highContrast = false;
   bool reducedMotion = false;
 

@@ -6,8 +6,8 @@
 #include <vector>
 
 TEST_CASE("frame callbacks are limited to surfaces in the presented frame") {
-  using lambda::compositor::WaylandServer;
-  using lambda::compositor::surfaceParticipatesInPresentedFrame;
+  using lambdaui::compositor::WaylandServer;
+  using lambdaui::compositor::surfaceParticipatesInPresentedFrame;
 
   WaylandServer::Impl::Surface visible{};
   visible.id = 10;
@@ -24,8 +24,8 @@ TEST_CASE("frame callbacks are limited to surfaces in the presented frame") {
 }
 
 TEST_CASE("resize pacing grace tracks recent activity for three refreshes") {
-  using lambda::compositor::resizePacingGraceActive;
-  using lambda::compositor::resizePacingGraceNanoseconds;
+  using lambdaui::compositor::resizePacingGraceActive;
+  using lambdaui::compositor::resizePacingGraceNanoseconds;
 
   CHECK(resizePacingGraceNanoseconds(60'000) == 49'999'998);
   CHECK(resizePacingGraceNanoseconds(144'000) == 33'000'000);

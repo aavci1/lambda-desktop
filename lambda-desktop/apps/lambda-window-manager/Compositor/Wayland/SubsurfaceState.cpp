@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 using Subsurface = WaylandServer::Impl::Subsurface;
@@ -358,4 +358,4 @@ std::vector<WaylandServer::Impl::Subsurface const*> orderedSubsurfacesForParent(
   return orderedSubsurfacesForParent(constSubsurfacePointers(server), parent, layer);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

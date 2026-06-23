@@ -11,7 +11,7 @@
 #include <tuple>
 #include <vector>
 
-using namespace lambda;
+using namespace lambdaui;
 
 const std::vector<std::tuple<std::string, Cursor>> cursors = {
     {"Default", Cursor::Arrow},

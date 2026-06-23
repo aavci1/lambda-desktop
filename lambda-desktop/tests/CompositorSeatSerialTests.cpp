@@ -10,10 +10,10 @@
 #include <deque>
 
 TEST_CASE("seat serial ledger validates client surface and kind") {
-  using lambda::compositor::SeatSerialKind;
-  using lambda::compositor::WaylandServer;
-  using lambda::compositor::issueSeatSerial;
-  using lambda::compositor::seatSerialIsValid;
+  using lambdaui::compositor::SeatSerialKind;
+  using lambdaui::compositor::WaylandServer;
+  using lambdaui::compositor::issueSeatSerial;
+  using lambdaui::compositor::seatSerialIsValid;
 
   std::uint32_t nextSerial = 1;
   std::deque<WaylandServer::Impl::SeatSerialRecord> records;
@@ -53,14 +53,14 @@ TEST_CASE("seat serial ledger validates client surface and kind") {
 }
 
 TEST_CASE("selection serial policy accepts only wlroots-aligned trigger serials") {
-  using lambda::compositor::SeatSerialKind;
-  using lambda::compositor::WaylandServer;
-  using lambda::compositor::dataDeviceStartDragAcceptsSerialKind;
-  using lambda::compositor::issueSeatSerial;
-  using lambda::compositor::kDataDeviceDragStartSerialKinds;
-  using lambda::compositor::kSelectionSetSerialKinds;
-  using lambda::compositor::seatSerialIsValid;
-  using lambda::compositor::selectionSetAcceptsSerialKind;
+  using lambdaui::compositor::SeatSerialKind;
+  using lambdaui::compositor::WaylandServer;
+  using lambdaui::compositor::dataDeviceStartDragAcceptsSerialKind;
+  using lambdaui::compositor::issueSeatSerial;
+  using lambdaui::compositor::kDataDeviceDragStartSerialKinds;
+  using lambdaui::compositor::kSelectionSetSerialKinds;
+  using lambdaui::compositor::seatSerialIsValid;
+  using lambdaui::compositor::selectionSetAcceptsSerialKind;
 
   CHECK(dataDeviceStartDragAcceptsSerialKind(SeatSerialKind::PointerButtonPress));
   CHECK_FALSE(dataDeviceStartDragAcceptsSerialKind(SeatSerialKind::PointerEnter));
@@ -102,11 +102,11 @@ TEST_CASE("selection serial policy accepts only wlroots-aligned trigger serials"
 }
 
 TEST_CASE("seat serial ledger trims old records and clears destroyed surfaces") {
-  using lambda::compositor::SeatSerialKind;
-  using lambda::compositor::WaylandServer;
-  using lambda::compositor::clearSeatSerialsForSurface;
-  using lambda::compositor::issueSeatSerial;
-  using lambda::compositor::seatSerialIsValid;
+  using lambdaui::compositor::SeatSerialKind;
+  using lambdaui::compositor::WaylandServer;
+  using lambdaui::compositor::clearSeatSerialsForSurface;
+  using lambdaui::compositor::issueSeatSerial;
+  using lambdaui::compositor::seatSerialIsValid;
 
   std::uint32_t nextSerial = 1;
   std::deque<WaylandServer::Impl::SeatSerialRecord> records;
@@ -131,11 +131,11 @@ TEST_CASE("seat serial ledger trims old records and clears destroyed surfaces") 
 }
 
 TEST_CASE("cursor request validation follows pointer focus without button grab") {
-  using lambda::compositor::CursorRequestSeatState;
-  using lambda::compositor::SeatSerialKind;
-  using lambda::compositor::WaylandServer;
-  using lambda::compositor::cursorRequestValidationSurface;
-  using lambda::compositor::issueSeatSerial;
+  using lambdaui::compositor::CursorRequestSeatState;
+  using lambdaui::compositor::SeatSerialKind;
+  using lambdaui::compositor::WaylandServer;
+  using lambdaui::compositor::cursorRequestValidationSurface;
+  using lambdaui::compositor::issueSeatSerial;
 
   std::uint32_t nextSerial = 1;
   std::deque<WaylandServer::Impl::SeatSerialRecord> records;
@@ -162,11 +162,11 @@ TEST_CASE("cursor request validation follows pointer focus without button grab")
 }
 
 TEST_CASE("cursor request validation honors implicit pointer button grab client") {
-  using lambda::compositor::CursorRequestSeatState;
-  using lambda::compositor::SeatSerialKind;
-  using lambda::compositor::WaylandServer;
-  using lambda::compositor::cursorRequestValidationSurface;
-  using lambda::compositor::issueSeatSerial;
+  using lambdaui::compositor::CursorRequestSeatState;
+  using lambdaui::compositor::SeatSerialKind;
+  using lambdaui::compositor::WaylandServer;
+  using lambdaui::compositor::cursorRequestValidationSurface;
+  using lambdaui::compositor::issueSeatSerial;
 
   std::uint32_t nextSerial = 1;
   std::deque<WaylandServer::Impl::SeatSerialRecord> records;
@@ -204,12 +204,12 @@ TEST_CASE("cursor request validation honors implicit pointer button grab client"
 }
 
 TEST_CASE("pointer button grab helper preserves implicit grab until final release") {
-  using lambda::compositor::PointerButtonGrabRefs;
-  using lambda::compositor::WaylandServer;
-  using lambda::compositor::pointerButtonGrabDeliveryClient;
-  using lambda::compositor::pointerButtonGrabDeliverySurface;
-  using lambda::compositor::pointerButtonGrabMotionFocusSurface;
-  using lambda::compositor::pointerButtonGrabUpdateForButton;
+  using lambdaui::compositor::PointerButtonGrabRefs;
+  using lambdaui::compositor::WaylandServer;
+  using lambdaui::compositor::pointerButtonGrabDeliveryClient;
+  using lambdaui::compositor::pointerButtonGrabDeliverySurface;
+  using lambdaui::compositor::pointerButtonGrabMotionFocusSurface;
+  using lambdaui::compositor::pointerButtonGrabUpdateForButton;
 
   WaylandServer::Impl::Surface focused{};
   WaylandServer::Impl::Surface otherFocus{};
@@ -270,12 +270,12 @@ TEST_CASE("pointer button grab helper preserves implicit grab until final releas
 }
 
 TEST_CASE("pointer button grab helper clears stale grabbed surfaces") {
-  using lambda::compositor::PointerButtonGrabRefs;
-  using lambda::compositor::WaylandServer;
-  using lambda::compositor::pointerButtonGrabClearStale;
-  using lambda::compositor::pointerButtonGrabDeliveryClient;
-  using lambda::compositor::pointerButtonGrabDeliverySurface;
-  using lambda::compositor::pointerButtonGrabMotionFocusSurface;
+  using lambdaui::compositor::PointerButtonGrabRefs;
+  using lambdaui::compositor::WaylandServer;
+  using lambdaui::compositor::pointerButtonGrabClearStale;
+  using lambdaui::compositor::pointerButtonGrabDeliveryClient;
+  using lambdaui::compositor::pointerButtonGrabDeliverySurface;
+  using lambdaui::compositor::pointerButtonGrabMotionFocusSurface;
 
   WaylandServer::Impl::Surface focused{};
   WaylandServer::Impl::Surface* grabSurface = nullptr;

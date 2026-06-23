@@ -140,7 +140,7 @@ The pattern from `RenderTarget`: I claimed the API was "Vulkan only because the 
 
 These are the framework changes the compositor needed; most have landed:
 
-- **DMABUF import on Linux (done).** `Image::fromDmabuf(...)` imports client dma-buf buffers on Linux/Vulkan (`LAMBDA_VULKAN`). It is not available on macOS/Metal builds. `Image::fromExternalVulkan` remains for caller-owned Vulkan images. IOSurface import on Metal is optional and not required for the compositor.
+- **DMABUF import on Linux (done).** `Image::fromDmabuf(...)` imports client dma-buf buffers on Linux/Vulkan (`LAMBDAUI_VULKAN`). It is not available on macOS/Metal builds. `Image::fromExternalVulkan` remains for caller-owned Vulkan images. IOSurface import on Metal is optional and not required for the compositor.
 
 - **Output management beyond Window (done).** `KmsDevice` / `KmsOutput` / `KmsAtomicPresenter` let the compositor own KMS outputs without Lambda `Window`.
 
@@ -233,7 +233,7 @@ This phase is mostly setup and confidence-building. The real compositor work sta
 
 ```cpp
 // Lambda: lambda/include/Lambda/Platform/Linux/KmsOutput.hpp (new, Linux-only)
-namespace lambda::platform {
+namespace lambdaui::platform {
 
 class KmsDevice {
 public:
@@ -271,7 +271,7 @@ public:
 
 This generalizes the existing `Kms*` code in Lambda's platform layer into reusable types. `KmsWindow` (the existing class) becomes a thin user of these — it creates a `KmsDevice`, picks the first output, allocates framebuffers, wraps them in Canvas-bearing surfaces, and exposes the result as a `Window`.
 
-**Metal parity:** the compositor doesn't run on Mac, but the framework-side change must preserve the existing Mac behavior. `CAMetalLayer` is Apple's framework-owned analog of KMS outputs; apps don't enumerate displays on Mac. No new public Metal API is required from this change. The Linux-side KmsDevice / KmsOutput types are gated `#if LAMBDA_PLATFORM_LINUX`; Mac builds don't see them. The existing `Window` continues to work identically on both backends.
+**Metal parity:** the compositor doesn't run on Mac, but the framework-side change must preserve the existing Mac behavior. `CAMetalLayer` is Apple's framework-owned analog of KMS outputs; apps don't enumerate displays on Mac. No new public Metal API is required from this change. The Linux-side KmsDevice / KmsOutput types are gated `#if LAMBDAUI_PLATFORM_LINUX`; Mac builds don't see them. The existing `Window` continues to work identically on both backends.
 
 ### 4.5 Implementation
 
@@ -294,10 +294,10 @@ int main(int /*argc*/, char** /*argv*/) {
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
 
-    auto& vk = lambda::VulkanContext::instance();
+    auto& vk = lambdaui::VulkanContext::instance();
     vk.ensureInitialized();
 
-    auto device = lambda::platform::KmsDevice::open();
+    auto device = lambdaui::platform::KmsDevice::open();
     auto outputs = device->outputs();
     if (outputs.empty()) {
         std::fprintf(stderr, "No connected outputs\n");
@@ -308,13 +308,13 @@ int main(int /*argc*/, char** /*argv*/) {
     auto framebuffers = output.allocateFramebuffers(2);
     int fbIndex = 0;
 
-    lambda::Color clearColor{0.20f, 0.50f, 0.95f, 1.0f};
+    lambdaui::Color clearColor{0.20f, 0.50f, 0.95f, 1.0f};
 
     while (g_running) {
         output.waitForVblank();
 
         auto const& fb = framebuffers[fbIndex];
-        lambda::RenderTarget target{lambda::VulkanRenderTargetSpec{
+        lambdaui::RenderTarget target{lambdaui::VulkanRenderTargetSpec{
             .image = fb.image,
             .view = fb.view,
             .format = fb.format,
@@ -395,7 +395,7 @@ The compositor accepts a Wayland client connection and displays exactly one wind
 **1. `Image::fromDmabuf(...)`** — a new factory on the framework's `Image` class that imports a DMABUF FD as a Vulkan-backed Image. Signature roughly:
 
 ```cpp
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 struct DmabufPlane {
     int fd;
     std::uint32_t offset;
@@ -436,7 +436,7 @@ while (running) {
     output.waitForVblank();                  // Pace to display refresh
     sceneGraph = buildSceneFromSurfaces();   // Materialize Wayland state
     auto& fb = nextFramebuffer();
-    lambda::RenderTarget target{...};
+    lambdaui::RenderTarget target{...};
     target.beginFrame();
     target.renderScene(sceneGraph);
     target.endFrame();
@@ -522,7 +522,7 @@ The compositor is usable as a minimal stacking compositor with multiple windows,
 
 **1. SceneNode "ownership tagging" for input routing.** The compositor's scene graph mixes its own UI (chrome, cursor, snap previews) with client-supplied surfaces. Input hit-testing needs to know whether a hit landed on a client surface (route input to that client via Wayland) or on chrome (handle locally, e.g., title-bar drag).
 
-Today, `SceneNode::interaction()` returns a `scenegraph::Interaction*` whose concrete type is determined by the consumer. In Lambda apps, the concrete type is `lambda::InteractionData` (UI-shaped, with cursor preference and event callbacks).
+Today, `SceneNode::interaction()` returns a `scenegraph::Interaction*` whose concrete type is determined by the consumer. In Lambda apps, the concrete type is `lambdaui::InteractionData` (UI-shaped, with cursor preference and event callbacks).
 
 For the compositor, the concrete type could be different — call it `lambda_compositor::SurfaceInteraction` — and would carry a Wayland surface reference plus chrome-vs-content classification. The hit-test returns the abstract `Interaction*`; the compositor's input dispatch casts down to its own type.
 
@@ -811,7 +811,7 @@ Updated each time a Lambda change lands in service of compositor work:
 | 2026-05-17 | local working tree | Added `wp_cursor_shape_v1` protocol bindings, pointer cursor-shape handling, and compositor-side cursor rendering. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-17 | local working tree | Added `zwp_idle_inhibit_manager_v1` protocol bindings and compositor-side inhibitor tracking. | Linux compositor-only protocol integration; no Metal API involved. |
 | 2026-05-18 | c2c3e59..f84b263 | Stabilized live resize: compositor resize geometry state, stale-content clipping, Vulkan swapchain reuse with size headroom, `wp_viewporter` client integration in `WaylandWindow`, and compositor-side viewport commit handling. | Mac unaffected: `CAMetalLayer` manages drawable size natively and has no Vulkan-style swapchain recreation per resize. No Metal API required. |
-| 2026-05-18 | compositor-cleanup-spec commit 1 | Unified resize tracing into `lambda::detail::resizeTrace`, using `LAMBDA_RESIZE_TRACE` and `LAMBDA_RESIZE_TRACE_LOG` across Vulkan, Wayland-window, and compositor resize paths. | No Metal API surface; tracing exists for Vulkan/Linux resize behavior and is a framework-internal utility. |
+| 2026-05-18 | compositor-cleanup-spec commit 1 | Unified resize tracing into `lambdaui::detail::resizeTrace`, using `LAMBDA_RESIZE_TRACE` and `LAMBDA_RESIZE_TRACE_LOG` across Vulkan, Wayland-window, and compositor resize paths. | No Metal API surface; tracing exists for Vulkan/Linux resize behavior and is a framework-internal utility. |
 | 2026-05-18 | compositor-cleanup-spec implementation | Added header-only tomlplusplus as the compositor config parser and removed the hand-rolled line scanner from `CompositorConfig.cpp`. | Header-only dependency is platform-neutral; no backend API surface. |
 | 2026-05-18 | compositor-cleanup-spec implementation | Migrated current Wayland global implementations, including core surfaces, xdg-shell/decoration, viewporter, fractional-scale, cursor-shape, idle-inhibit, layer-shell, presentation-time, relative-pointer/pointer-constraints, primary-selection, clipboard, and DnD into `lambda-desktop/apps/lambda-window-manager/Compositor/Wayland/Globals/`. | Linux compositor-only protocol structure; no Metal API involved. |
 | 2026-05-18 | compositor-cleanup-spec implementation | Moved compositor window/input-management behavior (focus, raise, titlebar drag, resize, snap/maximize, keyboard shortcuts, pointer/key forwarding, and popup dismissal) into `lambda-desktop/apps/lambda-window-manager/Compositor/Window/WindowManager.cpp`. | Linux compositor-only shell behavior; no Metal API involved. |

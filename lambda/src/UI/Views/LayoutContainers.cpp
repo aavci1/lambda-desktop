@@ -14,7 +14,7 @@
 #include <optional>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -262,4 +262,4 @@ Size ZStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   return Size{width, height};
 }
 
-} // namespace lambda
+} // namespace lambdaui

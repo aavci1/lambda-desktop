@@ -409,13 +409,13 @@ TEST_CASE("Shell docklet status items expose real and unavailable states") {
   CHECK_FALSE(items[1].active);
   CHECK(items[2].label == "55%");
   CHECK(items[3].label == "88%");
-  CHECK(items[3].icon == lambda::IconName::BatteryChargingFull);
+  CHECK(items[3].icon == lambdaui::IconName::BatteryChargingFull);
   CHECK(items[4].id == "media");
   CHECK(items[4].label == "Lambda Artist - Test Song");
   CHECK(items[4].availability == lambda_shell::StatusAvailability::Available);
   CHECK(items[4].active);
   CHECK(items[5].id == "session");
-  CHECK(items[5].icon == lambda::IconName::PowerSettingsNew);
+  CHECK(items[5].icon == lambdaui::IconName::PowerSettingsNew);
   CHECK(items[5].availability == lambda_shell::StatusAvailability::Available);
 }
 

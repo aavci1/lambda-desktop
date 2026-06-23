@@ -8,7 +8,7 @@
 #include <memory>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void viewporterDestroy(wl_client*, wl_resource* resource) {
@@ -136,4 +136,4 @@ void bindViewporter(wl_client* client, void* data, std::uint32_t version, std::u
   bindViewporterImpl(client, data, version, id);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

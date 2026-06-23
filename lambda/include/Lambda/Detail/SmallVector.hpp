@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 template <typename T, std::size_t N>
 class SmallVector {
@@ -194,4 +194,4 @@ private:
   std::size_t size_ = 0;
 };
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

@@ -71,7 +71,7 @@ std::vector<DockItem> launcherShellActions(std::string_view query) {
   return results;
 }
 
-DockletStatusItem unavailableItem(std::string id, lambda::IconName icon) {
+DockletStatusItem unavailableItem(std::string id, lambdaui::IconName icon) {
   DockletStatusItem item;
   item.id = std::move(id);
   item.icon = icon;
@@ -93,24 +93,24 @@ std::string batteryLabel(SystemStatus const& status) {
   return status.battery;
 }
 
-lambda::IconName batteryIcon(BatteryStatus const& status) {
+lambdaui::IconName batteryIcon(BatteryStatus const& status) {
   if (status.warningLevel == BatteryWarningLevel::Action ||
       status.warningLevel == BatteryWarningLevel::Critical ||
       status.chargeState == BatteryChargeState::Empty) {
-    return lambda::IconName::BatteryAlert;
+    return lambdaui::IconName::BatteryAlert;
   }
   if (status.chargeState == BatteryChargeState::Charging ||
       status.chargeState == BatteryChargeState::PendingCharge) {
-    return lambda::IconName::BatteryChargingFull;
+    return lambdaui::IconName::BatteryChargingFull;
   }
   if (status.chargeState == BatteryChargeState::Full || status.percentage >= 95) {
-    return lambda::IconName::BatteryFull;
+    return lambdaui::IconName::BatteryFull;
   }
   if (status.warningLevel == BatteryWarningLevel::Low ||
       (status.percentage >= 0 && status.percentage <= 15)) {
-    return lambda::IconName::BatteryLow;
+    return lambdaui::IconName::BatteryLow;
   }
-  return lambda::IconName::BatteryAndroid4;
+  return lambdaui::IconName::BatteryAndroid4;
 }
 
 } // namespace
@@ -319,7 +319,7 @@ std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status) {
   if (!unavailableStatus(status.wifi)) {
     DockletStatusItem item;
     item.id = "network";
-    item.icon = offStatus(status.wifi) ? lambda::IconName::WifiOff : lambda::IconName::Wifi;
+    item.icon = offStatus(status.wifi) ? lambdaui::IconName::WifiOff : lambdaui::IconName::Wifi;
     item.label = offStatus(status.wifi) ? std::string{} : status.wifi;
     item.availability = StatusAvailability::Available;
     item.active = !offStatus(status.wifi);
@@ -327,31 +327,31 @@ std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status) {
   } else if (!unavailableStatus(status.network)) {
     DockletStatusItem item;
     item.id = "network";
-    item.icon = offStatus(status.network) ? lambda::IconName::WifiOff : lambda::IconName::NetworkWifi;
+    item.icon = offStatus(status.network) ? lambdaui::IconName::WifiOff : lambdaui::IconName::NetworkWifi;
     item.availability = StatusAvailability::Available;
     item.active = !offStatus(status.network);
     items.push_back(std::move(item));
   } else {
-    items.push_back(unavailableItem("network", lambda::IconName::WifiOff));
+    items.push_back(unavailableItem("network", lambdaui::IconName::WifiOff));
   }
 
   if (unavailableStatus(status.bluetooth)) {
-    items.push_back(unavailableItem("bluetooth", lambda::IconName::BluetoothDisabled));
+    items.push_back(unavailableItem("bluetooth", lambdaui::IconName::BluetoothDisabled));
   } else {
     DockletStatusItem item;
     item.id = "bluetooth";
-    item.icon = offStatus(status.bluetooth) ? lambda::IconName::BluetoothDisabled : lambda::IconName::BluetoothConnected;
+    item.icon = offStatus(status.bluetooth) ? lambdaui::IconName::BluetoothDisabled : lambdaui::IconName::BluetoothConnected;
     item.availability = StatusAvailability::Available;
     item.active = !offStatus(status.bluetooth);
     items.push_back(std::move(item));
   }
 
   if (unavailableStatus(status.volume)) {
-    items.push_back(unavailableItem("volume", lambda::IconName::VolumeOff));
+    items.push_back(unavailableItem("volume", lambdaui::IconName::VolumeOff));
   } else {
     DockletStatusItem item;
     item.id = "volume";
-    item.icon = offStatus(status.volume) ? lambda::IconName::VolumeOff : lambda::IconName::VolumeUp;
+    item.icon = offStatus(status.volume) ? lambdaui::IconName::VolumeOff : lambdaui::IconName::VolumeUp;
     item.label = offStatus(status.volume) ? std::string{} : status.volume;
     item.availability = StatusAvailability::Available;
     item.active = !offStatus(status.volume);
@@ -359,7 +359,7 @@ std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status) {
   }
 
   if (!batteryAvailable(status)) {
-    items.push_back(unavailableItem("battery", lambda::IconName::BatteryUnknown));
+    items.push_back(unavailableItem("battery", lambdaui::IconName::BatteryUnknown));
   } else {
     DockletStatusItem item;
     item.id = "battery";
@@ -372,11 +372,11 @@ std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status) {
   }
 
   if (unavailableStatus(status.media)) {
-    items.push_back(unavailableItem("media", lambda::IconName::MusicOff));
+    items.push_back(unavailableItem("media", lambdaui::IconName::MusicOff));
   } else {
     DockletStatusItem item;
     item.id = "media";
-    item.icon = stoppedMediaStatus(status.media) ? lambda::IconName::MusicOff : lambda::IconName::MusicNote;
+    item.icon = stoppedMediaStatus(status.media) ? lambdaui::IconName::MusicOff : lambdaui::IconName::MusicNote;
     item.label = stoppedMediaStatus(status.media) ? std::string{} : status.media;
     item.availability = StatusAvailability::Available;
     item.active = !stoppedMediaStatus(status.media);
@@ -385,7 +385,7 @@ std::vector<DockletStatusItem> dockletStatusItems(SystemStatus const& status) {
 
   DockletStatusItem session;
   session.id = "session";
-  session.icon = lambda::IconName::PowerSettingsNew;
+  session.icon = lambdaui::IconName::PowerSettingsNew;
   session.availability = StatusAvailability::Available;
   session.active = true;
   items.push_back(std::move(session));

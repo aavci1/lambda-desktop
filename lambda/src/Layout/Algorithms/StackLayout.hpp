@@ -7,7 +7,7 @@
 #include <span>
 #include <vector>
 
-namespace lambda::layout {
+namespace lambdaui::layout {
 
 enum class StackAxis {
   Vertical,
@@ -54,4 +54,4 @@ StackLayoutResult layoutStack(StackAxis axis, Alignment crossAlignment,
                               float assignedCrossSize,
                               bool hasAssignedCrossSize);
 
-} // namespace lambda::layout
+} // namespace lambdaui::layout

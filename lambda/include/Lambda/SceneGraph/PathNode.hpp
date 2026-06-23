@@ -8,7 +8,7 @@
 #include <Lambda/Graphics/Styles.hpp>
 #include <Lambda/SceneGraph/SceneNode.hpp>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 class PathNode final : public SceneNode {
   public:
@@ -37,4 +37,4 @@ class PathNode final : public SceneNode {
     ShadowStyle shadow_ = ShadowStyle::none();
 };
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

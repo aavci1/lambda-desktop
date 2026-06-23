@@ -8,7 +8,7 @@
 #include <optional>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Platform clipboard. Access via Application::clipboard().
 ///
@@ -30,4 +30,4 @@ public:
   virtual bool hasText() const = 0;
 };
 
-} // namespace lambda
+} // namespace lambdaui

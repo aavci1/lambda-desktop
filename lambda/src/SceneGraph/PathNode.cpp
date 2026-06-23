@@ -3,7 +3,7 @@
 
 #include <utility>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 PathNode::PathNode(Rect bounds, Path path, FillStyle fill, StrokeStyle stroke, ShadowStyle shadow)
     : SceneNode(SceneNodeKind::Path, bounds)
@@ -70,4 +70,4 @@ void PathNode::render(Renderer& renderer) const {
     renderer.drawPath(path_, fill_, stroke_, shadow_);
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -193,4 +193,4 @@ void PortalNotificationService::emitActionInvoked(std::uint32_t daemonId, std::s
                     dbus::BasicValue(emptyVariantArray())});
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

@@ -4,9 +4,9 @@
 #include <Lambda/UI/Theme.hpp>
 #include <Lambda/UI/WindowChrome.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 LAMBDA_DEFINE_ENVIRONMENT_KEY(ThemeKey, Theme, Theme::light());
 LAMBDA_DEFINE_ENVIRONMENT_KEY(WindowChromeMetricsKey, WindowChromeMetrics, WindowChromeMetrics{});
 
-} // namespace lambda
+} // namespace lambdaui

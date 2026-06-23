@@ -8,7 +8,7 @@
 #include <memory>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void idleInhibitManagerDestroy(wl_client*, wl_resource* resource) {
@@ -74,4 +74,4 @@ void bindIdleInhibitManager(wl_client* client, void* data, std::uint32_t version
   bindIdleInhibitManagerImpl(client, data, version, id);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

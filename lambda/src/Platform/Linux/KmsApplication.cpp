@@ -43,7 +43,7 @@ extern "C" {
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 namespace {
 
 KmsApplication* gKmsApplication = nullptr;
@@ -810,13 +810,13 @@ void KmsApplication::reEnumerateConnectors() {
   for (KmsConnector const& connector : connectors_) previousById.emplace(connector.connectorId, connector);
   for (KmsConnector const& connector : next) nextById.emplace(connector.connectorId, connector);
 
-  bool const hasApplication = ::lambda::Application::hasInstance();
+  bool const hasApplication = ::lambdaui::Application::hasInstance();
 
   for (KmsConnector const& connector : connectors_) {
     if (nextById.contains(connector.connectorId)) continue;
     debugLog("KMS output removed: %s", connector.name.c_str());
     if (hasApplication) {
-      ::lambda::Application::instance().eventQueue().post(
+      ::lambdaui::Application::instance().eventQueue().post(
           WindowLifecycleEvent{.kind = WindowLifecycleEvent::Kind::OutputRemoved,
                                .handle = 0,
                                .window = nullptr,
@@ -824,7 +824,7 @@ void KmsApplication::reEnumerateConnectors() {
     }
     for (KmsWindow* window : windows_) {
       if (hasApplication && window && window->connectorId() == connector.connectorId) {
-        ::lambda::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::CloseRequest,
+        ::lambdaui::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::CloseRequest,
                                                                       .handle = window->handle(),
                                                                       .size = {},
                                                                       .dpi = 1.f,
@@ -839,7 +839,7 @@ void KmsApplication::reEnumerateConnectors() {
     if (previous == previousById.end()) {
       debugLog("KMS output added: %s", connector.name.c_str());
       if (hasApplication) {
-        ::lambda::Application::instance().eventQueue().post(
+        ::lambdaui::Application::instance().eventQueue().post(
             WindowLifecycleEvent{.kind = WindowLifecycleEvent::Kind::OutputAdded,
                                  .handle = 0,
                                  .window = nullptr,
@@ -856,7 +856,7 @@ void KmsApplication::reEnumerateConnectors() {
       if (!window || window->connectorId() != connector.connectorId) continue;
       window->updateConnector(connector);
       if (hasApplication && dpiChanged) {
-        ::lambda::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
+        ::lambdaui::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::DpiChanged,
                                                                       .handle = window->handle(),
                                                                       .size = {},
                                                                       .dpi = 1.f,
@@ -864,7 +864,7 @@ void KmsApplication::reEnumerateConnectors() {
                                                                       .dpiY = 1.f});
       }
       if (hasApplication && modeChanged) {
-        ::lambda::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::Resize,
+        ::lambdaui::Application::instance().eventQueue().post(WindowEvent{.kind = WindowEvent::Kind::Resize,
                                                                       .handle = window->handle(),
                                                                       .size = window->currentSize(),
                                                                       .dpi = 1.f,
@@ -876,7 +876,7 @@ void KmsApplication::reEnumerateConnectors() {
 
   connectors_ = std::move(next);
   if (hasApplication) {
-    ::lambda::Application::instance().eventQueue().dispatch();
+    ::lambdaui::Application::instance().eventQueue().dispatch();
   }
 }
 
@@ -1700,4 +1700,4 @@ std::unique_ptr<Application> createApplication() {
 }
 
 } // namespace platform
-} // namespace lambda
+} // namespace lambdaui

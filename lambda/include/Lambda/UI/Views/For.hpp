@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class ForLayout {
   VerticalStack,
@@ -508,4 +508,4 @@ For(Reactive::Signal<std::vector<T>> items, KeyFn&& keyFn, Factory&& factory,
       spacing, alignment, layout};
 }
 
-} // namespace lambda
+} // namespace lambdaui

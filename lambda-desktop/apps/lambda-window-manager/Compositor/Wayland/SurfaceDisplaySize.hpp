@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct SurfaceDisplaySize {
   std::int32_t width = 0;
@@ -55,4 +55,4 @@ inline SurfaceDisplaySize surfaceInteractiveDisplaySize(WaylandServer::Impl::Sur
   return size;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -11,7 +11,7 @@
 
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class ScrollAxis { Vertical, Horizontal, Both };
 
@@ -35,4 +35,4 @@ struct OffsetView : ViewModifiers<OffsetView> {
 
 };
 
-} // namespace lambda
+} // namespace lambdaui

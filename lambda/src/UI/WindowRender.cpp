@@ -15,7 +15,7 @@
 
 #include <chrono>
 
-namespace lambda {
+namespace lambdaui {
 
 void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
                        std::optional<scenegraph::SceneGraph> const& sceneGraph,
@@ -88,4 +88,4 @@ void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
   }
 }
 
-} // namespace lambda
+} // namespace lambdaui

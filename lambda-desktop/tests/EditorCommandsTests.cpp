@@ -4,11 +4,11 @@
 
 namespace {
 
-lambda::detail::TextEditSelection caret(int byte) {
+lambdaui::detail::TextEditSelection caret(int byte) {
   return {.caretByte = byte, .anchorByte = byte};
 }
 
-lambda::detail::TextEditSelection range(int start, int end) {
+lambdaui::detail::TextEditSelection range(int start, int end) {
   return {.caretByte = end, .anchorByte = start};
 }
 
@@ -37,7 +37,7 @@ TEST_CASE("EditorEditHistory records undo and redo snapshots") {
 
 TEST_CASE("Editor commands delete cut and paste with selection") {
   std::string text = "hello world";
-  lambda::detail::TextEditSelection selection = range(6, 11);
+  lambdaui::detail::TextEditSelection selection = range(6, 11);
 
   CHECK(lambda_editor::selectedText(text, selection) == "world");
 

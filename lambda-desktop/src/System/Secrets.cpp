@@ -5,7 +5,7 @@
 #include <memory>
 #include <utility>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -569,4 +569,4 @@ void SecretsService::exportItem(std::string const& path) {
   itemSlots_[path] = bus_->exportObject(path, itemDefinition(path));
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

@@ -13,7 +13,7 @@
 #include <string>
 #include <variant>
 
-namespace lambda {
+namespace lambdaui {
 
 class Window;
 
@@ -100,4 +100,4 @@ struct CustomEvent {
 
 using Event = std::variant<WindowLifecycleEvent, WindowEvent, InputEvent, TimerEvent, FrameEvent, CustomEvent>;
 
-} // namespace lambda
+} // namespace lambdaui

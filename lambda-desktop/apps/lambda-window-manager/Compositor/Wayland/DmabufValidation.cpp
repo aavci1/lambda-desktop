@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 std::optional<DmabufPlaneLayout> findPlane(std::span<DmabufPlaneLayout const> planes,
@@ -105,4 +105,4 @@ DmabufLayoutValidationResult validateSinglePlaneDmabufLayout(
   return result;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

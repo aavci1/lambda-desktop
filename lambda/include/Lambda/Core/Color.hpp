@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 struct Theme;
 
@@ -94,4 +94,4 @@ constexpr Color darkGray = Color::hex(0x424242);
 constexpr Color lightGray = Color::hex(0xE0E0E0);
 } // namespace Colors
 
-} // namespace lambda
+} // namespace lambdaui

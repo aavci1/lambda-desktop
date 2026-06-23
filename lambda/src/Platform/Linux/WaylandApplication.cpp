@@ -15,7 +15,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 std::unique_ptr<Clipboard> createWaylandClipboard();
 
@@ -154,4 +154,4 @@ std::unique_ptr<Application> createApplication() {
 }
 
 } // namespace platform
-} // namespace lambda
+} // namespace lambdaui

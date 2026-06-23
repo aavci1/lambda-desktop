@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 AnimationClock::AnimationClock() = default;
 
@@ -230,4 +230,4 @@ void AnimationClock::stopFramePump() {
   running_ = false;
 }
 
-} // namespace lambda
+} // namespace lambdaui

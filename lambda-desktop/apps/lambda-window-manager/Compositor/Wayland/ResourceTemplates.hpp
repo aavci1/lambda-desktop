@@ -8,7 +8,7 @@
 
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 template <typename T>
 T* resourceData(wl_resource* resource) {
@@ -41,4 +41,4 @@ inline void removeResource(std::vector<wl_resource*>& resources, wl_resource* re
   resources.erase(std::remove(resources.begin(), resources.end(), resource), resources.end());
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

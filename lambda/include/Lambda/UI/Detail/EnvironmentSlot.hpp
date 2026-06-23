@@ -12,7 +12,7 @@
 #include <typeinfo>
 #include <utility>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 inline constexpr std::uint16_t kMaxEnvironmentSlots = 256;
 
@@ -295,4 +295,4 @@ private:
   void* heap_ = nullptr;
 };
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-namespace lambda::compositor::presentation {
+namespace lambdaui::compositor::presentation {
 
 inline std::string lowerAscii(std::string_view value) {
   std::string result(value);
@@ -44,4 +44,4 @@ inline std::optional<std::size_t> parseOutputIndex(std::string_view selector, st
   return parseOutputIndex(*selector, outputNames.size());
 }
 
-} // namespace lambda::compositor::presentation
+} // namespace lambdaui::compositor::presentation

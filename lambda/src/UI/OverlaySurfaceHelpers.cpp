@@ -4,7 +4,7 @@
 #include <Lambda/Core/Color.hpp>
 #include <Lambda/UI/Theme.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 ResolvedAlertCardColors resolveAlertCardColors(Color cardColor, Color cardStrokeColor, float cornerRadius,
                                                Theme const& theme) {
@@ -33,4 +33,4 @@ Color resolvePopoverBackdropColor(Color backdropColor, Theme const& theme) {
   return resolveColor(backdropColor, theme.popoverScrimColor, theme);
 }
 
-} // namespace lambda
+} // namespace lambdaui

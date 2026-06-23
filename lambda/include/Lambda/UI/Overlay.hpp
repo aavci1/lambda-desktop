@@ -16,7 +16,7 @@
 #include <tuple>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 class Runtime;
 
@@ -107,4 +107,4 @@ private:
   std::uint64_t nextId_ = 1;
 };
 
-} // namespace lambda
+} // namespace lambdaui

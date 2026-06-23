@@ -9,23 +9,23 @@
 #include <cstdint>
 #include <memory>
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 #include <vulkan/vulkan.h>
 #endif
 
-#if LAMBDA_METAL && defined(__OBJC__)
+#if LAMBDAUI_METAL && defined(__OBJC__)
 @class MTLTexture;
 @class MTLCommandBuffer;
 @class MTLSharedEvent;
 #endif
 
-namespace lambda {
+namespace lambdaui {
 
 namespace scenegraph {
 class SceneGraph;
 }
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 struct VulkanRenderTargetSpec {
   VkImage image = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
@@ -50,7 +50,7 @@ struct VulkanRenderTargetSpec {
 };
 #endif
 
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
 struct MetalRenderTargetSpec {
   void* texture = nullptr;       ///< id<MTLTexture>; required.
   int format = 0;                ///< MTLPixelFormat; 0 means match the texture.
@@ -69,10 +69,10 @@ class RenderTarget;
 
 class RenderTarget {
 public:
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
   explicit RenderTarget(VulkanRenderTargetSpec const& spec);
 #endif
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
   explicit RenderTarget(MetalRenderTargetSpec const& spec);
 #endif
 
@@ -94,4 +94,4 @@ private:
   std::unique_ptr<platform::RenderTarget> impl_;
 };
 
-} // namespace lambda
+} // namespace lambdaui

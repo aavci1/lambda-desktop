@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kRelativePointerVersion = 1;
 inline constexpr std::uint32_t kPointerConstraintsVersion = 1;
@@ -28,4 +28,4 @@ inline constexpr std::uint32_t kPointerConstraintsVersion = 1;
   return constraint && constraint->pointer == pointerResource;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

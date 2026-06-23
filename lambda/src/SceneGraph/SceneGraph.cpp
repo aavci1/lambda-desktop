@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <unordered_map>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 namespace {
 
@@ -255,4 +255,4 @@ std::vector<std::pair<ComponentKey, Rect>> SceneGraph::snapshotGeometry() const 
     return out;
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

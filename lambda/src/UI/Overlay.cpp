@@ -19,7 +19,7 @@
 #include <tuple>
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -483,4 +483,4 @@ OverlayEntry const* OverlayManager::find(OverlayId id) const {
   return nullptr;
 }
 
-} // namespace lambda
+} // namespace lambdaui

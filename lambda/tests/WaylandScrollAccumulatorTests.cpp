@@ -3,7 +3,7 @@
 #include "Platform/Linux/WaylandScrollAccumulator.hpp"
 
 TEST_CASE("Wayland scroll accumulator batches horizontal and vertical axes") {
-  lambda::WaylandScrollAccumulator scroll;
+  lambdaui::WaylandScrollAccumulator scroll;
 
   scroll.addAxis(true, 3.f);
   scroll.addAxis(false, -5.f);
@@ -17,7 +17,7 @@ TEST_CASE("Wayland scroll accumulator batches horizontal and vertical axes") {
 }
 
 TEST_CASE("Wayland scroll accumulator drops zero-sum frames") {
-  lambda::WaylandScrollAccumulator scroll;
+  lambdaui::WaylandScrollAccumulator scroll;
 
   scroll.addAxis(false, 4.f);
   scroll.addAxis(false, -4.f);

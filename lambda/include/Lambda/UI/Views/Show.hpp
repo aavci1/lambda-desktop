@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 template<typename Condition, typename ThenFactory, typename ElseFactory>
 class ShowView {
@@ -209,4 +209,4 @@ auto Show(Condition&& condition, ThenFactory&& thenFactory) {
               std::move(empty));
 }
 
-} // namespace lambda
+} // namespace lambdaui

@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 using CommandId = std::uint64_t;
 
@@ -99,4 +99,4 @@ using ActionId = CommandId;
 using ActionHandler = CommandHandler;
 using ActionRegistry = CommandRegistry;
 
-} // namespace lambda
+} // namespace lambdaui

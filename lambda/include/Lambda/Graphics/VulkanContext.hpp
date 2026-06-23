@@ -6,14 +6,14 @@
 
 #include <cstdint>
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 
 #include <vulkan/vulkan.h>
 
 struct VmaAllocator_T;
 using VmaAllocator = VmaAllocator_T*;
 
-namespace lambda {
+namespace lambdaui {
 
 class VulkanContext {
 public:
@@ -44,6 +44,6 @@ private:
   VulkanContext() = default;
 };
 
-} // namespace lambda
+} // namespace lambdaui
 
-#endif // LAMBDA_VULKAN
+#endif // LAMBDAUI_VULKAN

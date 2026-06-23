@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 RenderNode::RenderNode(Rect bounds, DrawFunction draw)
     : SceneNode(SceneNodeKind::Render, bounds), draw_(std::move(draw)) {}
@@ -49,4 +49,4 @@ bool RenderNode::canPrepareRenderOps() const noexcept {
     return purity_ == Purity::Pure;
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 struct AttributedRun {
     std::uint32_t start = 0; // byte offset into utf8, inclusive
@@ -30,4 +30,4 @@ struct AttributedString {
     static AttributedString plain(std::string_view text, Font const &font, Color const &color);
 };
 
-} // namespace lambda
+} // namespace lambdaui

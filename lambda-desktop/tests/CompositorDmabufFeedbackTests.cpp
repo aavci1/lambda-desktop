@@ -5,7 +5,7 @@
 #include <array>
 
 TEST_CASE("dmabuf feedback keeps renderer fallback when scanout preferences exist") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   std::array rendererPairs{
       DmabufFeedbackPair{.format = 1, .modifier = 10},
@@ -29,7 +29,7 @@ TEST_CASE("dmabuf feedback keeps renderer fallback when scanout preferences exis
 }
 
 TEST_CASE("dmabuf feedback ignores scanout pairs the renderer cannot import") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   std::array rendererPairs{
       DmabufFeedbackPair{.format = 1, .modifier = 10},

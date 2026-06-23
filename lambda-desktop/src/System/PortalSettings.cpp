@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -356,4 +356,4 @@ bool PortalSettingsService::namespaceMatches(std::string const& requested, std::
   return false;
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

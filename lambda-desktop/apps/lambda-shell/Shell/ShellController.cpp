@@ -46,8 +46,8 @@ namespace lambda_shell {
 
 namespace {
 
-using namespace lambda;
-using namespace lambda::keys;
+using namespace lambdaui;
+using namespace lambdaui::keys;
 
 inline constexpr int kDockMenuGap = 10;
 inline constexpr int kDockVolumeStepPercent = 5;
@@ -66,7 +66,7 @@ struct ShellStatusCommandCompleted {
 
 #if LAMBDA_HAS_DBUS
 struct ShellNotificationPosted {
-  lambda::system::NotificationPosted notification;
+  lambdaui::system::NotificationPosted notification;
 };
 
 struct ShellNotificationClosed {
@@ -93,7 +93,7 @@ bool appIdsMatch(std::string_view a, std::string_view b) {
 }
 
 std::vector<NotificationActionEntry> shellNotificationActions(
-    std::vector<lambda::system::NotificationAction> const& actions) {
+    std::vector<lambdaui::system::NotificationAction> const& actions) {
   std::vector<NotificationActionEntry> output;
   output.reserve(actions.size());
   for (auto const& action : actions) {
@@ -133,7 +133,7 @@ bool containsToken(std::string const& haystack, std::string const& needle) {
   return haystack.find(needle) != std::string::npos;
 }
 
-lambda::IconName trayIconForItem(lambda::system::StatusNotifierItemProperties const& item) {
+lambdaui::IconName trayIconForItem(lambdaui::system::StatusNotifierItemProperties const& item) {
   std::string icon = lowerAscii(item.status == "NeedsAttention" && !item.attentionIconName.empty()
                                     ? item.attentionIconName
                                     : item.iconName);
@@ -143,31 +143,31 @@ lambda::IconName trayIconForItem(lambda::system::StatusNotifierItemProperties co
   icon += " " + lowerAscii(item.tooltip.title);
   icon += " " + lowerAscii(item.tooltip.description);
 
-  if (containsToken(icon, "bluetooth")) return lambda::IconName::BluetoothConnected;
+  if (containsToken(icon, "bluetooth")) return lambdaui::IconName::BluetoothConnected;
   if (containsToken(icon, "network") || containsToken(icon, "wifi") ||
       containsToken(icon, "nm-")) {
-    return lambda::IconName::NetworkWifi;
+    return lambdaui::IconName::NetworkWifi;
   }
   if (containsToken(icon, "audio") || containsToken(icon, "volume") ||
       containsToken(icon, "sound")) {
-    return lambda::IconName::VolumeUp;
+    return lambdaui::IconName::VolumeUp;
   }
   if (containsToken(icon, "battery") || containsToken(icon, "power")) {
-    return lambda::IconName::BatteryAndroid4;
+    return lambdaui::IconName::BatteryAndroid4;
   }
   if (containsToken(icon, "media") || containsToken(icon, "music") ||
       containsToken(icon, "spotify") || containsToken(icon, "player")) {
-    return lambda::IconName::MusicNote;
+    return lambdaui::IconName::MusicNote;
   }
-  if (containsToken(icon, "mail")) return lambda::IconName::Mail;
-  if (containsToken(icon, "calendar")) return lambda::IconName::CalendarToday;
+  if (containsToken(icon, "mail")) return lambdaui::IconName::Mail;
+  if (containsToken(icon, "calendar")) return lambdaui::IconName::CalendarToday;
   if (containsToken(icon, "notification") || containsToken(icon, "update")) {
-    return lambda::IconName::Notifications;
+    return lambdaui::IconName::Notifications;
   }
-  return lambda::IconName::Widgets;
+  return lambdaui::IconName::Widgets;
 }
 
-TrayStatusItem trayStatusItemFromProperties(lambda::system::StatusNotifierItemProperties const& item) {
+TrayStatusItem trayStatusItemFromProperties(lambdaui::system::StatusNotifierItemProperties const& item) {
   std::string label = item.title.empty() ? item.tooltip.title : item.title;
   if (label.empty()) {
     label = item.itemId;
@@ -183,7 +183,7 @@ TrayStatusItem trayStatusItemFromProperties(lambda::system::StatusNotifierItemPr
 }
 
 std::vector<TrayStatusItem>
-trayStatusItemsFromProperties(std::vector<lambda::system::StatusNotifierItemProperties> const& properties) {
+trayStatusItemsFromProperties(std::vector<lambdaui::system::StatusNotifierItemProperties> const& properties) {
   std::vector<TrayStatusItem> items;
   items.reserve(properties.size());
   for (auto const& item : properties) {
@@ -227,74 +227,74 @@ LayerShellOptions visibleMenuLayer(char const* nameSpace) {
 
 #if LAMBDA_HAS_DBUS
 struct ShellPowerStatusWatcher {
-  ShellPowerStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
-      : upower(lambda::system::UPowerClient::connectSystem()),
+  ShellPowerStatusWatcher(lambdaui::Application& app, std::function<void()> onChanged)
+      : upower(lambdaui::system::UPowerClient::connectSystem()),
         upowerPump(app, upower.bus()),
         upowerChanged(upower.watchStatusChanges(std::move(onChanged))) {}
 
-  lambda::system::UPowerClient upower;
-  lambda::dbus::BusEventPump upowerPump;
-  lambda::system::UPowerStatusWatch upowerChanged;
+  lambdaui::system::UPowerClient upower;
+  lambdaui::dbus::BusEventPump upowerPump;
+  lambdaui::system::UPowerStatusWatch upowerChanged;
 };
 
 struct ShellNetworkStatusWatcher {
-  ShellNetworkStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
-      : network(lambda::system::NetworkManagerClient::connectSystem()),
+  ShellNetworkStatusWatcher(lambdaui::Application& app, std::function<void()> onChanged)
+      : network(lambdaui::system::NetworkManagerClient::connectSystem()),
         networkPump(app, network.bus()),
         networkChanged(network.watchStatusChanges(std::move(onChanged))) {}
 
-  lambda::system::NetworkManagerClient network;
-  lambda::dbus::BusEventPump networkPump;
-  lambda::system::NetworkManagerStatusWatch networkChanged;
+  lambdaui::system::NetworkManagerClient network;
+  lambdaui::dbus::BusEventPump networkPump;
+  lambdaui::system::NetworkManagerStatusWatch networkChanged;
 };
 
 struct ShellBluetoothStatusWatcher {
-  ShellBluetoothStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
-      : bluetooth(lambda::system::BlueZClient::connectSystem()),
+  ShellBluetoothStatusWatcher(lambdaui::Application& app, std::function<void()> onChanged)
+      : bluetooth(lambdaui::system::BlueZClient::connectSystem()),
         bluetoothPump(app, bluetooth.bus()),
         bluetoothChanged(bluetooth.watchStatusChanges(std::move(onChanged))) {}
 
-  lambda::system::BlueZClient bluetooth;
-  lambda::dbus::BusEventPump bluetoothPump;
-  lambda::system::BlueZStatusWatch bluetoothChanged;
+  lambdaui::system::BlueZClient bluetooth;
+  lambdaui::dbus::BusEventPump bluetoothPump;
+  lambdaui::system::BlueZStatusWatch bluetoothChanged;
 };
 
 struct ShellMediaStatusWatcher {
-  ShellMediaStatusWatcher(lambda::Application& app, std::function<void()> onChanged)
-      : mpris(lambda::system::MPRISClient::connectSession()),
+  ShellMediaStatusWatcher(lambdaui::Application& app, std::function<void()> onChanged)
+      : mpris(lambdaui::system::MPRISClient::connectSession()),
         mprisPump(app, mpris.bus()),
         mprisChanged(mpris.watchPlayerChanges(std::move(onChanged))) {}
 
-  lambda::system::MPRISClient mpris;
-  lambda::dbus::BusEventPump mprisPump;
-  lambda::system::MPRISChangeWatch mprisChanged;
+  lambdaui::system::MPRISClient mpris;
+  lambdaui::dbus::BusEventPump mprisPump;
+  lambdaui::system::MPRISChangeWatch mprisChanged;
 };
 
 struct ShellNotificationWatcher {
-  ShellNotificationWatcher(lambda::Application& app,
-                           std::function<void(lambda::system::NotificationPosted)> onPosted,
+  ShellNotificationWatcher(lambdaui::Application& app,
+                           std::function<void(lambdaui::system::NotificationPosted)> onPosted,
                            std::function<void(std::uint32_t)> onClosed)
-      : notifications(lambda::system::NotificationsClient::connectSession()),
+      : notifications(lambdaui::system::NotificationsClient::connectSession()),
         pump(app, notifications.bus()),
         posted(notifications.watchPosted(std::move(onPosted))),
         closed(notifications.watchClosed([onClosed = std::move(onClosed)](
                                              std::uint32_t id,
-                                             lambda::system::NotificationCloseReason) {
+                                             lambdaui::system::NotificationCloseReason) {
           if (onClosed) {
             onClosed(id);
           }
         })) {}
 
-  lambda::system::NotificationsClient notifications;
-  lambda::dbus::BusEventPump pump;
-  lambda::dbus::Slot posted;
-  lambda::dbus::Slot closed;
+  lambdaui::system::NotificationsClient notifications;
+  lambdaui::dbus::BusEventPump pump;
+  lambdaui::dbus::Slot posted;
+  lambdaui::dbus::Slot closed;
 };
 
 struct ShellTrayStatusWatcher {
-  ShellTrayStatusWatcher(lambda::Application& app, std::function<void(std::vector<TrayStatusItem>)> onItemsChanged)
+  ShellTrayStatusWatcher(lambdaui::Application& app, std::function<void(std::vector<TrayStatusItem>)> onItemsChanged)
       : app(&app),
-        watcher(lambda::system::StatusNotifierWatcherClient::connectSession()),
+        watcher(lambdaui::system::StatusNotifierWatcherClient::connectSession()),
         pump(app, watcher.bus()),
         onItemsChanged(std::move(onItemsChanged)) {
     watcher.registerHost("org.freedesktop.StatusNotifierHost.lambda-shell");
@@ -327,7 +327,7 @@ struct ShellTrayStatusWatcher {
     }
   }
 
-  void rebuildPropertyWatches(std::vector<lambda::system::StatusNotifierItemProperties> const& properties) {
+  void rebuildPropertyWatches(std::vector<lambdaui::system::StatusNotifierItemProperties> const& properties) {
     itemPropertyWatches.clear();
     itemPropertyWatches.reserve(properties.size());
     for (auto const& item : properties) {
@@ -337,11 +337,11 @@ struct ShellTrayStatusWatcher {
     }
   }
 
-  lambda::Application* app = nullptr;
-  lambda::system::StatusNotifierWatcherClient watcher;
-  lambda::dbus::BusEventPump pump;
-  lambda::system::StatusNotifierItemsWatch changed;
-  std::vector<lambda::dbus::Slot> itemPropertyWatches;
+  lambdaui::Application* app = nullptr;
+  lambdaui::system::StatusNotifierWatcherClient watcher;
+  lambdaui::dbus::BusEventPump pump;
+  lambdaui::system::StatusNotifierItemsWatch changed;
+  std::vector<lambdaui::dbus::Slot> itemPropertyWatches;
   TrayRefreshCoalescer coalescer;
   std::function<void(std::vector<TrayStatusItem>)> onItemsChanged;
 };
@@ -360,7 +360,7 @@ struct ShellTrayStatusWatcher {
 };
 #endif
 
-lambda::WindowConfig dockWindowConfig(int width,
+lambdaui::WindowConfig dockWindowConfig(int width,
                                       int itemSize,
                                       int bottomGap,
                                       int cornerRadius,
@@ -389,7 +389,7 @@ lambda::WindowConfig dockWindowConfig(int width,
   };
 }
 
-lambda::WindowConfig launcherWindowConfig() {
+lambdaui::WindowConfig launcherWindowConfig() {
   LayerShellOptions layer = layerBase(LayerShellLayer::Overlay, "lambda.command-launcher");
   layer.anchorTop = true;
   layer.anchorBottom = true;
@@ -403,7 +403,7 @@ lambda::WindowConfig launcherWindowConfig() {
   };
 }
 
-lambda::WindowConfig dockMenuWindowConfig() {
+lambdaui::WindowConfig dockMenuWindowConfig() {
   LayerShellOptions layer = hiddenMenuLayer("lambda.dock-menu");
   return WindowConfig{
       .size = {1.f, 1.f},
@@ -436,7 +436,7 @@ LayerShellOptions visibleNotificationLayer() {
   return layer;
 }
 
-lambda::WindowConfig notificationWindowConfig() {
+lambdaui::WindowConfig notificationWindowConfig() {
   return WindowConfig{
       .size = {1.f, 1.f},
       .title = "Lambda Notifications",
@@ -445,13 +445,13 @@ lambda::WindowConfig notificationWindowConfig() {
   };
 }
 
-ShellController::ShellController(lambda::Application& app, ShellModel& model) : app_(app), model_(model) {
+ShellController::ShellController(lambdaui::Application& app, ShellModel& model) : app_(app), model_(model) {
   if (model_.dockItems().empty()) model_.resetDockItems();
   lastDockWidth_ = dockWidth(model_.dockItems(), model_.dockClockWidth(), model_.dockItemSize());
   lastDockHeight_ = dockHeight(model_.dockItemSize());
 
-  app_.eventQueue().on<lambda::WindowEvent>([this](lambda::WindowEvent const& event) {
-    if (event.kind == lambda::WindowEvent::Kind::DpiChanged) {
+  app_.eventQueue().on<lambdaui::WindowEvent>([this](lambdaui::WindowEvent const& event) {
+    if (event.kind == lambdaui::WindowEvent::Kind::DpiChanged) {
       if (dockHandle_ && event.handle == *dockHandle_) {
         float const scale = std::max(event.dpiX > 0.f ? event.dpiX : event.dpi, 0.5f);
         if (model_.setDockDpiScale(scale)) {
@@ -461,7 +461,7 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
       }
       return;
     }
-    if (event.kind != lambda::WindowEvent::Kind::Resize) return;
+    if (event.kind != lambdaui::WindowEvent::Kind::Resize) return;
     if (launcherHandle_ && event.handle == *launcherHandle_ && model_.launcherOpen()) {
       model_.setLauncherSize(event.size.width, event.size.height);
       if (event.size.width > 64.f && event.size.height > 64.f) {
@@ -486,7 +486,7 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
     }
   });
 
-  app_.eventQueue().on<lambda::TimerEvent>([this](lambda::TimerEvent const& event) {
+  app_.eventQueue().on<lambdaui::TimerEvent>([this](lambdaui::TimerEvent const& event) {
     if (clockTimerId_ != 0 && event.timerId == clockTimerId_) {
       if (model_.refreshTimeText()) {
         if (updateDockClockWidth()) {
@@ -513,7 +513,7 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
     }
   });
 
-  app_.eventQueue().on<lambda::InputEvent>([this](lambda::InputEvent const& event) {
+  app_.eventQueue().on<lambdaui::InputEvent>([this](lambdaui::InputEvent const& event) {
     bool const forLauncher =
         (launcherHandle_ && event.handle == *launcherHandle_) || (previewHandle_ && event.handle == *previewHandle_);
     if (forLauncher && model_.launcherOpen()) {
@@ -521,7 +521,7 @@ ShellController::ShellController(lambda::Application& app, ShellModel& model) : 
     }
   });
 
-  app_.eventQueue().on<lambda::CustomEvent>([this](lambda::CustomEvent const& event) {
+  app_.eventQueue().on<lambdaui::CustomEvent>([this](lambdaui::CustomEvent const& event) {
     if (event.type != 0x4c534850u) {
       return;
     }
@@ -643,7 +643,7 @@ std::function<void(std::string const&, DockStatusAction)> ShellController::makeS
 std::function<void(DockItem const&)> ShellController::makeNewWindowCallback() {
   return [this](DockItem const& item) {
     if (item.appId.empty()) return;
-    ipc_.sendLine(lambda::shell::serializeLaunchApp(item.appId, nextRequestId()));
+    ipc_.sendLine(lambdaui::shell::serializeLaunchApp(item.appId, nextRequestId()));
   };
 }
 
@@ -676,7 +676,7 @@ std::function<void(DockItem const&)> ShellController::makeTogglePinnedCallback()
 std::function<void(DockItem const&)> ShellController::makeQuitCallback() {
   return [this](DockItem const& item) {
     if (item.appId.empty()) return;
-    ipc_.sendLine(lambda::shell::serializeQuitApp(item.appId, nextRequestId()));
+    ipc_.sendLine(lambdaui::shell::serializeQuitApp(item.appId, nextRequestId()));
   };
 }
 
@@ -761,7 +761,7 @@ bool ShellController::connectIpc() {
   ipc_.sendHello(nextRequestId());
   ipcPollId_ = app_.registerEventPollSource(ipc_.fd(), [this] {
     ipc_.dispatchReadable([this](std::string_view line) {
-      app_.eventQueue().post(lambda::CustomEvent{.type = 0x4c534850u, .payload = std::string(line)});
+      app_.eventQueue().post(lambdaui::CustomEvent{.type = 0x4c534850u, .payload = std::string(line)});
     });
     if (!ipc_.connected()) {
       app_.quit();
@@ -774,14 +774,14 @@ void ShellController::createProductionWindows() {
   (void)updateDockClockWidth();
   int const itemSize = model_.dockItemSize();
   int const dockWidthPx = dockWidth(model_.dockItems(), model_.dockClockWidth(), itemSize);
-  auto& dock = app_.createWindow<lambda::Window>(
+  auto& dock = app_.createWindow<lambdaui::Window>(
       dockWindowConfig(dockWidthPx,
                        itemSize,
                        shellConfig_.dockBottomGap,
                        shellConfig_.dockCornerRadius,
                        shellConfig_.dockMaterial,
                        shellConfig_.dockFullWidth));
-  dock.setBackground(lambda::WindowBackground::transparent());
+  dock.setBackground(lambdaui::WindowBackground::transparent());
   dockWindow_ = &dock;
   dockHandle_ = dock.handle();
   lastDockWidth_ = shellConfig_.dockFullWidth ? 0 : dockWidthPx;
@@ -792,22 +792,22 @@ void ShellController::createProductionWindows() {
   setupSystemStatusWatchers();
   setupTrayStatusWatcher();
 
-  auto& dockMenu = app_.createWindow<lambda::Window>(dockMenuWindowConfig());
-  dockMenu.setBackground(lambda::WindowBackground::transparent());
+  auto& dockMenu = app_.createWindow<lambdaui::Window>(dockMenuWindowConfig());
+  dockMenu.setBackground(lambdaui::WindowBackground::transparent());
   dockMenuWindow_ = &dockMenu;
   dockMenuHandle_ = dockMenu.handle();
   dockMenu.resize({1.f, 1.f});
 
-  auto& launcher = app_.createWindow<lambda::Window>(launcherWindowConfig());
-  launcher.setBackground(lambda::WindowBackground::transparent());
+  auto& launcher = app_.createWindow<lambdaui::Window>(launcherWindowConfig());
+  launcher.setBackground(lambdaui::WindowBackground::transparent());
   launcherWindow_ = &launcher;
   launcherHandle_ = launcher.handle();
 
-  auto& notifications = app_.createWindow<lambda::Window>(notificationWindowConfig());
-  notifications.setBackground(lambda::WindowBackground::transparent());
+  auto& notifications = app_.createWindow<lambdaui::Window>(notificationWindowConfig());
+  notifications.setBackground(lambdaui::WindowBackground::transparent());
   notificationWindow_ = &notifications;
   notificationHandle_ = notifications.handle();
-  notifications.setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
+  notifications.setView(lambdaui::Rectangle{}.size(1.f, 1.f).fill(lambdaui::Colors::transparent));
   notifications.resize({1.f, 1.f});
   setupNotificationWatcher();
 
@@ -815,7 +815,7 @@ void ShellController::createProductionWindows() {
   syncLauncherWindow();
 }
 
-void ShellController::setupPreviewWindow(lambda::Window& window, float width, float height) {
+void ShellController::setupPreviewWindow(lambdaui::Window& window, float width, float height) {
   launcherWindow_ = &window;
   previewWidth_ = width;
   previewHeight_ = height;
@@ -843,7 +843,7 @@ void ShellController::mountProductionViews() {
     mountDockView();
   }
   if (dockMenuWindow_) {
-    dockMenuWindow_->setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
+    dockMenuWindow_->setView(lambdaui::Rectangle{}.size(1.f, 1.f).fill(lambdaui::Colors::transparent));
   }
   if (launcherWindow_ && !previewHandle_) {
     launcherWindow_->setView(ShellLauncherView{
@@ -990,7 +990,7 @@ void ShellController::setupNotificationWatcher() {
   try {
     notificationWatcher_ = std::make_unique<ShellNotificationWatcher>(
         app_,
-        [this](lambda::system::NotificationPosted notification) {
+        [this](lambdaui::system::NotificationPosted notification) {
           app_.eventQueue().post(ShellNotificationPosted{.notification = std::move(notification)});
         },
         [this](std::uint32_t id) {
@@ -1020,7 +1020,7 @@ void ShellController::syncNotificationWindow() {
   auto visible = notificationCenter_.visible();
   if (visible.empty()) {
     cancelNotificationTimeout();
-    notificationWindow_->setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
+    notificationWindow_->setView(lambdaui::Rectangle{}.size(1.f, 1.f).fill(lambdaui::Colors::transparent));
     notificationWindow_->setLayerShellOptions(hiddenNotificationLayer());
     notificationWindow_->resize({1.f, 1.f});
     requestNotificationRedraw();
@@ -1087,7 +1087,7 @@ void ShellController::closeNotificationAsync(std::uint32_t id) {
 #if LAMBDA_HAS_DBUS
   std::thread([id] {
     try {
-      auto client = lambda::system::NotificationsClient::connectSession();
+      auto client = lambdaui::system::NotificationsClient::connectSession();
       client.closeNotification(id);
     } catch (std::exception const& error) {
       std::fprintf(stderr, "lambda-shell: failed to close notification %u: %s\n", id, error.what());
@@ -1104,7 +1104,7 @@ void ShellController::invokeNotificationActionAsync(std::uint32_t id, std::strin
 #if LAMBDA_HAS_DBUS
   std::thread([id, actionKey = std::move(actionKey)] {
     try {
-      auto client = lambda::system::NotificationsClient::connectSession();
+      auto client = lambdaui::system::NotificationsClient::connectSession();
       client.invokeAction(id, actionKey);
     } catch (std::exception const& error) {
       std::fprintf(stderr,
@@ -1149,7 +1149,7 @@ void ShellController::performNetworkControlAsync(DockStatusAction action) {
   std::thread([this] {
     bool changed = false;
     try {
-      auto client = lambda::system::NetworkManagerClient::connectSystem();
+      auto client = lambdaui::system::NetworkManagerClient::connectSystem();
       auto const snapshot = client.readSnapshot();
       if (snapshot.wirelessHardwareEnabled) {
         client.setWirelessEnabled(!snapshot.wirelessEnabled);
@@ -1171,7 +1171,7 @@ void ShellController::performBluetoothControlAsync(DockStatusAction action) {
   std::thread([this] {
     bool changed = false;
     try {
-      auto client = lambda::system::BlueZClient::connectSystem();
+      auto client = lambdaui::system::BlueZClient::connectSystem();
       auto const snapshot = client.readSnapshot();
       bool const anyPowered = std::any_of(snapshot.adapters.begin(),
                                          snapshot.adapters.end(),
@@ -1198,12 +1198,12 @@ void ShellController::performMediaControlAsync(DockStatusAction action) {
   std::thread([this, action] {
     bool changed = false;
     try {
-      auto client = lambda::system::MPRISClient::connectSession();
-      auto player = lambda::system::activeMPRISPlayer(client.readPlayers());
+      auto client = lambdaui::system::MPRISClient::connectSession();
+      auto player = lambdaui::system::activeMPRISPlayer(client.readPlayers());
       if (player) {
-        using MPRISPlayerAction = lambda::system::MPRISPlayerAction;
+        using MPRISPlayerAction = lambdaui::system::MPRISPlayerAction;
         auto const supports = [&](MPRISPlayerAction playerAction) {
-          return lambda::system::mprisPlayerSupportsAction(*player, playerAction);
+          return lambdaui::system::mprisPlayerSupportsAction(*player, playerAction);
         };
         switch (action) {
         case DockStatusAction::Primary:
@@ -1240,7 +1240,7 @@ void ShellController::performMediaControlAsync(DockStatusAction action) {
 void ShellController::performShellActionAsync(std::string actionId) {
   std::thread([actionId = std::move(actionId)] {
     try {
-      auto client = lambda::system::LogindClient::connectSystem();
+      auto client = lambdaui::system::LogindClient::connectSystem();
       if (actionId == "shell.suspend") {
         client.suspend(true);
       } else if (actionId == "shell.hibernate") {
@@ -1298,18 +1298,18 @@ void ShellController::runVolumeAdjustmentWorker() {
 }
 
 int ShellController::measureDockClockWidth() {
-  lambda::TextLayoutOptions options;
-  options.wrapping = lambda::TextWrapping::NoWrap;
+  lambdaui::TextLayoutOptions options;
+  options.wrapping = lambdaui::TextWrapping::NoWrap;
   options.suppressCacheStats = true;
 
   std::string const text = model_.timeText();
   int const itemSize = model_.dockItemSize();
   if (dockUsesSingleRowDocklets(itemSize)) {
-    lambda::Size const textSize = app_.textSystem().measure(text,
-                                                            lambda::Font{.family = "",
+    lambdaui::Size const textSize = app_.textSystem().measure(text,
+                                                            lambdaui::Font{.family = "",
                                                                          .size = dockClockSingleRowFontSize(itemSize),
                                                                          .weight = kDockClockSingleRowFontWeight},
-                                                            lambda::VisualTokens::primaryText,
+                                                            lambdaui::VisualTokens::primaryText,
                                                             0.f,
                                                             options);
     return std::max(kDockClockMinWidth,
@@ -1320,18 +1320,18 @@ int ShellController::measureDockClockWidth() {
 
   std::string const date = dockClockDateText(text);
   std::string const time = dockClockTimeText(text);
-  lambda::Size const dateSize = app_.textSystem().measure(date,
-                                                          lambda::Font{.family = "",
+  lambdaui::Size const dateSize = app_.textSystem().measure(date,
+                                                          lambdaui::Font{.family = "",
                                                                        .size = dockClockDateFontSize(itemSize),
                                                                        .weight = kDockClockDateFontWeight},
-                                                          lambda::VisualTokens::primaryText,
+                                                          lambdaui::VisualTokens::primaryText,
                                                           0.f,
                                                           options);
-  lambda::Size const timeSize = app_.textSystem().measure(time,
-                                                          lambda::Font{.family = "",
+  lambdaui::Size const timeSize = app_.textSystem().measure(time,
+                                                          lambdaui::Font{.family = "",
                                                                        .size = dockClockTimeFontSize(itemSize),
                                                                        .weight = kDockClockTimeFontWeight},
-                                                          lambda::VisualTokens::primaryText,
+                                                          lambdaui::VisualTokens::primaryText,
                                                           0.f,
                                                           options);
   return std::max(kDockClockMinWidth,
@@ -1495,7 +1495,7 @@ void ShellController::closeDockMenu() {
   dockMenuItem_.reset();
   LayerShellOptions menuLayer = hiddenMenuLayer("lambda.dock-menu");
   if (dockMenuWindow_) {
-    dockMenuWindow_->setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
+    dockMenuWindow_->setView(lambdaui::Rectangle{}.size(1.f, 1.f).fill(lambdaui::Colors::transparent));
     dockMenuWindow_->resize({1.f, 1.f});
     dockMenuWindow_->setLayerShellOptions(menuLayer);
   }
@@ -1595,7 +1595,7 @@ void ShellController::closeSessionMenu() {
   sessionMenuOpen_ = false;
   LayerShellOptions menuLayer = hiddenMenuLayer("lambda.session-menu");
   if (dockMenuWindow_) {
-    dockMenuWindow_->setView(lambda::Rectangle{}.size(1.f, 1.f).fill(lambda::Colors::transparent));
+    dockMenuWindow_->setView(lambdaui::Rectangle{}.size(1.f, 1.f).fill(lambdaui::Colors::transparent));
     dockMenuWindow_->resize({1.f, 1.f});
     dockMenuWindow_->setLayerShellOptions(menuLayer);
   }
@@ -1603,13 +1603,13 @@ void ShellController::closeSessionMenu() {
 }
 
 void ShellController::handleIpcLine(std::string_view line) {
-  auto message = lambda::shell::parseLine(line);
+  auto message = lambdaui::shell::parseLine(line);
   if (!message) return;
-  if (message->kind == lambda::shell::ShellMessageKind::ShellOpenCommandLauncher) {
+  if (message->kind == lambdaui::shell::ShellMessageKind::ShellOpenCommandLauncher) {
     openLauncher();
     return;
   }
-  if (message->kind == lambda::shell::ShellMessageKind::WindowManagerSnapshot) {
+  if (message->kind == lambdaui::shell::ShellMessageKind::WindowManagerSnapshot) {
     lastSnapshotLine_ = std::string(line);
     auto const changes = model_.applySnapshot(line);
     if (previewHandle_) {
@@ -1651,8 +1651,8 @@ void ShellController::checkShellConfigReload() {
   applyShellConfigToModel();
 }
 
-void ShellController::handleLauncherKey(lambda::InputEvent const& event) {
-  if (event.kind == lambda::InputEvent::Kind::KeyDown) {
+void ShellController::handleLauncherKey(lambdaui::InputEvent const& event) {
+  if (event.kind == lambdaui::InputEvent::Kind::KeyDown) {
     if (event.key == Escape) {
       closeLauncher();
       return;
@@ -1706,7 +1706,7 @@ void ShellController::handleLauncherKey(lambda::InputEvent const& event) {
       return;
     }
   }
-  if (event.kind == lambda::InputEvent::Kind::TextInput && !event.text.empty()) {
+  if (event.kind == lambdaui::InputEvent::Kind::TextInput && !event.text.empty()) {
     model_.appendQueryText(event.text);
     requestLauncherRedraw();
   }

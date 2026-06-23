@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 enum class PortalScreenCastRequestKind {
   CreateSession,
@@ -87,4 +87,4 @@ private:
   std::map<std::string, dbus::Slot> sessionSlots_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

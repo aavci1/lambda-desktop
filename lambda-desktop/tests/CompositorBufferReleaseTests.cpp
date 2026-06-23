@@ -5,7 +5,7 @@
 #include <array>
 
 TEST_CASE("buffer release plan keeps retained dmabufs pending") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   std::array pending{
       PendingBufferReleaseRecord{.token = 1, .dmabufBufferId = 0},
@@ -24,7 +24,7 @@ TEST_CASE("buffer release plan keeps retained dmabufs pending") {
 }
 
 TEST_CASE("buffer release plan releases retained dmabufs after KMS drops them") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   std::array pending{
       PendingBufferReleaseRecord{.token = 3, .dmabufBufferId = 12},

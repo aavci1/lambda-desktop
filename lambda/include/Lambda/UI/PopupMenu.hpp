@@ -8,7 +8,7 @@
 
 #include <functional>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Hook: returns a function that presents a platform popup menu anchored to the last tapped element.
 ///
@@ -16,4 +16,4 @@ namespace lambda {
 /// transient popup primitives, this uses the native/Wayland popup building block instead of Lambda overlays.
 std::function<bool(PopupMenu)> usePopupMenu();
 
-} // namespace lambda
+} // namespace lambdaui

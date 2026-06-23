@@ -10,7 +10,7 @@
 #include <memory>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void cursorShapeManagerDestroy(wl_client*, wl_resource* resource) {
@@ -156,4 +156,4 @@ void destroyCursorShapeDevicesForPointer(WaylandServer::Impl* server, wl_resourc
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

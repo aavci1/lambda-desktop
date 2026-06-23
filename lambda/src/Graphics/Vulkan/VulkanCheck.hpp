@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 inline char const* vkResultName(VkResult result) {
   switch (result) {
@@ -57,4 +57,4 @@ template <typename T>
   return value;
 }
 
-} // namespace lambda
+} // namespace lambdaui

@@ -13,7 +13,7 @@
 
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 struct Theme;
 
@@ -250,4 +250,4 @@ struct Theme {
     bool operator==(Theme const& other) const = default;
 };
 
-} // namespace lambda
+} // namespace lambdaui

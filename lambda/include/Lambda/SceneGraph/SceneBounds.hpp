@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace lambda::scenegraph::detail {
+namespace lambdaui::scenegraph::detail {
 
 inline bool rectEmpty(Rect const& rect) noexcept {
   return rect.width == 0.f && rect.height == 0.f;
@@ -52,4 +52,4 @@ inline Rect subtreeLocalVisualBounds(SceneNode const& node) noexcept {
   return bounds;
 }
 
-} // namespace lambda::scenegraph::detail
+} // namespace lambdaui::scenegraph::detail

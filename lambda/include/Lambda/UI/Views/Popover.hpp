@@ -20,7 +20,7 @@
 #include <string>
 #include <tuple>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Floating card + optional arrow. Present/dismiss timing is owned by the overlay stack, not
 /// `Theme::duration*` (those apply to in-body transitions such as `useAnimated` on controls).
@@ -132,4 +132,4 @@ Vec2 popoverOverlayGapOffset(PopoverPlacement resolved, float gap);
 
 OverlayConfig::Placement overlayPlacementFromPopover(PopoverPlacement p);
 
-} // namespace lambda
+} // namespace lambdaui

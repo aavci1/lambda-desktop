@@ -24,7 +24,7 @@
 #include <optional>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void bufferDestroy(wl_client*, wl_resource* resource) {
@@ -94,7 +94,7 @@ void appendUniqueModifier(std::vector<std::uint64_t>& modifiers, std::uint64_t m
 
 std::vector<std::uint64_t> sampledDmabufModifiersForFormat(std::uint32_t drmFormat) {
   std::vector<std::uint64_t> modifiers{DRM_FORMAT_MOD_INVALID, DRM_FORMAT_MOD_LINEAR};
-  VkPhysicalDevice physical = lambda::VulkanContext::instance().physicalDevice();
+  VkPhysicalDevice physical = lambdaui::VulkanContext::instance().physicalDevice();
   VkFormat const vkFormat = vkFormatForDmabufFormat(drmFormat);
   if (!physical || vkFormat == VK_FORMAT_UNDEFINED) return modifiers;
 
@@ -548,4 +548,4 @@ void bindLinuxDmabuf(wl_client* client, void* data, std::uint32_t version, std::
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

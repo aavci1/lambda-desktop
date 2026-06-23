@@ -15,7 +15,7 @@
 #include <typeindex>
 #include <typeinfo>
 
-namespace lambda {
+namespace lambdaui {
 
 class Application;
 
@@ -106,4 +106,4 @@ void EventQueue::on(std::function<void(T const&)> handler) {
   }
 }
 
-} // namespace lambda
+} // namespace lambdaui

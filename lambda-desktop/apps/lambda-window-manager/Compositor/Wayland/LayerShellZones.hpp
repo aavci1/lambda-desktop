@@ -4,7 +4,7 @@
 #include <span>
 #include <string_view>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kLayerShellAnchorTop = 1u;
 inline constexpr std::uint32_t kLayerShellAnchorBottom = 2u;
@@ -66,4 +66,4 @@ struct LayerShellPlacement {
 
 [[nodiscard]] LayerShellPlacement resolveLayerShellPlacement(LayerShellPlacementInput const& input);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

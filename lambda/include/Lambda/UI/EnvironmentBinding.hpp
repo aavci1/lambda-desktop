@@ -8,7 +8,7 @@
 #include <optional>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 class EnvironmentBinding {
 public:
@@ -116,4 +116,4 @@ private:
   std::shared_ptr<std::vector<detail::EnvironmentEntry> const> entries_;
 };
 
-} // namespace lambda
+} // namespace lambdaui

@@ -5,7 +5,7 @@
 #include <optional>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 std::optional<std::string> MacClipboard::readText() const {
   NSPasteboard* pb = [NSPasteboard generalPasteboard];
@@ -40,4 +40,4 @@ bool MacClipboard::hasText() const {
   return readText().has_value();
 }
 
-} // namespace lambda
+} // namespace lambdaui

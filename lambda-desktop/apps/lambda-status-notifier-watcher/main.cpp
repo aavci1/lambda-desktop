@@ -22,16 +22,16 @@ int main() {
   std::signal(SIGTERM, handleSignal);
 
   try {
-    auto bus = lambda::dbus::Bus::open(lambda::dbus::BusType::Session);
-    bus.requestName(lambda::system::StatusNotifierWatcherService::serviceName);
+    auto bus = lambdaui::dbus::Bus::open(lambdaui::dbus::BusType::Session);
+    bus.requestName(lambdaui::system::StatusNotifierWatcherService::serviceName);
 
-    lambda::system::StatusNotifierWatcherService watcher(bus);
+    lambdaui::system::StatusNotifierWatcherService watcher(bus);
     auto objectSlot = watcher.exportObject();
     auto ownerSlot = watcher.watchNameOwners();
 
     std::cerr << "lambda-status-notifier-watcher: exported "
-              << lambda::system::StatusNotifierWatcherService::interfaceName
-              << " on " << lambda::system::StatusNotifierWatcherService::objectPath << "\n";
+              << lambdaui::system::StatusNotifierWatcherService::interfaceName
+              << " on " << lambdaui::system::StatusNotifierWatcherService::objectPath << "\n";
 
     while (gRunning.load()) {
       (void)bus.waitAndProcess(1000);

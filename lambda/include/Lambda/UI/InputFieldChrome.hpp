@@ -9,7 +9,7 @@
 #include <Lambda/Core/Color.hpp>
 #include <Lambda/Graphics/Styles.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 struct Theme;
 namespace detail {
@@ -56,4 +56,4 @@ struct ResolvedInputFieldChrome {
 
 ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spec, Theme const& theme);
 
-} // namespace lambda
+} // namespace lambdaui

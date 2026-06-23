@@ -8,7 +8,7 @@
 
 #include <memory>
 
-namespace lambda {
+namespace lambdaui {
 
 class MeasureContext;
 class TextSystem;
@@ -83,4 +83,4 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
 std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountContext& ctx);
 
 } // namespace detail
-} // namespace lambda
+} // namespace lambdaui

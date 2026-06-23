@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 struct UDisks2JobSnapshot {
   std::string path;
@@ -166,4 +166,4 @@ private:
 
 [[nodiscard]] std::string formatUDisks2VolumeName(UDisks2VolumeSnapshot const& volume);
 
-} // namespace lambda::system
+} // namespace lambdaui::system

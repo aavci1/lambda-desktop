@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -48,4 +48,4 @@ Size Text::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   return size;
 }
 
-} // namespace lambda
+} // namespace lambdaui

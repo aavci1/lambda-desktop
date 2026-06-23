@@ -14,8 +14,8 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::startPrivateBus;
 
 struct BlockingCallResult {
   bool completed = false;
@@ -32,7 +32,7 @@ BlockingCallResult runBlockingCall(Pump pump, Call call) {
     try {
       call();
       result.completed = true;
-    } catch (lambda::dbus::Error const& error) {
+    } catch (lambdaui::dbus::Error const& error) {
       result.errorName = error.name();
       result.errorMessage = error.what();
     } catch (...) {
@@ -51,39 +51,39 @@ BlockingCallResult runBlockingCall(Pump pump, Call call) {
   return result;
 }
 
-std::shared_ptr<lambda::dbus::DictionaryValue>
+std::shared_ptr<lambdaui::dbus::DictionaryValue>
 stringDictionary(std::vector<std::pair<std::string, std::string>> entries) {
-  std::vector<lambda::dbus::DictionaryEntry> values;
+  std::vector<lambdaui::dbus::DictionaryEntry> values;
   values.reserve(entries.size());
   for (auto& [key, value] : entries) {
-    values.push_back(lambda::dbus::DictionaryEntry{.key = std::move(key),
+    values.push_back(lambdaui::dbus::DictionaryEntry{.key = std::move(key),
                                                    .value = std::move(value)});
   }
-  return std::make_shared<lambda::dbus::DictionaryValue>(
-      lambda::dbus::DictionaryValue{.keySignature = "s",
+  return std::make_shared<lambdaui::dbus::DictionaryValue>(
+      lambdaui::dbus::DictionaryValue{.keySignature = "s",
                                     .valueSignature = "s",
                                     .entries = std::move(values)});
 }
 
-std::shared_ptr<lambda::dbus::ArrayValue>
-identityArray(std::vector<lambda::dbus::BasicValue> identities) {
-  return std::make_shared<lambda::dbus::ArrayValue>(
-      lambda::dbus::ArrayValue{.elementSignature = "(sa{sv})",
+std::shared_ptr<lambdaui::dbus::ArrayValue>
+identityArray(std::vector<lambdaui::dbus::BasicValue> identities) {
+  return std::make_shared<lambdaui::dbus::ArrayValue>(
+      lambdaui::dbus::ArrayValue{.elementSignature = "(sa{sv})",
                                .values = std::move(identities)});
 }
 
-std::optional<lambda::system::PolkitSubject> readSubject(lambda::dbus::Message& message) {
+std::optional<lambdaui::system::PolkitSubject> readSubject(lambdaui::dbus::Message& message) {
   auto value = message.readBasic("(sa{sv})");
-  auto const subject = std::get<std::shared_ptr<lambda::dbus::StructValue>>(value);
+  auto const subject = std::get<std::shared_ptr<lambdaui::dbus::StructValue>>(value);
   if (!subject || subject->fields.size() != 2) {
     return std::nullopt;
   }
   auto const details =
-      std::get<std::shared_ptr<lambda::dbus::VariantDictionary>>(subject->fields[1]);
+      std::get<std::shared_ptr<lambdaui::dbus::VariantDictionary>>(subject->fields[1]);
   if (!details) {
     return std::nullopt;
   }
-  return lambda::system::PolkitSubject{
+  return lambdaui::system::PolkitSubject{
       .kind = std::get<std::string>(subject->fields[0]),
       .details = *details,
   };
@@ -98,24 +98,24 @@ TEST_CASE("Polkit agent support is compile-time declared") {
 #if LAMBDA_HAS_DBUS
 
 TEST_CASE("Polkit subjects use documented D-Bus shapes") {
-  auto session = lambda::system::polkitUnixSessionSubject("session-7");
-  auto sessionValue = lambda::system::polkitSubjectValue(session);
-  CHECK(lambda::dbus::signatureFor(sessionValue) == "(sa{sv})");
-  auto sessionStruct = std::get<std::shared_ptr<lambda::dbus::StructValue>>(sessionValue);
+  auto session = lambdaui::system::polkitUnixSessionSubject("session-7");
+  auto sessionValue = lambdaui::system::polkitSubjectValue(session);
+  CHECK(lambdaui::dbus::signatureFor(sessionValue) == "(sa{sv})");
+  auto sessionStruct = std::get<std::shared_ptr<lambdaui::dbus::StructValue>>(sessionValue);
   REQUIRE(sessionStruct);
   REQUIRE(sessionStruct->fields.size() == 2);
   CHECK(std::get<std::string>(sessionStruct->fields[0]) == "unix-session");
   auto sessionDetails =
-      std::get<std::shared_ptr<lambda::dbus::VariantDictionary>>(sessionStruct->fields[1]);
+      std::get<std::shared_ptr<lambdaui::dbus::VariantDictionary>>(sessionStruct->fields[1]);
   REQUIRE(sessionDetails);
   CHECK(std::get<std::string>(sessionDetails->values.at("session-id")) == "session-7");
 
-  auto process = lambda::system::polkitUnixProcessSubject(123, 1000, 456);
+  auto process = lambdaui::system::polkitUnixProcessSubject(123, 1000, 456);
   auto processStruct =
-      std::get<std::shared_ptr<lambda::dbus::StructValue>>(lambda::system::polkitSubjectValue(process));
+      std::get<std::shared_ptr<lambdaui::dbus::StructValue>>(lambdaui::system::polkitSubjectValue(process));
   REQUIRE(processStruct);
   auto processDetails =
-      std::get<std::shared_ptr<lambda::dbus::VariantDictionary>>(processStruct->fields[1]);
+      std::get<std::shared_ptr<lambdaui::dbus::VariantDictionary>>(processStruct->fields[1]);
   REQUIRE(processDetails);
   CHECK(std::get<std::uint32_t>(processDetails->values.at("pid")) == 123);
   CHECK(std::get<std::int32_t>(processDetails->values.at("uid")) == 1000);
@@ -129,50 +129,50 @@ TEST_CASE("PolkitAuthenticationAgentService registers and exports authentication
     return;
   }
 
-  auto authorityBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto agentBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
-  authorityBus.requestName(lambda::system::PolkitAuthenticationAgentService::authorityServiceName);
+  auto authorityBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto agentBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  authorityBus.requestName(lambdaui::system::PolkitAuthenticationAgentService::authorityServiceName);
 
-  std::optional<lambda::system::PolkitSubject> registeredSubject;
+  std::optional<lambdaui::system::PolkitSubject> registeredSubject;
   std::string registeredLocale;
   std::string registeredPath;
-  std::optional<lambda::system::PolkitSubject> unregisteredSubject;
+  std::optional<lambdaui::system::PolkitSubject> unregisteredSubject;
   std::string unregisteredPath;
 
   auto authoritySlot = authorityBus.exportObject(
-      lambda::system::PolkitAuthenticationAgentService::authorityObjectPath,
-      lambda::dbus::ObjectDefinition{
+      lambdaui::system::PolkitAuthenticationAgentService::authorityObjectPath,
+      lambdaui::dbus::ObjectDefinition{
           .methods = {
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::PolkitAuthenticationAgentService::authorityInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::PolkitAuthenticationAgentService::authorityInterfaceName,
                   .member = "RegisterAuthenticationAgent",
-                  .handler = [&](lambda::dbus::Message& message) {
+                  .handler = [&](lambdaui::dbus::Message& message) {
                     registeredSubject = readSubject(message);
                     registeredLocale = message.readString();
                     registeredPath = message.readString();
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::PolkitAuthenticationAgentService::authorityInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::PolkitAuthenticationAgentService::authorityInterfaceName,
                   .member = "UnregisterAuthenticationAgent",
-                  .handler = [&](lambda::dbus::Message& message) {
+                  .handler = [&](lambdaui::dbus::Message& message) {
                     unregisteredSubject = readSubject(message);
                     unregisteredPath = message.readString();
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
           },
           .properties = {},
       });
 
-  auto subject = lambda::system::polkitUnixSessionSubject("lambda-session");
-  lambda::system::PolkitAuthenticationAgentService agent(
+  auto subject = lambdaui::system::polkitUnixSessionSubject("lambda-session");
+  lambdaui::system::PolkitAuthenticationAgentService agent(
       agentBus,
       subject,
       "C",
-      lambda::system::PolkitAuthenticationAgentService::defaultObjectPath);
+      lambdaui::system::PolkitAuthenticationAgentService::defaultObjectPath);
   auto agentSlot = agent.exportObject();
 
   auto registerResult = runBlockingCall([&] { pollBus(authorityBus, 10); },
@@ -184,20 +184,20 @@ TEST_CASE("PolkitAuthenticationAgentService registers and exports authentication
   CHECK(std::get<std::string>(registeredSubject->details.values.at("session-id")) ==
         "lambda-session");
   CHECK(registeredLocale == "C");
-  CHECK(registeredPath == lambda::system::PolkitAuthenticationAgentService::defaultObjectPath);
+  CHECK(registeredPath == lambdaui::system::PolkitAuthenticationAgentService::defaultObjectPath);
 
   auto details = stringDictionary({{"polkit.caller-pid", "321"},
                                    {"polkit.subject-pid", "654"}});
   auto identities =
-      identityArray({lambda::system::polkitSubjectValue(
-          lambda::system::polkitUnixProcessSubject(321, 1000, 456))});
+      identityArray({lambdaui::system::polkitSubjectValue(
+          lambdaui::system::polkitUnixProcessSubject(321, 1000, 456))});
   auto beginResult = runBlockingCall(
       [&] { pollBus(agentBus, 10); },
       [&] {
-        (void)client.call(lambda::dbus::MethodCall{
+        (void)client.call(lambdaui::dbus::MethodCall{
             .destination = agentBus.uniqueName(),
-            .path = lambda::system::PolkitAuthenticationAgentService::defaultObjectPath,
-            .interface = lambda::system::PolkitAuthenticationAgentService::agentInterfaceName,
+            .path = lambdaui::system::PolkitAuthenticationAgentService::defaultObjectPath,
+            .interface = lambdaui::system::PolkitAuthenticationAgentService::agentInterfaceName,
             .member = "BeginAuthentication",
             .arguments = {std::string("org.lambda.test.action"),
                           std::string("Authenticate to run a test action"),
@@ -220,10 +220,10 @@ TEST_CASE("PolkitAuthenticationAgentService registers and exports authentication
   auto cancelResult = runBlockingCall(
       [&] { pollBus(agentBus, 10); },
       [&] {
-        auto reply = client.call(lambda::dbus::MethodCall{
+        auto reply = client.call(lambdaui::dbus::MethodCall{
             .destination = agentBus.uniqueName(),
-            .path = lambda::system::PolkitAuthenticationAgentService::defaultObjectPath,
-            .interface = lambda::system::PolkitAuthenticationAgentService::agentInterfaceName,
+            .path = lambdaui::system::PolkitAuthenticationAgentService::defaultObjectPath,
+            .interface = lambdaui::system::PolkitAuthenticationAgentService::agentInterfaceName,
             .member = "CancelAuthentication",
             .arguments = {std::string("cookie-1")},
         });
@@ -240,7 +240,7 @@ TEST_CASE("PolkitAuthenticationAgentService registers and exports authentication
   CHECK_FALSE(unregisterResult.errorName);
   REQUIRE(unregisteredSubject);
   CHECK(unregisteredSubject->kind == "unix-session");
-  CHECK(unregisteredPath == lambda::system::PolkitAuthenticationAgentService::defaultObjectPath);
+  CHECK(unregisteredPath == lambdaui::system::PolkitAuthenticationAgentService::defaultObjectPath);
 }
 
 #endif

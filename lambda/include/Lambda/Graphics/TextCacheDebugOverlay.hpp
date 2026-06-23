@@ -11,7 +11,7 @@
 #include <array>
 #include <cstddef>
 
-namespace lambda {
+namespace lambdaui {
 
 class Canvas;
 class TextSystem;
@@ -27,4 +27,4 @@ struct TextCacheRingBuffer {
 void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuffer& ring,
                                  TextSystem& textSystem);
 
-} // namespace lambda
+} // namespace lambdaui

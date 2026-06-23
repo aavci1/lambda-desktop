@@ -5,11 +5,11 @@
 #include <Lambda/UI/Views/Rectangle.hpp>
 
 TEST_CASE("view modifiers infer bindables from mixed values and closures") {
-  lambda::Reactive::Signal<float> opacity{0.5f};
+  lambdaui::Reactive::Signal<float> opacity{0.5f};
 
-  auto sized = lambda::Rectangle{}.size(22.f, [] { return 18.f; });
-  auto filled = lambda::Rectangle{}.fill(lambda::Colors::red);
-  auto faded = lambda::Rectangle{}.opacity([opacity] { return opacity.get(); });
+  auto sized = lambdaui::Rectangle{}.size(22.f, [] { return 18.f; });
+  auto filled = lambdaui::Rectangle{}.fill(lambdaui::Colors::red);
+  auto faded = lambdaui::Rectangle{}.opacity([opacity] { return opacity.get(); });
 
   CHECK(sized.modifiers() != nullptr);
   CHECK(filled.modifiers() != nullptr);

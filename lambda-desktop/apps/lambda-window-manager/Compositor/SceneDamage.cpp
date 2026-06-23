@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <unordered_map>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 using RegionRect = CommittedSurfaceSnapshot::RegionRect;
@@ -321,4 +321,4 @@ SceneDamageResult updateSceneDamage(SceneDamageState& state,
   return damage;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -1,11 +1,11 @@
-if(NOT DEFINED LAMBDA_FRAMEWORK_DIR)
-  get_filename_component(LAMBDA_FRAMEWORK_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
-  set(LAMBDA_FRAMEWORK_INCLUDE_DIR "${LAMBDA_FRAMEWORK_DIR}/include")
-  set(LAMBDA_FRAMEWORK_SOURCE_DIR "${LAMBDA_FRAMEWORK_DIR}/src")
-  set(LAMBDA_FRAMEWORK_CMAKE_DIR "${LAMBDA_FRAMEWORK_DIR}/cmake")
-  set(LAMBDA_FRAMEWORK_RESOURCE_DIR "${LAMBDA_FRAMEWORK_DIR}/resources")
-  set(LAMBDA_FRAMEWORK_PROTOCOL_DIR "${LAMBDA_FRAMEWORK_DIR}/protocols")
-  set(LAMBDA_FRAMEWORK_VENDOR_DIR "${LAMBDA_FRAMEWORK_DIR}/vendor")
+if(NOT DEFINED LAMBDAUI_FRAMEWORK_DIR)
+  get_filename_component(LAMBDAUI_FRAMEWORK_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+  set(LAMBDAUI_FRAMEWORK_INCLUDE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/include")
+  set(LAMBDAUI_FRAMEWORK_SOURCE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/src")
+  set(LAMBDAUI_FRAMEWORK_CMAKE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/cmake")
+  set(LAMBDAUI_FRAMEWORK_RESOURCE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/resources")
+  set(LAMBDAUI_FRAMEWORK_PROTOCOL_DIR "${LAMBDAUI_FRAMEWORK_DIR}/protocols")
+  set(LAMBDAUI_FRAMEWORK_VENDOR_DIR "${LAMBDAUI_FRAMEWORK_DIR}/vendor")
 endif()
 
 set(LAMBDA_CORE_SOURCES
@@ -111,7 +111,7 @@ set(LAMBDA_UI_SOURCES
   UI/Views/Toggle.cpp
 )
 
-add_library(lambda SHARED
+add_library(lambdaui SHARED
   ${LAMBDA_CORE_SOURCES}
   ${LAMBDA_REACTIVE_SOURCES}
   ${LAMBDA_GRAPHICS_SOURCES}
@@ -119,38 +119,38 @@ add_library(lambda SHARED
   ${LAMBDA_LAYOUT_SOURCES}
   ${LAMBDA_UI_SOURCES}
 )
-add_library(lambda::lambda ALIAS lambda)
+add_library(lambdaui::lambdaui ALIAS lambdaui)
 
-set_target_properties(lambda PROPERTIES
+set_target_properties(lambdaui PROPERTIES
   VERSION ${PROJECT_VERSION}
   SOVERSION ${PROJECT_VERSION_MAJOR}
 )
 
-add_custom_target(lambda_module_dependency_check
-  COMMAND ${LAMBDA_FRAMEWORK_DIR}/scripts/check_module_dependencies.sh
+add_custom_target(lambdaui_module_dependency_check
+  COMMAND ${LAMBDAUI_FRAMEWORK_DIR}/scripts/check_module_dependencies.sh
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-  COMMENT "Check Lambda module dependencies"
+  COMMENT "Check LambdaUI module dependencies"
   VERBATIM
 )
 
-if(LAMBDA_PLATFORM_MACOS)
-  set(LAMBDA_METAL_SOURCE ${LAMBDA_FRAMEWORK_SOURCE_DIR}/Graphics/Metal/CanvasShaders.metal)
-  set(LAMBDA_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
-  set(LAMBDA_METALLIB ${CMAKE_CURRENT_BINARY_DIR}/LambdaShaders.metallib)
-  set(LAMBDA_METALLIB_EMBED_H ${CMAKE_CURRENT_BINARY_DIR}/LambdaShaders.metallib.h)
+if(LAMBDAUI_PLATFORM_MACOS)
+  set(LAMBDAUI_METAL_SOURCE ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}/Graphics/Metal/CanvasShaders.metal)
+  set(LAMBDAUI_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
+  set(LAMBDAUI_METALLIB ${CMAKE_CURRENT_BINARY_DIR}/LambdaUIShaders.metallib)
+  set(LAMBDAUI_METALLIB_EMBED_H ${CMAKE_CURRENT_BINARY_DIR}/LambdaUIShaders.metallib.h)
   add_custom_command(
-    OUTPUT ${LAMBDA_METAL_AIR} ${LAMBDA_METALLIB} ${LAMBDA_METALLIB_EMBED_H}
-    COMMAND xcrun -sdk macosx metal -mmacosx-version-min=11.0 -std=metal3.0 -c ${LAMBDA_METAL_SOURCE} -o ${LAMBDA_METAL_AIR}
-    COMMAND xcrun -sdk macosx metallib ${LAMBDA_METAL_AIR} -o ${LAMBDA_METALLIB}
+    OUTPUT ${LAMBDAUI_METAL_AIR} ${LAMBDAUI_METALLIB} ${LAMBDAUI_METALLIB_EMBED_H}
+    COMMAND xcrun -sdk macosx metal -mmacosx-version-min=11.0 -std=metal3.0 -c ${LAMBDAUI_METAL_SOURCE} -o ${LAMBDAUI_METAL_AIR}
+    COMMAND xcrun -sdk macosx metallib ${LAMBDAUI_METAL_AIR} -o ${LAMBDAUI_METALLIB}
     COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR}
-            xxd -i LambdaShaders.metallib LambdaShaders.metallib.h
-    DEPENDS ${LAMBDA_METAL_SOURCE}
-    COMMENT "Compile CanvasShaders.metal to LambdaShaders.metallib (embedded)"
+            xxd -i LambdaUIShaders.metallib LambdaUIShaders.metallib.h
+    DEPENDS ${LAMBDAUI_METAL_SOURCE}
+    COMMENT "Compile CanvasShaders.metal to LambdaUIShaders.metallib (embedded)"
     VERBATIM
   )
-  add_custom_target(lambda_shaders DEPENDS ${LAMBDA_METALLIB_EMBED_H})
-  add_dependencies(lambda lambda_shaders)
-  target_sources(lambda PRIVATE
+  add_custom_target(lambdaui_shaders DEPENDS ${LAMBDAUI_METALLIB_EMBED_H})
+  add_dependencies(lambdaui lambdaui_shaders)
+  target_sources(lambdaui PRIVATE
     UI/Application.mm
     Graphics/CoreTextSystem.mm
     Graphics/Metal/MetalFrameRecorder.mm
@@ -165,8 +165,8 @@ if(LAMBDA_PLATFORM_MACOS)
     Platform/Mac/MacMetalWindow.mm
     Platform/Mac/MacClipboard.mm
   )
-elseif(LAMBDA_PLATFORM_LINUX_WAYLAND)
-  include(${LAMBDA_FRAMEWORK_CMAKE_DIR}/LambdaWaylandProtocols.cmake)
+elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
+  include(${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaWaylandProtocols.cmake)
   find_package(PkgConfig REQUIRED)
   find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
   pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
@@ -187,7 +187,7 @@ elseif(LAMBDA_PLATFORM_LINUX_WAYLAND)
   find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
   lambda_setup_wayland_protocol_paths("${WAYLAND_PROTOCOLS_DIR}")
   add_library(lambda_wayland_client_protocols OBJECT
-    ${LAMBDA_FRAMEWORK_PROTOCOL_DIR}/wayland/tablet-v2-tool-interface-stub.c)
+    ${LAMBDAUI_FRAMEWORK_PROTOCOL_DIR}/wayland/tablet-v2-tool-interface-stub.c)
   target_include_directories(lambda_wayland_client_protocols PUBLIC ${LAMBDA_WAYLAND_PROTOCOL_DIR})
   lambda_wayland_client_protocols(lambda_wayland_client_protocols
     "${LAMBDA_XDG_SHELL_XML}|xdg-shell"
@@ -205,7 +205,7 @@ elseif(LAMBDA_PLATFORM_LINUX_WAYLAND)
     "${LAMBDA_POINTER_CONSTRAINTS_XML}|pointer-constraints-unstable-v1"
     "${LAMBDA_PRIMARY_SELECTION_XML}|primary-selection-unstable-v1"
     "${LAMBDA_XDG_ACTIVATION_XML}|xdg-activation-v1")
-  target_sources(lambda PRIVATE
+  target_sources(lambdaui PRIVATE
     UI/Application.cpp
     Graphics/Linux/FreeTypeTextSystem.cpp
     Graphics/Vulkan/VulkanAllocator.cpp
@@ -217,8 +217,8 @@ elseif(LAMBDA_PLATFORM_LINUX_WAYLAND)
     Platform/Linux/WaylandApplication.cpp
     Platform/Linux/WaylandWindow.cpp
   )
-  target_link_libraries(lambda PRIVATE lambda_wayland_client_protocols)
-elseif(LAMBDA_PLATFORM_LINUX_KMS)
+  target_link_libraries(lambdaui PRIVATE lambda_wayland_client_protocols)
+elseif(LAMBDAUI_PLATFORM_LINUX_KMS)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
   pkg_check_modules(GBM REQUIRED IMPORTED_TARGET gbm)
@@ -233,7 +233,7 @@ elseif(LAMBDA_PLATFORM_LINUX_KMS)
   pkg_check_modules(LIBRSVG REQUIRED IMPORTED_TARGET librsvg-2.0)
   pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
   find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
-  target_sources(lambda PRIVATE
+  target_sources(lambdaui PRIVATE
     UI/Application.cpp
     Graphics/Linux/FreeTypeTextSystem.cpp
     Graphics/Vulkan/VulkanAllocator.cpp
@@ -249,13 +249,13 @@ elseif(LAMBDA_PLATFORM_LINUX_KMS)
   )
 endif()
 
-if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND OR LAMBDAUI_PLATFORM_LINUX_KMS)
   set(LAMBDA_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
   file(MAKE_DIRECTORY ${LAMBDA_VULKAN_GENERATED_DIR})
   set(_lambda_vulkan_shader_headers)
   foreach(_lambda_shader rect.vert rect.frag callout.vert callout.frag image.vert image.frag image_unpremultiply.frag backdrop.frag backdrop_blur.frag path.vert path.frag)
     string(REPLACE "." "_" _lambda_shader_name ${_lambda_shader})
-    set(_lambda_shader_src ${LAMBDA_FRAMEWORK_SOURCE_DIR}/Graphics/Vulkan/shaders/${_lambda_shader})
+    set(_lambda_shader_src ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}/Graphics/Vulkan/shaders/${_lambda_shader})
     set(_lambda_shader_spv ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders/${_lambda_shader}.spv)
     set(_lambda_shader_header ${LAMBDA_VULKAN_GENERATED_DIR}/${_lambda_shader_name}_spv.hpp)
     add_custom_command(
@@ -266,8 +266,8 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
               -DINPUT=${_lambda_shader_spv}
               -DOUTPUT=${_lambda_shader_header}
               -DSYMBOL=lambda_${_lambda_shader_name}_spv
-              -P ${LAMBDA_FRAMEWORK_CMAKE_DIR}/LambdaEmbedBinary.cmake
-      DEPENDS ${_lambda_shader_src} ${LAMBDA_FRAMEWORK_CMAKE_DIR}/LambdaEmbedBinary.cmake
+              -P ${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaEmbedBinary.cmake
+      DEPENDS ${_lambda_shader_src} ${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaEmbedBinary.cmake
       VERBATIM
     )
     list(APPEND _lambda_vulkan_shader_headers ${_lambda_shader_header})
@@ -278,50 +278,50 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
     COMMENT "Regenerating Vulkan SPIR-V headers from shader sources"
     VERBATIM
   )
-  add_dependencies(lambda lambda_vulkan_shaders)
+  add_dependencies(lambdaui lambda_vulkan_shaders)
 endif()
 
-target_include_directories(lambda PUBLIC
-  ${LAMBDA_FRAMEWORK_INCLUDE_DIR}
+target_include_directories(lambdaui PUBLIC
+  ${LAMBDAUI_FRAMEWORK_INCLUDE_DIR}
 )
-target_include_directories(lambda PRIVATE
+target_include_directories(lambdaui PRIVATE
   ${CMAKE_CURRENT_BINARY_DIR}
-  ${LAMBDA_FRAMEWORK_SOURCE_DIR}
-  ${LAMBDA_FRAMEWORK_VENDOR_DIR}
+  ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}
+  ${LAMBDAUI_FRAMEWORK_VENDOR_DIR}
 )
 
-target_compile_options(lambda PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(lambdaui PRIVATE -Wall -Wextra -Wpedantic)
 
 if(APPLE)
-  target_compile_options(lambda PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
+  target_compile_options(lambdaui PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
 endif()
 
-if(LAMBDA_ENABLE_ASAN)
-  target_compile_options(lambda PRIVATE -fsanitize=address -fno-omit-frame-pointer)
-  target_link_options(lambda PRIVATE -fsanitize=address)
+if(LAMBDAUI_ENABLE_ASAN)
+  target_compile_options(lambdaui PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+  target_link_options(lambdaui PRIVATE -fsanitize=address)
 endif()
 
-target_compile_definitions(lambda PRIVATE
-  LAMBDA_ENABLE_DEFAULT_EVENT_LOGGING=$<BOOL:${LAMBDA_ENABLE_DEFAULT_EVENT_LOGGING}>
+target_compile_definitions(lambdaui PRIVATE
+  LAMBDAUI_ENABLE_DEFAULT_EVENT_LOGGING=$<BOOL:${LAMBDAUI_ENABLE_DEFAULT_EVENT_LOGGING}>
 )
 
-if(LAMBDA_PROFILE_REACTIVE)
-  target_compile_definitions(lambda PUBLIC LAMBDA_PROFILE_REACTIVE=1)
+if(LAMBDAUI_PROFILE_REACTIVE)
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_PROFILE_REACTIVE=1)
 else()
-  target_compile_definitions(lambda PUBLIC LAMBDA_PROFILE_REACTIVE=0)
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_PROFILE_REACTIVE=0)
 endif()
 
-if(LAMBDA_DISABLE_VARIANT_REFS)
-  target_compile_definitions(lambda PRIVATE LAMBDA_DISABLE_VARIANT_REFS=1)
+if(LAMBDAUI_DISABLE_VARIANT_REFS)
+  target_compile_definitions(lambdaui PRIVATE LAMBDAUI_DISABLE_VARIANT_REFS=1)
 endif()
 
-if(LAMBDA_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT)
-  target_compile_definitions(lambda PRIVATE LAMBDA_PARAGRAPH_CACHE_PARALLEL_ASSERT=1)
+if(LAMBDAUI_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT)
+  target_compile_definitions(lambdaui PRIVATE LAMBDAUI_PARAGRAPH_CACHE_PARALLEL_ASSERT=1)
 endif()
 
-if(LAMBDA_PLATFORM_MACOS)
-  target_compile_definitions(lambda PUBLIC LAMBDA_METAL=1 LAMBDA_VULKAN=0 PRIVATE LAMBDA_PLATFORM_MACOS=1)
-  target_link_libraries(lambda PRIVATE
+if(LAMBDAUI_PLATFORM_MACOS)
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=1 LAMBDAUI_VULKAN=0 PRIVATE LAMBDAUI_PLATFORM_MACOS=1)
+  target_link_libraries(lambdaui PRIVATE
     "-framework Cocoa"
     "-framework QuartzCore"
     "-framework Metal"
@@ -329,10 +329,10 @@ if(LAMBDA_PLATFORM_MACOS)
     "-framework Foundation"
     "-framework CoreText"
     "-framework CoreVideo")
-elseif(LAMBDA_PLATFORM_LINUX_WAYLAND)
-  target_compile_definitions(lambda PUBLIC LAMBDA_METAL=0 LAMBDA_VULKAN=1 PRIVATE LAMBDA_PLATFORM_LINUX_WAYLAND=1)
-  target_include_directories(lambda PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
-  target_link_libraries(lambda PRIVATE
+elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=1 PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
+  target_include_directories(lambdaui PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
+  target_link_libraries(lambdaui PRIVATE
     PkgConfig::WAYLAND_CLIENT
     PkgConfig::WAYLAND_CURSOR
     PkgConfig::LIBDRM
@@ -344,9 +344,9 @@ elseif(LAMBDA_PLATFORM_LINUX_WAYLAND)
     PkgConfig::LIBRSVG
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
-elseif(LAMBDA_PLATFORM_LINUX_KMS)
-  target_compile_definitions(lambda PUBLIC LAMBDA_METAL=0 LAMBDA_VULKAN=1 PRIVATE LAMBDA_PLATFORM_LINUX_KMS=1)
-  target_link_libraries(lambda PRIVATE
+elseif(LAMBDAUI_PLATFORM_LINUX_KMS)
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=1 PRIVATE LAMBDAUI_PLATFORM_LINUX_KMS=1)
+  target_link_libraries(lambdaui PRIVATE
     PkgConfig::LIBDRM
     PkgConfig::GBM
     PkgConfig::LIBINPUT
@@ -362,9 +362,9 @@ elseif(LAMBDA_PLATFORM_LINUX_KMS)
     ${CMAKE_DL_LIBS})
 endif()
 
-target_link_libraries(lambda PRIVATE libtess2)
+target_link_libraries(lambdaui PRIVATE libtess2)
 
-install(TARGETS lambda
+install(TARGETS lambdaui
   EXPORT LambdaTargets
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

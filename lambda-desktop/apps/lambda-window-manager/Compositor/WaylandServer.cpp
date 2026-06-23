@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 WaylandServer::WaylandServer(WaylandOutputInfo output) : impl_(std::make_unique<Impl>(std::move(output))) {}
 
@@ -341,4 +341,4 @@ bool WaylandServer::diagnosticExerciseToplevels(std::uint32_t step, bool resize)
   return true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

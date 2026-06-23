@@ -12,9 +12,9 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::pumpUntil;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::pumpUntil;
+using lambdaui::testing::dbus::startPrivateBus;
 
 constexpr char kAdapterPath[] = "/org/bluez/hci0";
 constexpr char kDevicePath[] = "/org/bluez/hci0/dev_11_22_33_44_55_66";
@@ -29,9 +29,9 @@ private:
   Callback callback_;
 };
 
-lambda::dbus::ManagedObjectDictionary managedObjects(bool powered, bool discovering, bool connected) {
-  lambda::dbus::ManagedObjectDictionary objects;
-  auto& adapter = objects.values[kAdapterPath][lambda::system::BlueZClient::adapterInterfaceName];
+lambdaui::dbus::ManagedObjectDictionary managedObjects(bool powered, bool discovering, bool connected) {
+  lambdaui::dbus::ManagedObjectDictionary objects;
+  auto& adapter = objects.values[kAdapterPath][lambdaui::system::BlueZClient::adapterInterfaceName];
   adapter["Address"] = std::string("00:11:22:33:44:55");
   adapter["AddressType"] = std::string("public");
   adapter["Name"] = std::string("lambda-host");
@@ -44,14 +44,14 @@ lambda::dbus::ManagedObjectDictionary managedObjects(bool powered, bool discover
   adapter["Pairable"] = true;
   adapter["Connectable"] = true;
   adapter["Discovering"] = discovering;
-  adapter["UUIDs"] = lambda::dbus::StringArray{
+  adapter["UUIDs"] = lambdaui::dbus::StringArray{
       .values = {"0000110a-0000-1000-8000-00805f9b34fb"},
   };
-  adapter["Roles"] = lambda::dbus::StringArray{
+  adapter["Roles"] = lambdaui::dbus::StringArray{
       .values = {"central", "peripheral"},
   };
 
-  auto& device = objects.values[kDevicePath][lambda::system::BlueZClient::deviceInterfaceName];
+  auto& device = objects.values[kDevicePath][lambdaui::system::BlueZClient::deviceInterfaceName];
   device["Address"] = std::string("11:22:33:44:55:66");
   device["AddressType"] = std::string("public");
   device["Alias"] = std::string("Keyboard");
@@ -59,10 +59,10 @@ lambda::dbus::ManagedObjectDictionary managedObjects(bool powered, bool discover
   device["Icon"] = std::string("input-keyboard");
   device["Class"] = std::uint32_t(0x000540);
   device["Appearance"] = std::uint16_t(0x03c1);
-  device["UUIDs"] = lambda::dbus::StringArray{
+  device["UUIDs"] = lambdaui::dbus::StringArray{
       .values = {"00001124-0000-1000-8000-00805f9b34fb"},
   };
-  device["Adapter"] = lambda::dbus::ObjectPath{kAdapterPath};
+  device["Adapter"] = lambdaui::dbus::ObjectPath{kAdapterPath};
   device["Paired"] = true;
   device["Connected"] = connected;
   device["Trusted"] = true;
@@ -73,9 +73,9 @@ lambda::dbus::ManagedObjectDictionary managedObjects(bool powered, bool discover
   device["WakeAllowed"] = true;
   device["RSSI"] = std::int16_t(-48);
   device["TxPower"] = std::int16_t(6);
-  device["ManufacturerData"] = lambda::dbus::EmptyVariantDictionary{};
+  device["ManufacturerData"] = lambdaui::dbus::EmptyVariantDictionary{};
 
-  auto& battery = objects.values[kDevicePath][lambda::system::BlueZClient::batteryInterfaceName];
+  auto& battery = objects.values[kDevicePath][lambdaui::system::BlueZClient::batteryInterfaceName];
   battery["Percentage"] = std::uint8_t(73);
   battery["Source"] = std::string("HID");
   return objects;
@@ -96,9 +96,9 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
     return;
   }
 
-  auto service = lambda::dbus::Bus::openAddress(privateBus->address);
-  lambda::system::BlueZClient client(lambda::dbus::Bus::openAddress(privateBus->address));
-  service.requestName(lambda::system::BlueZClient::serviceName);
+  auto service = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  lambdaui::system::BlueZClient client(lambdaui::dbus::Bus::openAddress(privateBus->address));
+  service.requestName(lambdaui::system::BlueZClient::serviceName);
 
   bool powered = true;
   bool discovering = false;
@@ -114,14 +114,14 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   std::string removedDevicePath;
 
   auto managerSlot = service.exportObject(
-      lambda::system::BlueZClient::objectManagerPath,
-      lambda::dbus::ObjectDefinition{
+      lambdaui::system::BlueZClient::objectManagerPath,
+      lambdaui::dbus::ObjectDefinition{
           .methods = {
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::BlueZClient::objectManagerInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::BlueZClient::objectManagerInterfaceName,
                   .member = "GetManagedObjects",
-                  .handler = [&](lambda::dbus::Message&) {
-                    return lambda::dbus::MethodReply{
+                  .handler = [&](lambdaui::dbus::Message&) {
+                    return lambdaui::dbus::MethodReply{
                         .values = {managedObjects(powered, discovering, connected)},
                     };
                   },
@@ -132,43 +132,43 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
 
   auto adapterSlot = service.exportObject(
       kAdapterPath,
-      lambda::dbus::ObjectDefinition{
+      lambdaui::dbus::ObjectDefinition{
           .methods = {
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::BlueZClient::adapterInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::BlueZClient::adapterInterfaceName,
                   .member = "StartDiscovery",
-                  .handler = [&](lambda::dbus::Message&) {
+                  .handler = [&](lambdaui::dbus::Message&) {
                     discovering = true;
                     ++startDiscoveryCalls;
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::BlueZClient::adapterInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::BlueZClient::adapterInterfaceName,
                   .member = "StopDiscovery",
-                  .handler = [&](lambda::dbus::Message&) {
+                  .handler = [&](lambdaui::dbus::Message&) {
                     discovering = false;
                     ++stopDiscoveryCalls;
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::BlueZClient::adapterInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::BlueZClient::adapterInterfaceName,
                   .member = "RemoveDevice",
-                  .handler = [&](lambda::dbus::Message& message) {
+                  .handler = [&](lambdaui::dbus::Message& message) {
                     removedDevicePath = message.readObjectPath().value;
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
           },
           .properties = {
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::BlueZClient::adapterInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::BlueZClient::adapterInterfaceName,
                   .name = "Powered",
                   .value = true,
                   .writable = true,
-                  .getter = [&] { return lambda::dbus::BasicValue(powered); },
-                  .setter = [&](lambda::dbus::BasicValue const& value) {
+                  .getter = [&] { return lambdaui::dbus::BasicValue(powered); },
+                  .setter = [&](lambdaui::dbus::BasicValue const& value) {
                     powered = std::get<bool>(value);
                   },
               },
@@ -177,61 +177,61 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
 
   auto deviceSlot = service.exportObject(
       kDevicePath,
-      lambda::dbus::ObjectDefinition{
+      lambdaui::dbus::ObjectDefinition{
           .methods = {
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::BlueZClient::deviceInterfaceName,
                   .member = "Pair",
-                  .handler = [&](lambda::dbus::Message&) {
+                  .handler = [&](lambdaui::dbus::Message&) {
                     ++pairCalls;
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::BlueZClient::deviceInterfaceName,
                   .member = "CancelPairing",
-                  .handler = [&](lambda::dbus::Message&) {
+                  .handler = [&](lambdaui::dbus::Message&) {
                     ++cancelPairingCalls;
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::BlueZClient::deviceInterfaceName,
                   .member = "Connect",
-                  .handler = [&](lambda::dbus::Message&) {
+                  .handler = [&](lambdaui::dbus::Message&) {
                     connected = true;
                     ++connectCalls;
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::BlueZClient::deviceInterfaceName,
                   .member = "Disconnect",
-                  .handler = [&](lambda::dbus::Message&) {
+                  .handler = [&](lambdaui::dbus::Message&) {
                     connected = false;
                     ++disconnectCalls;
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
           },
           .properties = {
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::BlueZClient::deviceInterfaceName,
                   .name = "Trusted",
                   .value = true,
                   .writable = true,
-                  .getter = [&] { return lambda::dbus::BasicValue(trusted); },
-                  .setter = [&](lambda::dbus::BasicValue const& value) {
+                  .getter = [&] { return lambdaui::dbus::BasicValue(trusted); },
+                  .setter = [&](lambdaui::dbus::BasicValue const& value) {
                     trusted = std::get<bool>(value);
                   },
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::BlueZClient::deviceInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::BlueZClient::deviceInterfaceName,
                   .name = "Blocked",
                   .value = false,
                   .writable = true,
-                  .getter = [&] { return lambda::dbus::BasicValue(blocked); },
-                  .setter = [&](lambda::dbus::BasicValue const& value) {
+                  .getter = [&] { return lambdaui::dbus::BasicValue(blocked); },
+                  .setter = [&](lambdaui::dbus::BasicValue const& value) {
                     blocked = std::get<bool>(value);
                   },
               },
@@ -292,16 +292,16 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   CHECK(snapshot.devices.front().txPower == 6);
   CHECK(snapshot.devices.front().batteryPercentage == 73);
   CHECK(snapshot.devices.front().batterySource == "HID");
-  CHECK(lambda::system::formatBluetoothStatus(snapshot) == "Keyboard");
+  CHECK(lambdaui::system::formatBluetoothStatus(snapshot) == "Keyboard");
 
   connected = false;
   snapshot = client.readSnapshot();
-  CHECK(lambda::system::formatBluetoothStatus(snapshot) == "on");
+  CHECK(lambdaui::system::formatBluetoothStatus(snapshot) == "on");
 
   client.setAdapterPowered(kAdapterPath, false);
   CHECK(!powered);
   snapshot = client.readSnapshot();
-  CHECK(lambda::system::formatBluetoothStatus(snapshot) == "off");
+  CHECK(lambdaui::system::formatBluetoothStatus(snapshot) == "off");
 
   client.startDiscovery(kAdapterPath);
   CHECK(discovering);
@@ -334,17 +334,17 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   auto statusWatch = client.watchStatusChanges([&] {
     ++statusChanges;
   });
-  std::optional<lambda::system::BlueZDeviceDisconnectedEvent> disconnectedEvent;
+  std::optional<lambdaui::system::BlueZDeviceDisconnectedEvent> disconnectedEvent;
   auto disconnectedSlot = client.watchDeviceDisconnected(
-      [&](lambda::system::BlueZDeviceDisconnectedEvent event) {
+      [&](lambdaui::system::BlueZDeviceDisconnectedEvent event) {
         disconnectedEvent = std::move(event);
       });
   powered = true;
   service.emitPropertiesChanged(
       kAdapterPath,
-      lambda::system::BlueZClient::adapterInterfaceName,
-      lambda::dbus::VariantDictionary{
-          .values = {{"Powered", lambda::dbus::BasicValue(powered)}},
+      lambdaui::system::BlueZClient::adapterInterfaceName,
+      lambdaui::dbus::VariantDictionary{
+          .values = {{"Powered", lambdaui::dbus::BasicValue(powered)}},
       });
   service.flush();
   CHECK(pumpUntil(client.bus(),
@@ -352,26 +352,26 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
                   std::chrono::milliseconds(500)));
   CHECK(statusChanges == 1);
 
-  lambda::dbus::NamespacedVariantDictionary addedInterfaces;
-  addedInterfaces.values[lambda::system::BlueZClient::deviceInterfaceName] = {
-      {"Connected", lambda::dbus::BasicValue(false)},
+  lambdaui::dbus::NamespacedVariantDictionary addedInterfaces;
+  addedInterfaces.values[lambdaui::system::BlueZClient::deviceInterfaceName] = {
+      {"Connected", lambdaui::dbus::BasicValue(false)},
   };
-  service.emitSignal(lambda::system::BlueZClient::objectManagerPath,
-                     lambda::system::BlueZClient::objectManagerInterfaceName,
+  service.emitSignal(lambdaui::system::BlueZClient::objectManagerPath,
+                     lambdaui::system::BlueZClient::objectManagerInterfaceName,
                      "InterfacesAdded",
-                     {lambda::dbus::ObjectPath{"/org/bluez/hci0/dev_11_22_33_44_55_66"},
+                     {lambdaui::dbus::ObjectPath{"/org/bluez/hci0/dev_11_22_33_44_55_66"},
                       addedInterfaces});
   service.flush();
   CHECK(pumpUntil(client.bus(),
                   [&] { return statusChanges == 2; },
                   std::chrono::milliseconds(500)));
 
-  service.emitSignal(lambda::system::BlueZClient::objectManagerPath,
-                     lambda::system::BlueZClient::objectManagerInterfaceName,
+  service.emitSignal(lambdaui::system::BlueZClient::objectManagerPath,
+                     lambdaui::system::BlueZClient::objectManagerInterfaceName,
                      "InterfacesRemoved",
-                     {lambda::dbus::ObjectPath{"/org/bluez/hci0/dev_11_22_33_44_55_66"},
-                      lambda::dbus::StringArray{
-                          .values = {lambda::system::BlueZClient::deviceInterfaceName},
+                     {lambdaui::dbus::ObjectPath{"/org/bluez/hci0/dev_11_22_33_44_55_66"},
+                      lambdaui::dbus::StringArray{
+                          .values = {lambdaui::system::BlueZClient::deviceInterfaceName},
                       }});
   service.flush();
   CHECK(pumpUntil(client.bus(),
@@ -380,9 +380,9 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
 
   service.emitPropertiesChanged(
       kDevicePath,
-      lambda::system::BlueZClient::batteryInterfaceName,
-      lambda::dbus::VariantDictionary{
-          .values = {{"Percentage", lambda::dbus::BasicValue(std::uint8_t(71))}},
+      lambdaui::system::BlueZClient::batteryInterfaceName,
+      lambdaui::dbus::VariantDictionary{
+          .values = {{"Percentage", lambdaui::dbus::BasicValue(std::uint8_t(71))}},
       });
   service.flush();
   CHECK(pumpUntil(client.bus(),
@@ -390,7 +390,7 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
                   std::chrono::milliseconds(500)));
 
   service.emitSignal(kDevicePath,
-                     lambda::system::BlueZClient::deviceInterfaceName,
+                     lambdaui::system::BlueZClient::deviceInterfaceName,
                      "Disconnected",
                      {std::string("org.bluez.Reason.Timeout"),
                       std::string("Connection timed out")});
@@ -403,7 +403,7 @@ TEST_CASE("BlueZClient reads adapter and connected device status") {
   CHECK(disconnectedEvent->reason == "org.bluez.Reason.Timeout");
   CHECK(disconnectedEvent->message == "Connection timed out");
 
-  CHECK(lambda::system::formatBluetoothStatus(lambda::system::BlueZSnapshot{}) == "unavailable");
+  CHECK(lambdaui::system::formatBluetoothStatus(lambdaui::system::BlueZSnapshot{}) == "unavailable");
 }
 
 #endif

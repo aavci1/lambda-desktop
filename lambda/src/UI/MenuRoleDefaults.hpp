@@ -5,9 +5,9 @@
 
 #include <string>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 std::string standardRoleActionName(MenuRole role);
 Shortcut standardRoleShortcut(MenuRole role);
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

@@ -27,7 +27,7 @@
 #include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon.h>
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void raiseSurface(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   auto found = std::find_if(server->surfaces_.begin(), server->surfaces_.end(),
@@ -167,16 +167,16 @@ bool cycleFocus(WaylandServer::Impl* server, std::uint32_t timeMs, bool forward)
         advancedFocusCycleIndex(server->focusCycleIndex_, server->focusCycleList_.size(), forward);
     WaylandServer::Impl::Surface* target = server->focusCycleList_[server->focusCycleIndex_];
     if (!surfaceFocusableInOrder(target)) continue;
-    lambda::compositor::focusSurface(server, target, timeMs);
+    lambdaui::compositor::focusSurface(server, target, timeMs);
     return true;
   }
   clearFocusCycle(server);
   return false;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 std::optional<int> WaylandServer::Impl::windowCyclerWakeDelayMs() const {
   if (focusCycleList_.size() < 2u || focusCycleStartedAtMs_ == 0 || focusCycleOverlayShown_) {
@@ -236,4 +236,4 @@ void minimizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

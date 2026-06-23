@@ -14,7 +14,7 @@
 #include <initializer_list>
 #include <variant>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class StrokeCap { Butt, Round, Square };
 enum class StrokeJoin { Miter, Round, Bevel };
@@ -156,4 +156,4 @@ struct ShadowStyle {
   bool operator==(ShadowStyle const& other) const = default;
 };
 
-} // namespace lambda
+} // namespace lambdaui

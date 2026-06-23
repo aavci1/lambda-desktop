@@ -13,7 +13,7 @@
 #include <functional>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 struct ListRow : ViewModifiers<ListRow> {
     struct Style {
@@ -59,4 +59,4 @@ struct ListView : ViewModifiers<ListView> {
     Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

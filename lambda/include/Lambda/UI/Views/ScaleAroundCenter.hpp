@@ -8,7 +8,7 @@
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/Reactive/Bindable.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Scales a single child around the center of the layout slot (used for press feedback).
 struct ScaleAroundCenter : ViewModifiers<ScaleAroundCenter> {
@@ -26,4 +26,4 @@ struct ScaleAroundCenter : ViewModifiers<ScaleAroundCenter> {
 
 };
 
-} // namespace lambda
+} // namespace lambdaui

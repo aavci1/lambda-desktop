@@ -10,7 +10,7 @@
 #include <memory>
 #include <stdexcept>
 
-namespace lambda::platform {
+namespace lambdaui::platform {
 
 namespace {
 
@@ -42,4 +42,4 @@ std::unique_ptr<RenderTarget> createRenderTarget(MetalRenderTargetSpec const& sp
   return std::make_unique<MetalRenderTarget>(spec);
 }
 
-} // namespace lambda::platform
+} // namespace lambdaui::platform

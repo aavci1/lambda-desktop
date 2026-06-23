@@ -27,7 +27,7 @@
 #include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon.h>
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool updateShortcutModifier(WaylandServer::Impl* server, std::uint32_t key, bool pressed) {
   bool changed = false;
@@ -61,9 +61,9 @@ bool updateShortcutModifier(WaylandServer::Impl* server, std::uint32_t key, bool
   return false;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bool pressed, std::uint32_t timeMs) {
   if (!pressed) return focusCycleActive(server) && key == KEY_TAB;
@@ -110,4 +110,4 @@ bool handleCompositorShortcut(WaylandServer::Impl* server, std::uint32_t key, bo
   return false;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm

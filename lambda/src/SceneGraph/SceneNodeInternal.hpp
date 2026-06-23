@@ -3,7 +3,7 @@
 #include <memory>
 #include <cstdint>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 class SceneNode;
 class PreparedRenderOps;
@@ -27,4 +27,4 @@ struct SceneNodeAccess {
 };
 
 } // namespace detail
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

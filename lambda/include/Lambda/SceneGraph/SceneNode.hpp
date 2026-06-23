@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace scenegraph {
 
@@ -147,4 +147,4 @@ class SceneNode {
 };
 
 } // namespace scenegraph
-} // namespace lambda
+} // namespace lambdaui

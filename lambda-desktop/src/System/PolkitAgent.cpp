@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -196,4 +196,4 @@ dbus::MethodReply PolkitAuthenticationAgentService::cancelAuthentication(dbus::M
   return dbus::MethodReply{};
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 struct InteractionData : public scenegraph::Interaction {
   ComponentKey stableTargetKey_{};
@@ -87,4 +87,4 @@ inline InteractionData& interactionData(scenegraph::Interaction& interaction) no
   return static_cast<InteractionData&>(interaction);
 }
 
-} // namespace lambda
+} // namespace lambdaui

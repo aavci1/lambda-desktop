@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -830,4 +830,4 @@ int PathFlattener::tessWindingFromFillRule(FillRule rule) {
   return rule == FillRule::EvenOdd ? TESS_WINDING_ODD : TESS_WINDING_NONZERO;
 }
 
-} // namespace lambda
+} // namespace lambdaui

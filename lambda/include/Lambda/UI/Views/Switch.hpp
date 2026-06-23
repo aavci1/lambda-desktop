@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 template<typename T>
 struct SwitchCase {
@@ -232,4 +232,4 @@ Switch(Selector&& selector, std::vector<SwitchCase<Value>> cases,
       std::forward<Selector>(selector), std::move(cases), std::move(defaultFactory)};
 }
 
-} // namespace lambda
+} // namespace lambdaui

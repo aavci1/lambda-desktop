@@ -40,20 +40,20 @@ TEST_CASE("compositor config hot reload detects scale and wallpaper edits") {
   }
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = lambda::compositor::loadConfigWithMetadata();
+  auto loaded = lambdaui::compositor::loadConfigWithMetadata();
   CHECK(loaded.config.scale == doctest::Approx(1.0f));
   REQUIRE(loaded.config.wallpaperPath);
   CHECK(*loaded.config.wallpaperPath == "/tmp/a.png");
-  CHECK_FALSE(lambda::compositor::configChanged(loaded));
+  CHECK_FALSE(lambdaui::compositor::configChanged(loaded));
 
   {
     std::ofstream file(path);
     file << "scale = 1.25\n";
     file << "wallpaper = \"/tmp/b.png\"\n";
   }
-  CHECK(lambda::compositor::configChanged(loaded));
+  CHECK(lambdaui::compositor::configChanged(loaded));
 
-  loaded = lambda::compositor::loadConfigWithMetadata();
+  loaded = lambdaui::compositor::loadConfigWithMetadata();
   CHECK(loaded.config.scale == doctest::Approx(1.25f));
   REQUIRE(loaded.config.wallpaperPath);
   CHECK(*loaded.config.wallpaperPath == "/tmp/b.png");

@@ -15,11 +15,11 @@
 #include <memory>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 class FreeTypeTextSystem;
 }
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct SurfaceRenderState;
 struct CursorRenderState;
@@ -55,10 +55,10 @@ struct VulkanDisplayPendingFrameCallbacks {
 
 struct CompositorRenderFrameContext {
   WaylandServer& wayland;
-  lambda::platform::KmsOutput const& output;
+  lambdaui::platform::KmsOutput const& output;
   Presenter& presenter;
-  lambda::Canvas& canvas;
-  lambda::FreeTypeTextSystem& textSystem;
+  lambdaui::Canvas& canvas;
+  lambdaui::FreeTypeTextSystem& textSystem;
   AppliedCompositorConfig& appliedConfig;
   SurfaceRenderState& surfaceRenderState;
   CursorRenderState& cursorState;
@@ -86,7 +86,7 @@ struct CompositorRenderFrameContext {
 
 bool completeVulkanDisplayPendingFrameCallbacks(
     WaylandServer& wayland,
-    lambda::platform::KmsOutput const& output,
+    lambdaui::platform::KmsOutput const& output,
     std::vector<VulkanDisplayPendingFrameCallbacks>& pendingCallbacks,
     std::vector<PresentationCompletion> const& completions,
     std::uint32_t nowMs);
@@ -97,4 +97,4 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
                            PresentationTiming presentationTiming,
                            bool renderAheadFrame);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

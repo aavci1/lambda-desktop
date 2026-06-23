@@ -15,7 +15,7 @@
 #include <functional>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class ButtonVariant : std::uint8_t {
     Primary,
@@ -123,4 +123,4 @@ struct IconButton : ViewModifiers<IconButton> {
     Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

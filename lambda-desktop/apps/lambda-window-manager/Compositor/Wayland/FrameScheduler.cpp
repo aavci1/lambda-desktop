@@ -17,7 +17,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
@@ -434,4 +434,4 @@ void WaylandServer::Impl::completePresentationFeedbacks(std::vector<Presentation
   if (sent) flushClients();
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

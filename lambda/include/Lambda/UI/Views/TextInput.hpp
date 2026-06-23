@@ -22,7 +22,7 @@
 #include <optional>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 class MountContext;
 namespace scenegraph {
@@ -146,4 +146,4 @@ struct TextInput : ViewModifiers<TextInput> {
     Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

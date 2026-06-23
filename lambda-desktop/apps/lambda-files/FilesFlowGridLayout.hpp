@@ -49,18 +49,18 @@ struct FilesFlowGridLayout {
     return rowCountForEntries(entryCount, columnCountForWidth(width));
   }
 
-  lambda::Size contentSizeFor(float width, std::size_t entryCount) const {
+  lambdaui::Size contentSizeFor(float width, std::size_t entryCount) const {
     if (!std::isfinite(width) || width <= 0.f) {
-      return lambda::Size{};
+      return lambdaui::Size{};
     }
     int const columns = columnCountForWidth(width);
     int const rows = rowCountForEntries(entryCount, columns);
     if (rows <= 0) {
-      return lambda::Size{width > 0.f ? width : 0.f, 0.f};
+      return lambdaui::Size{width > 0.f ? width : 0.f, 0.f};
     }
     float const height =
         static_cast<float>(rows) * cellHeight + static_cast<float>(rows - 1) * verticalSpacing;
-    return lambda::Size{width > 0.f ? width : 0.f, height};
+    return lambdaui::Size{width > 0.f ? width : 0.f, height};
   }
 
   std::vector<std::size_t> rowIndicesFor(std::size_t entryCount, float width) const {

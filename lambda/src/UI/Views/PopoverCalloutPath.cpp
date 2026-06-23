@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -215,4 +215,4 @@ Path buildPopoverCalloutPath(PopoverPlacement placement, CornerRadius cornerRadi
   return p;
 }
 
-} // namespace lambda
+} // namespace lambdaui

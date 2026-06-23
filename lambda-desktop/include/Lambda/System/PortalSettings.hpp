@@ -9,7 +9,7 @@
 #include <filesystem>
 #include <optional>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 enum class PortalColorScheme : std::uint32_t {
   NoPreference = 0,
@@ -63,4 +63,4 @@ private:
   PortalSettingsState state_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

@@ -20,7 +20,7 @@
 #include <string_view>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 class TextSystem {
   public:
@@ -110,4 +110,4 @@ class TextSystem {
                                                               TextLayoutOptions const &options = {});
 };
 
-} // namespace lambda
+} // namespace lambdaui

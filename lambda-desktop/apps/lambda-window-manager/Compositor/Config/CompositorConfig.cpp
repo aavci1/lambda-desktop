@@ -15,7 +15,7 @@
 
 #include <toml++/toml.hpp>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 std::string trim(std::string_view value) {
@@ -985,4 +985,4 @@ float scaleForOutput(CompositorConfig const& config, std::string const& outputNa
   return found == config.outputScales.end() ? config.scale : found->second;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

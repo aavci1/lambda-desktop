@@ -413,9 +413,9 @@ void ShellModel::activateItem(DockItem const& item,
                               std::uint64_t requestId) {
   if (!sendIpc) return;
   if (item.running) {
-    sendIpc(lambda::shell::serializeFocusApp(item.appId, requestId));
+    sendIpc(lambdaui::shell::serializeFocusApp(item.appId, requestId));
   } else if (item.kind == "app") {
-    sendIpc(lambda::shell::serializeLaunchApp(item.appId, requestId));
+    sendIpc(lambdaui::shell::serializeLaunchApp(item.appId, requestId));
   }
 }
 

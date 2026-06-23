@@ -15,7 +15,7 @@
 #include <Lambda/UI/Views/Text.hpp>
 #include <Lambda/UI/Views/ZStack.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 struct TableColumnLayout {
     float width = 0.f;
@@ -41,9 +41,9 @@ template<>
 struct EnvironmentKey<TableLayoutContextKey> {
     using Value = TableLayoutContext;
     static Value defaultValue() { return {}; }
-    static ::lambda::detail::EnvironmentSlot const& slot() {
-        static ::lambda::detail::EnvironmentSlot s{
-            ::lambda::detail::allocateEnvironmentSlot(typeid(TableLayoutContextKey))};
+    static ::lambdaui::detail::EnvironmentSlot const& slot() {
+        static ::lambdaui::detail::EnvironmentSlot s{
+            ::lambdaui::detail::allocateEnvironmentSlot(typeid(TableLayoutContextKey))};
         return s;
     }
 };
@@ -53,9 +53,9 @@ template<>
 struct EnvironmentKey<TableColumnIndexKey> {
     using Value = TableColumnIndex;
     static Value defaultValue() { return {}; }
-    static ::lambda::detail::EnvironmentSlot const& slot() {
-        static ::lambda::detail::EnvironmentSlot s{
-            ::lambda::detail::allocateEnvironmentSlot(typeid(TableColumnIndexKey))};
+    static ::lambdaui::detail::EnvironmentSlot const& slot() {
+        static ::lambdaui::detail::EnvironmentSlot s{
+            ::lambdaui::detail::allocateEnvironmentSlot(typeid(TableColumnIndexKey))};
         return s;
     }
 };
@@ -477,4 +477,4 @@ Element TableView::body() const {
         .fill(FillStyle::solid(resolved.backgroundColor));
 }
 
-} // namespace lambda
+} // namespace lambdaui

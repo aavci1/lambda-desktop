@@ -1,7 +1,7 @@
 namespace {
 
 class VulkanCanvas final : public Canvas {
-  friend bool ::lambda::deferVulkanFrameRecorderResourcesDestroy(
+  friend bool ::lambdaui::deferVulkanFrameRecorderResourcesDestroy(
       VulkanFrameRecorderResources resources) noexcept;
 
 public:

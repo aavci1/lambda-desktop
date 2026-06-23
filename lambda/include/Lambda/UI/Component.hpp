@@ -7,7 +7,7 @@
 #include <concepts>
 #include <type_traits>
 
-namespace lambda {
+namespace lambdaui {
 
 class Canvas;
 class MeasureContext;
@@ -21,4 +21,4 @@ concept BodyComponent = requires(T const& t) {
 template<typename T>
 concept Component = true;
 
-} // namespace lambda
+} // namespace lambdaui

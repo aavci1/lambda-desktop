@@ -14,7 +14,7 @@
 #include <chrono>
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -122,4 +122,4 @@ void MountRoot::resize(Size viewportSize, scenegraph::SceneGraph& sceneGraph) {
   }
 }
 
-} // namespace lambda
+} // namespace lambdaui

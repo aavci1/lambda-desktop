@@ -7,7 +7,7 @@
 #include <doctest/doctest.h>
 #include <functional>
 
-using namespace lambda::Reactive;
+using namespace lambdaui::Reactive;
 
 TEST_CASE("Reactive Signal reads writes and skips equal writes") {
   Signal<int> count(1);

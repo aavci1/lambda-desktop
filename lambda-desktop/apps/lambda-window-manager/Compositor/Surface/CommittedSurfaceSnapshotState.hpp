@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 template <typename Visitor>
 void visitCommittedSurfaceContentShape(CommittedSurfaceSnapshot const& surface,
@@ -209,4 +209,4 @@ committedSurfaceFrameRect(CommittedSurfaceSnapshot const& surface) {
          committedSurfaceRegionListsEqual(lhs.backgroundBlurRects, rhs.backgroundBlurRects);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

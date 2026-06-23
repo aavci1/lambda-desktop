@@ -27,7 +27,7 @@
 #include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon.h>
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 WindowGeometry frameGeometryFor(WaylandServer::Impl* server, WaylandServer::Impl::Surface const* surface) {
   std::int32_t const titleBarHeight = externalTitleBarHeight(server, surface);
@@ -99,9 +99,9 @@ void resetDragSnapState(WaylandServer::Impl* server) {
   server->dragSnapTargetStartedAtMs_ = 0;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void clearSnapPreview(WaylandServer::Impl* server) {
   resetDragSnapState(server);
@@ -113,9 +113,9 @@ void clearSnapPreview(WaylandServer::Impl* server) {
   server->snapPreviewTargetWindow_ = {};
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void animateSnapPreviewTo(WaylandServer::Impl* server,
                           WaylandServer::Impl::Surface const* surface,
@@ -137,9 +137,9 @@ void animateSnapPreviewTo(WaylandServer::Impl* server,
   server->snapPreviewTargetWindow_ = target;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 std::optional<SnapTarget> activeDragSnapTarget(WaylandServer::Impl* server,
                                                WaylandServer::Impl::Surface const* surface,
@@ -177,9 +177,9 @@ std::optional<SnapTarget> activeDragSnapTarget(WaylandServer::Impl* server,
   return target;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using wm::activeDragSnapTarget;
 using wm::clearSnapPreview;
@@ -237,9 +237,9 @@ std::optional<SnapPreviewSnapshot> snapPreviewForDrag(WaylandServer::Impl const*
   };
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void startGeometryAnimation(WaylandServer::Impl* server,
                             WaylandServer::Impl::Surface* surface,
@@ -264,8 +264,8 @@ void startGeometryAnimation(WaylandServer::Impl* server,
   surface->geometryAnimationTargetWidth = targetWidth;
   surface->geometryAnimationTargetHeight = targetHeight;
   surface->geometryAnimationStartedAtMs = monotonicMilliseconds();
-  if (lambda::detail::resizeTraceMetadataEnabled()) {
-    surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+  if (lambdaui::detail::resizeTraceMetadataEnabled()) {
+    surface->lastResizeInputNsec = lambdaui::detail::resizeTraceTimestampNanoseconds();
   }
   if (server) server->noteResizePacingActivity();
   surface->geometryAnimationActive = true;
@@ -300,9 +300,9 @@ void clearPreFullscreenState(WaylandServer::Impl::Surface* surface) {
   surface->preFullscreenHeight = 0;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, SnapTarget target) {
   if (!isManagedToplevel(surface)) return;
@@ -331,17 +331,17 @@ void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* sur
                          geometry.height);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void snapToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface, bool leftHalf) {
   snapToplevel(server, surface, leftHalf ? SnapTarget::LeftHalf : SnapTarget::RightHalf);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using wm::isManagedToplevel;
 using wm::kMinWindowHeight;
@@ -416,9 +416,9 @@ bool restoreToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* 
   return true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using wm::isManagedToplevel;
 using wm::clearPreFullscreenState;
@@ -450,33 +450,33 @@ void maximizeToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   startGeometryAnimation(server, surface, target.x, target.y, target.width, target.height);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void snapFocusedToplevel(WaylandServer::Impl* server, bool leftHalf) {
   snapToplevel(server, server->keyboardFocus_, leftHalf);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void maximizeFocusedToplevel(WaylandServer::Impl* server) {
-  lambda::compositor::maximizeToplevel(server, server->keyboardFocus_);
+  lambdaui::compositor::maximizeToplevel(server, server->keyboardFocus_);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool restoreFocusedToplevel(WaylandServer::Impl* server) {
-  return lambda::compositor::restoreToplevel(server, server->keyboardFocus_);
+  return lambdaui::compositor::restoreToplevel(server, server->keyboardFocus_);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void fullscreenToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!isManagedToplevel(surface) || surface->fullscreen) return;
@@ -503,9 +503,9 @@ void fullscreenToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surfac
   startGeometryAnimation(server, surface, 0, 0, targetWidth, targetHeight);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!surface || (!surface->snapped && !surface->maximized && !surface->fullscreen)) return;
@@ -540,22 +540,22 @@ void restoreSnappedForDrag(WaylandServer::Impl* server, WaylandServer::Impl::Sur
   }
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void toggleMaximizedToplevel(WaylandServer::Impl* server, WaylandServer::Impl::Surface* surface) {
   if (!isManagedToplevel(surface)) return;
   if (surface->maximized) {
-    lambda::compositor::restoreToplevel(server, surface);
+    lambdaui::compositor::restoreToplevel(server, surface);
     return;
   }
-  lambda::compositor::maximizeToplevel(server, surface);
+  lambdaui::compositor::maximizeToplevel(server, surface);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void updateDrag(WaylandServer::Impl* server) {
   if (!server->dragSurface_) return;
@@ -583,9 +583,9 @@ void updateDrag(WaylandServer::Impl* server) {
   activeDragSnapTarget(server, surface, monotonicMilliseconds());
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void updateResize(WaylandServer::Impl* server) {
   WaylandServer::Impl::Surface* surface = server->resizeSurface_;
@@ -621,8 +621,8 @@ void updateResize(WaylandServer::Impl* server) {
       next.height == server->resizeLastHeight_) {
     return;
   }
-  if (lambda::detail::resizeTraceMetadataEnabled()) {
-    surface->lastResizeInputNsec = lambda::detail::resizeTraceTimestampNanoseconds();
+  if (lambdaui::detail::resizeTraceMetadataEnabled()) {
+    surface->lastResizeInputNsec = lambdaui::detail::resizeTraceTimestampNanoseconds();
   }
   server->noteResizePacingActivity();
   server->resizeLastX_ = nextX;
@@ -647,4 +647,4 @@ void updateResize(WaylandServer::Impl* server) {
   }
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm

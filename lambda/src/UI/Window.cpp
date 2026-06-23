@@ -35,7 +35,7 @@
 #include <chrono>
 #include <optional>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -614,4 +614,4 @@ void Window::render(Canvas& canvas) {
   }
 }
 
-} // namespace lambda
+} // namespace lambdaui

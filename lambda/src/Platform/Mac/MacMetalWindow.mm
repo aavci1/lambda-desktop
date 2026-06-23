@@ -32,13 +32,13 @@
 #include <string>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 class MacMetalWindow;
 class MacPopoverSurface;
 class Window;
-::lambda::Window* lambdaWindowForPlatform(MacMetalWindow* platform);
+::lambdaui::Window* lambdaWindowForPlatform(MacMetalWindow* platform);
 CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform);
-} // namespace lambda
+} // namespace lambdaui
 
 /// Private AppKit class methods; stable in practice for diagonal window-resize cursors.
 @interface NSCursor (LambdaPrivateResizeCursors)
@@ -47,7 +47,7 @@ CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform);
 @end
 
 @interface LambdaMetalView : NSView <NSTextInputClient>
-@property(nonatomic, assign) lambda::MacMetalWindow* lambdaPlatform;
+@property(nonatomic, assign) lambdaui::MacMetalWindow* lambdaPlatform;
 - (CAMetalLayer*)lambdaMetalLayer;
 - (void)updateDrawableSize;
 - (BOOL)lambdaWantsTextInput;
@@ -56,7 +56,7 @@ CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform);
 
 @interface LambdaPopupMenuTarget : NSObject {
 @public
-  lambda::Window* lambdaWindow;
+  lambdaui::Window* lambdaWindow;
   std::vector<std::function<void()>> handlers;
   std::vector<std::string> actionNames;
 }
@@ -64,22 +64,22 @@ CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform);
 @end
 
 @interface LambdaPopoverView : NSView <NSTextInputClient>
-@property(nonatomic, assign) lambda::MacPopoverSurface* surface;
+@property(nonatomic, assign) lambdaui::MacPopoverSurface* surface;
 - (CAMetalLayer*)lambdaMetalLayer;
 - (void)updateDrawableSize;
 @end
 
 @interface LambdaPopoverDelegate : NSObject <NSPopoverDelegate>
-@property(nonatomic, assign) lambda::MacMetalWindow* platform;
+@property(nonatomic, assign) lambdaui::MacMetalWindow* platform;
 @property(nonatomic, assign) std::uint64_t popoverId;
 @end
 
-namespace lambda {
+namespace lambdaui {
 namespace detail {
 void postInputFromView(LambdaMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text = {});
 void postTextInput(LambdaMetalView* view, std::string text);
 } // namespace detail
-} // namespace lambda
+} // namespace lambdaui
 
 @implementation LambdaMetalView
 
@@ -219,14 +219,14 @@ void postTextInput(LambdaMetalView* view, std::string text);
 }
 
 - (void)keyDown:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::KeyDown, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::KeyDown, event);
   if ([self lambdaWantsTextInput]) {
     [self interpretKeyEvents:@[event]];
   }
 }
 
 - (void)keyUp:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::KeyUp, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::KeyUp, event);
 }
 
 - (void)doCommandBySelector:(SEL)selector {
@@ -276,7 +276,7 @@ void postTextInput(LambdaMetalView* view, std::string text);
     s = (NSString*)string;
   }
   std::string utf8 = s ? [s UTF8String] : "";
-  lambda::detail::postTextInput(self, std::move(utf8));
+  lambdaui::detail::postTextInput(self, std::move(utf8));
 }
 
 - (NSUInteger)characterIndexForPoint:(NSPoint)point {
@@ -285,8 +285,8 @@ void postTextInput(LambdaMetalView* view, std::string text);
 }
 
 - (BOOL)lambdaWantsTextInput {
-  lambda::MacMetalWindow* platform = self.lambdaPlatform;
-  lambda::Window* window = lambda::lambdaWindowForPlatform(platform);
+  lambdaui::MacMetalWindow* platform = self.lambdaPlatform;
+  lambdaui::Window* window = lambdaui::lambdaWindowForPlatform(platform);
   return window && window->wantsTextInput();
 }
 
@@ -299,11 +299,11 @@ void postTextInput(LambdaMetalView* view, std::string text);
 
 - (void)lambdaHandleDisplayLink:(id)displayLink {
   (void)displayLink;
-  lambda::MacMetalWindow* platform = self.lambdaPlatform;
+  lambdaui::MacMetalWindow* platform = self.lambdaPlatform;
   if (!platform) {
     return;
   }
-  (void)lambda::lambdaHandleDisplayLinkTick(platform);
+  (void)lambdaui::lambdaHandleDisplayLinkTick(platform);
 }
 
 - (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange {
@@ -339,10 +339,10 @@ void postTextInput(LambdaMetalView* view, std::string text);
 @end
 
 @interface LambdaWindowDelegate : NSObject <NSWindowDelegate>
-@property (nonatomic, assign) lambda::MacMetalWindow* platform;
+@property (nonatomic, assign) lambdaui::MacMetalWindow* platform;
 @end
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -353,7 +353,7 @@ NSString* ns(std::string const& text) {
   return out ? out : @"";
 }
 
-bool popupItemEnabled(lambda::MenuItem const& item, lambda::Window* window) {
+bool popupItemEnabled(lambdaui::MenuItem const& item, lambdaui::Window* window) {
   if (item.isEnabled && !item.isEnabled()) {
     return false;
   }
@@ -363,18 +363,18 @@ bool popupItemEnabled(lambda::MenuItem const& item, lambda::Window* window) {
   return true;
 }
 
-void addPopupMenuItem(NSMenu* menu, lambda::MenuItem const& item, LambdaPopupMenuTarget* target) {
-  if (item.role == lambda::MenuRole::Separator) {
+void addPopupMenuItem(NSMenu* menu, lambdaui::MenuItem const& item, LambdaPopupMenuTarget* target) {
+  if (item.role == lambdaui::MenuRole::Separator) {
     [menu addItem:[NSMenuItem separatorItem]];
     return;
   }
 
-  if (item.role == lambda::MenuRole::Submenu) {
+  if (item.role == lambdaui::MenuRole::Submenu) {
     NSMenuItem* submenuItem = [[NSMenuItem alloc] initWithTitle:ns(item.label)
                                                         action:nil
                                                  keyEquivalent:@""];
     NSMenu* submenu = [[NSMenu alloc] initWithTitle:ns(item.label)];
-    for (lambda::MenuItem const& child : item.children) {
+    for (lambdaui::MenuItem const& child : item.children) {
       addPopupMenuItem(submenu, child, target);
     }
     submenuItem.submenu = submenu;
@@ -411,7 +411,7 @@ public:
   explicit MacMetalWindow(const WindowConfig& config);
   ~MacMetalWindow() override;
 
-  void setLambdaWindow(::lambda::Window* window) override;
+  void setLambdaWindow(::lambdaui::Window* window) override;
   void show() override;
   void resize(const Size& newSize) override;
   void setMinSize(Size size) override;
@@ -435,7 +435,7 @@ public:
   unsigned int handle() const override;
   void* nativeGraphicsSurface() const override;
 
-  std::unique_ptr<Canvas> createCanvas(::lambda::Window& owner) override;
+  std::unique_ptr<Canvas> createCanvas(::lambdaui::Window& owner) override;
 
   void processEvents() override;
   void waitForEvents(int timeoutMs) override;
@@ -448,7 +448,7 @@ public:
   [[nodiscard]] PlatformWindowCapabilities capabilities() const override;
   void rememberPointerDownEvent(NSEvent* event);
 
-  ::lambda::Window* lambdaWindow() const;
+  ::lambdaui::Window* lambdaWindow() const;
   CVReturn onDisplayLinkTick();
   void handlePopoverClosed(PopoverSurfaceId id);
 
@@ -539,7 +539,7 @@ struct MacMetalWindow::Impl {
   NSView* tintView_{nil};
   LambdaMetalView* metalView_{nil};
   LambdaWindowDelegate* delegate_{nil};
-  ::lambda::Window* lambdaWindow_{nullptr};
+  ::lambdaui::Window* lambdaWindow_{nullptr};
   unsigned int handle_{0};
   id displayLink_ = nil;
   CVDisplayLinkRef legacyDisplayLink_{nullptr};
@@ -713,7 +713,7 @@ Size popoverMaxSize(MacMetalWindow* owner, Popover const& popover) {
 
 MacPopoverSurface::MacPopoverSurface(MacMetalWindow* owner, PopoverSurfaceId id, Popover popover)
     : owner_(owner), id_(id), popover_(std::move(popover)) {
-  ::lambda::Window* window = owner_ ? owner_->lambdaWindow() : nullptr;
+  ::lambdaui::Window* window = owner_ ? owner_->lambdaWindow() : nullptr;
   EnvironmentBinding environment = window ? window->environmentBinding() : EnvironmentBinding{};
   Size const maxSize = popoverMaxSize(owner_, popover_);
   host_ = std::make_unique<TransientPopoverHost>(TransientPopoverHost::Config{
@@ -942,7 +942,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
   return NSMaxYEdge;
 }
 
-} // namespace lambda
+} // namespace lambdaui
 
 @implementation LambdaPopoverView
 
@@ -1170,9 +1170,9 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)popoverDidClose:(NSNotification*)notification {
   (void)notification;
-  lambda::MacMetalWindow* platform = self.platform;
+  lambdaui::MacMetalWindow* platform = self.platform;
   if (platform) {
-    platform->handlePopoverClosed(lambda::PopoverSurfaceId{self.popoverId});
+    platform->handlePopoverClosed(lambdaui::PopoverSurfaceId{self.popoverId});
   }
 }
 
@@ -1182,17 +1182,17 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)windowWillClose:(NSNotification*)notification {
   (void)notification;
-  lambda::MacMetalWindow* platform = self.platform;
+  lambdaui::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
-  lambda::Window* w = platform->lambdaWindow();
+  lambdaui::Window* w = platform->lambdaWindow();
   if (!w) {
     return;
   }
   void (^block)(void) = ^{
-    lambda::Application::instance().eventQueue().post(lambda::WindowEvent{lambda::WindowEvent::Kind::CloseRequest,
-                                                                        w->handle(), lambda::Size{}, 1.0f});
+    lambdaui::Application::instance().eventQueue().post(lambdaui::WindowEvent{lambdaui::WindowEvent::Kind::CloseRequest,
+                                                                        w->handle(), lambdaui::Size{}, 1.0f});
   };
   if ([NSThread isMainThread]) {
     block();
@@ -1202,70 +1202,70 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 }
 
 - (void)windowDidResize:(NSNotification*)notification {
-  lambda::MacMetalWindow* platform = self.platform;
+  lambdaui::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
-  lambda::Window* fw = platform->lambdaWindow();
+  lambdaui::Window* fw = platform->lambdaWindow();
   if (!fw) {
     return;
   }
-  lambda::Size const currentSize = platform->currentSize();
+  lambdaui::Size const currentSize = platform->currentSize();
   platform->positionNativeWindowControls();
-  lambda::Application::instance().eventQueue().post(
-      lambda::WindowEvent{lambda::WindowEvent::Kind::Resize, fw->handle(), currentSize, 1.0f});
+  lambdaui::Application::instance().eventQueue().post(
+      lambdaui::WindowEvent{lambdaui::WindowEvent::Kind::Resize, fw->handle(), currentSize, 1.0f});
   // Live resize runs in NSEventTrackingRunLoopMode; our main loop waits in NSDefaultRunLoopMode, so it does not
   // run the redraw pass until tracking ends. Dispatch + flush presents immediately during the drag.
-  lambda::Application::instance().eventQueue().dispatch();
+  lambdaui::Application::instance().eventQueue().dispatch();
   // `flushRedraw` only presents when `requestRedraw` has been set. Declarative windows get this from
   // `Runtime`'s resize subscription; imperative apps must not rely on that — always request here.
-  lambda::Application::instance().requestRedraw();
+  lambdaui::Application::instance().requestRedraw();
   fw->canvas().resize(static_cast<int>(std::lround(currentSize.width)),
                       static_cast<int>(std::lround(currentSize.height)));
   platform->setMetalLayerPresentsWithTransaction(true);
-  lambda::setSyncPresentForCanvas(&fw->canvas(), true);
-  lambda::Application::instance().flushRedraw();
+  lambdaui::setSyncPresentForCanvas(&fw->canvas(), true);
+  lambdaui::Application::instance().flushRedraw();
   platform->setMetalLayerPresentsWithTransaction(false);
 }
 
 - (void)windowDidBecomeKey:(NSNotification*)notification {
   (void)notification;
-  lambda::MacMetalWindow* platform = self.platform;
+  lambdaui::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
-  lambda::Window* fw = platform->lambdaWindow();
+  lambdaui::Window* fw = platform->lambdaWindow();
   if (!fw) {
     return;
   }
-  lambda::Application::instance().eventQueue().post(
-      lambda::WindowEvent{lambda::WindowEvent::Kind::FocusGained, fw->handle(), {}, 1.0f});
-  lambda::Application::instance().requestRedraw();
+  lambdaui::Application::instance().eventQueue().post(
+      lambdaui::WindowEvent{lambdaui::WindowEvent::Kind::FocusGained, fw->handle(), {}, 1.0f});
+  lambdaui::Application::instance().requestRedraw();
 }
 
 - (void)windowDidResignKey:(NSNotification*)notification {
   (void)notification;
-  lambda::MacMetalWindow* platform = self.platform;
+  lambdaui::MacMetalWindow* platform = self.platform;
   if (!platform) {
     return;
   }
-  lambda::Window* fw = platform->lambdaWindow();
+  lambdaui::Window* fw = platform->lambdaWindow();
   if (!fw) {
     return;
   }
-  lambda::Application::instance().eventQueue().post(
-      lambda::WindowEvent{lambda::WindowEvent::Kind::FocusLost, fw->handle(), {}, 1.0f});
+  lambdaui::Application::instance().eventQueue().post(
+      lambdaui::WindowEvent{lambdaui::WindowEvent::Kind::FocusLost, fw->handle(), {}, 1.0f});
 }
 
 - (void)windowDidChangeBackingProperties:(NSNotification*)notification {
   NSWindow* win = static_cast<NSWindow*>(notification.object);
-  lambda::MacMetalWindow* platform = self.platform;
+  lambdaui::MacMetalWindow* platform = self.platform;
   if (!platform || !platform->lambdaWindow()) {
     return;
   }
   CGFloat scale = win ? win.backingScaleFactor : 1.0;
-  lambda::Window* fw = platform->lambdaWindow();
-  lambda::Application::instance().eventQueue().post(lambda::WindowEvent{lambda::WindowEvent::Kind::DpiChanged,
+  lambdaui::Window* fw = platform->lambdaWindow();
+  lambdaui::Application::instance().eventQueue().post(lambdaui::WindowEvent{lambdaui::WindowEvent::Kind::DpiChanged,
                                                        fw->handle(), {}, static_cast<float>(scale)});
 }
 
@@ -1274,54 +1274,54 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 @implementation LambdaMetalView (LambdaInput)
 
 - (void)mouseDown:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerDown, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerDown, event);
 }
 
 - (void)mouseUp:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerUp, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerUp, event);
 }
 
 - (void)mouseMoved:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerMove, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerMove, event);
 }
 
 - (void)mouseEntered:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerEnter, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerEnter, event);
 }
 
 - (void)mouseExited:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerLeave, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerLeave, event);
 }
 
 - (void)mouseDragged:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerMove, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerMove, event);
 }
 
 - (void)rightMouseDown:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerDown, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerDown, event);
 }
 
 - (void)rightMouseUp:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerUp, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerUp, event);
 }
 
 - (void)otherMouseDown:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerDown, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerDown, event);
 }
 
 - (void)otherMouseUp:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::PointerUp, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerUp, event);
 }
 
 - (void)scrollWheel:(NSEvent*)event {
-  lambda::detail::postInputFromView(self, lambda::InputEvent::Kind::Scroll, event);
+  lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::Scroll, event);
 }
 
 @end
 
-namespace lambda {
+namespace lambdaui {
 
-::lambda::Window* lambdaWindowForPlatform(MacMetalWindow* platform) {
+::lambdaui::Window* lambdaWindowForPlatform(MacMetalWindow* platform) {
   return platform ? platform->lambdaWindow() : nullptr;
 }
 
@@ -1332,7 +1332,7 @@ CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform) {
   return platform->onDisplayLinkTick();
 }
 
-::lambda::Window* MacMetalWindow::lambdaWindow() const {
+::lambdaui::Window* MacMetalWindow::lambdaWindow() const {
   return d ? d->lambdaWindow_ : nullptr;
 }
 
@@ -1596,7 +1596,7 @@ MacMetalWindow::~MacMetalWindow() {
   d.reset();
 }
 
-void MacMetalWindow::setLambdaWindow(::lambda::Window* window) {
+void MacMetalWindow::setLambdaWindow(::lambdaui::Window* window) {
   d->lambdaWindow_ = window;
 }
 
@@ -1897,7 +1897,7 @@ void MacMetalWindow::setMetalLayerPresentsWithTransaction(bool enable) {
   }
 }
 
-std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::lambda::Window& owner) {
+std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::lambdaui::Window& owner) {
   (void)owner;
   void* layerPtr = nativeGraphicsSurface();
   if (!layerPtr) {
@@ -2105,4 +2105,4 @@ std::unique_ptr<Window> createWindow(const WindowConfig& config) {
 
 } // namespace platform
 
-} // namespace lambda
+} // namespace lambdaui

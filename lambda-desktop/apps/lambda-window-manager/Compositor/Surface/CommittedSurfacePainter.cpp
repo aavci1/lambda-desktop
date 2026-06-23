@@ -6,7 +6,7 @@
 
 #include <Lambda/UI/Views/PopoverCalloutPath.hpp>
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #endif
 
@@ -16,7 +16,7 @@
 #include <cmath>
 #include <optional>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 float clamp01(float value) {
@@ -131,7 +131,7 @@ void drawContentPiece(Canvas& canvas,
 }
 
 bool setCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
   return setVulkanCanvasImagePremultipliedAlpha(canvas, enabled);
 #else
   (void)canvas;
@@ -297,7 +297,7 @@ Path materialPath(Rect const& rect, CornerRadius const& corners, ResolvedGlassMa
   return translatedPath(local, rect.x, rect.y);
 }
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 VulkanCalloutPlacement vulkanCalloutPlacement(BackgroundEffectCalloutPlacement placement) {
   switch (placement) {
   case BackgroundEffectCalloutPlacement::Above:
@@ -324,7 +324,7 @@ void drawSurfaceBackgroundBlur(Canvas& canvas,
   auto drawMaterialRect = [&](Rect const& rect, CornerRadius const& corners) {
     Rect const blurRect = material.shape == BackgroundEffectShape::Callout ? calloutCardRect(rect, material) : rect;
     canvas.drawBackdropBlur(blurRect, material.blurRadius, Colors::transparent, corners);
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
     if (material.shape == BackgroundEffectShape::Callout &&
         drawVulkanCalloutMaterial(&canvas,
                                   rect,
@@ -626,4 +626,4 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
   canvas.restore();
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

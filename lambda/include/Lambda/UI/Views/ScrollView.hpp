@@ -15,7 +15,7 @@
 #include <functional>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Clamps \p o so the scrolled content does not overscroll past the viewport for \p axis.
 /// Non-scrolling axes are zeroed (horizontal-only keeps `o.y == 0`, vertical-only keeps `o.x == 0`).
@@ -48,4 +48,4 @@ struct ScrollView : ViewModifiers<ScrollView> {
 
 };
 
-} // namespace lambda
+} // namespace lambdaui

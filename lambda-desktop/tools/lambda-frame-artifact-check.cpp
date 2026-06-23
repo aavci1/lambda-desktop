@@ -173,7 +173,7 @@ bool contains(Rect rect, double x, double y) {
   return x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
 }
 
-Pixel pixelAt(lambda::DecodedImageRgba const& image, int x, int y) {
+Pixel pixelAt(lambdaui::DecodedImageRgba const& image, int x, int y) {
   x = std::clamp(x, 0, static_cast<int>(image.width) - 1);
   y = std::clamp(y, 0, static_cast<int>(image.height) - 1);
   std::size_t const offset = (static_cast<std::size_t>(y) * image.width + static_cast<std::size_t>(x)) * 4u;
@@ -185,7 +185,7 @@ Pixel pixelAt(lambda::DecodedImageRgba const& image, int x, int y) {
   };
 }
 
-Pixel sampleLogical(lambda::DecodedImageRgba const& image, FrameTrace const& trace, double logicalX, double logicalY) {
+Pixel sampleLogical(lambdaui::DecodedImageRgba const& image, FrameTrace const& trace, double logicalX, double logicalY) {
   double const scaleX = trace.outputWidth > 0 ? static_cast<double>(image.width) / trace.outputWidth : 1.0;
   double const scaleY = trace.outputHeight > 0 ? static_cast<double>(image.height) / trace.outputHeight : 1.0;
   int const x = static_cast<int>(std::lround(logicalX * scaleX));
@@ -279,7 +279,7 @@ int main(int argc, char** argv) {
     auto traceIt = traces.find(frameIndex);
     if (traceIt == traces.end()) continue;
     FrameTrace const& trace = traceIt->second;
-    auto image = lambda::decodeImageRgbaFromFile(path.string());
+    auto image = lambdaui::decodeImageRgbaFromFile(path.string());
     if (!image) fail("failed to decode captured PNG: " + path.string());
     ++analyzedFrames;
     if (!trace.surfaces.empty()) ++framesWithSurfaces;

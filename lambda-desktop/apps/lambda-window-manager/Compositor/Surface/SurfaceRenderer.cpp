@@ -22,7 +22,7 @@
 #include <unistd.h>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 using TraceClock = std::chrono::steady_clock;
@@ -162,7 +162,7 @@ std::span<std::uint8_t const> surfacePixelBytes(CommittedSurfaceSnapshot const &
 }
 
 bool setCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
   return setVulkanCanvasImagePremultipliedAlpha(canvas, enabled);
 #else
   (void)canvas;
@@ -171,7 +171,7 @@ bool setCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
 }
 
 void markCachedImageContentsChanged(Image* image) {
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
   (void)markVulkanImageContentsChanged(image);
 #else
   (void)image;
@@ -624,4 +624,4 @@ void pruneSurfaceRenderState(SurfaceRenderState &state, std::unordered_set<std::
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

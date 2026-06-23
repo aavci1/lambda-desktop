@@ -10,7 +10,7 @@
 
 #include <memory>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void shmPoolCreateBuffer(wl_client* client, wl_resource* resource, std::uint32_t id, std::int32_t offset,
@@ -129,4 +129,4 @@ void bindShm(wl_client* client, void* data, std::uint32_t version, std::uint32_t
   wl_shm_send_format(resource, WL_SHM_FORMAT_XRGB8888);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

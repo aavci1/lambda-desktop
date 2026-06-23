@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::text_detail {
+namespace lambdaui::text_detail {
 
 inline std::pair<Font, Color> resolveBodyTextStyle(Font const& font, Color color) {
   auto theme = useEnvironment<ThemeKey>();
@@ -156,4 +156,4 @@ inline std::string ellipsizedPlainText(std::string const& text, Font const& font
   return fitted;
 }
 
-} // namespace lambda::text_detail
+} // namespace lambdaui::text_detail

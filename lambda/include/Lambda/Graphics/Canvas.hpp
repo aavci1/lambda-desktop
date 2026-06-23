@@ -18,7 +18,7 @@
 #include <span>
 #include <string_view>
 
-namespace lambda {
+namespace lambdaui {
 
 class Image;
 class Window;
@@ -144,4 +144,4 @@ using RasterizeDrawCallback = std::function<void(Canvas&, Rect)>;
 std::shared_ptr<Image> rasterizeToImage(Canvas& canvas, Size logicalSize,
                                         RasterizeDrawCallback draw, float dpiScale);
 
-} // namespace lambda
+} // namespace lambdaui

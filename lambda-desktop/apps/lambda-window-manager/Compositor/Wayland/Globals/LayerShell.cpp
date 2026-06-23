@@ -12,7 +12,7 @@
 #include <vector>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 constexpr std::uint32_t kValidLayerAnchors = ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
@@ -301,4 +301,4 @@ void bindLayerShell(wl_client* client, void* data, std::uint32_t version, std::u
   bindLayerShellImpl(client, data, version, id);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

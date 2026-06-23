@@ -12,11 +12,11 @@
 struct VkInstance_T;
 using VkInstance = VkInstance_T*;
 
-namespace lambda {
+namespace lambdaui {
 class TextSystem;
 }
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 enum class PresenterKind {
   AtomicKms,
@@ -58,4 +58,4 @@ public:
 [[nodiscard]] bool forceVulkanDisplayPresenter();
 [[nodiscard]] std::unique_ptr<Presenter> createPresenter(PresenterContext const& context);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

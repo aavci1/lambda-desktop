@@ -4,7 +4,7 @@
 
 #include <doctest/doctest.h>
 
-using namespace lambda;
+using namespace lambdaui;
 
 TEST_CASE("PathFlattener flattens rounded rect commands without recursion") {
   Path path;

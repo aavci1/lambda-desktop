@@ -11,12 +11,12 @@
 #include <memory>
 #include <string>
 
-using namespace lambda;
+using namespace lambdaui;
 
 namespace {
 
 struct ImageLoadResult {
-  std::shared_ptr<lambda::Image> image;
+  std::shared_ptr<lambdaui::Image> image;
   Size size;
   std::string status;
 };
@@ -54,7 +54,7 @@ std::string fileLabel(std::string const& path) {
 
 struct LambdaPreview {
   std::string initialPath;
-  std::shared_ptr<lambda::Image> initialImage;
+  std::shared_ptr<lambdaui::Image> initialImage;
   Size initialImageSize;
   std::string initialStatus;
 

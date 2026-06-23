@@ -2,7 +2,7 @@
 
 #include <doctest/doctest.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 TEST_CASE("viewporter resources use the implemented protocol version") {
   CHECK(kViewporterVersion == 1);
@@ -10,4 +10,4 @@ TEST_CASE("viewporter resources use the implemented protocol version") {
   CHECK(viewporterResourceVersion(2) == 1);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

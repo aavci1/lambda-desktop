@@ -5,7 +5,7 @@
 #include <cassert>
 #include <cmath>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -73,4 +73,4 @@ void Canvas::drawImage(Image const& image, Rect const& dst, ImageFillMode fillMo
   drawImage(image, src, dst, corners, opacity);
 }
 
-} // namespace lambda
+} // namespace lambdaui

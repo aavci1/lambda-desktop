@@ -6,7 +6,7 @@
 #include <Lambda/Graphics/Canvas.hpp>
 #include <Lambda/Graphics/TextSystem.hpp>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 void drawWindowChrome(Canvas& canvas,
                       TextSystem& textSystem,
@@ -18,4 +18,4 @@ void drawWindowFrameShadow(Canvas& canvas, CommittedSurfaceSnapshot const& surfa
 void drawWindowFrameBorder(Canvas& canvas, CommittedSurfaceSnapshot const& surface, ChromeConfig const& chrome);
 void drawSnapPreview(Canvas& canvas, SnapPreviewSnapshot const& preview, ChromeConfig const& chrome);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

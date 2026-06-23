@@ -6,7 +6,7 @@
 
 #include <limits>
 
-namespace lambda {
+namespace lambdaui {
 
 struct LayoutConstraints {
   float maxWidth = std::numeric_limits<float>::infinity();
@@ -15,4 +15,4 @@ struct LayoutConstraints {
   float minHeight = 0.f;
 };
 
-} // namespace lambda
+} // namespace lambdaui

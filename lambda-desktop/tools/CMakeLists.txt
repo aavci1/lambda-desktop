@@ -1,4 +1,4 @@
-if(LAMBDA_PLATFORM_LINUX_WAYLAND)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
 
@@ -14,13 +14,13 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND)
 
   add_executable(lambda-frame-artifact-check
     lambda-frame-artifact-check.cpp)
-  target_link_libraries(lambda-frame-artifact-check PRIVATE lambda::lambda)
+  target_link_libraries(lambda-frame-artifact-check PRIVATE lambdaui::lambdaui)
   target_compile_options(lambda-frame-artifact-check PRIVATE -Wall -Wextra -Wpedantic)
   set_target_properties(lambda-frame-artifact-check PROPERTIES CXX_STANDARD 23)
 
   add_executable(lambda-clipboard-probe
     lambda-clipboard-probe.cpp)
-  target_link_libraries(lambda-clipboard-probe PRIVATE lambda::lambda)
+  target_link_libraries(lambda-clipboard-probe PRIVATE lambdaui::lambdaui)
   target_compile_options(lambda-clipboard-probe PRIVATE -Wall -Wextra -Wpedantic)
   set_target_properties(lambda-clipboard-probe PROPERTIES CXX_STANDARD 23)
 endif()

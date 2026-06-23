@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Shared alignment for layout containers (`VStack`, `HStack`, `Grid`, `ZStack`, …). `Start` is the
 /// min axis (leading/top); `End` is the max axis (trailing/bottom). Text layout uses separate
@@ -25,4 +25,4 @@ enum class JustifyContent : std::uint8_t {
   SpaceEvenly,
 };
 
-} // namespace lambda
+} // namespace lambdaui

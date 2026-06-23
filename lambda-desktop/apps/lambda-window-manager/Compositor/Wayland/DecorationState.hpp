@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct CutoutBox {
   std::int32_t x = 0;
@@ -85,4 +85,4 @@ inline bool shouldReportDefunctCutoutsOnToplevelDestroy(bool cutoutsAlive) {
   return cutoutsAlive;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

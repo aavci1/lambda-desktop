@@ -15,7 +15,7 @@
 #include <memory>
 #include <optional>
 
-namespace lambda {
+namespace lambdaui {
 
 class TransientPopoverHost {
 public:
@@ -52,4 +52,4 @@ private:
   Size measuredSize_{};
 };
 
-} // namespace lambda
+} // namespace lambdaui

@@ -13,7 +13,7 @@
 
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -176,4 +176,4 @@ Element Dialog::body() const {
   };
 }
 
-} // namespace lambda
+} // namespace lambdaui

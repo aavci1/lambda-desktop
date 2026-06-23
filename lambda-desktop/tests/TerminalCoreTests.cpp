@@ -49,22 +49,22 @@ std::filesystem::path tempRoot(char const* name) {
 } // namespace
 
 TEST_CASE("terminal input encoder handles control alt navigation and functions") {
-  using namespace lambda::keys;
-  CHECK(encodeTerminalKey(C, lambda::Modifiers::Ctrl) == std::string("\x03", 1));
-  CHECK(encodeTerminalKey(C, lambda::Modifiers::Ctrl | lambda::Modifiers::Alt) == std::string("\x1b\x03", 2));
+  using namespace lambdaui::keys;
+  CHECK(encodeTerminalKey(C, lambdaui::Modifiers::Ctrl) == std::string("\x03", 1));
+  CHECK(encodeTerminalKey(C, lambdaui::Modifiers::Ctrl | lambdaui::Modifiers::Alt) == std::string("\x1b\x03", 2));
   CHECK(encodeTerminalKey(LeftArrow) == "\x1b[D");
-  CHECK(encodeTerminalKey(LeftArrow, lambda::Modifiers::Shift) == "\x1b[1;2D");
-  CHECK(encodeTerminalKey(UpArrow, lambda::Modifiers::Ctrl | lambda::Modifiers::Alt) == "\x1b[1;7A");
+  CHECK(encodeTerminalKey(LeftArrow, lambdaui::Modifiers::Shift) == "\x1b[1;2D");
+  CHECK(encodeTerminalKey(UpArrow, lambdaui::Modifiers::Ctrl | lambdaui::Modifiers::Alt) == "\x1b[1;7A");
   CHECK(encodeTerminalKey(F1) == "\x1bOP");
   CHECK(encodeTerminalKey(F5) == "\x1b[15~");
-  CHECK(encodeTerminalKey(F12, lambda::Modifiers::Shift) == "\x1b[24;2~");
-  CHECK(encodeTerminalKey(Tab, lambda::Modifiers::Shift) == "\x1b[Z");
+  CHECK(encodeTerminalKey(F12, lambdaui::Modifiers::Shift) == "\x1b[24;2~");
+  CHECK(encodeTerminalKey(Tab, lambdaui::Modifiers::Shift) == "\x1b[Z");
 }
 
 TEST_CASE("terminal input encoder supports application cursor and keypad modes") {
-  using namespace lambda::keys;
-  CHECK(encodeTerminalKey(LeftArrow, lambda::Modifiers::None, TerminalInputMode{.applicationCursor = true}) == "\x1bOD");
-  CHECK(encodeTerminalKey(Return, lambda::Modifiers::None, TerminalInputMode{.applicationCursor = true}) == "\r");
+  using namespace lambdaui::keys;
+  CHECK(encodeTerminalKey(LeftArrow, lambdaui::Modifiers::None, TerminalInputMode{.applicationCursor = true}) == "\x1bOD");
+  CHECK(encodeTerminalKey(Return, lambdaui::Modifiers::None, TerminalInputMode{.applicationCursor = true}) == "\r");
   CHECK(encodeTerminalKeypadKey(TerminalKeypadKey::Digit3) == "3");
   CHECK(encodeTerminalKeypadKey(TerminalKeypadKey::Digit3, TerminalInputMode{.applicationKeypad = true}) == "\x1bOs");
   CHECK(encodeTerminalKeypadKey(TerminalKeypadKey::Enter, TerminalInputMode{.applicationKeypad = true}) == "\x1bOM");
@@ -98,18 +98,18 @@ TEST_CASE("terminal copy and paste payload helpers honor selection and bracketed
 }
 
 TEST_CASE("terminal clipboard shortcuts keep Ctrl+C and Ctrl+V available for programs") {
-  using namespace lambda::keys;
-  CHECK(isTerminalCopyShortcut(C, lambda::Modifiers::Ctrl | lambda::Modifiers::Shift));
-  CHECK_FALSE(isTerminalCopyShortcut(C, lambda::Modifiers::Ctrl));
-  CHECK_FALSE(isTerminalCopyShortcut(C, lambda::Modifiers::Meta));
-  CHECK_FALSE(isTerminalCopyShortcut(C, lambda::Modifiers::Ctrl | lambda::Modifiers::Alt));
-  CHECK_FALSE(isTerminalCopyShortcut(V, lambda::Modifiers::Ctrl | lambda::Modifiers::Shift));
+  using namespace lambdaui::keys;
+  CHECK(isTerminalCopyShortcut(C, lambdaui::Modifiers::Ctrl | lambdaui::Modifiers::Shift));
+  CHECK_FALSE(isTerminalCopyShortcut(C, lambdaui::Modifiers::Ctrl));
+  CHECK_FALSE(isTerminalCopyShortcut(C, lambdaui::Modifiers::Meta));
+  CHECK_FALSE(isTerminalCopyShortcut(C, lambdaui::Modifiers::Ctrl | lambdaui::Modifiers::Alt));
+  CHECK_FALSE(isTerminalCopyShortcut(V, lambdaui::Modifiers::Ctrl | lambdaui::Modifiers::Shift));
 
-  CHECK(isTerminalPasteShortcut(V, lambda::Modifiers::Ctrl | lambda::Modifiers::Shift));
-  CHECK_FALSE(isTerminalPasteShortcut(V, lambda::Modifiers::Ctrl));
-  CHECK_FALSE(isTerminalPasteShortcut(V, lambda::Modifiers::Meta));
-  CHECK_FALSE(isTerminalPasteShortcut(V, lambda::Modifiers::Ctrl | lambda::Modifiers::Alt));
-  CHECK_FALSE(isTerminalPasteShortcut(C, lambda::Modifiers::Ctrl | lambda::Modifiers::Shift));
+  CHECK(isTerminalPasteShortcut(V, lambdaui::Modifiers::Ctrl | lambdaui::Modifiers::Shift));
+  CHECK_FALSE(isTerminalPasteShortcut(V, lambdaui::Modifiers::Ctrl));
+  CHECK_FALSE(isTerminalPasteShortcut(V, lambdaui::Modifiers::Meta));
+  CHECK_FALSE(isTerminalPasteShortcut(V, lambdaui::Modifiers::Ctrl | lambdaui::Modifiers::Alt));
+  CHECK_FALSE(isTerminalPasteShortcut(C, lambdaui::Modifiers::Ctrl | lambdaui::Modifiers::Shift));
 }
 
 TEST_CASE("terminal SGR mouse encoding maps buttons modifiers motion and wheel events") {
@@ -131,7 +131,7 @@ TEST_CASE("terminal SGR mouse encoding maps buttons modifiers motion and wheel e
             .motion = true,
             .column = 2,
             .row = 3,
-            .modifiers = lambda::Modifiers::Shift | lambda::Modifiers::Ctrl,
+            .modifiers = lambdaui::Modifiers::Shift | lambdaui::Modifiers::Ctrl,
         }) == "\x1b[<54;2;3M");
   CHECK(encodeSgrMouseEvent({
             .button = TerminalMouseButton::WheelDown,
@@ -177,8 +177,8 @@ TEST_CASE("terminal indexed and truecolor conversion is deterministic") {
 }
 
 TEST_CASE("terminal attributes resolve dim reverse and common style flags") {
-  lambda::Color fg{0.8f, 0.6f, 0.4f, 1.f};
-  lambda::Color bg{0.1f, 0.2f, 0.3f, 1.f};
+  lambdaui::Color fg{0.8f, 0.6f, 0.4f, 1.f};
+  lambdaui::Color bg{0.1f, 0.2f, 0.3f, 1.f};
   auto normal = resolveTerminalCellStyle(fg,
                                          bg,
                                          TerminalAttributes{

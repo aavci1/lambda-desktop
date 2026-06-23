@@ -17,8 +17,8 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::startPrivateBus;
 
 template <typename Callback>
 class ScopeExit {
@@ -56,12 +56,12 @@ private:
   std::optional<std::string> previous_;
 };
 
-std::shared_ptr<lambda::dbus::VariantDictionary> options() {
-  return std::make_shared<lambda::dbus::VariantDictionary>();
+std::shared_ptr<lambdaui::dbus::VariantDictionary> options() {
+  return std::make_shared<lambdaui::dbus::VariantDictionary>();
 }
 
-std::shared_ptr<lambda::dbus::VariantDictionary> selectOptions() {
-  auto value = std::make_shared<lambda::dbus::VariantDictionary>();
+std::shared_ptr<lambdaui::dbus::VariantDictionary> selectOptions() {
+  auto value = std::make_shared<lambdaui::dbus::VariantDictionary>();
   value->values["types"] = std::uint32_t(1);
   value->values["multiple"] = false;
   value->values["cursor_mode"] = std::uint32_t(1);
@@ -69,12 +69,12 @@ std::shared_ptr<lambda::dbus::VariantDictionary> selectOptions() {
   return value;
 }
 
-lambda::dbus::MethodCall screenCastCall(std::string member,
-                                        std::vector<lambda::dbus::BasicValue> arguments) {
-  return lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalScreenCastService::serviceName,
-      .path = lambda::system::PortalScreenCastService::objectPath,
-      .interface = lambda::system::PortalScreenCastService::interfaceName,
+lambdaui::dbus::MethodCall screenCastCall(std::string member,
+                                        std::vector<lambdaui::dbus::BasicValue> arguments) {
+  return lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalScreenCastService::serviceName,
+      .path = lambdaui::system::PortalScreenCastService::objectPath,
+      .interface = lambdaui::system::PortalScreenCastService::interfaceName,
       .member = std::move(member),
       .arguments = std::move(arguments),
   };
@@ -103,11 +103,11 @@ TEST_CASE("PortalScreenCastService records sessions and returns configured strea
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::PortalScreenCastService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::PortalScreenCastService::serviceName);
 
-  lambda::system::PortalScreenCastService screenCast(serviceBus);
+  lambdaui::system::PortalScreenCastService screenCast(serviceBus);
   auto slot = screenCast.exportObject();
 
   std::atomic<bool> serviceRunning = true;
@@ -124,10 +124,10 @@ TEST_CASE("PortalScreenCastService records sessions and returns configured strea
   });
 
   auto availableSources = client.getProperty(
-      lambda::dbus::PropertyAddress{
-          .destination = lambda::system::PortalScreenCastService::serviceName,
-          .path = lambda::system::PortalScreenCastService::objectPath,
-          .interface = lambda::system::PortalScreenCastService::interfaceName,
+      lambdaui::dbus::PropertyAddress{
+          .destination = lambdaui::system::PortalScreenCastService::serviceName,
+          .path = lambdaui::system::PortalScreenCastService::objectPath,
+          .interface = lambdaui::system::PortalScreenCastService::interfaceName,
           .name = "AvailableSourceTypes",
       },
       "u");
@@ -137,8 +137,8 @@ TEST_CASE("PortalScreenCastService records sessions and returns configured strea
   std::string const sessionHandle = "/org/freedesktop/portal/desktop/session/1_1/cast";
   auto createReply = client.call(screenCastCall(
       "CreateSession",
-      {lambda::dbus::ObjectPath{createHandle},
-       lambda::dbus::ObjectPath{sessionHandle},
+      {lambdaui::dbus::ObjectPath{createHandle},
+       lambdaui::dbus::ObjectPath{sessionHandle},
        std::string("org.lambda.TestApp"),
        options()}));
   CHECK(createReply.readUint32() == 0);
@@ -152,8 +152,8 @@ TEST_CASE("PortalScreenCastService records sessions and returns configured strea
   std::string const selectHandle = "/org/freedesktop/portal/desktop/request/1_1/select";
   auto selectReply = client.call(screenCastCall(
       "SelectSources",
-      {lambda::dbus::ObjectPath{selectHandle},
-       lambda::dbus::ObjectPath{sessionHandle},
+      {lambdaui::dbus::ObjectPath{selectHandle},
+       lambdaui::dbus::ObjectPath{sessionHandle},
        std::string("org.lambda.TestApp"),
        selectOptions()}));
   CHECK(selectReply.readUint32() == 0);
@@ -165,8 +165,8 @@ TEST_CASE("PortalScreenCastService records sessions and returns configured strea
   std::string const startHandle = "/org/freedesktop/portal/desktop/request/1_1/start";
   auto startReply = client.call(screenCastCall(
       "Start",
-      {lambda::dbus::ObjectPath{startHandle},
-       lambda::dbus::ObjectPath{sessionHandle},
+      {lambdaui::dbus::ObjectPath{startHandle},
+       lambdaui::dbus::ObjectPath{sessionHandle},
        std::string("org.lambda.TestApp"),
        std::string("wayland:window"),
        options()}));
@@ -174,27 +174,27 @@ TEST_CASE("PortalScreenCastService records sessions and returns configured strea
   auto startResults = startReply.readVariantDictionary();
   CHECK(std::get<std::uint32_t>(startResults.values["persist_mode"]) == 2);
   auto streams =
-      std::get<std::shared_ptr<lambda::dbus::ArrayValue>>(startResults.values["streams"]);
+      std::get<std::shared_ptr<lambdaui::dbus::ArrayValue>>(startResults.values["streams"]);
   REQUIRE(streams);
   CHECK(streams->elementSignature == "(ua{sv})");
   REQUIRE(streams->values.size() == 1);
-  auto stream = std::get<std::shared_ptr<lambda::dbus::StructValue>>(streams->values.front());
+  auto stream = std::get<std::shared_ptr<lambdaui::dbus::StructValue>>(streams->values.front());
   REQUIRE(stream);
   REQUIRE(stream->fields.size() == 2);
   CHECK(std::get<std::uint32_t>(stream->fields[0]) == 42);
   auto streamProperties =
-      std::get<std::shared_ptr<lambda::dbus::VariantDictionary>>(stream->fields[1]);
+      std::get<std::shared_ptr<lambdaui::dbus::VariantDictionary>>(stream->fields[1]);
   REQUIRE(streamProperties);
   CHECK(std::get<std::uint32_t>(streamProperties->values["source_type"]) == 1);
   CHECK(std::get<std::uint64_t>(streamProperties->values["pipewire-serial"]) == 987654321);
   CHECK(std::get<std::string>(streamProperties->values["mapping_id"]) == "monitor-1");
   auto size =
-      std::get<std::shared_ptr<lambda::dbus::StructValue>>(streamProperties->values["size"]);
+      std::get<std::shared_ptr<lambdaui::dbus::StructValue>>(streamProperties->values["size"]);
   REQUIRE(size);
   CHECK(std::get<std::int32_t>(size->fields[0]) == 1920);
   CHECK(std::get<std::int32_t>(size->fields[1]) == 1080);
   auto position =
-      std::get<std::shared_ptr<lambda::dbus::StructValue>>(streamProperties->values["position"]);
+      std::get<std::shared_ptr<lambdaui::dbus::StructValue>>(streamProperties->values["position"]);
   REQUIRE(position);
   CHECK(std::get<std::int32_t>(position->fields[0]) == 10);
   CHECK(std::get<std::int32_t>(position->fields[1]) == 20);
@@ -204,10 +204,10 @@ TEST_CASE("PortalScreenCastService records sessions and returns configured strea
   REQUIRE(session->streams.size() == 1);
   CHECK(session->streams.front().nodeId == 42);
 
-  auto closeRequestReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalScreenCastService::serviceName,
+  auto closeRequestReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalScreenCastService::serviceName,
       .path = startHandle,
-      .interface = lambda::system::PortalScreenCastService::requestInterfaceName,
+      .interface = lambdaui::system::PortalScreenCastService::requestInterfaceName,
       .member = "Close",
   });
   CHECK(closeRequestReply.valid());
@@ -215,10 +215,10 @@ TEST_CASE("PortalScreenCastService records sessions and returns configured strea
   REQUIRE(request);
   CHECK(request->closed);
 
-  auto closeSessionReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalScreenCastService::serviceName,
+  auto closeSessionReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalScreenCastService::serviceName,
       .path = sessionHandle,
-      .interface = lambda::system::PortalScreenCastService::sessionInterfaceName,
+      .interface = lambdaui::system::PortalScreenCastService::sessionInterfaceName,
       .member = "Close",
   });
   CHECK(closeSessionReply.valid());
@@ -236,11 +236,11 @@ TEST_CASE("PortalScreenCastService reports no selection without a configured str
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::PortalScreenCastService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::PortalScreenCastService::serviceName);
 
-  lambda::system::PortalScreenCastService screenCast(serviceBus);
+  lambdaui::system::PortalScreenCastService screenCast(serviceBus);
   auto slot = screenCast.exportObject();
 
   std::atomic<bool> serviceRunning = true;
@@ -260,8 +260,8 @@ TEST_CASE("PortalScreenCastService reports no selection without a configured str
   std::string const sessionHandle = "/org/freedesktop/portal/desktop/session/1_1/empty";
   auto createReply = client.call(screenCastCall(
       "CreateSession",
-      {lambda::dbus::ObjectPath{createHandle},
-       lambda::dbus::ObjectPath{sessionHandle},
+      {lambdaui::dbus::ObjectPath{createHandle},
+       lambdaui::dbus::ObjectPath{sessionHandle},
        std::string("org.lambda.TestApp"),
        options()}));
   CHECK(createReply.readUint32() == 0);
@@ -269,8 +269,8 @@ TEST_CASE("PortalScreenCastService reports no selection without a configured str
 
   auto startReply = client.call(screenCastCall(
       "Start",
-      {lambda::dbus::ObjectPath{"/org/freedesktop/portal/desktop/request/1_1/start_empty"},
-       lambda::dbus::ObjectPath{sessionHandle},
+      {lambdaui::dbus::ObjectPath{"/org/freedesktop/portal/desktop/request/1_1/start_empty"},
+       lambdaui::dbus::ObjectPath{sessionHandle},
        std::string("org.lambda.TestApp"),
        std::string(),
        options()}));

@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <memory>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -106,4 +106,4 @@ std::unique_ptr<scenegraph::SceneNode> PopoverCalloutShape::mount(MountContext& 
   return group;
 }
 
-} // namespace lambda
+} // namespace lambdaui

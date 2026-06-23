@@ -12,7 +12,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -391,7 +391,7 @@ MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) 
   pixelFormat_ = layer_.pixelFormat;
   queue_ = [device_ newCommandQueue];
 
-  lib_ = lambda::detail::lambdaLoadShaderLibrary(device_);
+  lib_ = lambdaui::detail::lambdauiLoadShaderLibrary(device_);
 
   static const vector_float2 kQuadStrip[kQuadStripCount] = {
       {-1.f, -1.f},
@@ -421,7 +421,7 @@ MetalDeviceResources::MetalDeviceResources(id<MTLDevice> device, MTLPixelFormat 
       device_(device ? device : MTLCreateSystemDefaultDevice()) {
   queue_ = [device_ newCommandQueue];
 
-  lib_ = lambda::detail::lambdaLoadShaderLibrary(device_);
+  lib_ = lambdaui::detail::lambdauiLoadShaderLibrary(device_);
 
   static const vector_float2 kQuadStrip[kQuadStripCount] = {
       {-1.f, -1.f},
@@ -630,4 +630,4 @@ void MetalDeviceResources::reserveDrawStateBuffers(std::uint32_t uniformCount, s
   ensureRoundedClipArenaCapacity(roundedClipCount);
 }
 
-} // namespace lambda
+} // namespace lambdaui

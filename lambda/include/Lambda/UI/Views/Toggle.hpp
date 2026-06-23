@@ -12,7 +12,7 @@
 
 #include <functional>
 
-namespace lambda {
+namespace lambdaui {
 
 /// On/off switch control (track + thumb). Binds to \ref value, supports keyboard (Space/Return),
 /// pointer, focus ring, and theme-driven motion.
@@ -60,4 +60,4 @@ struct Toggle : ViewModifiers<Toggle> {
   Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

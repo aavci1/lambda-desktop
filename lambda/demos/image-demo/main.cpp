@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-using namespace lambda;
+using namespace lambdaui;
 
 namespace {
 
@@ -112,7 +112,7 @@ Element makeBadge(Theme const &theme, std::string label, Color fill, Color textC
         .cornerRadius(CornerRadius{theme.radiusFull});
 }
 
-Element makeImageSurface(Theme const &theme, std::shared_ptr<lambda::Image> const &image,
+Element makeImageSurface(Theme const &theme, std::shared_ptr<lambdaui::Image> const &image,
                          ImageFillMode fillMode, float height, std::optional<Element> overlay = std::nullopt) {
     Element media = Element{views::Image{
         .source = image,
@@ -151,7 +151,7 @@ Element makeImageSurface(Theme const &theme, std::shared_ptr<lambda::Image> cons
         .height(height);
 }
 
-Element makeModeTile(Theme const &theme, std::shared_ptr<lambda::Image> const &image, std::string title,
+Element makeModeTile(Theme const &theme, std::shared_ptr<lambdaui::Image> const &image, std::string title,
                      std::string caption, ImageFillMode fillMode, float height = 168.f) {
     return VStack{
         .spacing = theme.space2,
@@ -177,7 +177,7 @@ Element makeModeTile(Theme const &theme, std::shared_ptr<lambda::Image> const &i
         .cornerRadius(CornerRadius{theme.radiusMedium});
 }
 
-Element makeUsageRow(Theme const &theme, std::shared_ptr<lambda::Image> const &image, std::string title,
+Element makeUsageRow(Theme const &theme, std::shared_ptr<lambdaui::Image> const &image, std::string title,
                      std::string caption, ImageFillMode fillMode, float thumbWidth) {
     return HStack{
         .spacing = theme.space3,
@@ -212,7 +212,7 @@ Element makeUsageRow(Theme const &theme, std::shared_ptr<lambda::Image> const &i
 }
 
 struct ImageDemoRoot {
-    std::shared_ptr<lambda::Image> image;
+    std::shared_ptr<lambdaui::Image> image;
     std::string imagePath;
 
     Element body() const {
@@ -466,7 +466,7 @@ int main(int argc, char *argv[]) {
     Application app(argc, argv);
 
     std::string const imagePath = argc > 1 ? std::string(argv[1]) : defaultImagePath();
-    std::shared_ptr<lambda::Image> image = loadImage(imagePath);
+    std::shared_ptr<lambdaui::Image> image = loadImage(imagePath);
 
     auto &w = app.createWindow<Window>({
         .size = {960, 920},

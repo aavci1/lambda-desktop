@@ -10,7 +10,7 @@
 #include <chrono>
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::chrono::milliseconds kSurfaceOpenAnimationDuration{140};
 
@@ -56,4 +56,4 @@ void drawCommittedSurfaceSnapshot(Canvas& canvas,
                                   ChromeConfig const& chrome,
                                   bool animationsEnabled);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kPresentationVersion = 2;
 
@@ -11,4 +11,4 @@ inline constexpr std::uint32_t kPresentationVersion = 2;
   return std::min(boundVersion, kPresentationVersion);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

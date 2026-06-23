@@ -10,7 +10,7 @@
 
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 struct Badge : ViewModifiers<Badge> {
     struct Style {
@@ -33,4 +33,4 @@ struct Badge : ViewModifiers<Badge> {
     Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

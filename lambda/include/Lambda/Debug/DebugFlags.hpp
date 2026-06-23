@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace lambda::debug {
+namespace lambdaui::debug {
 
 inline bool envNonZero(char const* value) {
   return value && value[0] != '\0' && std::strcmp(value, "0") != 0 &&
@@ -73,4 +73,4 @@ inline bool perfAnomalyOnly() {
   return perfLevel() < 0;
 }
 
-} // namespace lambda::debug
+} // namespace lambdaui::debug

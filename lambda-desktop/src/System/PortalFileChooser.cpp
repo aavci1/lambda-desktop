@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -402,4 +402,4 @@ void PortalFileChooserService::exportRequestObject(std::string const& handle) {
   requestSlots_.emplace(handle, std::move(slot));
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

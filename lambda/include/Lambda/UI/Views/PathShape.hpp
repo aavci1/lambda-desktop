@@ -9,9 +9,9 @@
 #include <Lambda/UI/Detail/PrimitiveForwards.hpp>
 #include <Lambda/UI/ViewModifiers.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
-/// Scene path primitive (name avoids clashing with `lambda::Path`). Fill, stroke, and shadow use \ref Element
+/// Scene path primitive (name avoids clashing with `lambdaui::Path`). Fill, stroke, and shadow use \ref Element
 /// modifiers (\c fill, \c stroke, \c shadow).
 struct PathShape : ViewModifiers<PathShape> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
@@ -24,4 +24,4 @@ struct PathShape : ViewModifiers<PathShape> {
   }
 };
 
-} // namespace lambda
+} // namespace lambdaui

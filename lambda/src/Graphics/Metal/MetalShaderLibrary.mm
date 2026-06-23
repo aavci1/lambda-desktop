@@ -4,13 +4,13 @@
 
 #include "Graphics/Metal/MetalShaderLibrary.hpp"
 
-#include "LambdaShaders.metallib.h"
+#include "LambdaUIShaders.metallib.h"
 
 #include <stdexcept>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
-id<MTLLibrary> lambdaLoadShaderLibrary(id<MTLDevice> device) {
+id<MTLLibrary> lambdauiLoadShaderLibrary(id<MTLDevice> device) {
   static NSMutableDictionary* cache = nil;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
@@ -26,15 +26,18 @@ id<MTLLibrary> lambdaLoadShaderLibrary(id<MTLDevice> device) {
 
     NSError* err = nil;
     dispatch_data_t libData = dispatch_data_create(
-        LambdaShaders_metallib, static_cast<size_t>(LambdaShaders_metallib_len), nil, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
+        LambdaUIShaders_metallib,
+        static_cast<size_t>(LambdaUIShaders_metallib_len),
+        nil,
+        DISPATCH_DATA_DESTRUCTOR_DEFAULT);
     id<MTLLibrary> lib = [device newLibraryWithData:libData error:&err];
     if (!lib) {
-      NSLog(@"Lambda: failed to load embedded metallib: %@", err);
-      throw std::runtime_error("lambda: embedded metallib load failed");
+      NSLog(@"LambdaUI: failed to load embedded metallib: %@", err);
+      throw std::runtime_error("lambdaui: embedded metallib load failed");
     }
     cache[key] = lib;
     return lib;
   }
 }
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

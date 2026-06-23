@@ -4,7 +4,7 @@
 
 #include <memory>
 
-namespace lambda::platform {
+namespace lambdaui::platform {
 
 class RenderTarget {
 public:
@@ -15,12 +15,12 @@ public:
   virtual void endFrame() = 0;
 };
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 std::unique_ptr<RenderTarget> createRenderTarget(VulkanRenderTargetSpec const& spec);
 #endif
 
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
 std::unique_ptr<RenderTarget> createRenderTarget(MetalRenderTargetSpec const& spec);
 #endif
 
-} // namespace lambda::platform
+} // namespace lambdaui::platform

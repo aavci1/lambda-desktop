@@ -8,7 +8,7 @@
 #include <Lambda/Core/Geometry.hpp>
 #include <Lambda/Layout/LayoutEngine.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace scenegraph {
 class SceneGraph;
@@ -32,4 +32,4 @@ inline void layoutDebugRecordMeasure(LayoutConstraints const& constraints, Size 
   detail::layoutDebugRecordMeasureSlow(constraints, sz);
 }
 
-} // namespace lambda
+} // namespace lambdaui

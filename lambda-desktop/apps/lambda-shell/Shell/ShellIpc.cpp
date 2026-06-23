@@ -4,7 +4,7 @@
 #include <cctype>
 #include <cstdlib>
 
-namespace lambda::shell {
+namespace lambdaui::shell {
 namespace {
 
 ShellMessageKind kindForTypeField(std::string_view type) {
@@ -266,4 +266,4 @@ std::string serializeWindowManagerError(std::string_view code, std::string_view 
          escapeJson(message) + "\"" + requestIdJson(requestId) + "}";
 }
 
-} // namespace lambda::shell
+} // namespace lambdaui::shell

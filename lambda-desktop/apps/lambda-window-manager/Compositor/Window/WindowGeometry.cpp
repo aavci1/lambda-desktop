@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 std::optional<WindowGeometry> snapPreviewGeometry(WindowGeometry const& window,
                                                  OutputGeometry output,
@@ -552,4 +552,4 @@ std::optional<WindowGeometry> popupScreenGeometry(std::span<WindowGeometry const
   return result;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

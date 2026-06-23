@@ -2,7 +2,7 @@
 
 #include <Lambda/UI/Clipboard.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 class MacClipboard final : public Clipboard {
 public:
@@ -11,4 +11,4 @@ public:
   bool hasText() const override;
 };
 
-} // namespace lambda
+} // namespace lambdaui

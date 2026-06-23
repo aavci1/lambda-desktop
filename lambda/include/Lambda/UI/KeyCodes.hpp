@@ -9,7 +9,7 @@
 
 #include <Lambda/UI/Input.hpp>
 
-namespace lambda::keys {
+namespace lambdaui::keys {
 
 constexpr std::uint16_t Unknown = 0xFFFF;
 
@@ -94,4 +94,4 @@ constexpr std::uint16_t F10 = 0x6D;
 constexpr std::uint16_t F11 = 0x67;
 constexpr std::uint16_t F12 = 0x6F;
 
-} // namespace lambda::keys
+} // namespace lambdaui::keys

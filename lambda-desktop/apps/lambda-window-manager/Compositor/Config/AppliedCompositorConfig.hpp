@@ -11,7 +11,7 @@
 #include <memory>
 #include <optional>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct AppliedCompositorConfig {
   CompositorConfig config;
@@ -41,4 +41,4 @@ void drawCompositorBackground(Canvas& canvas,
 
 [[nodiscard]] std::uint32_t wallpaperPreviewMaxEdge();
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 class SceneGraph;
 class SceneNode;
@@ -32,4 +32,4 @@ void resetHitTestTraversalCountForTesting() noexcept;
 std::uint64_t hitTestTraversalCountForTesting() noexcept;
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

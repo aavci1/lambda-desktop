@@ -9,12 +9,12 @@
 #include <Lambda/SceneGraph/SceneGraph.hpp>
 #include <Lambda/SceneGraph/SceneNode.hpp>
 
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
 #include "Graphics/Metal/MetalCanvas.hpp"
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
 #endif
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
 #endif
@@ -33,7 +33,7 @@
 
 #include "Debug/PerfCounters.hpp"
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 namespace {
 
@@ -108,7 +108,7 @@ std::uint64_t preparedGroupRenderOpsKey(float dpiScale) noexcept {
     return hash == 0 ? 1 : hash;
 }
 
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
 MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
     return MetalRecorderSlice {
         .orderStart = 0,
@@ -131,7 +131,7 @@ MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
 }
 #endif
 
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
 bool roundedClipHasEntries(MetalRoundedClipStack const &clip) noexcept {
     return clip.header.x > 0.f;
 }
@@ -149,7 +149,7 @@ bool recordedOpsContainClipState(MetalFrameRecorder const &recorded) noexcept {
 }
 #endif
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 bool sameClipRect(Rect a, Rect b) noexcept {
     constexpr float eps = 1e-4f;
     return std::abs(a.x - b.x) <= eps &&
@@ -196,7 +196,7 @@ class CanvasRenderer final : public Renderer {
     Canvas &canvas_;
 };
 
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
 class MetalCanvasPreparedRenderOps final : public PreparedRenderOps {
   public:
     explicit MetalCanvasPreparedRenderOps(MetalFrameRecorder recorded) : recorded_(std::move(recorded)), slice_(fullRecordedSlice(recorded_)) {}
@@ -211,7 +211,7 @@ class MetalCanvasPreparedRenderOps final : public PreparedRenderOps {
 };
 #endif
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 class VulkanCanvasPreparedRenderOps final : public PreparedRenderOps {
   public:
     explicit VulkanCanvasPreparedRenderOps(VulkanFrameRecorder recorded) : recorded_(std::move(recorded)) {}
@@ -257,7 +257,7 @@ std::unique_ptr<PreparedRenderOps> captureCanvasPreparedOps(Canvas* canvas,
 }
 
 std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node) {
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
     if (auto prepared = captureCanvasPreparedOps<MetalFrameRecorder>(
             &canvas_,
             [&] { node.render(*this); },
@@ -272,7 +272,7 @@ std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node
         return prepared;
     }
 #endif
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
     if (auto prepared = captureCanvasPreparedOps<VulkanFrameRecorder>(
             &canvas_,
             [&] { node.render(*this); },
@@ -309,7 +309,7 @@ struct SceneRenderer::Impl {
 
     void render(SceneNode const &node) {
         debug::perf::recordSceneRenderPass();
-        bool const traceResize = ::lambda::detail::resizeTraceEnabled();
+        bool const traceResize = ::lambdaui::detail::resizeTraceEnabled();
         auto const renderStart = traceResize ? std::chrono::steady_clock::now()
                                              : std::chrono::steady_clock::time_point{};
         std::int64_t prepareElapsed = 0;
@@ -512,7 +512,7 @@ struct SceneRenderer::Impl {
         if (!canvas) {
             return nullptr;
         }
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
         if (auto prepared = captureCanvasPreparedOps<MetalFrameRecorder>(canvas, [&] {
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
                 renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
@@ -528,7 +528,7 @@ struct SceneRenderer::Impl {
             return prepared;
         }
 #endif
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
         if (auto prepared = captureCanvasPreparedOps<VulkanFrameRecorder>(canvas, [&] {
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
                 renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
@@ -795,4 +795,4 @@ void SceneRenderer::render(SceneNode const &node) {
     impl_->render(node);
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

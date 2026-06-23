@@ -16,7 +16,7 @@
 #include <memory>
 #include <optional>
 
-namespace lambda {
+namespace lambdaui {
 
 class MountContext;
 namespace scenegraph {
@@ -51,4 +51,4 @@ struct PopoverCalloutShape : ViewModifiers<PopoverCalloutShape> {
   static constexpr float kArrowH = 8.f;
 };
 
-} // namespace lambda
+} // namespace lambdaui

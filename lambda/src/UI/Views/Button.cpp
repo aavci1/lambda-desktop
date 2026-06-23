@@ -14,7 +14,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -329,4 +329,4 @@ Element IconButton::body() const {
         .onTap(std::function<void()> {handleTap});
 }
 
-} // namespace lambda
+} // namespace lambdaui

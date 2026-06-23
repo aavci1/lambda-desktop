@@ -6,7 +6,7 @@
 #include <cmath>
 #include <limits>
 
-namespace lambda::layout {
+namespace lambdaui::layout {
 
 namespace {
 
@@ -230,4 +230,4 @@ ScrollIndicatorMetrics makeHorizontalIndicator(Point const& offset, Size const& 
   };
 }
 
-} // namespace lambda::layout
+} // namespace lambdaui::layout

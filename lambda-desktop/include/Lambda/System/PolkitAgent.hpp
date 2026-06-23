@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 struct PolkitSubject {
   std::string kind;
@@ -77,4 +77,4 @@ private:
   std::vector<std::string> cancelledCookies_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

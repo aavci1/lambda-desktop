@@ -35,7 +35,7 @@
 
 namespace {
 
-using namespace lambda;
+using namespace lambdaui;
 using namespace lambda_files;
 
 class FakeTextSystem final : public TextSystem {
@@ -392,14 +392,14 @@ TEST_CASE("ScrollView viewport taps carry pointer modifiers") {
 }
 
 TEST_CASE("ScrollView indicators fit very small tracks") {
-  lambda::layout::ScrollIndicatorMetrics const horizontal =
-      lambda::layout::makeHorizontalIndicator(Point{}, Size{18.5f, 40.f}, Size{69.f, 40.f}, false);
+  lambdaui::layout::ScrollIndicatorMetrics const horizontal =
+      lambdaui::layout::makeHorizontalIndicator(Point{}, Size{18.5f, 40.f}, Size{69.f, 40.f}, false);
 
   CHECK(horizontal.visible());
   CHECK(horizontal.width == doctest::Approx(12.5f));
 
-  lambda::layout::ScrollIndicatorMetrics const vertical =
-      lambda::layout::makeVerticalIndicator(Point{}, Size{40.f, 18.5f}, Size{40.f, 69.f}, false);
+  lambdaui::layout::ScrollIndicatorMetrics const vertical =
+      lambdaui::layout::makeVerticalIndicator(Point{}, Size{40.f, 18.5f}, Size{40.f, 69.f}, false);
 
   CHECK(vertical.visible());
   CHECK(vertical.height == doctest::Approx(12.5f));

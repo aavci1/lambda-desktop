@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct SurfaceSeatStateRefs {
   std::vector<WaylandServer::Impl::Surface*>* focusOrder = nullptr;
@@ -177,4 +177,4 @@ inline SurfaceSeatCleanupResult clearUnmappedSurfaceSeatState(WaylandServer::Imp
   return clearUnmappedSurfaceSeatState(surfaceSeatStateRefs(server), surface);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

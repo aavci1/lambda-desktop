@@ -4,10 +4,10 @@
 
 namespace lambda_shell {
 
-using lambda::shell::escapeJson;
-using lambda::shell::jsonFloatField;
-using lambda::shell::jsonStringField;
-using lambda::shell::jsonUintField;
-using lambda::shell::lineContains;
+using lambdaui::shell::escapeJson;
+using lambdaui::shell::jsonFloatField;
+using lambdaui::shell::jsonStringField;
+using lambdaui::shell::jsonUintField;
+using lambdaui::shell::lineContains;
 
 } // namespace lambda_shell

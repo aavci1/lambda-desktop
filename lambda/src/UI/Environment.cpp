@@ -5,7 +5,7 @@
 #include <typeindex>
 #include <unordered_map>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace detail {
 
@@ -37,4 +37,4 @@ std::uint16_t allocateEnvironmentSlot(std::type_info const& tag) {
 
 } // namespace detail
 
-} // namespace lambda
+} // namespace lambdaui

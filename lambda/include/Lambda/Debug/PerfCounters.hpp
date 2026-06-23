@@ -11,7 +11,7 @@
 #include <cstdlib>
 #include <cmath>
 
-namespace lambda::debug::perf {
+namespace lambdaui::debug::perf {
 
 enum class TimedMetric : std::uint8_t {
   ProcessReactiveUpdates = 0,
@@ -681,4 +681,4 @@ private:
   std::chrono::steady_clock::time_point startedAt_{};
 };
 
-} // namespace lambda::debug::perf
+} // namespace lambdaui::debug::perf

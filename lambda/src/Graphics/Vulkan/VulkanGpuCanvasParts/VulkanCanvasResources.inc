@@ -333,7 +333,7 @@
   };
 
   Rect intersectRects(Rect a, Rect b) const {
-    return lambda::intersectRects(a, b);
+    return lambdaui::intersectRects(a, b);
   }
 
   Rect quadBounds(std::uint32_t first, std::uint32_t count) const {

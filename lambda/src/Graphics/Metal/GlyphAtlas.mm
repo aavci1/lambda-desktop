@@ -8,7 +8,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace lambda {
+namespace lambdaui {
 
 std::size_t GlyphKeyHash::operator()(GlyphKey const& k) const noexcept {
   std::size_t h = std::hash<std::uint32_t>{}(k.fontId);
@@ -280,4 +280,4 @@ AtlasEntry const& GlyphAtlas::getOrUpload(GlyphKey const& key) {
   return ins.first->second;
 }
 
-} // namespace lambda
+} // namespace lambdaui

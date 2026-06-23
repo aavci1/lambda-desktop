@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 TEST_CASE("pointer extension resources use implemented protocol versions") {
   CHECK(kRelativePointerVersion == 1);
@@ -35,4 +35,4 @@ TEST_CASE("pointer extension resources are matched by dependent wl_pointer") {
   CHECK_FALSE(pointerConstraintUsesPointer(&constraint, pointerB));
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

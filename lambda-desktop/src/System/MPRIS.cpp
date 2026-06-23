@@ -8,7 +8,7 @@
 #include <sstream>
 #include <utility>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -599,4 +599,4 @@ std::string formatMPRISStatus(std::vector<MPRISPlayerSnapshot> const& players) {
   return "stopped";
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

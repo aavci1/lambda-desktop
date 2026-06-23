@@ -11,7 +11,7 @@
 #include <optional>
 #include <span>
 
-namespace lambda {
+namespace lambdaui {
 
 /// One Core Text `CTRun`-equivalent: resolved style, shaped glyphs, and metrics. Glyph `positions` are
 /// relative to this run's baseline-left; `y` is positive downward (canvas space). `glyphIds` and
@@ -29,4 +29,4 @@ struct TextRun {
     float width = 0.f;
 };
 
-} // namespace lambda
+} // namespace lambdaui

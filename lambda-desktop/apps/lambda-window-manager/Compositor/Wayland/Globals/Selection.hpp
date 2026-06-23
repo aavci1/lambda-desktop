@@ -5,7 +5,7 @@
 
 struct wl_client;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 class WaylandServer;
 
@@ -23,4 +23,4 @@ inline constexpr std::uint32_t kDataDeviceVersion = 3;
 void bindPrimarySelectionManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 void bindDataDeviceManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

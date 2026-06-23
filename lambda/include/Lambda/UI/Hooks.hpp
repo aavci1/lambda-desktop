@@ -31,7 +31,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace detail {
 
@@ -591,4 +591,4 @@ inline void useWindowAction(std::string const& name, std::function<void()> handl
   useWindowCommand(name, std::move(handler), std::move(descriptor));
 }
 
-} // namespace lambda
+} // namespace lambdaui

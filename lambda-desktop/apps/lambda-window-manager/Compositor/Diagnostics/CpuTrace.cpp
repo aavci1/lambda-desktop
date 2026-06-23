@@ -22,7 +22,7 @@
 #include <mutex>
 #include <string>
 
-namespace lambda::compositor::diagnostics {
+namespace lambdaui::compositor::diagnostics {
 namespace {
 
 constexpr int kMaxCpuSamples = 4096;
@@ -1012,4 +1012,4 @@ void recordDmabufFallbackCopy(std::size_t bytes, double milliseconds, bool succe
   traceState.dmabufFallbackMs += milliseconds;
 }
 
-} // namespace lambda::compositor::diagnostics
+} // namespace lambdaui::compositor::diagnostics

@@ -7,7 +7,7 @@
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/Theme.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 struct ProgressBar : ViewModifiers<ProgressBar> {
     struct Style {
@@ -32,4 +32,4 @@ struct ProgressBar : ViewModifiers<ProgressBar> {
     Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

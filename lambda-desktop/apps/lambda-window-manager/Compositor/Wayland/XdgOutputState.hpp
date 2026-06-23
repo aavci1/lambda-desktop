@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kXdgOutputVersion = 3;
 inline constexpr std::uint32_t kXdgOutputDoneDeprecatedSinceVersion = 3;
@@ -47,4 +47,4 @@ enum class XdgOutputDoneKind : std::uint8_t {
          xdgOutputLogicalSizeChanged(currentWidth, currentHeight, nextWidth, nextHeight);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

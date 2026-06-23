@@ -16,9 +16,9 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::pumpUntil;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::pumpUntil;
+using lambdaui::testing::dbus::startPrivateBus;
 
 constexpr char kLogin1Service[] = "org.freedesktop.login1";
 constexpr char kManagerPath[] = "/org/freedesktop/login1";
@@ -82,8 +82,8 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
     return;
   }
 
-  auto service = lambda::dbus::Bus::openAddress(privateBus->address);
-  lambda::system::LogindClient client(lambda::dbus::Bus::openAddress(privateBus->address));
+  auto service = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  lambdaui::system::LogindClient client(lambdaui::dbus::Bus::openAddress(privateBus->address));
   service.requestName(kLogin1Service);
 
   TestPipe inhibitorPipe;
@@ -96,44 +96,44 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
   std::vector<std::uint32_t> sessionPathRequests;
 
   auto recordPowerCall = [&](std::string member) {
-    return [&, member = std::move(member)](lambda::dbus::Message& message) {
+    return [&, member = std::move(member)](lambdaui::dbus::Message& message) {
       bool const interactive = message.readBool();
       {
         std::lock_guard guard(recordsMutex);
         powerCalls.push_back(PowerCall{.member = member, .interactive = interactive});
       }
-      return lambda::dbus::MethodReply{};
+      return lambdaui::dbus::MethodReply{};
     };
   };
 
   auto objectSlot = service.exportObject(
       kManagerPath,
-      lambda::dbus::ObjectDefinition{
+      lambdaui::dbus::ObjectDefinition{
           .methods = {
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = kManagerInterface,
                   .member = "Suspend",
                   .handler = recordPowerCall("Suspend"),
               },
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = kManagerInterface,
                   .member = "Hibernate",
                   .handler = recordPowerCall("Hibernate"),
               },
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = kManagerInterface,
                   .member = "PowerOff",
                   .handler = recordPowerCall("PowerOff"),
               },
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = kManagerInterface,
                   .member = "Reboot",
                   .handler = recordPowerCall("Reboot"),
               },
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = kManagerInterface,
                   .member = "Inhibit",
-                  .handler = [&](lambda::dbus::Message& message) {
+                  .handler = [&](lambdaui::dbus::Message& message) {
                     auto what = message.readString();
                     auto who = message.readString();
                     auto why = message.readString();
@@ -142,22 +142,22 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
                       std::lock_guard guard(recordsMutex);
                       inhibitRequests.emplace_back(what, who, why, mode);
                     }
-                    return lambda::dbus::MethodReply{
-                        .values = {lambda::dbus::UnixFd::borrow(inhibitorPipe.writeFd)},
+                    return lambdaui::dbus::MethodReply{
+                        .values = {lambdaui::dbus::UnixFd::borrow(inhibitorPipe.writeFd)},
                     };
                   },
               },
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = kManagerInterface,
                   .member = "GetSessionByPID",
-                  .handler = [&](lambda::dbus::Message& message) {
+                  .handler = [&](lambdaui::dbus::Message& message) {
                     std::uint32_t const pid = message.readUint32();
                     {
                       std::lock_guard guard(recordsMutex);
                       sessionPathRequests.push_back(pid);
                     }
-                    return lambda::dbus::MethodReply{
-                        .values = {lambda::dbus::ObjectPath{kSessionPath}},
+                    return lambdaui::dbus::MethodReply{
+                        .values = {lambdaui::dbus::ObjectPath{kSessionPath}},
                     };
                   },
               },
@@ -165,24 +165,24 @@ TEST_CASE("LogindClient sends power calls takes inhibitors and watches session s
       });
   auto sessionObjectSlot = service.exportObject(
       kSessionPath,
-      lambda::dbus::ObjectDefinition{
+      lambdaui::dbus::ObjectDefinition{
           .methods = {
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = kSessionInterface,
                   .member = "Lock",
-                  .handler = [&](lambda::dbus::Message&) {
+                  .handler = [&](lambdaui::dbus::Message&) {
                     std::lock_guard guard(recordsMutex);
                     sessionCalls.push_back("Lock");
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
-              lambda::dbus::ExportedMethod{
+              lambdaui::dbus::ExportedMethod{
                   .interface = kSessionInterface,
                   .member = "Terminate",
-                  .handler = [&](lambda::dbus::Message&) {
+                  .handler = [&](lambdaui::dbus::Message&) {
                     std::lock_guard guard(recordsMutex);
                     sessionCalls.push_back("Terminate");
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
           },

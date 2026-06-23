@@ -4,7 +4,7 @@
 #include <optional>
 #include <span>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 constexpr std::int32_t kCompositorTitleBarHeight = 28;
 constexpr std::int32_t kCompositorSnapEdgeThreshold = 8;
@@ -175,4 +175,4 @@ struct PopupGeometry {
 [[nodiscard]] PopupGeometry positionedPopupGeometry(PopupPositionerGeometry const& geometry);
 [[nodiscard]] std::optional<WindowGeometry> popupScreenGeometry(std::span<WindowGeometry const> parentToChildChain);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

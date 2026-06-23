@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace lambda::platform {
+namespace lambdaui::platform {
 
 class GpuSurfaceProvider;
 
@@ -51,4 +51,4 @@ public:
 
 std::unique_ptr<Application> createApplication();
 
-} // namespace lambda::platform
+} // namespace lambdaui::platform

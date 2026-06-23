@@ -19,7 +19,7 @@
 #define LAMBDA_HAS_DBUS 0
 #endif
 
-namespace lambda {
+namespace lambdaui {
 
 class Application;
 
@@ -399,4 +399,4 @@ struct BackendAccess {
 } // namespace detail
 
 } // namespace dbus
-} // namespace lambda
+} // namespace lambdaui

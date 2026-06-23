@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 struct TextCacheStats {
   struct LayerStats {
@@ -31,4 +31,4 @@ struct TextCacheStats {
   std::uint64_t contentHashCollisions = 0;
 };
 
-} // namespace lambda
+} // namespace lambdaui

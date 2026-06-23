@@ -7,7 +7,7 @@
 
 #include <functional>
 
-namespace lambda {
+namespace lambdaui {
 
 using EasingFn = float (*)(float);
 
@@ -27,4 +27,4 @@ float easeInOut(float t);
 std::function<float(float)> spring(float stiffness = 300.f, float damping = 20.f);
 
 } // namespace Easing
-} // namespace lambda
+} // namespace lambdaui

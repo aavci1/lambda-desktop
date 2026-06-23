@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 struct TableColumn {
     struct Sort {
@@ -167,4 +167,4 @@ struct TableView : ViewModifiers<TableView> {
     Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

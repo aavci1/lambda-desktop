@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -613,4 +613,4 @@ void NotificationsClient::invokeAction(std::uint32_t id, std::string actionKey) 
   });
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

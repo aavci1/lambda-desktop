@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 Transition Transition::instant() {
   Transition t{};
@@ -82,4 +82,4 @@ TransitionScopeSuspension::~TransitionScopeSuspension() {
 
 } // namespace detail
 
-} // namespace lambda
+} // namespace lambdaui

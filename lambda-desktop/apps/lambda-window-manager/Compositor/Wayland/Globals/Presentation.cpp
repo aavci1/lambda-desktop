@@ -10,7 +10,7 @@
 #include <memory>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void presentationDestroy(wl_client*, wl_resource* resource) {
@@ -67,4 +67,4 @@ void bindPresentation(wl_client* client, void* data, std::uint32_t version, std:
   bindPresentationImpl(client, data, version, id);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

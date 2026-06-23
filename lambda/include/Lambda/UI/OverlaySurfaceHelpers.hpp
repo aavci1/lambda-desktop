@@ -9,7 +9,7 @@
 #include <Lambda/Core/Color.hpp>
 #include <Lambda/Graphics/Styles.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 struct Theme;
 
@@ -38,4 +38,4 @@ ResolvedPopoverCardBody resolvePopoverCardBody(Color backgroundColor, Color bord
 
 Color resolvePopoverBackdropColor(Color backdropColor, Theme const& theme);
 
-} // namespace lambda
+} // namespace lambdaui

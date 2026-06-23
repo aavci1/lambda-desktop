@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Opaque handle returned by subscription-style APIs such as AnimationClock.
 struct ObserverHandle {
@@ -15,4 +15,4 @@ struct ObserverHandle {
   bool isValid() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace lambda {
+namespace lambdaui {
 
 inline Rect boundsOfTransformedRect(Rect const& rect, Mat3 const& transform) {
   Point const p0 = transform.apply({rect.x, rect.y});
@@ -78,4 +78,4 @@ inline void clampRoundRectCornerRadii(float width, float height, CornerRadius& r
   fit(radii.topRight, radii.bottomRight, height);
 }
 
-} // namespace lambda
+} // namespace lambdaui

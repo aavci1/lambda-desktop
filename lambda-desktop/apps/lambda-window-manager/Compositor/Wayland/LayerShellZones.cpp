@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <string_view>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 namespace {
 
@@ -74,4 +74,4 @@ LayerShellPlacement resolveLayerShellPlacement(LayerShellPlacementInput const& i
   return placement;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

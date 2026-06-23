@@ -4,7 +4,7 @@
 
 #include <array>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::array kDataDeviceDragStartSerialKinds{
     SeatSerialKind::PointerButtonPress,
@@ -26,4 +26,4 @@ inline bool selectionSetAcceptsSerialKind(SeatSerialKind kind) {
          kind == SeatSerialKind::PointerButtonPress;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

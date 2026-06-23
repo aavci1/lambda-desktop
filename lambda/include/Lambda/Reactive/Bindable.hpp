@@ -7,7 +7,7 @@
 #include <utility>
 #include <variant>
 
-namespace lambda::Reactive {
+namespace lambdaui::Reactive {
 
 template <typename T>
 class Bindable {
@@ -59,4 +59,4 @@ private:
   std::variant<T, SmallFn<T()>> storage_{T{}};
 };
 
-} // namespace lambda::Reactive
+} // namespace lambdaui::Reactive

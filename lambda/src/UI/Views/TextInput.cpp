@@ -24,7 +24,7 @@
 #include <optional>
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -945,4 +945,4 @@ Element TextInput::body() const {
   };
 }
 
-} // namespace lambda
+} // namespace lambdaui

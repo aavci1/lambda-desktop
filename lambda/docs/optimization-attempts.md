@@ -26,7 +26,7 @@
 
 - Original baseline before optimization work:
   - CPU: `36.07%`
-  - Primary hot path: `lambda::Application::processReactiveUpdates()` and repeated `BuildOrchestrator` / `SceneBuilder` work.
+  - Primary hot path: `lambdaui::Application::processReactiveUpdates()` and repeated `BuildOrchestrator` / `SceneBuilder` work.
 - Current framework-only baseline after restoring `useAnimation` in `AmbientLoopLab`:
   - CPU: `32.47%`
   - Notes:
@@ -87,7 +87,7 @@
   - CPU: `34.64%`
   - Delta: `+2.17` percentage points
 - Outcome:
-  - The fresh stack trace still shows `lambda::Application::processReactiveUpdates()` rebuilding the same `ScrollView` / `VStack` path on nearly every tick.
+  - The fresh stack trace still shows `lambdaui::Application::processReactiveUpdates()` rebuilding the same `ScrollView` / `VStack` path on nearly every tick.
   - Visibility gating did not suppress the dominant rebuild path in this demo, so it was reverted.
 
 ## Attempt 5
@@ -288,7 +288,7 @@
 - Type: framework
 - Status: Worked, kept.
 - Before:
-  - Sample hotspot: `lambda::(anonymous namespace)::ComponentKeyTable::intern(unsigned int, lambda::LocalId)` at `1.07 G cycles` / `7.7%`
+  - Sample hotspot: `lambdaui::(anonymous namespace)::ComponentKeyTable::intern(unsigned int, lambdaui::LocalId)` at `1.07 G cycles` / `7.7%`
   - `ck append`: `28435 (238975id)` / `235/f` (run 1), `28200 (237000id)` / `235/f` (run 2)
   - `reactive`: `134.62 ms/s (1.11/f)` (run 1), `94.11 ms/s (0.78/f)` (run 2)
   - `incremental`: `133.56 ms/s (1.10/f)` (run 1), `93.06 ms/s (0.78/f)` (run 2)

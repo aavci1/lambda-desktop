@@ -2,11 +2,11 @@
 #include <Lambda/SceneGraph/SceneGraph.hpp>
 #include <Lambda/SceneGraph/SceneRenderer.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 void RenderTarget::renderScene(scenegraph::SceneGraph const& scene) {
   scenegraph::SceneRenderer renderer(canvas());
   renderer.render(scene);
 }
 
-} // namespace lambda
+} // namespace lambdaui

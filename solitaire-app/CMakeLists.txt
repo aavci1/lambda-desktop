@@ -1,3 +1,39 @@
+cmake_minimum_required(VERSION 3.25)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS "12.0")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS version" FORCE)
+  endif()
+
+  project(lambda-solitaire VERSION 1.0 LANGUAGES CXX C)
+
+  set(CMAKE_CXX_STANDARD 23)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CXX_EXTENSIONS OFF)
+
+  set(_lambda_solitaire_default_lambdaui "")
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../lambdaui/CMakeLists.txt")
+    get_filename_component(_lambda_solitaire_default_lambdaui
+      "${CMAKE_CURRENT_SOURCE_DIR}/../lambdaui" ABSOLUTE)
+  endif()
+  set(LAMBDAUI_SOURCE_DIR "${_lambda_solitaire_default_lambdaui}" CACHE PATH
+      "Path to a local lambdaui source checkout.")
+  if(LAMBDAUI_SOURCE_DIR)
+    set(LAMBDAUI_FRAMEWORK_DIR "${LAMBDAUI_SOURCE_DIR}")
+    set(LAMBDAUI_FRAMEWORK_INCLUDE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/include")
+    set(LAMBDAUI_FRAMEWORK_SOURCE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/src")
+    set(LAMBDAUI_FRAMEWORK_CMAKE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/cmake")
+    set(LAMBDAUI_FRAMEWORK_RESOURCE_DIR "${LAMBDAUI_FRAMEWORK_DIR}/resources")
+    set(LAMBDAUI_FRAMEWORK_PROTOCOL_DIR "${LAMBDAUI_FRAMEWORK_DIR}/protocols")
+    set(LAMBDAUI_FRAMEWORK_VENDOR_DIR "${LAMBDAUI_FRAMEWORK_DIR}/vendor")
+    add_subdirectory("${LAMBDAUI_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/_deps/lambdaui")
+  else()
+    message(FATAL_ERROR
+      "lambda-solitaire requires lambdaui. Configure with "
+      "-DLAMBDAUI_SOURCE_DIR=/path/to/lambdaui, or place lambdaui next to this repo.")
+  endif()
+endif()
+
 set(SOLITAIRE_APP_NAME "Solitaire")
 set(SOLITAIRE_BUNDLE_IDENTIFIER "io.lambda.solitaire")
 set(SOLITAIRE_CATEGORY "public.app-category.card-games")
@@ -5,10 +41,10 @@ set(SOLITAIRE_VERSION "1.0")
 set(SOLITAIRE_BUILD "1")
 set(SOLITAIRE_MIN_MACOS "12.0")
 set(SOLITAIRE_ICON_SVG "${CMAKE_CURRENT_SOURCE_DIR}/icon.svg")
-if(NOT DEFINED LAMBDA_FRAMEWORK_RESOURCE_DIR)
-  set(LAMBDA_FRAMEWORK_RESOURCE_DIR "${PROJECT_SOURCE_DIR}/lambda/resources")
+if(NOT DEFINED LAMBDAUI_FRAMEWORK_RESOURCE_DIR)
+  message(FATAL_ERROR "lambda-solitaire requires lambdaui resources; add lambdaui before this directory.")
 endif()
-set(SOLITAIRE_FONT "${LAMBDA_FRAMEWORK_RESOURCE_DIR}/fonts/MaterialSymbolsRounded.ttf")
+set(SOLITAIRE_FONT "${LAMBDAUI_FRAMEWORK_RESOURCE_DIR}/fonts/MaterialSymbolsRounded.ttf")
 set(SOLITAIRE_ENTITLEMENTS "${CMAKE_CURRENT_SOURCE_DIR}/sandbox.entitlements")
 
 string(TIMESTAMP SOLITAIRE_COPYRIGHT_YEAR "%Y")
@@ -47,7 +83,7 @@ if(APPLE)
     "${SOLITAIRE_PLIST}"
     @ONLY)
 
-  add_executable(solitaire-app MACOSX_BUNDLE
+  add_executable(lambda-solitaire MACOSX_BUNDLE
     main.cpp
     "${SOLITAIRE_ICON_ICNS}"
     "${SOLITAIRE_FONT}")
@@ -58,7 +94,7 @@ if(APPLE)
   set_source_files_properties("${SOLITAIRE_FONT}" PROPERTIES
     MACOSX_PACKAGE_LOCATION "Resources/fonts")
 
-  set_target_properties(solitaire-app PROPERTIES
+  set_target_properties(lambda-solitaire PROPERTIES
     OUTPUT_NAME "${SOLITAIRE_APP_NAME}"
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_INFO_PLIST "${SOLITAIRE_PLIST}"
@@ -72,26 +108,26 @@ if(APPLE)
     XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${SOLITAIRE_ENTITLEMENTS}"
     OSX_ARCHITECTURES "arm64;x86_64")
 
-  foreach(_solitaire_dep IN ITEMS lambda libtess2)
+  foreach(_solitaire_dep IN ITEMS lambdaui libtess2)
     if(TARGET ${_solitaire_dep})
       set_target_properties(${_solitaire_dep} PROPERTIES OSX_ARCHITECTURES "arm64;x86_64")
     endif()
   endforeach()
 
-  add_custom_target(solitaire-app-package
+  add_custom_target(lambda-solitaire-package
     COMMAND /bin/bash -c
-            "exec /bin/bash \"${CMAKE_CURRENT_SOURCE_DIR}/sign-and-package.sh\" \"$<TARGET_BUNDLE_DIR:solitaire-app>\" \"$LAMBDA_SIGN_APP_ID\" \"$LAMBDA_SIGN_INSTALLER_ID\" \"${CMAKE_CURRENT_BINARY_DIR}/${SOLITAIRE_APP_NAME}.pkg\" \"${SOLITAIRE_ENTITLEMENTS}\""
-    DEPENDS solitaire-app
+            "exec /bin/bash \"${CMAKE_CURRENT_SOURCE_DIR}/sign-and-package.sh\" \"$<TARGET_BUNDLE_DIR:lambda-solitaire>\" \"$LAMBDA_SIGN_APP_ID\" \"$LAMBDA_SIGN_INSTALLER_ID\" \"${CMAKE_CURRENT_BINARY_DIR}/${SOLITAIRE_APP_NAME}.pkg\" \"${SOLITAIRE_ENTITLEMENTS}\""
+    DEPENDS lambda-solitaire
     VERBATIM
     COMMENT "Sign and package ${SOLITAIRE_APP_NAME}")
 
-  target_link_libraries(solitaire-app PRIVATE lambda)
-  if(LAMBDA_ENABLE_ASAN)
-    target_compile_options(solitaire-app PRIVATE -fsanitize=address -fno-omit-frame-pointer)
-    target_link_options(solitaire-app PRIVATE -fsanitize=address)
+  target_link_libraries(lambda-solitaire PRIVATE lambdaui)
+  if(LAMBDAUI_ENABLE_ASAN)
+    target_compile_options(lambda-solitaire PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(lambda-solitaire PRIVATE -fsanitize=address)
   endif()
 else()
-  lambda_add_app(solitaire-app
+  lambdaui_add_app(lambda-solitaire
     APP_NAME "${SOLITAIRE_APP_NAME}"
     BUNDLE_IDENTIFIER "${SOLITAIRE_BUNDLE_IDENTIFIER}"
     CATEGORY "Game"

@@ -19,11 +19,11 @@ struct ShellDesktopView {
   std::function<void(std::string const&, DockStatusAction)> onStatusAction;
   std::function<void(DockItem const&)> onActivateLauncherResult;
   std::function<void()> onDismissLauncher;
-  std::function<void(lambda::KeyCode, lambda::Modifiers)> onLauncherKeyDown;
+  std::function<void(lambdaui::KeyCode, lambdaui::Modifiers)> onLauncherKeyDown;
   float width = 960.f;
   float height = 620.f;
 
-  lambda::Element body() const {
+  lambdaui::Element body() const {
     auto const open = model.launcherOpenSignal();
     int const itemSize = model.dockItemSize();
     int const dockW = dockWidth(model.dockItems(), model.dockClockWidth(), itemSize);
@@ -31,17 +31,17 @@ struct ShellDesktopView {
     float const dockX = (width - static_cast<float>(dockW)) * 0.5f;
     float const dockY = height - dockH - static_cast<float>(kDockBottom);
 
-    std::vector<lambda::Element> layers;
-    layers.push_back(lambda::Rectangle{}
+    std::vector<lambdaui::Element> layers;
+    layers.push_back(lambdaui::Rectangle{}
                          .size(width, height)
-                         .fill(lambda::FillStyle::linearGradient(
-                             lambda::Color{0.05f, 0.07f, 0.12f, 1.f},
-                             lambda::Color{0.14f, 0.20f, 0.33f, 1.f},
+                         .fill(lambdaui::FillStyle::linearGradient(
+                             lambdaui::Color{0.05f, 0.07f, 0.12f, 1.f},
+                             lambdaui::Color{0.14f, 0.20f, 0.33f, 1.f},
                              {0.f, 0.f},
                              {1.f, 1.f})));
 
     layers.push_back(shell_preview::wrapDock(
-            lambda::Element{ShellDockView{
+            lambdaui::Element{ShellDockView{
                 model,
                 onOpenLauncher,
                 onActivateItem,
@@ -53,10 +53,10 @@ struct ShellDesktopView {
             dockH)
             .position(dockX, dockY));
 
-    layers.push_back(lambda::Show(
+    layers.push_back(lambdaui::Show(
         open,
         [this] {
-          return lambda::Element{ShellLauncherView{
+          return lambdaui::Element{ShellLauncherView{
               model,
               onActivateLauncherResult,
               onDismissLauncher,
@@ -64,10 +64,10 @@ struct ShellDesktopView {
           }}.position(0.f, 0.f).size(width, height);
         },
         [] {
-          return lambda::Rectangle{}.size(0.f, 0.f);
+          return lambdaui::Rectangle{}.size(0.f, 0.f);
         }));
 
-    return lambda::ZStack{.children = std::move(layers)}.size(width, height);
+    return lambdaui::ZStack{.children = std::move(layers)}.size(width, height);
   }
 };
 

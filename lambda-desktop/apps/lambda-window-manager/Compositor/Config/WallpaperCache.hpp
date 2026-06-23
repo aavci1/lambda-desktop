@@ -7,11 +7,11 @@
 #include <optional>
 #include <string_view>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 [[nodiscard]] std::filesystem::path wallpaperCacheDirectory(std::filesystem::path const& cacheRoot);
 
-[[nodiscard]] std::optional<lambda::DecodedImageRgba>
+[[nodiscard]] std::optional<lambdaui::DecodedImageRgba>
 readWallpaperCache(std::filesystem::path const& sourcePath,
                    std::uint32_t maxLongEdge,
                    std::filesystem::path const& cacheRoot);
@@ -19,6 +19,6 @@ readWallpaperCache(std::filesystem::path const& sourcePath,
 [[nodiscard]] bool writeWallpaperCache(std::filesystem::path const& sourcePath,
                                        std::uint32_t maxLongEdge,
                                        std::filesystem::path const& cacheRoot,
-                                       lambda::DecodedImageRgba const& image);
+                                       lambdaui::DecodedImageRgba const& image);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

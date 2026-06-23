@@ -20,7 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void seatDestroyResource(wl_resource* resource) {
@@ -245,4 +245,4 @@ void bindSeat(wl_client* client, void* data, std::uint32_t version, std::uint32_
   if (version >= 2) wl_seat_send_name(resource, "seat0");
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

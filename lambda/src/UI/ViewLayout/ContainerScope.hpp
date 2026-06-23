@@ -8,7 +8,7 @@
 
 #include <cassert>
 
-namespace lambda {
+namespace lambdaui {
 
 class ContainerMeasureScope {
 public:
@@ -46,4 +46,4 @@ private:
 #endif
 };
 
-} // namespace lambda
+} // namespace lambdaui

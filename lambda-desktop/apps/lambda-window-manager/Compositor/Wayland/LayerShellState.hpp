@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline bool layerShellSupportsOnDemandKeyboardInteractivity(std::uint32_t resourceVersion) {
   return resourceVersion >= ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND_SINCE_VERSION;
@@ -46,4 +46,4 @@ inline bool layerShellShouldReconfigureForOutputGeometry(bool initialized,
   return initialized && hasSurface && hasResource;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

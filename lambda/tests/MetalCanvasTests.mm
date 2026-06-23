@@ -27,8 +27,8 @@
 
 namespace {
 
-using namespace lambda;
-using namespace lambda::scenegraph;
+using namespace lambdaui;
+using namespace lambdaui::scenegraph;
 
 static std::filesystem::path imageFixturePath() {
   std::filesystem::path path = std::filesystem::path(__FILE__).parent_path();
@@ -72,18 +72,18 @@ struct StressScene {
 
 static StressScene makeStressScene(CoreTextSystem& textSystem, std::shared_ptr<Image> const& image) {
   auto graph = std::make_unique<SceneGraph>();
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 640.f, 480.f},
+      lambdaui::Rect{0.f, 0.f, 640.f, 480.f},
       FillStyle::solid(Color{0.08f, 0.09f, 0.11f, 1.f})
   ));
 
-  auto animatedGroup = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+  auto animatedGroup = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
   SceneNode* animatedGroupPtr = animatedGroup.get();
 
   for (int i = 0; i < 256; ++i) {
     animatedGroup->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{
+        lambdaui::Rect{
             static_cast<float>((i % 32) * 18),
             static_cast<float>((i / 32) * 18),
             14.f,
@@ -102,7 +102,7 @@ static StressScene makeStressScene(CoreTextSystem& textSystem, std::shared_ptr<I
 
   for (int i = 0; i < 64; ++i) {
     animatedGroup->appendChild(std::make_unique<TextNode>(
-        lambda::Rect{
+        lambdaui::Rect{
             static_cast<float>((i % 8) * 72),
             170.f + static_cast<float>(i / 8) * 16.f,
             64.f,
@@ -118,7 +118,7 @@ static StressScene makeStressScene(CoreTextSystem& textSystem, std::shared_ptr<I
   triangle.lineTo({-80.f, 140.f});
   triangle.close();
   animatedGroup->appendChild(std::make_unique<PathNode>(
-      lambda::Rect{320.f, 40.f, 180.f, 140.f},
+      lambdaui::Rect{320.f, 40.f, 180.f, 140.f},
       triangle,
       FillStyle::solid(Color{0.2f, 0.6f, 0.9f, 1.f}),
       StrokeStyle::none(),
@@ -129,7 +129,7 @@ static StressScene makeStressScene(CoreTextSystem& textSystem, std::shared_ptr<I
     std::shared_ptr<Image const> constImage = image;
     for (int i = 0; i < 9; ++i) {
       animatedGroup->appendChild(std::make_unique<ImageNode>(
-          lambda::Rect{
+          lambdaui::Rect{
               static_cast<float>((i % 3) * 88),
               320.f + static_cast<float>(i / 3) * 88.f,
               72.f,
@@ -371,7 +371,7 @@ TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing 
 
     SceneRenderer renderer{canvas};
     for (int frame = 0; frame < 18; ++frame) {
-      scene.animatedGroup->setPosition(lambda::Point{0.f, static_cast<float>(frame % 3)});
+      scene.animatedGroup->setPosition(lambdaui::Point{0.f, static_cast<float>(frame % 3)});
       target.begin(Color{0.08f, 0.09f, 0.11f, 1.f});
       renderer.render(*scene.graph);
       target.end();
@@ -408,18 +408,18 @@ TEST_CASE("Metal RenderTarget renders canvas ops into an offscreen texture") {
     CHECK(externalImage->size().width == static_cast<float>(width));
     CHECK(externalImage->size().height == static_cast<float>(height));
 
-    lambda::RenderTarget target{lambda::MetalRenderTargetSpec{
+    lambdaui::RenderTarget target{lambdaui::MetalRenderTargetSpec{
         .texture = (__bridge void*)texture,
         .width = static_cast<std::uint32_t>(width),
         .height = static_cast<std::uint32_t>(height),
     }};
 
     target.beginFrame();
-    target.canvas().clear(lambda::Colors::black);
-    auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 64.f, 64.f});
+    target.canvas().clear(lambdaui::Colors::black);
+    auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 64.f, 64.f});
     root->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{16.f, 16.f, 32.f, 32.f},
-        lambda::FillStyle::solid(lambda::Color{1.f, 0.f, 0.f, 1.f})));
+        lambdaui::Rect{16.f, 16.f, 32.f, 32.f},
+        lambdaui::FillStyle::solid(lambdaui::Color{1.f, 0.f, 0.f, 1.f})));
     SceneGraph graph{std::move(root)};
     target.renderScene(graph);
     target.endFrame();
@@ -473,7 +473,7 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
     MetalFrameRecorder recorded;
     target.begin(Colors::black);
     REQUIRE(beginRecordedOpsCaptureForCanvas(&canvas, &recorded));
-    canvas.drawTextLayout(*cachedLayout, lambda::Point{12.f, 12.f});
+    canvas.drawTextLayout(*cachedLayout, lambdaui::Point{12.f, 12.f});
     endRecordedOpsCaptureForCanvas(&canvas);
     target.end();
 
@@ -486,7 +486,7 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
         textSystem.layout("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", largeFont, Colors::white, 12000.f, {});
 
     target.begin(Colors::black);
-    canvas.drawTextLayout(*largeLayout, lambda::Point{0.f, 260.f});
+    canvas.drawTextLayout(*largeLayout, lambdaui::Point{0.f, 260.f});
     target.end();
 
     target.begin(Colors::black);
@@ -518,14 +518,14 @@ TEST_CASE("MetalCanvas retries glyphs after deferred atlas growth") {
         textSystem.layout("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", pressureFont, Colors::white, 12000.f, {});
 
     target.begin(Colors::black);
-    canvas.drawTextLayout(*seedLayout, lambda::Point{0.f, 40.f});
-    canvas.drawTextLayout(*pressureLayout, lambda::Point{0.f, 300.f});
+    canvas.drawTextLayout(*seedLayout, lambdaui::Point{0.f, 40.f});
+    canvas.drawTextLayout(*pressureLayout, lambdaui::Point{0.f, 300.f});
     target.end();
 
     MetalFrameRecorder recorded;
     target.begin(Colors::black);
     REQUIRE(beginRecordedOpsCaptureForCanvas(&canvas, &recorded));
-    canvas.drawTextLayout(*pressureLayout, lambda::Point{0.f, 300.f});
+    canvas.drawTextLayout(*pressureLayout, lambdaui::Point{0.f, 300.f});
     endRecordedOpsCaptureForCanvas(&canvas);
     target.end();
 
@@ -576,7 +576,7 @@ TEST_CASE("MetalCanvas replays image and path prepared buffers with shader trans
     target.begin(Colors::black);
     REQUIRE(beginRecordedOpsCaptureForCanvas(&canvas, &recorded));
     canvas.drawPath(path, FillStyle::solid(Colors::red), StrokeStyle::none(), ShadowStyle::none());
-    canvas.drawImage(*image, lambda::Rect{0.f, 0.f, 8.f, 8.f}, lambda::Rect{28.f, 4.f, 8.f, 8.f});
+    canvas.drawImage(*image, lambdaui::Rect{0.f, 0.f, 8.f, 8.f}, lambdaui::Rect{28.f, 4.f, 8.f, 8.f});
     endRecordedOpsCaptureForCanvas(&canvas);
     target.end();
 
@@ -585,7 +585,7 @@ TEST_CASE("MetalCanvas replays image and path prepared buffers with shader trans
 
     target.begin(Colors::black);
     canvas.save();
-    canvas.translate(lambda::Point{16.f, 8.f});
+    canvas.translate(lambdaui::Point{16.f, 8.f});
     REQUIRE(replayRecordedLocalOpsForCanvas(&canvas, recorded, fullSlice(recorded)));
     canvas.restore();
     CHECK(recorded.preparedPathVertexBuffer != nullptr);
@@ -615,21 +615,21 @@ TEST_CASE("MetalCanvas applies rounded clip masks to child content") {
     HeadlessMetalTarget target{textSystem, 640, 480};
     REQUIRE(target);
 
-    auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+    auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{0.f, 0.f, 640.f, 480.f},
+        lambdaui::Rect{0.f, 0.f, 640.f, 480.f},
         FillStyle::solid(Colors::white)
     ));
 
     auto clip = std::make_unique<RectNode>(
-        lambda::Rect{20.f, 20.f, 80.f, 20.f},
+        lambdaui::Rect{20.f, 20.f, 80.f, 20.f},
         FillStyle::none(),
         StrokeStyle::none(),
-        CornerRadius::pill(lambda::Rect::sharp(0.f, 0.f, 80.f, 20.f))
+        CornerRadius::pill(lambdaui::Rect::sharp(0.f, 0.f, 80.f, 20.f))
     );
     clip->setClipsContents(true);
     clip->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{0.f, 0.f, 80.f, 20.f},
+        lambdaui::Rect{0.f, 0.f, 80.f, 20.f},
         FillStyle::solid(Colors::red)
     ));
     root->appendChild(std::move(clip));
@@ -668,14 +668,14 @@ TEST_CASE("MetalCanvas shades linear gradient rect fills") {
     HeadlessMetalTarget target{textSystem, 640, 480};
     REQUIRE(target);
 
-    auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+    auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{0.f, 0.f, 640.f, 480.f},
+        lambdaui::Rect{0.f, 0.f, 640.f, 480.f},
         FillStyle::solid(Colors::black)
     ));
     root->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{20.f, 20.f, 100.f, 40.f},
-        FillStyle::linearGradient(Colors::red, Colors::blue, lambda::Point{0.f, 0.f}, lambda::Point{1.f, 0.f})
+        lambdaui::Rect{20.f, 20.f, 100.f, 40.f},
+        FillStyle::linearGradient(Colors::red, Colors::blue, lambdaui::Point{0.f, 0.f}, lambdaui::Point{1.f, 0.f})
     ));
 
     SceneGraph graph{std::move(root)};
@@ -703,17 +703,17 @@ TEST_CASE("MetalCanvas shades radial and conical gradient rect fills") {
     HeadlessMetalTarget target{textSystem, 640, 480};
     REQUIRE(target);
 
-    auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+    auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{0.f, 0.f, 640.f, 480.f},
+        lambdaui::Rect{0.f, 0.f, 640.f, 480.f},
         FillStyle::solid(Colors::black)
     ));
     root->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{20.f, 80.f, 100.f, 100.f},
-        FillStyle::radialGradient(Colors::white, Colors::black, lambda::Point{0.5f, 0.5f}, 0.5f)
+        lambdaui::Rect{20.f, 80.f, 100.f, 100.f},
+        FillStyle::radialGradient(Colors::white, Colors::black, lambdaui::Point{0.5f, 0.5f}, 0.5f)
     ));
     root->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{150.f, 80.f, 100.f, 100.f},
+        lambdaui::Rect{150.f, 80.f, 100.f, 100.f},
         FillStyle::conicalGradient({
             GradientStop{0.00f, Colors::red},
             GradientStop{0.33f, Colors::green},
@@ -756,21 +756,21 @@ TEST_CASE("MetalCanvas preserves rounded rect geometry when clipped by the viewp
     HeadlessMetalTarget target{textSystem, 640, 480};
     REQUIRE(target);
 
-    auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+    auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{0.f, 0.f, 640.f, 480.f},
+        lambdaui::Rect{0.f, 0.f, 640.f, 480.f},
         FillStyle::solid(Colors::white)
     ));
 
     auto clip = std::make_unique<RectNode>(
-        lambda::Rect{20.f, 30.f, 140.f, 120.f},
+        lambdaui::Rect{20.f, 30.f, 140.f, 120.f},
         FillStyle::none(),
         StrokeStyle::none(),
         CornerRadius{}
     );
     clip->setClipsContents(true);
     clip->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{0.f, -10.f, 100.f, 80.f},
+        lambdaui::Rect{0.f, -10.f, 100.f, 80.f},
         FillStyle::solid(Colors::red),
         StrokeStyle::none(),
         CornerRadius{28.f, 28.f, 28.f, 28.f}
@@ -811,26 +811,26 @@ TEST_CASE("MetalCanvas preserves image sampling when clipped by the viewport") {
     std::shared_ptr<Image> image = loadImage(imageFixturePath().string(), target.canvas().gpuDevice());
     REQUIRE(image);
 
-    auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+    auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
     root->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{0.f, 0.f, 640.f, 480.f},
+        lambdaui::Rect{0.f, 0.f, 640.f, 480.f},
         FillStyle::solid(Colors::white)
     ));
     root->appendChild(std::make_unique<ImageNode>(
-        lambda::Rect{20.f, 20.f, 120.f, 160.f},
+        lambdaui::Rect{20.f, 20.f, 120.f, 160.f},
         image,
         ImageFillMode::Stretch
     ));
 
     auto clip = std::make_unique<RectNode>(
-        lambda::Rect{180.f, 40.f, 120.f, 140.f},
+        lambdaui::Rect{180.f, 40.f, 120.f, 140.f},
         FillStyle::none(),
         StrokeStyle::none(),
         CornerRadius{}
     );
     clip->setClipsContents(true);
     clip->appendChild(std::make_unique<ImageNode>(
-        lambda::Rect{0.f, -20.f, 120.f, 160.f},
+        lambdaui::Rect{0.f, -20.f, 120.f, 160.f},
         image,
         ImageFillMode::Stretch
     ));
@@ -862,11 +862,11 @@ TEST_CASE("SceneRenderer rasterizes RasterCacheNode into a reusable Metal image"
     REQUIRE(target);
     Canvas& canvas = target.canvas();
 
-    auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 160.f, 120.f});
-    auto raster = std::make_unique<RasterCacheNode>(lambda::Rect{20.f, 24.f, 80.f, 40.f});
+    auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 160.f, 120.f});
+    auto raster = std::make_unique<RasterCacheNode>(lambdaui::Rect{20.f, 24.f, 80.f, 40.f});
     RasterCacheNode* rasterNode = raster.get();
     raster->setSubtree(std::make_unique<RectNode>(
-        lambda::Rect{0.f, 0.f, 80.f, 40.f},
+        lambdaui::Rect{0.f, 0.f, 80.f, 40.f},
         FillStyle::solid(Colors::red)
     ));
     root->appendChild(std::move(raster));
@@ -878,7 +878,7 @@ TEST_CASE("SceneRenderer rasterizes RasterCacheNode into a reusable Metal image"
     renderer.render(graph);
     std::shared_ptr<Image> firstCache = rasterNode->cachedImage();
     REQUIRE(firstCache);
-    CHECK(firstCache->size() == lambda::Size{160.f, 80.f});
+    CHECK(firstCache->size() == lambdaui::Size{160.f, 80.f});
     target.end();
 
     target.begin(Colors::black);

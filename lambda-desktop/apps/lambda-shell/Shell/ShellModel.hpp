@@ -39,20 +39,20 @@ public:
   lambda_shell::SystemStatus const& systemStatus() const { return systemStatus_.peek(); }
   std::vector<DockItem> const& launcherResults() const { return launcherResults_.peek(); }
 
-  lambda::Signal<std::vector<DockItem>>& dockItemsSignal() { return dockItems_; }
-  lambda::Signal<bool>& launcherOpenSignal() { return launcherOpen_; }
-  lambda::Signal<bool>& launcherUiVisibleSignal() { return launcherUiVisible_; }
-  lambda::Signal<float>& launcherWidthSignal() { return launcherWidth_; }
-  lambda::Signal<float>& launcherHeightSignal() { return launcherHeight_; }
-  lambda::Signal<std::string>& querySignal() { return query_; }
-  lambda::Signal<int>& queryCursorSignal() { return queryCursor_; }
-  lambda::Signal<int>& highlightedSignal() { return highlighted_; }
-  lambda::Signal<std::string>& activeTitleSignal() { return activeTitle_; }
-  lambda::Signal<std::string>& timeTextSignal() { return timeText_; }
-  lambda::Signal<int>& dockClockWidthSignal() { return dockClockWidth_; }
-  lambda::Signal<int>& dockItemSizeSignal() { return dockItemSize_; }
-  lambda::Signal<SystemStatus>& systemStatusSignal() { return systemStatus_; }
-  lambda::Signal<std::vector<DockItem>>& launcherResultsSignal() { return launcherResults_; }
+  lambdaui::Signal<std::vector<DockItem>>& dockItemsSignal() { return dockItems_; }
+  lambdaui::Signal<bool>& launcherOpenSignal() { return launcherOpen_; }
+  lambdaui::Signal<bool>& launcherUiVisibleSignal() { return launcherUiVisible_; }
+  lambdaui::Signal<float>& launcherWidthSignal() { return launcherWidth_; }
+  lambdaui::Signal<float>& launcherHeightSignal() { return launcherHeight_; }
+  lambdaui::Signal<std::string>& querySignal() { return query_; }
+  lambdaui::Signal<int>& queryCursorSignal() { return queryCursor_; }
+  lambdaui::Signal<int>& highlightedSignal() { return highlighted_; }
+  lambdaui::Signal<std::string>& activeTitleSignal() { return activeTitle_; }
+  lambdaui::Signal<std::string>& timeTextSignal() { return timeText_; }
+  lambdaui::Signal<int>& dockClockWidthSignal() { return dockClockWidth_; }
+  lambdaui::Signal<int>& dockItemSizeSignal() { return dockItemSize_; }
+  lambdaui::Signal<SystemStatus>& systemStatusSignal() { return systemStatus_; }
+  lambdaui::Signal<std::vector<DockItem>>& launcherResultsSignal() { return launcherResults_; }
 
   static std::string formatTimeText();
   static std::string formatTimeText(std::string_view format);
@@ -88,20 +88,20 @@ private:
   static bool dockItemsVisualStateEqual(std::vector<DockItem> const& a,
                                         std::vector<DockItem> const& b);
 
-  lambda::Signal<std::vector<DockItem>> dockItems_;
-  lambda::Signal<bool> launcherOpen_{false};
-  lambda::Signal<bool> launcherUiVisible_{false};
-  lambda::Signal<float> launcherWidth_{1.f};
-  lambda::Signal<float> launcherHeight_{1.f};
-  lambda::Signal<std::string> query_;
-  lambda::Signal<int> queryCursor_{0};
-  lambda::Signal<int> highlighted_{0};
-  lambda::Signal<std::string> activeTitle_;
-  lambda::Signal<std::string> timeText_{formatTimeText()};
-  lambda::Signal<int> dockClockWidth_{kDockClockMinWidth};
-  lambda::Signal<int> dockItemSize_{kDockIconSize};
-  lambda::Signal<SystemStatus> systemStatus_;
-  lambda::Signal<std::vector<DockItem>> launcherResults_;
+  lambdaui::Signal<std::vector<DockItem>> dockItems_;
+  lambdaui::Signal<bool> launcherOpen_{false};
+  lambdaui::Signal<bool> launcherUiVisible_{false};
+  lambdaui::Signal<float> launcherWidth_{1.f};
+  lambdaui::Signal<float> launcherHeight_{1.f};
+  lambdaui::Signal<std::string> query_;
+  lambdaui::Signal<int> queryCursor_{0};
+  lambdaui::Signal<int> highlighted_{0};
+  lambdaui::Signal<std::string> activeTitle_;
+  lambdaui::Signal<std::string> timeText_{formatTimeText()};
+  lambdaui::Signal<int> dockClockWidth_{kDockClockMinWidth};
+  lambdaui::Signal<int> dockItemSize_{kDockIconSize};
+  lambdaui::Signal<SystemStatus> systemStatus_;
+  lambdaui::Signal<std::vector<DockItem>> launcherResults_;
   bool showRunningUnpinned_ = true;
   std::string iconTheme_;
   float dockDpiScale_ = 1.f;

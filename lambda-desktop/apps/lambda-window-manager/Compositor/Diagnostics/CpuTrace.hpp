@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace lambda::compositor::diagnostics {
+namespace lambdaui::compositor::diagnostics {
 
 using CpuTraceClock = std::chrono::steady_clock;
 
@@ -102,4 +102,4 @@ void recordSurfaceImageUpload(std::size_t bytes, double milliseconds, bool creat
 void recordDmabufImport(double milliseconds, bool imported);
 void recordDmabufFallbackCopy(std::size_t bytes, double milliseconds, bool success);
 
-} // namespace lambda::compositor::diagnostics
+} // namespace lambdaui::compositor::diagnostics

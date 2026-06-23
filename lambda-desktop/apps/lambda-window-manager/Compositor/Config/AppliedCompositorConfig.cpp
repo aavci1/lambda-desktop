@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 constexpr std::uint32_t kWallpaperPreviewMaxEdge = 384u;
@@ -177,4 +177,4 @@ std::uint32_t wallpaperPreviewMaxEdge() {
   return kWallpaperPreviewMaxEdge;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -7,9 +7,9 @@
 struct wl_client;
 struct wl_resource;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 void bindCursorShapeManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 void destroyCursorShapeDevicesForPointer(WaylandServer::Impl* server, wl_resource* pointerResource);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

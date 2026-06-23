@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 enum class ScreenshotMode : std::uint8_t {
   FullOutput,
@@ -87,4 +87,4 @@ void maskBgraToRoundedRect(std::vector<std::uint8_t>& bgra,
                                                      std::uint32_t width,
                                                      std::uint32_t height);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

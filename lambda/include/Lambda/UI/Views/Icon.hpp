@@ -10,7 +10,7 @@
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/IconName.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 struct Icon : ViewModifiers<Icon> {
 
@@ -38,4 +38,4 @@ struct Icon : ViewModifiers<Icon> {
     Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

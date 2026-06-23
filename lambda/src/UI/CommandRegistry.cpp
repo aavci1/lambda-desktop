@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace lambda {
+namespace lambdaui {
 
 void CommandRegistry::beginRebuild() {
   viewHandlers_.clear();
@@ -199,4 +199,4 @@ bool CommandRegistry::isHandlerEnabled(ComponentKey const& focusedKey, std::stri
   return false;
 }
 
-} // namespace lambda
+} // namespace lambdaui

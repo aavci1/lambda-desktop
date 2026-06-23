@@ -6,7 +6,7 @@
 #include <memory>
 #include <utility>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -563,4 +563,4 @@ std::string formatUDisks2VolumeName(UDisks2VolumeSnapshot const& volume) {
   return volume.path;
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

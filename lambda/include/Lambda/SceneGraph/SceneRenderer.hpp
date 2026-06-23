@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace lambda {
+namespace lambdaui {
 
 class Canvas;
 
@@ -37,4 +37,4 @@ class SceneRenderer {
 };
 
 } // namespace scenegraph
-} // namespace lambda
+} // namespace lambdaui

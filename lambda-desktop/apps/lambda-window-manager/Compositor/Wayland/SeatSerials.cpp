@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 constexpr std::size_t kMaxSeatSerialRecords = 64;
@@ -90,4 +90,4 @@ void clearSeatSerialsForSurface(std::deque<WaylandServer::Impl::SeatSerialRecord
   });
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

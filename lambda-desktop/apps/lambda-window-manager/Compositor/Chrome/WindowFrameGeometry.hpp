@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct WindowShadowLayerGeometry {
   Rect rect{};
@@ -130,4 +130,4 @@ inline WindowShadowLayerGeometry windowShadowLayerGeometry(Rect const& frameRect
   };
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

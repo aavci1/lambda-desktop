@@ -10,7 +10,7 @@
 #include <sstream>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -112,4 +112,4 @@ void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuf
   canvas.restore();
 }
 
-} // namespace lambda
+} // namespace lambdaui

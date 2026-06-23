@@ -296,7 +296,7 @@ TEST_CASE("Shell app registry finds icon theme paths with fallback") {
   std::filesystem::remove_all(root);
 }
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 TEST_CASE("Image loader decodes SVG theme icons on Linux") {
   auto root = tempRoot("lambda-shell-svg-icon-test");
   auto icon = root / "icon.svg";
@@ -304,14 +304,14 @@ TEST_CASE("Image loader decodes SVG theme icons on Linux") {
 <rect width="4" height="4" fill="#336699"/>
 </svg>)";
 
-  auto decoded = lambda::decodeImageRgbaFromFile(icon.string());
+  auto decoded = lambdaui::decodeImageRgbaFromFile(icon.string());
   REQUIRE(decoded);
   CHECK(decoded->width == 4);
   CHECK(decoded->height == 4);
   REQUIRE(decoded->pixels.size() == 64);
   CHECK(decoded->pixels[3] == 255);
 
-  auto scaled = lambda::decodeImageRgbaFromFile(icon.string(), 24);
+  auto scaled = lambdaui::decodeImageRgbaFromFile(icon.string(), 24);
   REQUIRE(scaled);
   CHECK(scaled->width == 24);
   CHECK(scaled->height == 24);

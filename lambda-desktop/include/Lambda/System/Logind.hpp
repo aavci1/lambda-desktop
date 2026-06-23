@@ -10,7 +10,7 @@
 #include <functional>
 #include <string>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 class InhibitorLock {
 public:
@@ -71,4 +71,4 @@ private:
   dbus::Bus bus_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

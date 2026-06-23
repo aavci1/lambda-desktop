@@ -16,7 +16,7 @@
 #include <string>
 #include <string_view>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 std::string runtimePath(char const* name) {
@@ -56,13 +56,13 @@ std::string appRegistryJson() {
     if (!first) json.push_back(',');
     first = false;
     json += "{\"id\":\"";
-    json += lambda::shell::escapeJson(app.appId);
+    json += lambdaui::shell::escapeJson(app.appId);
     json += "\",\"name\":\"";
-    json += lambda::shell::escapeJson(app.name.empty() ? app.appId : app.name);
+    json += lambdaui::shell::escapeJson(app.name.empty() ? app.appId : app.name);
     json += "\",\"icon\":\"";
-    json += lambda::shell::escapeJson(app.icon);
+    json += lambdaui::shell::escapeJson(app.icon);
     json += "\",\"command\":\"";
-    json += lambda::shell::escapeJson(app.command);
+    json += lambdaui::shell::escapeJson(app.command);
     json += "\"}";
   }
   json += "]";
@@ -79,9 +79,9 @@ std::string windowStateJson(WaylandServer::Impl const* server, WaylandServer::Im
   std::string const appId = toplevel && !toplevel->appId.empty() ? toplevel->appId : "unknown";
   std::string const title = toplevel && !toplevel->title.empty() ? toplevel->title : appId;
   return "{\"id\":" + std::to_string(surface->id) +
-         ",\"appId\":\"" + lambda::shell::escapeJson(appId) +
-         "\",\"title\":\"" + lambda::shell::escapeJson(title) +
-         "\",\"outputId\":\"" + lambda::shell::escapeJson(server->output_.name) +
+         ",\"appId\":\"" + lambdaui::shell::escapeJson(appId) +
+         "\",\"title\":\"" + lambdaui::shell::escapeJson(title) +
+         "\",\"outputId\":\"" + lambdaui::shell::escapeJson(server->output_.name) +
          "\",\"state\":\"" + state +
          "\",\"focused\":" + (server->keyboardFocus_ == surface ? "true" : "false") +
          ",\"attention\":false}";
@@ -89,8 +89,8 @@ std::string windowStateJson(WaylandServer::Impl const* server, WaylandServer::Im
 
 std::string desktopSnapshotJson(WaylandServer::Impl const* server) {
   std::string json = "{\"type\":\"lambda.windowManager.snapshot\",\"outputs\":[{\"id\":\"" +
-                     lambda::shell::escapeJson(server->output_.name) + "\",\"name\":\"" +
-                     lambda::shell::escapeJson(server->output_.name) + "\",\"width\":" +
+                     lambdaui::shell::escapeJson(server->output_.name) + "\",\"name\":\"" +
+                     lambdaui::shell::escapeJson(server->output_.name) + "\",\"width\":" +
                      std::to_string(server->logicalOutputWidth()) + ",\"height\":" +
                      std::to_string(server->logicalOutputHeight()) + ",\"scale\":" +
                      std::to_string(server->preferredScale()) + "}],\"apps\":" +
@@ -127,47 +127,47 @@ void sendWelcome(WaylandServer::Impl* server) {
 }
 
 void handleShellLine(WaylandServer::Impl* server, std::string_view line) {
-  auto message = lambda::shell::parseLine(line);
+  auto message = lambdaui::shell::parseLine(line);
   if (!message) return;
 
   switch (message->kind) {
-  case lambda::shell::ShellMessageKind::ShellHello:
+  case lambdaui::shell::ShellMessageKind::ShellHello:
     server->shellHelloReceived_ = true;
     sendWelcome(server);
     return;
-  case lambda::shell::ShellMessageKind::WindowManagerLaunchApp:
+  case lambdaui::shell::ShellMessageKind::WindowManagerLaunchApp:
     if (!server->launchShellApp(message->launchApp.appId)) {
       sendLine(server->shellClientFd_,
-               lambda::shell::serializeWindowManagerError("not-found", "app is not launchable", message->requestId));
+               lambdaui::shell::serializeWindowManagerError("not-found", "app is not launchable", message->requestId));
     }
     return;
-  case lambda::shell::ShellMessageKind::WindowManagerFocusApp:
+  case lambdaui::shell::ShellMessageKind::WindowManagerFocusApp:
     if (!server->focusShellApp(message->focusApp.appId, 0)) {
       sendLine(server->shellClientFd_,
-               lambda::shell::serializeWindowManagerError(
+               lambdaui::shell::serializeWindowManagerError(
                    "not-found", "app has no running windows", message->requestId));
     }
     return;
-  case lambda::shell::ShellMessageKind::WindowManagerFocusWindow:
+  case lambdaui::shell::ShellMessageKind::WindowManagerFocusWindow:
     if (!server->focusShellWindow(message->focusWindow.windowId, 0)) {
       sendLine(server->shellClientFd_,
-               lambda::shell::serializeWindowManagerError("not-found", "window not found", message->requestId));
+               lambdaui::shell::serializeWindowManagerError("not-found", "window not found", message->requestId));
     }
     return;
-  case lambda::shell::ShellMessageKind::WindowManagerQuitApp:
+  case lambdaui::shell::ShellMessageKind::WindowManagerQuitApp:
     if (!server->quitShellApp(message->quitApp.appId)) {
       sendLine(server->shellClientFd_,
-               lambda::shell::serializeWindowManagerError(
+               lambdaui::shell::serializeWindowManagerError(
                    "not-found", "app has no running windows", message->requestId));
     }
     return;
-  case lambda::shell::ShellMessageKind::WindowManagerClaimCommandLauncherModal:
+  case lambdaui::shell::ShellMessageKind::WindowManagerClaimCommandLauncherModal:
     server->claimCommandLauncherModal(0);
     return;
-  case lambda::shell::ShellMessageKind::WindowManagerReleaseCommandLauncherModal:
+  case lambdaui::shell::ShellMessageKind::WindowManagerReleaseCommandLauncherModal:
     server->releaseCommandLauncherModal(0);
     return;
-  case lambda::shell::ShellMessageKind::ShellRefreshState:
+  case lambdaui::shell::ShellMessageKind::ShellRefreshState:
     sendLine(server->shellClientFd_, desktopSnapshotJson(server));
     return;
   default:
@@ -256,11 +256,11 @@ void WaylandServer::Impl::requestShellOpenCommandLauncher() {
     std::fprintf(stderr, "lambda-window-manager: lambda-shell is not connected; cannot open command launcher\n");
     return;
   }
-  sendLine(shellClientFd_, lambda::shell::serializeOpenCommandLauncher());
+  sendLine(shellClientFd_, lambdaui::shell::serializeOpenCommandLauncher());
 }
 
 void WaylandServer::Impl::notifyShellStateChanged() {
   shellSnapshotDirty_ = true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

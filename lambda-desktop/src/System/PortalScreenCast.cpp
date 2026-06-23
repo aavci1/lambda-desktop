@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -414,4 +414,4 @@ void PortalScreenCastService::exportSessionObject(std::string const& handle) {
   sessionSlots_.emplace(handle, std::move(slot));
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

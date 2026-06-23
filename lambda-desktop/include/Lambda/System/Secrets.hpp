@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 struct SecretValue {
   std::string sessionPath;
@@ -90,4 +90,4 @@ private:
 [[nodiscard]] dbus::BasicValue secretValueToDBus(SecretValue const& secret);
 [[nodiscard]] SecretValue secretValueFromDBus(dbus::BasicValue const& value);
 
-} // namespace lambda::system
+} // namespace lambdaui::system

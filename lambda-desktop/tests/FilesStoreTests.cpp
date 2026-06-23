@@ -60,8 +60,8 @@ bool hasStagingCopyPath(std::filesystem::path const& root) {
   return false;
 }
 
-lambda::system::UDisks2OperationResult storageSuccess(std::string value = {}) {
-  lambda::system::UDisks2OperationResult result;
+lambdaui::system::UDisks2OperationResult storageSuccess(std::string value = {}) {
+  lambdaui::system::UDisks2OperationResult result;
   result.ok = true;
   result.value = std::move(value);
   return result;
@@ -95,19 +95,19 @@ TEST_CASE("FilesStore home directory falls back when HOME is unusable") {
 
 TEST_CASE("FilesStore surfaces UDisks2 volumes in sidebar places") {
   std::vector<lambda_files::SidebarPlace> places = {
-      {.id = "home", .label = "Home", .icon = lambda::IconName::Home, .path = "/home/tester"},
-      {.id = "downloads", .label = "Downloads", .icon = lambda::IconName::Download, .path = "/media/DUP"},
+      {.id = "home", .label = "Home", .icon = lambdaui::IconName::Home, .path = "/home/tester"},
+      {.id = "downloads", .label = "Downloads", .icon = lambdaui::IconName::Download, .path = "/media/DUP"},
   };
 
-  lambda::system::UDisks2Snapshot snapshot;
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  lambdaui::system::UDisks2Snapshot snapshot;
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdb1",
       .drivePath = "/org/freedesktop/UDisks2/drives/Lambda_USB",
       .label = "USB_DISK",
       .hasFilesystem = true,
       .mountPoints = {"/media/USB_DISK"},
       .jobs = {
-          lambda::system::UDisks2JobSnapshot{
+          lambdaui::system::UDisks2JobSnapshot{
               .path = "/org/freedesktop/UDisks2/jobs/1",
               .operation = "filesystem-unmount",
               .progress = 0.5,
@@ -115,59 +115,59 @@ TEST_CASE("FilesStore surfaces UDisks2 volumes in sidebar places") {
               .cancelable = true,
           },
       },
-      .drive = lambda::system::UDisks2DriveSnapshot{
+      .drive = lambdaui::system::UDisks2DriveSnapshot{
           .path = "/org/freedesktop/UDisks2/drives/Lambda_USB",
           .ejectable = true,
       },
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdc1",
       .label = "DUP",
       .hasFilesystem = true,
       .mountPoints = {"/media/DUP"},
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdd1",
       .drivePath = "/org/freedesktop/UDisks2/drives/Lambda_USB",
       .label = "UNMOUNTED",
       .hasFilesystem = true,
-      .drive = lambda::system::UDisks2DriveSnapshot{
+      .drive = lambdaui::system::UDisks2DriveSnapshot{
           .path = "/org/freedesktop/UDisks2/drives/Lambda_USB",
           .ejectable = true,
       },
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sde1",
       .drivePath = "/org/freedesktop/UDisks2/drives/Lambda_USB",
       .label = "LOCKED",
       .cleartextDevice = "/",
       .encrypted = true,
       .unlocked = false,
-      .drive = lambda::system::UDisks2DriveSnapshot{
+      .drive = lambdaui::system::UDisks2DriveSnapshot{
           .path = "/org/freedesktop/UDisks2/drives/Lambda_USB",
           .ejectable = true,
       },
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdf1",
       .label = "CRYPT_PARENT",
       .cleartextDevice = "/org/freedesktop/UDisks2/block_devices/dm_2d0",
       .encrypted = true,
       .unlocked = true,
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/dm_2d0",
       .drivePath = "/org/freedesktop/UDisks2/drives/Lambda_USB",
       .label = "UNLOCKED",
       .cryptoBackingDevice = "/org/freedesktop/UDisks2/block_devices/sdf1",
       .hasFilesystem = true,
       .cleartext = true,
-      .drive = lambda::system::UDisks2DriveSnapshot{
+      .drive = lambdaui::system::UDisks2DriveSnapshot{
           .path = "/org/freedesktop/UDisks2/drives/Lambda_USB",
           .ejectable = true,
       },
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/nvme0n1p1",
       .label = "ROOT",
       .hintSystem = true,
@@ -188,7 +188,7 @@ TEST_CASE("FilesStore surfaces UDisks2 volumes in sidebar places") {
   REQUIRE(mounted != nullptr);
   CHECK(mounted->label == "USB_DISK");
   CHECK(mounted->kind == lambda_files::SidebarPlaceKind::Volume);
-  CHECK(mounted->icon == lambda::IconName::DevicesOther);
+  CHECK(mounted->icon == lambdaui::IconName::DevicesOther);
   CHECK(mounted->path == "/media/USB_DISK");
   CHECK(mounted->subtitle == "Unmounting 50%");
   CHECK(mounted->volumeMounted);
@@ -223,7 +223,7 @@ TEST_CASE("FilesStore surfaces UDisks2 volumes in sidebar places") {
 
   auto const* locked = findPlace("volume:/org/freedesktop/UDisks2/block_devices/sde1");
   REQUIRE(locked != nullptr);
-  CHECK(locked->icon == lambda::IconName::Lock);
+  CHECK(locked->icon == lambdaui::IconName::Lock);
   CHECK(locked->subtitle == "Locked");
   CHECK(locked->volumeLocked);
   auto lockedCommands = lambda_files::sidebarVolumeContextCommands(*locked);
@@ -235,7 +235,7 @@ TEST_CASE("FilesStore surfaces UDisks2 volumes in sidebar places") {
   CHECK(findPlace("volume:/org/freedesktop/UDisks2/block_devices/sdf1") == nullptr);
   auto const* cleartext = findPlace("volume:/org/freedesktop/UDisks2/block_devices/dm_2d0");
   REQUIRE(cleartext != nullptr);
-  CHECK(cleartext->icon == lambda::IconName::LockOpen);
+  CHECK(cleartext->icon == lambdaui::IconName::LockOpen);
   CHECK(cleartext->encryptedPath == "/org/freedesktop/UDisks2/block_devices/sdf1");
 }
 
@@ -346,7 +346,7 @@ TEST_CASE("FilesStore performs sidebar volume actions through a storage backend"
   CHECK(cancelCalls == 1);
 
   backend.unmountFilesystem = [](std::string const&, bool) {
-    lambda::system::UDisks2OperationResult result;
+    lambdaui::system::UDisks2OperationResult result;
     result.userMessage = "The volume is busy. Close files using it, then retry or force unmount.";
     result.retryable = true;
     result.canForce = true;
@@ -373,46 +373,46 @@ TEST_CASE("FilesStore performs sidebar volume actions through a storage backend"
 }
 
 TEST_CASE("FilesStore plans opt-in removable auto mounts conservatively") {
-  lambda::system::UDisks2Snapshot snapshot;
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  lambdaui::system::UDisks2Snapshot snapshot;
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdb1",
       .label = "ELIGIBLE",
       .hintAuto = true,
       .hasFilesystem = true,
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdc1",
       .label = "MOUNTED",
       .hintAuto = true,
       .hasFilesystem = true,
       .mountPoints = {"/media/MOUNTED"},
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdd1",
       .label = "NO_HINT",
       .hasFilesystem = true,
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sde1",
       .label = "BUSY",
       .hintAuto = true,
       .hasFilesystem = true,
-      .jobs = {lambda::system::UDisks2JobSnapshot{.path = "/org/freedesktop/UDisks2/jobs/2"}},
+      .jobs = {lambdaui::system::UDisks2JobSnapshot{.path = "/org/freedesktop/UDisks2/jobs/2"}},
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/sdf1",
       .label = "LOCKED",
       .hintAuto = true,
       .encrypted = true,
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/nvme0n1p1",
       .label = "ROOT",
       .hintSystem = true,
       .hintAuto = true,
       .hasFilesystem = true,
   });
-  snapshot.volumes.push_back(lambda::system::UDisks2VolumeSnapshot{
+  snapshot.volumes.push_back(lambdaui::system::UDisks2VolumeSnapshot{
       .path = "/org/freedesktop/UDisks2/block_devices/dm_2d0",
       .label = "UNLOCKED",
       .cryptoBackingDevice = "/org/freedesktop/UDisks2/block_devices/sdg1",
@@ -830,22 +830,22 @@ TEST_CASE("FilesStore pointer selection supports activate toggle and range") {
       {.name = "d", .path = "/tmp/d"},
   };
 
-  auto result = lambda_files::selectionForPointerTap({}, entries, 1, lambda::Modifiers::None);
+  auto result = lambda_files::selectionForPointerTap({}, entries, 1, lambdaui::Modifiers::None);
   CHECK(result.activate);
   CHECK(result.selection.selected == std::vector<std::filesystem::path>{"/tmp/b"});
   CHECK(result.selection.anchorIndex == 1);
 
-  result = lambda_files::selectionForPointerTap(result.selection, entries, 3, lambda::Modifiers::Ctrl);
+  result = lambda_files::selectionForPointerTap(result.selection, entries, 3, lambdaui::Modifiers::Ctrl);
   CHECK_FALSE(result.activate);
   CHECK(result.selection.selected == std::vector<std::filesystem::path>{"/tmp/b", "/tmp/d"});
   CHECK(result.selection.anchorIndex == 3);
 
-  result = lambda_files::selectionForPointerTap(result.selection, entries, 0, lambda::Modifiers::Shift);
+  result = lambda_files::selectionForPointerTap(result.selection, entries, 0, lambdaui::Modifiers::Shift);
   CHECK_FALSE(result.activate);
   CHECK(result.selection.selected == std::vector<std::filesystem::path>{"/tmp/a", "/tmp/b", "/tmp/c", "/tmp/d"});
   CHECK(result.selection.anchorIndex == 3);
 
-  auto invalid = lambda_files::selectionForPointerTap(result.selection, entries, 42, lambda::Modifiers::None);
+  auto invalid = lambda_files::selectionForPointerTap(result.selection, entries, 42, lambdaui::Modifiers::None);
   CHECK_FALSE(invalid.activate);
   CHECK(invalid.selection == result.selection);
 }

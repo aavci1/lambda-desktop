@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 namespace {
 
 struct ElementRootHolder final : RootHolder {
@@ -460,4 +460,4 @@ void TransientPopoverHost::notifyDismissed() {
   }
 }
 
-} // namespace lambda
+} // namespace lambdaui

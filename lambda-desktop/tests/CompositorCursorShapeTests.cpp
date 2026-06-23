@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 TEST_CASE("cursor shape resources use the implemented protocol version") {
   CHECK(kCursorShapeVersion == 1);
@@ -34,4 +34,4 @@ TEST_CASE("cursor shape device lifetime follows pointer resources, not surfaces"
   CHECK_FALSE(cursorShapeDeviceShouldClearForSurfaceDestroy(&device, &surface));
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <utility>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 namespace {
 
 void hashCombine(std::uint64_t& hash, void const* data, std::size_t size) {
@@ -62,4 +62,4 @@ std::uint64_t TextNode::preparedRenderOpsKey(float dpiScale) const noexcept {
     return hash == 0 ? 1 : hash;
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

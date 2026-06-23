@@ -26,7 +26,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 enum class SurfaceRole : std::uint8_t {
   None,
@@ -1196,4 +1196,4 @@ struct WaylandServer::Impl::XxCutouts {
   std::int32_t lastHeight = 0;
 };
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

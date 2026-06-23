@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 enum class XdgSurfaceBufferCommitReadiness : std::uint8_t {
   Ready,
@@ -106,4 +106,4 @@ inline bool commitPendingXdgConfigure(WaylandServer::Impl::XdgSurface* xdgSurfac
   return true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

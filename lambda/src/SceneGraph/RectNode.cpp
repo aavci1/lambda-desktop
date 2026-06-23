@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 namespace {
 
@@ -140,4 +140,4 @@ void RectNode::render(Renderer &renderer) const {
                       ShadowStyle::none());
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

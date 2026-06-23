@@ -11,7 +11,7 @@
 
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Vertical stack. Use **`.clipContent(bool)`** on the wrapping `Element` to clip children to bounds.
 struct VStack : ViewModifiers<VStack> {
@@ -28,4 +28,4 @@ struct VStack : ViewModifiers<VStack> {
 
 };
 
-} // namespace lambda
+} // namespace lambdaui

@@ -13,7 +13,7 @@
 #include <memory>
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -115,4 +115,4 @@ void useTooltip(std::string text) {
   useTooltip(TooltipConfig {.text = std::move(text)});
 }
 
-} // namespace lambda
+} // namespace lambdaui

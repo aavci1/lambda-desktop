@@ -94,7 +94,7 @@ def generate_header(entries: list[tuple[str, int, str]]) -> str:
         '',
         '#include <cstdint>',
         '',
-        'namespace lambda {',
+        'namespace lambdaui {',
         '',
         '/// Material Symbols Rounded — complete icon set.',
         '///',
@@ -125,7 +125,7 @@ def generate_header(entries: list[tuple[str, int, str]]) -> str:
         '  return static_cast<char32_t>(name);',
         '}',
         '',
-        '} // namespace lambda',
+        '} // namespace lambdaui',
         '',
     ]
 

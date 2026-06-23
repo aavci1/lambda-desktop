@@ -41,7 +41,7 @@ namespace lambda_files {
 
 namespace {
 
-using namespace lambda;
+using namespace lambdaui;
 
 struct ChromeInsets {
   float leading = 0.f;
@@ -275,19 +275,19 @@ struct SideItemRow {
 
 #if LAMBDA_HAS_DBUS
 struct FilesVolumeWatcher {
-  FilesVolumeWatcher(lambda::Application& app,
+  FilesVolumeWatcher(lambdaui::Application& app,
                      FilesPreferences preferences,
                      std::function<bool()> refreshPlaces)
       : refreshPlaces(std::move(refreshPlaces)),
         preferences(std::move(preferences)),
-        udisks(lambda::system::UDisks2Client::connectSystem()),
+        udisks(lambdaui::system::UDisks2Client::connectSystem()),
         pump(app, udisks.bus()),
         changed(udisks.watchStatusChanges([this] { refresh(); })) {}
 
   void refresh() {
     applyAutoMountPolicy();
-    if (refreshPlaces && refreshPlaces() && lambda::Application::hasInstance()) {
-      lambda::Application::instance().requestRedraw();
+    if (refreshPlaces && refreshPlaces() && lambdaui::Application::hasInstance()) {
+      lambdaui::Application::instance().requestRedraw();
     }
   }
 
@@ -305,9 +305,9 @@ struct FilesVolumeWatcher {
 
   std::function<bool()> refreshPlaces;
   FilesPreferences preferences;
-  lambda::system::UDisks2Client udisks;
-  lambda::dbus::BusEventPump pump;
-  lambda::system::UDisks2StatusWatch changed;
+  lambdaui::system::UDisks2Client udisks;
+  lambdaui::dbus::BusEventPump pump;
+  lambdaui::system::UDisks2StatusWatch changed;
 };
 #endif
 
@@ -583,8 +583,8 @@ Element filesTitlebar(Window* window,
 struct FilesAppRoot {
   Window* window = nullptr;
 
-  lambda::Element body() const {
-    using namespace lambda;
+  lambdaui::Element body() const {
+    using namespace lambdaui;
     double const bodyStartMs = trace::nowMs();
 
     auto history = useState(NavigationHistory{.current = normalizeDirectoryPath(homeDirectory())});
@@ -741,7 +741,7 @@ struct FilesAppRoot {
     auto performVolumeSidebarCommand =
         [navigateToPath, syncPlaces, listError](SidebarPlace place, SidebarVolumeCommandKind command) {
           try {
-            auto client = lambda::system::UDisks2Client::connectSystem();
+            auto client = lambdaui::system::UDisks2Client::connectSystem();
             SidebarVolumeActionResult const result =
                 performSidebarVolumeAction(place, command, udisksSidebarVolumeActionBackend(client));
             if (!result.ok) {
@@ -1169,7 +1169,7 @@ struct FilesAppRoot {
         [goBackNav, goForwardNav, goUpNav, selectedPath, selection, entries, activateEntry, applySelection,
          gridColumns, viewMode](
             KeyCode key, Modifiers modifiers) {
-          using namespace lambda::keys;
+          using namespace lambdaui::keys;
           bool const extend = any(modifiers & Modifiers::Shift);
           bool const command = any(modifiers & Modifiers::Meta) || any(modifiers & Modifiers::Ctrl);
           int const verticalStep = viewMode() == "list" ? 1 : gridColumns;

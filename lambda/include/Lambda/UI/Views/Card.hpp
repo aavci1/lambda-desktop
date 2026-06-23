@@ -9,7 +9,7 @@
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/Theme.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Surface container for card-like content: padded elevated background, optional border, radius, and shadow.
 struct Card : ViewModifiers<Card> {
@@ -52,4 +52,4 @@ struct Card : ViewModifiers<Card> {
   Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

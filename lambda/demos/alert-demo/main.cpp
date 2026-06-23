@@ -14,7 +14,7 @@
 
 #include <string>
 
-using namespace lambda;
+using namespace lambdaui;
 
 struct AlertDemoRoot {
     auto body() const {

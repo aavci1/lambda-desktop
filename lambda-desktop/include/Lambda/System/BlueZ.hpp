@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 struct BlueZAdapterSnapshot {
   std::string path;
@@ -123,4 +123,4 @@ private:
 
 [[nodiscard]] std::string formatBluetoothStatus(BlueZSnapshot const& snapshot);
 
-} // namespace lambda::system
+} // namespace lambdaui::system

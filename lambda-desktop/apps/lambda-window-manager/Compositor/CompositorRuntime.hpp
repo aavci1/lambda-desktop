@@ -2,7 +2,7 @@
 
 #include <atomic>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct KmsCompositorOptions {
   bool listOutputs = false;
@@ -10,4 +10,4 @@ struct KmsCompositorOptions {
 
 int runKmsCompositor(std::atomic<bool>& running, KmsCompositorOptions options = {});
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

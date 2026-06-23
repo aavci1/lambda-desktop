@@ -62,14 +62,14 @@ struct ScopedEnvOverride {
 
 struct RuntimeHarness {
   ScopedEnvOverride disableNativePopovers;
-  lambda::Application app;
-  lambda::Window& window;
-  lambda::Runtime runtime;
+  lambdaui::Application app;
+  lambdaui::Window& window;
+  lambdaui::Runtime runtime;
 
   RuntimeHarness()
       : disableNativePopovers("LAMBDA_DISABLE_NATIVE_POPOVERS", "1")
       , app()
-      , window(app.createWindow(lambda::WindowConfig{
+      , window(app.createWindow(lambdaui::WindowConfig{
             .size = {240.f, 140.f},
             .title = "Lambda Runtime Input Tests",
             .fullscreen = false,
@@ -83,33 +83,33 @@ struct RuntimeHarness {
 
   template<typename Root>
   void setRoot(Root root) {
-    runtime.setRoot(std::make_unique<lambda::TypedRootHolder<Root>>(
+    runtime.setRoot(std::make_unique<lambdaui::TypedRootHolder<Root>>(
         std::in_place, std::move(root)));
   }
 
-  void pointerMove(lambda::Point point) {
-    dispatchPointer(lambda::InputEvent::Kind::PointerMove, point);
+  void pointerMove(lambdaui::Point point) {
+    dispatchPointer(lambdaui::InputEvent::Kind::PointerMove, point);
   }
 
-  void pointerEnter(lambda::Point point) {
-    dispatchPointer(lambda::InputEvent::Kind::PointerEnter, point, lambda::Modifiers::None, 0u);
+  void pointerEnter(lambdaui::Point point) {
+    dispatchPointer(lambdaui::InputEvent::Kind::PointerEnter, point, lambdaui::Modifiers::None, 0u);
   }
 
-  void pointerLeave(lambda::Point point = {}) {
-    dispatchPointer(lambda::InputEvent::Kind::PointerLeave, point, lambda::Modifiers::None, 0u);
+  void pointerLeave(lambdaui::Point point = {}) {
+    dispatchPointer(lambdaui::InputEvent::Kind::PointerLeave, point, lambdaui::Modifiers::None, 0u);
   }
 
-  void pointerDown(lambda::Point point, lambda::Modifiers modifiers = lambda::Modifiers::None) {
-    dispatchPointer(lambda::InputEvent::Kind::PointerDown, point, modifiers);
+  void pointerDown(lambdaui::Point point, lambdaui::Modifiers modifiers = lambdaui::Modifiers::None) {
+    dispatchPointer(lambdaui::InputEvent::Kind::PointerDown, point, modifiers);
   }
 
-  void pointerUp(lambda::Point point, lambda::Modifiers modifiers = lambda::Modifiers::None) {
-    dispatchPointer(lambda::InputEvent::Kind::PointerUp, point, modifiers);
+  void pointerUp(lambdaui::Point point, lambdaui::Modifiers modifiers = lambdaui::Modifiers::None) {
+    dispatchPointer(lambdaui::InputEvent::Kind::PointerUp, point, modifiers);
   }
 
-  void keyDown(lambda::KeyCode key, lambda::Modifiers modifiers = lambda::Modifiers::None) {
-    lambda::InputEvent event{};
-    event.kind = lambda::InputEvent::Kind::KeyDown;
+  void keyDown(lambdaui::KeyCode key, lambdaui::Modifiers modifiers = lambdaui::Modifiers::None) {
+    lambdaui::InputEvent event{};
+    event.kind = lambdaui::InputEvent::Kind::KeyDown;
     event.handle = window.handle();
     event.key = key;
     event.modifiers = modifiers;
@@ -117,31 +117,31 @@ struct RuntimeHarness {
   }
 
   void textInput(std::string text) {
-    lambda::InputEvent event{};
-    event.kind = lambda::InputEvent::Kind::TextInput;
+    lambdaui::InputEvent event{};
+    event.kind = lambdaui::InputEvent::Kind::TextInput;
     event.handle = window.handle();
     event.text = std::move(text);
     runtime.handleInput(event);
   }
 
-  void windowEvent(lambda::WindowEvent::Kind kind) {
-    lambda::WindowEvent event{};
+  void windowEvent(lambdaui::WindowEvent::Kind kind) {
+    lambdaui::WindowEvent event{};
     event.kind = kind;
     event.handle = window.handle();
     runtime.handleWindowEvent(event);
   }
 
-  void resize(lambda::Size size) {
-    lambda::WindowEvent event{};
-    event.kind = lambda::WindowEvent::Kind::Resize;
+  void resize(lambdaui::Size size) {
+    lambdaui::WindowEvent event{};
+    event.kind = lambdaui::WindowEvent::Kind::Resize;
     event.handle = window.handle();
     event.size = size;
     runtime.handleWindowEvent(event);
   }
 
-  void scroll(lambda::Point point, lambda::Vec2 delta, bool precise = true) {
-    lambda::InputEvent event{};
-    event.kind = lambda::InputEvent::Kind::Scroll;
+  void scroll(lambdaui::Point point, lambdaui::Vec2 delta, bool precise = true) {
+    lambdaui::InputEvent event{};
+    event.kind = lambdaui::InputEvent::Kind::Scroll;
     event.handle = window.handle();
     event.position = {point.x, point.y};
     event.scrollDelta = delta;
@@ -150,44 +150,44 @@ struct RuntimeHarness {
   }
 
 private:
-  void dispatchPointer(lambda::InputEvent::Kind kind, lambda::Point point,
-                       lambda::Modifiers modifiers = lambda::Modifiers::None,
+  void dispatchPointer(lambdaui::InputEvent::Kind kind, lambdaui::Point point,
+                       lambdaui::Modifiers modifiers = lambdaui::Modifiers::None,
                        std::uint8_t pressedButtons = 1u) {
-    lambda::InputEvent event{};
+    lambdaui::InputEvent event{};
     event.kind = kind;
     event.handle = window.handle();
     event.position = {point.x, point.y};
-    event.button = pressedButtons == 0u ? lambda::MouseButton::None : lambda::MouseButton::Left;
+    event.button = pressedButtons == 0u ? lambdaui::MouseButton::None : lambdaui::MouseButton::Left;
     event.modifiers = modifiers;
     event.pressedButtons =
-        kind == lambda::InputEvent::Kind::PointerUp ? 0u : pressedButtons;
+        kind == lambdaui::InputEvent::Kind::PointerUp ? 0u : pressedButtons;
     runtime.handleInput(event);
   }
 };
 
 struct ProbeView {
-  lambda::Reactive::Signal<bool>* hover = nullptr;
-  lambda::Reactive::Signal<bool>* press = nullptr;
-  lambda::Reactive::Signal<bool>* focus = nullptr;
-  lambda::Reactive::Signal<bool>* keyboardFocus = nullptr;
+  lambdaui::Reactive::Signal<bool>* hover = nullptr;
+  lambdaui::Reactive::Signal<bool>* press = nullptr;
+  lambdaui::Reactive::Signal<bool>* focus = nullptr;
+  lambdaui::Reactive::Signal<bool>* keyboardFocus = nullptr;
   int* pointerEnterCount = nullptr;
   int* pointerExitCount = nullptr;
-  lambda::Cursor cursor = lambda::Cursor::Inherit;
+  lambdaui::Cursor cursor = lambdaui::Cursor::Inherit;
 
-  lambda::Element body() const {
+  lambdaui::Element body() const {
     if (hover) {
-      *hover = lambda::useHover();
+      *hover = lambdaui::useHover();
     }
     if (press) {
-      *press = lambda::usePress();
+      *press = lambdaui::usePress();
     }
     if (focus) {
-      *focus = lambda::useFocus();
+      *focus = lambdaui::useFocus();
     }
     if (keyboardFocus) {
-      *keyboardFocus = lambda::useKeyboardFocus();
+      *keyboardFocus = lambdaui::useKeyboardFocus();
     }
-    auto element = lambda::Element{lambda::Rectangle{}}
+    auto element = lambdaui::Element{lambdaui::Rectangle{}}
         .size(20.f, 20.f)
         .focusable(true)
         .onTap([] {});
@@ -201,7 +201,7 @@ struct ProbeView {
         ++*pointerExitCount;
       });
     }
-    if (cursor != lambda::Cursor::Inherit) {
+    if (cursor != lambdaui::Cursor::Inherit) {
       element = std::move(element).cursor(cursor);
     }
     return element;
@@ -209,30 +209,30 @@ struct ProbeView {
 };
 
 struct SingleProbeRoot {
-  lambda::Reactive::Signal<bool>* hover = nullptr;
-  lambda::Reactive::Signal<bool>* press = nullptr;
-  lambda::Reactive::Signal<bool>* focus = nullptr;
-  lambda::Reactive::Signal<bool>* keyboardFocus = nullptr;
+  lambdaui::Reactive::Signal<bool>* hover = nullptr;
+  lambdaui::Reactive::Signal<bool>* press = nullptr;
+  lambdaui::Reactive::Signal<bool>* focus = nullptr;
+  lambdaui::Reactive::Signal<bool>* keyboardFocus = nullptr;
   int* pointerEnterCount = nullptr;
   int* pointerExitCount = nullptr;
-  lambda::Cursor cursor = lambda::Cursor::Inherit;
+  lambdaui::Cursor cursor = lambdaui::Cursor::Inherit;
 
-  lambda::Element body() const {
+  lambdaui::Element body() const {
     return ProbeView{hover, press, focus, keyboardFocus, pointerEnterCount, pointerExitCount, cursor};
   }
 };
 
 struct CapturedMoveUnmountRoot {
-  lambda::Reactive::Signal<bool>* visible = nullptr;
+  lambdaui::Reactive::Signal<bool>* visible = nullptr;
   int* moveCount = nullptr;
 
-  lambda::Element body() const {
-    return lambda::Show(
+  lambdaui::Element body() const {
+    return lambdaui::Show(
         *visible,
         [visible = visible, moveCount = moveCount] {
-          return lambda::Element{lambda::Rectangle{}}
+          return lambdaui::Element{lambdaui::Rectangle{}}
               .size(40.f, 40.f)
-              .onPointerMove([visible, moveCount](lambda::Point) {
+              .onPointerMove([visible, moveCount](lambdaui::Point) {
                 ++*moveCount;
                 visible->set(false);
               });
@@ -241,18 +241,18 @@ struct CapturedMoveUnmountRoot {
 };
 
 struct TextInputFocusRoot {
-  lambda::Reactive::Signal<std::string>* first = nullptr;
-  lambda::Reactive::Signal<std::string>* second = nullptr;
+  lambdaui::Reactive::Signal<std::string>* first = nullptr;
+  lambdaui::Reactive::Signal<std::string>* second = nullptr;
 
-  lambda::Element body() const {
-    return lambda::VStack{
+  lambdaui::Element body() const {
+    return lambdaui::VStack{
         .spacing = 8.f,
-        .children = lambda::children(
-            lambda::TextInput{
+        .children = lambdaui::children(
+            lambdaui::TextInput{
                 .value = *first,
                 .placeholder = "First",
             },
-            lambda::TextInput{
+            lambdaui::TextInput{
                 .value = *second,
                 .placeholder = "Second",
             }),
@@ -261,21 +261,21 @@ struct TextInputFocusRoot {
 };
 
 struct ControlledTextInputRoot {
-  lambda::Reactive::Signal<std::string>* text = nullptr;
-  lambda::Reactive::Signal<lambda::detail::TextEditSelection>* selection = nullptr;
+  lambdaui::Reactive::Signal<std::string>* text = nullptr;
+  lambdaui::Reactive::Signal<lambdaui::detail::TextEditSelection>* selection = nullptr;
   int* editCount = nullptr;
   bool multiline = false;
-  std::function<bool(lambda::KeyCode, lambda::Modifiers)> onPreviewKeyDown;
+  std::function<bool(lambdaui::KeyCode, lambdaui::Modifiers)> onPreviewKeyDown;
   std::function<bool(std::string const&)> onPreviewCommand;
 
-  lambda::Element body() const {
-    return lambda::TextInput{
+  lambdaui::Element body() const {
+    return lambdaui::TextInput{
         .value = *text,
         .selection = *selection,
         .placeholder = "Controlled",
         .multiline = multiline,
         .onEdit = [editCount = editCount](
-                      std::string const&, lambda::detail::TextEditSelection) {
+                      std::string const&, lambdaui::detail::TextEditSelection) {
           ++*editCount;
         },
         .onPreviewKeyDown = onPreviewKeyDown,
@@ -287,16 +287,16 @@ struct ControlledTextInputRoot {
 struct StatefulOverlayProbe {
   std::shared_ptr<int> bodyCalls;
   std::shared_ptr<int> cleanups;
-  lambda::Reactive::Signal<int>* state = nullptr;
+  lambdaui::Reactive::Signal<int>* state = nullptr;
 
-  lambda::Element body() const {
+  lambdaui::Element body() const {
     ++*bodyCalls;
-    auto localState = lambda::useState(1);
+    auto localState = lambdaui::useState(1);
     *state = localState;
-    lambda::Reactive::onCleanup([cleanups = cleanups] {
+    lambdaui::Reactive::onCleanup([cleanups = cleanups] {
       ++*cleanups;
     });
-    return lambda::Element{lambda::Rectangle{}}
+    return lambdaui::Element{lambdaui::Rectangle{}}
         .size([localState] {
           return 20.f + static_cast<float>(localState.get());
         }, 12.f);
@@ -304,13 +304,13 @@ struct StatefulOverlayProbe {
 };
 
 struct TwoProbeRoot {
-  lambda::Reactive::Signal<bool>* firstFocus = nullptr;
-  lambda::Reactive::Signal<bool>* secondFocus = nullptr;
+  lambdaui::Reactive::Signal<bool>* firstFocus = nullptr;
+  lambdaui::Reactive::Signal<bool>* secondFocus = nullptr;
 
-  lambda::Element body() const {
-    return lambda::HStack{
+  lambdaui::Element body() const {
+    return lambdaui::HStack{
         .spacing = 8.f,
-        .children = lambda::children(
+        .children = lambdaui::children(
             ProbeView{nullptr, nullptr, firstFocus, nullptr},
             ProbeView{nullptr, nullptr, secondFocus, nullptr}),
     };
@@ -318,15 +318,15 @@ struct TwoProbeRoot {
 };
 
 struct ScopedAutoFocusProbe {
-  lambda::Reactive::Signal<int> focusGeneration;
-  lambda::Reactive::Signal<bool>* firstFocus = nullptr;
-  lambda::Reactive::Signal<bool>* secondFocus = nullptr;
+  lambdaui::Reactive::Signal<int> focusGeneration;
+  lambdaui::Reactive::Signal<bool>* firstFocus = nullptr;
+  lambdaui::Reactive::Signal<bool>* secondFocus = nullptr;
 
-  lambda::Element body() const {
-    lambda::useAutoFocus(focusGeneration);
-    return lambda::HStack{
+  lambdaui::Element body() const {
+    lambdaui::useAutoFocus(focusGeneration);
+    return lambdaui::HStack{
         .spacing = 8.f,
-        .children = lambda::children(
+        .children = lambdaui::children(
             ProbeView{nullptr, nullptr, firstFocus, nullptr},
             ProbeView{nullptr, nullptr, secondFocus, nullptr}),
     };
@@ -334,15 +334,15 @@ struct ScopedAutoFocusProbe {
 };
 
 struct AutoFocusScopeRoot {
-  lambda::Reactive::Signal<int> focusGeneration;
-  lambda::Reactive::Signal<bool>* outsideFocus = nullptr;
-  lambda::Reactive::Signal<bool>* firstInsideFocus = nullptr;
-  lambda::Reactive::Signal<bool>* secondInsideFocus = nullptr;
+  lambdaui::Reactive::Signal<int> focusGeneration;
+  lambdaui::Reactive::Signal<bool>* outsideFocus = nullptr;
+  lambdaui::Reactive::Signal<bool>* firstInsideFocus = nullptr;
+  lambdaui::Reactive::Signal<bool>* secondInsideFocus = nullptr;
 
-  lambda::Element body() const {
-    return lambda::HStack{
+  lambdaui::Element body() const {
+    return lambdaui::HStack{
         .spacing = 8.f,
-        .children = lambda::children(
+        .children = lambdaui::children(
             ProbeView{nullptr, nullptr, outsideFocus, nullptr},
             ScopedAutoFocusProbe{
                 .focusGeneration = focusGeneration,
@@ -356,12 +356,12 @@ struct AutoFocusScopeRoot {
 struct ActionProbeView {
   int* fired = nullptr;
 
-  lambda::Element body() const {
-    lambda::useFocus();
-    lambda::useViewAction("demo.save", [fired = fired] {
+  lambdaui::Element body() const {
+    lambdaui::useFocus();
+    lambdaui::useViewAction("demo.save", [fired = fired] {
       ++*fired;
     });
-    return lambda::Element{lambda::Rectangle{}}
+    return lambdaui::Element{lambdaui::Rectangle{}}
         .size(20.f, 20.f)
         .focusable(true)
         .onTap([] {});
@@ -372,10 +372,10 @@ struct TwoActionRoot {
   int* firstFired = nullptr;
   int* secondFired = nullptr;
 
-  lambda::Element body() const {
-    return lambda::HStack{
+  lambdaui::Element body() const {
+    return lambdaui::HStack{
         .spacing = 8.f,
-        .children = lambda::children(
+        .children = lambdaui::children(
             ActionProbeView{firstFired},
             ActionProbeView{secondFired}),
     };
@@ -383,115 +383,115 @@ struct TwoActionRoot {
 };
 
 struct ConditionalActionRoot {
-  lambda::Reactive::Signal<bool> visible;
+  lambdaui::Reactive::Signal<bool> visible;
   int* fired = nullptr;
 
-  lambda::Element body() const {
-    return lambda::Show(visible, [fired = fired] {
-      return lambda::Element{ActionProbeView{fired}};
+  lambdaui::Element body() const {
+    return lambdaui::Show(visible, [fired = fired] {
+      return lambdaui::Element{ActionProbeView{fired}};
     });
   }
 };
 
 struct AncestorActionShowRoot {
-  lambda::Reactive::Signal<bool> visible;
+  lambdaui::Reactive::Signal<bool> visible;
   int* fired = nullptr;
 
-  lambda::Element body() const {
-    lambda::useViewAction("demo.save", [fired = fired] {
+  lambdaui::Element body() const {
+    lambdaui::useViewAction("demo.save", [fired = fired] {
       ++*fired;
     });
-    return lambda::Show(visible, [] {
-      return lambda::Element{ProbeView{}};
+    return lambdaui::Show(visible, [] {
+      return lambdaui::Element{ProbeView{}};
     });
   }
 };
 
 struct AncestorActionForRoot {
-  lambda::Reactive::Signal<std::vector<int>> items;
+  lambdaui::Reactive::Signal<std::vector<int>> items;
   int* fired = nullptr;
 
-  lambda::Element body() const {
-    lambda::useViewAction("demo.save", [fired = fired] {
+  lambdaui::Element body() const {
+    lambdaui::useViewAction("demo.save", [fired = fired] {
       ++*fired;
     });
-    return lambda::For(
+    return lambdaui::For(
         items,
         [](int value) {
           return value;
         },
-        [](int, lambda::Reactive::Signal<std::size_t>) {
-          return lambda::Element{ProbeView{}};
+        [](int, lambdaui::Reactive::Signal<std::size_t>) {
+          return lambdaui::Element{ProbeView{}};
         });
   }
 };
 
 struct ConditionalHoverRoot {
-  lambda::Reactive::Signal<bool> visible;
-  lambda::Reactive::Signal<bool>* hover = nullptr;
+  lambdaui::Reactive::Signal<bool> visible;
+  lambdaui::Reactive::Signal<bool>* hover = nullptr;
 
-  lambda::Element body() const {
-    return lambda::Show(visible, [hover = hover] {
-      return lambda::Element{ProbeView{hover, nullptr, nullptr, nullptr}};
+  lambdaui::Element body() const {
+    return lambdaui::Show(visible, [hover = hover] {
+      return lambdaui::Element{ProbeView{hover, nullptr, nullptr, nullptr}};
     });
   }
 };
 
 struct ScrollProbeRoot {
-  lambda::Reactive::Signal<lambda::Point> offset;
+  lambdaui::Reactive::Signal<lambdaui::Point> offset;
 
-  lambda::Element body() const {
-    return lambda::ScrollView{
-        .axis = lambda::ScrollAxis::Vertical,
+  lambdaui::Element body() const {
+    return lambdaui::ScrollView{
+        .axis = lambdaui::ScrollAxis::Vertical,
         .scrollOffset = offset,
-        .children = lambda::children(
-            lambda::Rectangle{}.size(100.f, 100.f),
-            lambda::Rectangle{}.size(100.f, 100.f)),
+        .children = lambdaui::children(
+            lambdaui::Rectangle{}.size(100.f, 100.f),
+            lambdaui::Rectangle{}.size(100.f, 100.f)),
     };
   }
 };
 
 struct ScrollAnchoredProbeRoot {
-  lambda::Reactive::Signal<lambda::Point> offset;
+  lambdaui::Reactive::Signal<lambdaui::Point> offset;
 
-  lambda::Element body() const {
-    return lambda::ScrollView{
-        .axis = lambda::ScrollAxis::Vertical,
+  lambdaui::Element body() const {
+    return lambdaui::ScrollView{
+        .axis = lambdaui::ScrollAxis::Vertical,
         .scrollOffset = offset,
-        .children = lambda::children(
-            lambda::Rectangle{}.size(100.f, 80.f),
+        .children = lambdaui::children(
+            lambdaui::Rectangle{}.size(100.f, 80.f),
             ProbeView{},
-            lambda::Rectangle{}.size(100.f, 100.f)),
+            lambdaui::Rectangle{}.size(100.f, 100.f)),
     };
   }
 };
 
 struct SelectKeyboardProbeRoot {
-  lambda::Element body() const {
-    return lambda::Element{lambda::Select{
+  lambdaui::Element body() const {
+    return lambdaui::Element{lambdaui::Select{
         .options = {
-            lambda::SelectOption{.label = "First"},
-            lambda::SelectOption{.label = "Second"},
+            lambdaui::SelectOption{.label = "First"},
+            lambdaui::SelectOption{.label = "Second"},
         },
     }}.width(120.f);
   }
 };
 
 struct SelectCommitProbeRoot {
-  lambda::Reactive::Signal<int> selected;
-  lambda::Reactive::Signal<bool>* nextFocus = nullptr;
+  lambdaui::Reactive::Signal<int> selected;
+  lambdaui::Reactive::Signal<bool>* nextFocus = nullptr;
   int* changeCount = nullptr;
 
-  lambda::Element body() const {
-    return lambda::VStack{
+  lambdaui::Element body() const {
+    return lambdaui::VStack{
         .spacing = 8.f,
-        .alignment = lambda::Alignment::Stretch,
-        .children = lambda::children(
-            lambda::Element{lambda::Select{
+        .alignment = lambdaui::Alignment::Stretch,
+        .children = lambdaui::children(
+            lambdaui::Element{lambdaui::Select{
                 .selectedIndex = selected,
                 .options = {
-                    lambda::SelectOption{.label = "First"},
-                    lambda::SelectOption{.label = "Second"},
+                    lambdaui::SelectOption{.label = "First"},
+                    lambdaui::SelectOption{.label = "Second"},
                 },
                 .onChange = [changeCount = changeCount](int) {
                   if (changeCount) {
@@ -505,40 +505,40 @@ struct SelectCommitProbeRoot {
 };
 
 struct LongSelectProbeRoot {
-  lambda::Element body() const {
-    return lambda::Element{lambda::Select{
+  lambdaui::Element body() const {
+    return lambdaui::Element{lambdaui::Select{
         .options = {
-            lambda::SelectOption{.label = "Option 1"},
-            lambda::SelectOption{.label = "Option 2"},
-            lambda::SelectOption{.label = "Option 3"},
-            lambda::SelectOption{.label = "Option 4"},
-            lambda::SelectOption{.label = "Option 5"},
-            lambda::SelectOption{.label = "Option 6"},
-            lambda::SelectOption{.label = "Option 7"},
-            lambda::SelectOption{.label = "Option 8"},
-            lambda::SelectOption{.label = "Option 9"},
-            lambda::SelectOption{.label = "Option 10"},
-            lambda::SelectOption{.label = "Option 11"},
-            lambda::SelectOption{.label = "Option 12"},
+            lambdaui::SelectOption{.label = "Option 1"},
+            lambdaui::SelectOption{.label = "Option 2"},
+            lambdaui::SelectOption{.label = "Option 3"},
+            lambdaui::SelectOption{.label = "Option 4"},
+            lambdaui::SelectOption{.label = "Option 5"},
+            lambdaui::SelectOption{.label = "Option 6"},
+            lambdaui::SelectOption{.label = "Option 7"},
+            lambdaui::SelectOption{.label = "Option 8"},
+            lambdaui::SelectOption{.label = "Option 9"},
+            lambdaui::SelectOption{.label = "Option 10"},
+            lambdaui::SelectOption{.label = "Option 11"},
+            lambdaui::SelectOption{.label = "Option 12"},
         },
     }}.width(160.f);
   }
 };
 
 struct HoverPopoverProbeRoot {
-  lambda::Element body() const {
-    auto [showPopover, hidePopover, presented] = lambda::usePopover();
+  lambdaui::Element body() const {
+    auto [showPopover, hidePopover, presented] = lambdaui::usePopover();
     (void)presented;
-    return lambda::Element{lambda::Rectangle{}}
+    return lambdaui::Element{lambdaui::Rectangle{}}
         .size(20.f, 20.f)
         .onPointerEnter([showPopover] {
-          showPopover(lambda::Popover{
-              .content = lambda::Element{lambda::Rectangle{}}.size(30.f, 10.f),
-              .placement = lambda::PopoverPlacement::Below,
+          showPopover(lambdaui::Popover{
+              .content = lambdaui::Element{lambdaui::Rectangle{}}.size(30.f, 10.f),
+              .placement = lambdaui::PopoverPlacement::Below,
               .gap = 0.f,
               .arrow = false,
               .contentPadding = 0.f,
-              .backdropColor = lambda::Colors::transparent,
+              .backdropColor = lambdaui::Colors::transparent,
               .dismissOnOutsideTap = false,
               .useTapAnchor = false,
               .useHoverLeafAnchor = true,
@@ -551,68 +551,68 @@ struct HoverPopoverProbeRoot {
 };
 
 struct NestedButtonTooltipProbeRoot {
-  lambda::Element body() const {
-    lambda::useTooltip(lambda::TooltipConfig{
+  lambdaui::Element body() const {
+    lambdaui::useTooltip(lambdaui::TooltipConfig{
         .text = "Nested button tooltip",
-        .placement = lambda::PopoverPlacement::Below,
+        .placement = lambdaui::PopoverPlacement::Below,
         .delayMs = 1,
     });
-    return lambda::Element{lambda::Button{
+    return lambdaui::Element{lambdaui::Button{
         .label = "Hover",
-        .variant = lambda::ButtonVariant::Secondary,
+        .variant = lambdaui::ButtonVariant::Secondary,
     }}.size(80.f, 36.f);
   }
 };
 
 struct WrappedScrollProbeRoot {
-  lambda::Reactive::Signal<lambda::Point> offset;
-  lambda::Reactive::Signal<lambda::Size> viewport;
-  lambda::Reactive::Signal<lambda::Size> content;
+  lambdaui::Reactive::Signal<lambdaui::Point> offset;
+  lambdaui::Reactive::Signal<lambdaui::Size> viewport;
+  lambdaui::Reactive::Signal<lambdaui::Size> content;
 
-  lambda::Element body() const {
-    return lambda::VStack{
+  lambdaui::Element body() const {
+    return lambdaui::VStack{
         .spacing = 0.f,
-        .alignment = lambda::Alignment::Stretch,
-        .children = lambda::children(
-            lambda::Rectangle{}.height(20.f),
-            lambda::ScrollView{
-                .axis = lambda::ScrollAxis::Vertical,
+        .alignment = lambdaui::Alignment::Stretch,
+        .children = lambdaui::children(
+            lambdaui::Rectangle{}.height(20.f),
+            lambdaui::ScrollView{
+                .axis = lambdaui::ScrollAxis::Vertical,
                 .scrollOffset = offset,
                 .viewportSize = viewport,
                 .contentSize = content,
-                .children = lambda::children(
-                    lambda::Rectangle{}.size(100.f, 100.f),
-                    lambda::Rectangle{}.size(100.f, 100.f)),
+                .children = lambdaui::children(
+                    lambdaui::Rectangle{}.size(100.f, 100.f),
+                    lambdaui::Rectangle{}.size(100.f, 100.f)),
             }
                 .flex(1.f, 1.f, 0.f)
-                .fill(lambda::Color::windowBackground())),
+                .fill(lambdaui::Color::windowBackground())),
     };
   }
 };
 
-void checkSameColor(lambda::Color actual, lambda::Color expected) {
+void checkSameColor(lambdaui::Color actual, lambdaui::Color expected) {
   CHECK(actual.r == doctest::Approx(expected.r));
   CHECK(actual.g == doctest::Approx(expected.g));
   CHECK(actual.b == doctest::Approx(expected.b));
   CHECK(actual.a == doctest::Approx(expected.a));
 }
 
-lambda::Color solidWindowBackground(lambda::Window const& window) {
-  lambda::Color color{};
-  REQUIRE(window.background().kind == lambda::WindowBackgroundKind::Fill);
+lambdaui::Color solidWindowBackground(lambdaui::Window const& window) {
+  lambdaui::Color color{};
+  REQUIRE(window.background().kind == lambdaui::WindowBackgroundKind::Fill);
   REQUIRE(window.background().fill.solidColor(&color));
   return color;
 }
 
-void registerSaveAction(lambda::Window& window) {
-  window.registerAction("demo.save", lambda::ActionDescriptor{
+void registerSaveAction(lambdaui::Window& window) {
+  window.registerAction("demo.save", lambdaui::ActionDescriptor{
       .label = "Save",
-      .shortcut = lambda::shortcuts::Save,
+      .shortcut = lambdaui::shortcuts::Save,
   });
 }
 
-lambda::scenegraph::SceneNode const* findScrollViewport(lambda::scenegraph::SceneNode const& node) {
-  auto const* interaction = lambda::interactionData(node);
+lambdaui::scenegraph::SceneNode const* findScrollViewport(lambdaui::scenegraph::SceneNode const& node) {
+  auto const* interaction = lambdaui::interactionData(node);
   if (interaction && interaction->onScroll && node.children().size() >= 2) {
     return &node;
   }
@@ -626,12 +626,12 @@ lambda::scenegraph::SceneNode const* findScrollViewport(lambda::scenegraph::Scen
   return nullptr;
 }
 
-void collectTapRects(lambda::scenegraph::SceneNode const& node,
-                     std::vector<lambda::scenegraph::RectNode const*>& out) {
-  auto const* interaction = lambda::interactionData(node);
-  if (node.kind() == lambda::scenegraph::SceneNodeKind::Rect &&
+void collectTapRects(lambdaui::scenegraph::SceneNode const& node,
+                     std::vector<lambdaui::scenegraph::RectNode const*>& out) {
+  auto const* interaction = lambdaui::interactionData(node);
+  if (node.kind() == lambdaui::scenegraph::SceneNodeKind::Rect &&
       interaction && interaction->onTap) {
-    out.push_back(static_cast<lambda::scenegraph::RectNode const*>(&node));
+    out.push_back(static_cast<lambdaui::scenegraph::RectNode const*>(&node));
   }
   for (auto const& child : node.children()) {
     if (child) {
@@ -640,30 +640,30 @@ void collectTapRects(lambda::scenegraph::SceneNode const& node,
   }
 }
 
-lambda::Point windowPointInside(lambda::OverlayEntry const& entry,
-                              lambda::scenegraph::SceneNode const& node) {
-  lambda::Point origin{entry.resolvedFrame.x, entry.resolvedFrame.y};
-  lambda::scenegraph::SceneNode const* current = &node;
+lambdaui::Point windowPointInside(lambdaui::OverlayEntry const& entry,
+                              lambdaui::scenegraph::SceneNode const& node) {
+  lambdaui::Point origin{entry.resolvedFrame.x, entry.resolvedFrame.y};
+  lambdaui::scenegraph::SceneNode const* current = &node;
   while (current) {
     origin.x += current->position().x;
     origin.y += current->position().y;
     current = current->parent();
   }
-  lambda::Size const size = node.size();
-  return lambda::Point{origin.x + std::min(12.f, std::max(1.f, size.width * 0.5f)),
+  lambdaui::Size const size = node.size();
+  return lambdaui::Point{origin.x + std::min(12.f, std::max(1.f, size.width * 0.5f)),
                      origin.y + std::min(12.f, std::max(1.f, size.height * 0.5f))};
 }
 
-float solidFillAlpha(lambda::scenegraph::RectNode const& node) {
-  lambda::Color color{};
+float solidFillAlpha(lambdaui::scenegraph::RectNode const& node) {
+  lambdaui::Color color{};
   if (node.fill().solidColor(&color)) {
     return color.a;
   }
   return 0.f;
 }
 
-lambda::Color solidFillColor(lambda::scenegraph::RectNode const& node) {
-  lambda::Color color{};
+lambdaui::Color solidFillColor(lambdaui::scenegraph::RectNode const& node) {
+  lambdaui::Color color{};
   if (node.fill().solidColor(&color)) {
     return color;
   }
@@ -674,7 +674,7 @@ lambda::Color solidFillColor(lambda::scenegraph::RectNode const& node) {
 
 TEST_CASE("pointer move into element flips hover signal") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> hover;
+  lambdaui::Reactive::Signal<bool> hover;
   harness.setRoot(SingleProbeRoot{.hover = &hover});
 
   harness.pointerMove({10.f, 10.f});
@@ -686,32 +686,32 @@ TEST_CASE("pointer move into element flips hover signal") {
 
 TEST_CASE("pointer move performs one scene hit traversal") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> hover;
+  lambdaui::Reactive::Signal<bool> hover;
   harness.setRoot(SingleProbeRoot{
       .hover = &hover,
-      .cursor = lambda::Cursor::Hand,
+      .cursor = lambdaui::Cursor::Hand,
   });
 
-  lambda::scenegraph::detail::resetHitTestTraversalCountForTesting();
+  lambdaui::scenegraph::detail::resetHitTestTraversalCountForTesting();
 
   harness.pointerMove({10.f, 10.f});
 
-  CHECK(lambda::scenegraph::detail::hitTestTraversalCountForTesting() == 1);
+  CHECK(lambdaui::scenegraph::detail::hitTestTraversalCountForTesting() == 1);
   CHECK(hover.get());
 }
 
 TEST_CASE("pointer leave clears hover without blurring keyboard focus") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> hover;
-  lambda::Reactive::Signal<bool> focus;
-  lambda::Reactive::Signal<bool> keyboardFocus;
+  lambdaui::Reactive::Signal<bool> hover;
+  lambdaui::Reactive::Signal<bool> focus;
+  lambdaui::Reactive::Signal<bool> keyboardFocus;
   int pointerExitCount = 0;
   harness.setRoot(SingleProbeRoot{
       .hover = &hover,
       .focus = &focus,
       .keyboardFocus = &keyboardFocus,
       .pointerExitCount = &pointerExitCount,
-      .cursor = lambda::Cursor::Hand,
+      .cursor = lambdaui::Cursor::Hand,
   });
 
   REQUIRE(focus.get());
@@ -730,7 +730,7 @@ TEST_CASE("pointer leave clears hover without blurring keyboard focus") {
 
 TEST_CASE("pointer down and up flip press signal") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> press;
+  lambdaui::Reactive::Signal<bool> press;
   harness.setRoot(SingleProbeRoot{.press = &press});
 
   harness.pointerDown({10.f, 10.f});
@@ -742,7 +742,7 @@ TEST_CASE("pointer down and up flip press signal") {
 
 TEST_CASE("pointer down then drag out keeps press until release") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> press;
+  lambdaui::Reactive::Signal<bool> press;
   harness.setRoot(SingleProbeRoot{.press = &press});
 
   harness.pointerDown({10.f, 10.f});
@@ -757,7 +757,7 @@ TEST_CASE("pointer down then drag out keeps press until release") {
 
 TEST_CASE("captured pointer move survives handler unmounting its target") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> visible{true};
+  lambdaui::Reactive::Signal<bool> visible{true};
   int moveCount = 0;
   harness.setRoot(CapturedMoveUnmountRoot{&visible, &moveCount});
 
@@ -770,23 +770,23 @@ TEST_CASE("captured pointer move survives handler unmounting its target") {
 
 TEST_CASE("focus moves between elements") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> firstFocus;
-  lambda::Reactive::Signal<bool> secondFocus;
+  lambdaui::Reactive::Signal<bool> firstFocus;
+  lambdaui::Reactive::Signal<bool> secondFocus;
   harness.setRoot(TwoProbeRoot{.firstFocus = &firstFocus, .secondFocus = &secondFocus});
 
-  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambdaui::keys::Tab);
   CHECK(firstFocus.get());
   CHECK_FALSE(secondFocus.get());
 
-  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambdaui::keys::Tab);
   CHECK_FALSE(firstFocus.get());
   CHECK(secondFocus.get());
 }
 
 TEST_CASE("keyboard focus signal differs from pointer focus") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> focus;
-  lambda::Reactive::Signal<bool> keyboardFocus;
+  lambdaui::Reactive::Signal<bool> focus;
+  lambdaui::Reactive::Signal<bool> keyboardFocus;
   harness.setRoot(SingleProbeRoot{.focus = &focus, .keyboardFocus = &keyboardFocus});
 
   harness.pointerDown({10.f, 10.f});
@@ -796,15 +796,15 @@ TEST_CASE("keyboard focus signal differs from pointer focus") {
   harness.pointerDown({100.f, 100.f});
   REQUIRE_FALSE(focus.get());
 
-  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambdaui::keys::Tab);
   CHECK(focus.get());
   CHECK(keyboardFocus.get());
 }
 
 TEST_CASE("root mount selects the only focusable target") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> focus;
-  lambda::Reactive::Signal<bool> keyboardFocus;
+  lambdaui::Reactive::Signal<bool> focus;
+  lambdaui::Reactive::Signal<bool> keyboardFocus;
   harness.setRoot(SingleProbeRoot{.focus = &focus, .keyboardFocus = &keyboardFocus});
 
   CHECK(focus.get());
@@ -813,15 +813,15 @@ TEST_CASE("root mount selects the only focusable target") {
 
 TEST_CASE("window focus reselects the only focusable target") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> focus;
-  lambda::Reactive::Signal<bool> keyboardFocus;
+  lambdaui::Reactive::Signal<bool> focus;
+  lambdaui::Reactive::Signal<bool> keyboardFocus;
   harness.setRoot(SingleProbeRoot{.focus = &focus, .keyboardFocus = &keyboardFocus});
 
-  harness.windowEvent(lambda::WindowEvent::Kind::FocusLost);
+  harness.windowEvent(lambdaui::WindowEvent::Kind::FocusLost);
   REQUIRE_FALSE(focus.get());
   REQUIRE_FALSE(keyboardFocus.get());
 
-  harness.windowEvent(lambda::WindowEvent::Kind::FocusGained);
+  harness.windowEvent(lambdaui::WindowEvent::Kind::FocusGained);
 
   CHECK(focus.get());
   CHECK(keyboardFocus.get());
@@ -829,8 +829,8 @@ TEST_CASE("window focus reselects the only focusable target") {
 
 TEST_CASE("root mount does not select among multiple focusable targets") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> firstFocus;
-  lambda::Reactive::Signal<bool> secondFocus;
+  lambdaui::Reactive::Signal<bool> firstFocus;
+  lambdaui::Reactive::Signal<bool> secondFocus;
   harness.setRoot(TwoProbeRoot{.firstFocus = &firstFocus, .secondFocus = &secondFocus});
 
   CHECK_FALSE(firstFocus.get());
@@ -839,10 +839,10 @@ TEST_CASE("root mount does not select among multiple focusable targets") {
 
 TEST_CASE("auto focus requests first focusable target inside hook scope") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<int> focusGeneration{0};
-  lambda::Reactive::Signal<bool> outsideFocus;
-  lambda::Reactive::Signal<bool> firstInsideFocus;
-  lambda::Reactive::Signal<bool> secondInsideFocus;
+  lambdaui::Reactive::Signal<int> focusGeneration{0};
+  lambdaui::Reactive::Signal<bool> outsideFocus;
+  lambdaui::Reactive::Signal<bool> firstInsideFocus;
+  lambdaui::Reactive::Signal<bool> secondInsideFocus;
   harness.setRoot(AutoFocusScopeRoot{
       .focusGeneration = focusGeneration,
       .outsideFocus = &outsideFocus,
@@ -857,8 +857,8 @@ TEST_CASE("auto focus requests first focusable target inside hook scope") {
   CHECK(firstInsideFocus.get());
   CHECK_FALSE(secondInsideFocus.get());
 
-  harness.keyDown(lambda::keys::Tab);
-  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambdaui::keys::Tab);
+  harness.keyDown(lambdaui::keys::Tab);
   REQUIRE(outsideFocus.get());
   REQUIRE_FALSE(firstInsideFocus.get());
 
@@ -872,15 +872,15 @@ TEST_CASE("auto focus requests first focusable target inside hook scope") {
 
 TEST_CASE("text input participates in keyboard focus traversal") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<std::string> first{""};
-  lambda::Reactive::Signal<std::string> second{""};
+  lambdaui::Reactive::Signal<std::string> first{""};
+  lambdaui::Reactive::Signal<std::string> second{""};
   harness.setRoot(TextInputFocusRoot{.first = &first, .second = &second});
 
-  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambdaui::keys::Tab);
   CHECK(harness.runtime.focusTargetKey().has_value());
   harness.textInput("A");
 
-  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambdaui::keys::Tab);
   harness.textInput("B");
 
   CHECK(first.get() == "A");
@@ -889,11 +889,11 @@ TEST_CASE("text input participates in keyboard focus traversal") {
 
 TEST_CASE("resize preserves focused text input target") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<std::string> first{""};
-  lambda::Reactive::Signal<std::string> second{""};
+  lambdaui::Reactive::Signal<std::string> first{""};
+  lambdaui::Reactive::Signal<std::string> second{""};
   harness.setRoot(TextInputFocusRoot{.first = &first, .second = &second});
 
-  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambdaui::keys::Tab);
   REQUIRE(harness.runtime.focusTargetKey().has_value());
   harness.textInput("A");
 
@@ -906,9 +906,9 @@ TEST_CASE("resize preserves focused text input target") {
 
 TEST_CASE("controlled text input handles Ctrl+A and reports edit selection") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<std::string> text{"abc"};
-  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection{
-      lambda::detail::TextEditSelection{.caretByte = 3, .anchorByte = 3}};
+  lambdaui::Reactive::Signal<std::string> text{"abc"};
+  lambdaui::Reactive::Signal<lambdaui::detail::TextEditSelection> selection{
+      lambdaui::detail::TextEditSelection{.caretByte = 3, .anchorByte = 3}};
   int editCount = 0;
   harness.setRoot(ControlledTextInputRoot{
       .text = &text,
@@ -916,7 +916,7 @@ TEST_CASE("controlled text input handles Ctrl+A and reports edit selection") {
       .editCount = &editCount,
   });
 
-  harness.keyDown(lambda::keys::A, lambda::Modifiers::Ctrl);
+  harness.keyDown(lambdaui::keys::A, lambdaui::Modifiers::Ctrl);
 
   CHECK(selection.get().anchorByte == 0);
   CHECK(selection.get().caretByte == 3);
@@ -934,9 +934,9 @@ TEST_CASE("controlled text input uses Ctrl clipboard shortcuts without Super fal
   RuntimeHarness harness;
   harness.app.clipboard().writeText("");
 
-  lambda::Reactive::Signal<std::string> text{"hello world"};
-  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection{
-      lambda::detail::TextEditSelection{.caretByte = 11, .anchorByte = 6}};
+  lambdaui::Reactive::Signal<std::string> text{"hello world"};
+  lambdaui::Reactive::Signal<lambdaui::detail::TextEditSelection> selection{
+      lambdaui::detail::TextEditSelection{.caretByte = 11, .anchorByte = 6}};
   int editCount = 0;
   harness.setRoot(ControlledTextInputRoot{
       .text = &text,
@@ -944,18 +944,18 @@ TEST_CASE("controlled text input uses Ctrl clipboard shortcuts without Super fal
       .editCount = &editCount,
   });
 
-  harness.keyDown(lambda::keys::C, lambda::Modifiers::Ctrl);
+  harness.keyDown(lambdaui::keys::C, lambdaui::Modifiers::Ctrl);
   REQUIRE(harness.app.clipboard().readText().has_value());
   CHECK(*harness.app.clipboard().readText() == "world");
   CHECK(text.get() == "hello world");
 
   harness.app.clipboard().writeText("");
-  harness.keyDown(lambda::keys::C, lambda::Modifiers::Meta);
+  harness.keyDown(lambdaui::keys::C, lambdaui::Modifiers::Meta);
   CHECK_FALSE(harness.app.clipboard().readText().has_value());
 
   harness.app.clipboard().writeText("Flux ");
-  selection.set(lambda::detail::TextEditSelection{.caretByte = 0, .anchorByte = 0});
-  harness.keyDown(lambda::keys::V, lambda::Modifiers::Ctrl);
+  selection.set(lambdaui::detail::TextEditSelection{.caretByte = 0, .anchorByte = 0});
+  harness.keyDown(lambdaui::keys::V, lambdaui::Modifiers::Ctrl);
 
   CHECK(text.get() == "Flux hello world");
   CHECK(selection.get().caretByte == 5);
@@ -965,18 +965,18 @@ TEST_CASE("controlled text input uses Ctrl clipboard shortcuts without Super fal
 
 TEST_CASE("controlled text input handles registered semantic edit commands") {
   RuntimeHarness harness;
-  harness.window.registerCommand("edit.deleteWordBackward", lambda::CommandDescriptor{
+  harness.window.registerCommand("edit.deleteWordBackward", lambdaui::CommandDescriptor{
       .title = "Delete Word Backward",
-      .shortcut = lambda::Shortcut{lambda::keys::Delete, lambda::Modifiers::Ctrl},
+      .shortcut = lambdaui::Shortcut{lambdaui::keys::Delete, lambdaui::Modifiers::Ctrl},
   });
-  harness.window.registerCommand("selection.lineStart", lambda::CommandDescriptor{
+  harness.window.registerCommand("selection.lineStart", lambdaui::CommandDescriptor{
       .title = "Select to Line Start",
-      .shortcut = lambda::Shortcut{lambda::keys::Home, lambda::Modifiers::Shift},
+      .shortcut = lambdaui::Shortcut{lambdaui::keys::Home, lambdaui::Modifiers::Shift},
   });
 
-  lambda::Reactive::Signal<std::string> text{"hello world"};
-  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection{
-      lambda::detail::TextEditSelection{.caretByte = 11, .anchorByte = 11}};
+  lambdaui::Reactive::Signal<std::string> text{"hello world"};
+  lambdaui::Reactive::Signal<lambdaui::detail::TextEditSelection> selection{
+      lambdaui::detail::TextEditSelection{.caretByte = 11, .anchorByte = 11}};
   int editCount = 0;
   harness.setRoot(ControlledTextInputRoot{
       .text = &text,
@@ -984,15 +984,15 @@ TEST_CASE("controlled text input handles registered semantic edit commands") {
       .editCount = &editCount,
   });
 
-  harness.keyDown(lambda::keys::Tab);
-  harness.keyDown(lambda::keys::Delete, lambda::Modifiers::Ctrl);
+  harness.keyDown(lambdaui::keys::Tab);
+  harness.keyDown(lambdaui::keys::Delete, lambdaui::Modifiers::Ctrl);
 
   CHECK(text.get() == "hello ");
   CHECK(selection.get().caretByte == 6);
   CHECK(selection.get().anchorByte == 6);
   CHECK(editCount == 1);
 
-  harness.keyDown(lambda::keys::Home, lambda::Modifiers::Shift);
+  harness.keyDown(lambdaui::keys::Home, lambdaui::Modifiers::Shift);
 
   CHECK(selection.get().caretByte == 0);
   CHECK(selection.get().anchorByte == 6);
@@ -1000,14 +1000,14 @@ TEST_CASE("controlled text input handles registered semantic edit commands") {
 
 TEST_CASE("controlled text input preview hooks consume raw keys and semantic commands") {
   RuntimeHarness harness;
-  harness.window.registerCommand("cursor.right", lambda::CommandDescriptor{
+  harness.window.registerCommand("cursor.right", lambdaui::CommandDescriptor{
       .title = "Move Cursor Right",
-      .shortcut = lambda::Shortcut{lambda::keys::RightArrow, lambda::Modifiers::None},
+      .shortcut = lambdaui::Shortcut{lambdaui::keys::RightArrow, lambdaui::Modifiers::None},
   });
 
-  lambda::Reactive::Signal<std::string> text{"abc"};
-  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection{
-      lambda::detail::TextEditSelection{.caretByte = 0, .anchorByte = 0}};
+  lambdaui::Reactive::Signal<std::string> text{"abc"};
+  lambdaui::Reactive::Signal<lambdaui::detail::TextEditSelection> selection{
+      lambdaui::detail::TextEditSelection{.caretByte = 0, .anchorByte = 0}};
   int editCount = 0;
   int previewKeyCount = 0;
   int previewCommandCount = 0;
@@ -1015,8 +1015,8 @@ TEST_CASE("controlled text input preview hooks consume raw keys and semantic com
       .text = &text,
       .selection = &selection,
       .editCount = &editCount,
-      .onPreviewKeyDown = [&previewKeyCount](lambda::KeyCode key, lambda::Modifiers) {
-        if (key == lambda::keys::PageDown) {
+      .onPreviewKeyDown = [&previewKeyCount](lambdaui::KeyCode key, lambdaui::Modifiers) {
+        if (key == lambdaui::keys::PageDown) {
           ++previewKeyCount;
           return true;
         }
@@ -1031,9 +1031,9 @@ TEST_CASE("controlled text input preview hooks consume raw keys and semantic com
       },
   });
 
-  harness.keyDown(lambda::keys::Tab);
-  harness.keyDown(lambda::keys::RightArrow);
-  harness.keyDown(lambda::keys::PageDown);
+  harness.keyDown(lambdaui::keys::Tab);
+  harness.keyDown(lambdaui::keys::RightArrow);
+  harness.keyDown(lambdaui::keys::PageDown);
 
   CHECK(previewCommandCount == 1);
   CHECK(previewKeyCount == 1);
@@ -1044,15 +1044,15 @@ TEST_CASE("controlled text input preview hooks consume raw keys and semantic com
 
 TEST_CASE("multiline text input handles registered line edit commands") {
   RuntimeHarness harness;
-  harness.window.registerCommand("edit.deleteLine", lambda::CommandDescriptor{
+  harness.window.registerCommand("edit.deleteLine", lambdaui::CommandDescriptor{
       .title = "Delete Line",
-      .shortcut = lambda::Shortcut{lambda::keys::K,
-                                   lambda::Modifiers::Ctrl | lambda::Modifiers::Shift},
+      .shortcut = lambdaui::Shortcut{lambdaui::keys::K,
+                                   lambdaui::Modifiers::Ctrl | lambdaui::Modifiers::Shift},
   });
 
-  lambda::Reactive::Signal<std::string> text{"one\ntwo\nthree"};
-  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection{
-      lambda::detail::TextEditSelection{.caretByte = 5, .anchorByte = 5}};
+  lambdaui::Reactive::Signal<std::string> text{"one\ntwo\nthree"};
+  lambdaui::Reactive::Signal<lambdaui::detail::TextEditSelection> selection{
+      lambdaui::detail::TextEditSelection{.caretByte = 5, .anchorByte = 5}};
   int editCount = 0;
   harness.setRoot(ControlledTextInputRoot{
       .text = &text,
@@ -1061,8 +1061,8 @@ TEST_CASE("multiline text input handles registered line edit commands") {
       .multiline = true,
   });
 
-  harness.keyDown(lambda::keys::Tab);
-  harness.keyDown(lambda::keys::K, lambda::Modifiers::Ctrl | lambda::Modifiers::Shift);
+  harness.keyDown(lambdaui::keys::Tab);
+  harness.keyDown(lambdaui::keys::K, lambdaui::Modifiers::Ctrl | lambdaui::Modifiers::Shift);
 
   CHECK(text.get() == "one\nthree");
   CHECK(selection.get().caretByte == 4);
@@ -1077,13 +1077,13 @@ TEST_CASE("view action fires only for the focused view") {
   int secondFired = 0;
   harness.setRoot(TwoActionRoot{.firstFired = &firstFired, .secondFired = &secondFired});
 
-  harness.keyDown(lambda::keys::Tab);
-  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  harness.keyDown(lambdaui::keys::Tab);
+  harness.keyDown(lambdaui::keys::S, lambdaui::Modifiers::Meta);
   CHECK(firstFired == 1);
   CHECK(secondFired == 0);
 
-  harness.keyDown(lambda::keys::Tab);
-  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  harness.keyDown(lambdaui::keys::Tab);
+  harness.keyDown(lambdaui::keys::S, lambdaui::Modifiers::Meta);
   CHECK(firstFired == 1);
   CHECK(secondFired == 1);
 }
@@ -1091,28 +1091,28 @@ TEST_CASE("view action fires only for the focused view") {
 TEST_CASE("view action deregisters on view unmount") {
   RuntimeHarness harness;
   registerSaveAction(harness.window);
-  lambda::Reactive::Signal<bool> visible{true};
+  lambdaui::Reactive::Signal<bool> visible{true};
   int fired = 0;
   harness.setRoot(ConditionalActionRoot{.visible = visible, .fired = &fired});
 
   harness.pointerDown({10.f, 10.f});
-  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  harness.keyDown(lambdaui::keys::S, lambdaui::Modifiers::Meta);
   REQUIRE(fired == 1);
 
   visible.set(false);
-  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  harness.keyDown(lambdaui::keys::S, lambdaui::Modifiers::Meta);
   CHECK(fired == 1);
 }
 
 TEST_CASE("view action on ancestor resolves through Show branch remount") {
   RuntimeHarness harness;
   registerSaveAction(harness.window);
-  lambda::Reactive::Signal<bool> visible{true};
+  lambdaui::Reactive::Signal<bool> visible{true};
   int fired = 0;
   harness.setRoot(AncestorActionShowRoot{.visible = visible, .fired = &fired});
 
   harness.pointerDown({10.f, 10.f});
-  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  harness.keyDown(lambdaui::keys::S, lambdaui::Modifiers::Meta);
   REQUIRE(fired == 1);
 
   visible.set(false);
@@ -1121,33 +1121,33 @@ TEST_CASE("view action on ancestor resolves through Show branch remount") {
   harness.app.eventQueue().dispatch();
 
   harness.pointerDown({10.f, 10.f});
-  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  harness.keyDown(lambdaui::keys::S, lambdaui::Modifiers::Meta);
   CHECK(fired == 2);
 }
 
 TEST_CASE("view action on ancestor resolves through For row replacement") {
   RuntimeHarness harness;
   registerSaveAction(harness.window);
-  lambda::Reactive::Signal<std::vector<int>> items{std::vector<int>{1}};
+  lambdaui::Reactive::Signal<std::vector<int>> items{std::vector<int>{1}};
   int fired = 0;
   harness.setRoot(AncestorActionForRoot{.items = items, .fired = &fired});
 
   harness.pointerDown({10.f, 10.f});
-  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  harness.keyDown(lambdaui::keys::S, lambdaui::Modifiers::Meta);
   REQUIRE(fired == 1);
 
   items.set(std::vector<int>{2});
   harness.app.eventQueue().dispatch();
 
   harness.pointerDown({10.f, 10.f});
-  harness.keyDown(lambda::keys::S, lambda::Modifiers::Meta);
+  harness.keyDown(lambdaui::keys::S, lambdaui::Modifiers::Meta);
   CHECK(fired == 2);
 }
 
 TEST_CASE("hover chain disposes signals on subtree unmount") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<bool> visible{true};
-  lambda::Reactive::Signal<bool> hover;
+  lambdaui::Reactive::Signal<bool> visible{true};
+  lambdaui::Reactive::Signal<bool> hover;
   harness.setRoot(ConditionalHoverRoot{.visible = visible, .hover = &hover});
 
   harness.pointerMove({10.f, 10.f});
@@ -1162,7 +1162,7 @@ TEST_CASE("hover chain disposes signals on subtree unmount") {
 
 TEST_CASE("runtime scroll dispatch reaches scroll view") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 0.f}};
+  lambdaui::Reactive::Signal<lambdaui::Point> offset{lambdaui::Point{0.f, 0.f}};
   harness.setRoot(ScrollProbeRoot{.offset = offset});
 
   harness.scroll({10.f, 10.f}, {0.f, -12.f});
@@ -1173,9 +1173,9 @@ TEST_CASE("runtime scroll dispatch reaches scroll view") {
 
 TEST_CASE("scroll view measurement does not overwrite mounted scroll range") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 0.f}};
-  lambda::Reactive::Signal<lambda::Size> viewport{lambda::Size{0.f, 0.f}};
-  lambda::Reactive::Signal<lambda::Size> content{lambda::Size{0.f, 0.f}};
+  lambdaui::Reactive::Signal<lambdaui::Point> offset{lambdaui::Point{0.f, 0.f}};
+  lambdaui::Reactive::Signal<lambdaui::Size> viewport{lambdaui::Size{0.f, 0.f}};
+  lambdaui::Reactive::Signal<lambdaui::Size> content{lambdaui::Size{0.f, 0.f}};
   harness.setRoot(WrappedScrollProbeRoot{
       .offset = offset,
       .viewport = viewport,
@@ -1195,7 +1195,7 @@ TEST_CASE("runtime exposes tap and hover anchors for overlay placement") {
   harness.setRoot(SingleProbeRoot{});
 
   harness.pointerMove({10.f, 10.f});
-  std::optional<lambda::Rect> hoverAnchor = harness.runtime.hoverAnchor();
+  std::optional<lambdaui::Rect> hoverAnchor = harness.runtime.hoverAnchor();
   REQUIRE(hoverAnchor.has_value());
   CHECK(harness.runtime.hoverTargetKey().has_value());
   CHECK(hoverAnchor->x == doctest::Approx(0.f));
@@ -1204,7 +1204,7 @@ TEST_CASE("runtime exposes tap and hover anchors for overlay placement") {
   CHECK(hoverAnchor->height == doctest::Approx(20.f));
 
   harness.pointerDown({10.f, 10.f});
-  std::optional<lambda::Rect> tapAnchor = harness.runtime.lastTapAnchor();
+  std::optional<lambdaui::Rect> tapAnchor = harness.runtime.lastTapAnchor();
   REQUIRE(tapAnchor.has_value());
   CHECK(harness.runtime.lastTapTargetKey().has_value());
   CHECK(tapAnchor->x == doctest::Approx(0.f));
@@ -1212,8 +1212,8 @@ TEST_CASE("runtime exposes tap and hover anchors for overlay placement") {
   CHECK(tapAnchor->width == doctest::Approx(20.f));
   CHECK(tapAnchor->height == doctest::Approx(20.f));
 
-  harness.keyDown(lambda::keys::Tab);
-  std::optional<lambda::Rect> focusAnchor = harness.runtime.focusAnchor();
+  harness.keyDown(lambdaui::keys::Tab);
+  std::optional<lambdaui::Rect> focusAnchor = harness.runtime.focusAnchor();
   REQUIRE(focusAnchor.has_value());
   CHECK(harness.runtime.focusTargetKey().has_value());
   CHECK(focusAnchor->x == doctest::Approx(0.f));
@@ -1228,7 +1228,7 @@ TEST_CASE("hover popovers keep the exact hover anchor instead of tracking compon
 
   harness.pointerMove({10.f, 10.f});
 
-  lambda::OverlayEntry const* entry = harness.window.overlayManager().top();
+  lambdaui::OverlayEntry const* entry = harness.window.overlayManager().top();
   REQUIRE(entry != nullptr);
   REQUIRE(entry->config.anchor.has_value());
   CHECK(entry->config.anchor->x == doctest::Approx(0.f));
@@ -1245,10 +1245,10 @@ TEST_CASE("tooltips observe hover on nested child components") {
   harness.pointerMove({10.f, 10.f});
   CHECK(harness.window.overlayManager().top() == nullptr);
 
-  harness.app.eventQueue().post(lambda::TimerEvent{.timerId = 1});
+  harness.app.eventQueue().post(lambdaui::TimerEvent{.timerId = 1});
   harness.app.eventQueue().dispatch();
 
-  lambda::OverlayEntry const* entry = harness.window.overlayManager().top();
+  lambdaui::OverlayEntry const* entry = harness.window.overlayManager().top();
   REQUIRE(entry != nullptr);
   CHECK(entry->config.debugName == "tooltip");
   REQUIRE(entry->config.anchor.has_value());
@@ -1263,22 +1263,22 @@ TEST_CASE("tooltips observe hover on nested child components") {
 
 TEST_CASE("tracked overlay anchors follow moved trigger nodes") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 0.f}};
+  lambdaui::Reactive::Signal<lambdaui::Point> offset{lambdaui::Point{0.f, 0.f}};
   harness.setRoot(ScrollAnchoredProbeRoot{.offset = offset});
 
   harness.pointerDown({10.f, 90.f});
-  std::optional<lambda::ComponentKey> key = harness.runtime.lastTapTargetKey();
+  std::optional<lambdaui::ComponentKey> key = harness.runtime.lastTapTargetKey();
   REQUIRE(key.has_value());
 
-  lambda::OverlayConfig config{};
+  lambdaui::OverlayConfig config{};
   config.anchor = harness.runtime.lastTapAnchor();
   config.anchorTrackComponentKey = key;
-  config.placement = lambda::OverlayConfig::Placement::Below;
-  lambda::OverlayId const id = harness.window.overlayManager().push(
-      lambda::Element{lambda::Rectangle{}}.size(30.f, 10.f),
+  config.placement = lambdaui::OverlayConfig::Placement::Below;
+  lambdaui::OverlayId const id = harness.window.overlayManager().push(
+      lambdaui::Element{lambdaui::Rectangle{}}.size(30.f, 10.f),
       std::move(config), &harness.runtime);
 
-  lambda::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+  lambdaui::OverlayEntry const* entry = harness.window.overlayManager().find(id);
   REQUIRE(entry != nullptr);
   CHECK(entry->resolvedFrame.y == doctest::Approx(100.f));
 
@@ -1292,25 +1292,25 @@ TEST_CASE("tracked overlay anchors follow moved trigger nodes") {
 
 TEST_CASE("tracked overlay placement flips after scroll changes available space") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 0.f}};
+  lambdaui::Reactive::Signal<lambdaui::Point> offset{lambdaui::Point{0.f, 0.f}};
   harness.setRoot(ScrollAnchoredProbeRoot{.offset = offset});
 
   harness.pointerDown({10.f, 90.f});
-  std::optional<lambda::ComponentKey> key = harness.runtime.lastTapTargetKey();
+  std::optional<lambdaui::ComponentKey> key = harness.runtime.lastTapTargetKey();
   REQUIRE(key.has_value());
 
-  lambda::OverlayConfig config{};
+  lambdaui::OverlayConfig config{};
   config.anchor = harness.runtime.lastTapAnchor();
   config.anchorTrackComponentKey = key;
-  config.placement = lambda::OverlayConfig::Placement::Below;
-  config.autoFlipPreferredPlacement = lambda::OverlayConfig::Placement::Below;
-  lambda::OverlayId const id = harness.window.overlayManager().push(
-      lambda::Element{lambda::Rectangle{}}.size(30.f, 50.f),
+  config.placement = lambdaui::OverlayConfig::Placement::Below;
+  config.autoFlipPreferredPlacement = lambdaui::OverlayConfig::Placement::Below;
+  lambdaui::OverlayId const id = harness.window.overlayManager().push(
+      lambdaui::Element{lambdaui::Rectangle{}}.size(30.f, 50.f),
       std::move(config), &harness.runtime);
 
-  lambda::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+  lambdaui::OverlayEntry const* entry = harness.window.overlayManager().find(id);
   REQUIRE(entry != nullptr);
-  CHECK(entry->config.placement == lambda::OverlayConfig::Placement::Above);
+  CHECK(entry->config.placement == lambdaui::OverlayConfig::Placement::Above);
   CHECK(entry->resolvedFrame.y == doctest::Approx(30.f));
 
   harness.scroll({10.f, 90.f}, {0.f, -60.f});
@@ -1319,57 +1319,57 @@ TEST_CASE("tracked overlay placement flips after scroll changes available space"
   entry = harness.window.overlayManager().find(id);
   REQUIRE(entry != nullptr);
   REQUIRE(entry->config.anchor.has_value());
-  CHECK(entry->config.placement == lambda::OverlayConfig::Placement::Below);
+  CHECK(entry->config.placement == lambdaui::OverlayConfig::Placement::Below);
   CHECK(entry->resolvedFrame.y ==
         doctest::Approx(entry->config.anchor->y + entry->config.anchor->height));
 }
 
 TEST_CASE("tracked popover callout arrow follows flipped overlay placement") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<lambda::Point> offset{lambda::Point{0.f, 60.f}};
+  lambdaui::Reactive::Signal<lambdaui::Point> offset{lambdaui::Point{0.f, 60.f}};
   harness.setRoot(ScrollAnchoredProbeRoot{.offset = offset});
 
   harness.pointerDown({10.f, 30.f});
-  std::optional<lambda::ComponentKey> key = harness.runtime.lastTapTargetKey();
+  std::optional<lambdaui::ComponentKey> key = harness.runtime.lastTapTargetKey();
   REQUIRE(key.has_value());
 
-  lambda::OverlayConfig config{};
+  lambdaui::OverlayConfig config{};
   config.anchor = harness.runtime.lastTapAnchor();
   config.anchorTrackComponentKey = key;
-  config.placement = lambda::OverlayConfig::Placement::Below;
-  config.autoFlipPreferredPlacement = lambda::OverlayConfig::Placement::Below;
+  config.placement = lambdaui::OverlayConfig::Placement::Below;
+  config.autoFlipPreferredPlacement = lambdaui::OverlayConfig::Placement::Below;
 
-  lambda::Theme const theme = lambda::Theme::light();
-  lambda::OverlayId const id = harness.window.overlayManager().push(
-      lambda::Popover{
-          .content = lambda::Element{lambda::Rectangle{}}.size(30.f, 10.f),
-          .placement = lambda::PopoverPlacement::Below,
+  lambdaui::Theme const theme = lambdaui::Theme::light();
+  lambdaui::OverlayId const id = harness.window.overlayManager().push(
+      lambdaui::Popover{
+          .content = lambdaui::Element{lambdaui::Rectangle{}}.size(30.f, 10.f),
+          .placement = lambdaui::PopoverPlacement::Below,
           .arrow = true,
       },
       std::move(config), &harness.runtime);
 
   auto calloutContentY = [&]() {
-    lambda::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+    lambdaui::OverlayEntry const* entry = harness.window.overlayManager().find(id);
     REQUIRE(entry != nullptr);
     REQUIRE(entry->sceneGraph.root().children().size() >= 1);
-    lambda::scenegraph::SceneNode const* callout =
+    lambdaui::scenegraph::SceneNode const* callout =
         entry->sceneGraph.root().children().back().get();
     REQUIRE(callout != nullptr);
     REQUIRE(callout->children().size() == 2);
     return callout->children()[1]->position().y;
   };
 
-  lambda::OverlayEntry const* entry = harness.window.overlayManager().find(id);
+  lambdaui::OverlayEntry const* entry = harness.window.overlayManager().find(id);
   REQUIRE(entry != nullptr);
-  CHECK(entry->config.placement == lambda::OverlayConfig::Placement::Below);
-  CHECK(calloutContentY() == doctest::Approx(theme.space3 + lambda::PopoverCalloutShape::kArrowH));
+  CHECK(entry->config.placement == lambdaui::OverlayConfig::Placement::Below);
+  CHECK(calloutContentY() == doctest::Approx(theme.space3 + lambdaui::PopoverCalloutShape::kArrowH));
 
-  offset = lambda::Point{0.f, 0.f};
+  offset = lambdaui::Point{0.f, 0.f};
   harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
 
   entry = harness.window.overlayManager().find(id);
   REQUIRE(entry != nullptr);
-  CHECK(entry->config.placement == lambda::OverlayConfig::Placement::Above);
+  CHECK(entry->config.placement == lambdaui::OverlayConfig::Placement::Above);
   CHECK(calloutContentY() == doctest::Approx(theme.space3));
 }
 
@@ -1377,11 +1377,11 @@ TEST_CASE("transparent overlay backdrop still dismisses on outside tap") {
   RuntimeHarness harness;
   harness.setRoot(SingleProbeRoot{});
 
-  lambda::OverlayConfig config{};
-  config.backdropColor = lambda::Colors::transparent;
+  lambdaui::OverlayConfig config{};
+  config.backdropColor = lambdaui::Colors::transparent;
   config.dismissOnOutsideTap = true;
-  lambda::OverlayId const id = harness.window.overlayManager().push(
-      lambda::Element{lambda::Rectangle{}}.size(30.f, 10.f),
+  lambdaui::OverlayId const id = harness.window.overlayManager().push(
+      lambdaui::Element{lambdaui::Rectangle{}}.size(30.f, 10.f),
       std::move(config), &harness.runtime);
 
   REQUIRE(harness.window.overlayManager().find(id) != nullptr);
@@ -1396,11 +1396,11 @@ TEST_CASE("transparent overlay backdrop ignores outside tap when dismissal is di
   RuntimeHarness harness;
   harness.setRoot(SingleProbeRoot{});
 
-  lambda::OverlayConfig config{};
-  config.backdropColor = lambda::Colors::transparent;
+  lambdaui::OverlayConfig config{};
+  config.backdropColor = lambdaui::Colors::transparent;
   config.dismissOnOutsideTap = false;
-  lambda::OverlayId const id = harness.window.overlayManager().push(
-      lambda::Element{lambda::Rectangle{}}.size(30.f, 10.f),
+  lambdaui::OverlayId const id = harness.window.overlayManager().push(
+      lambdaui::Element{lambdaui::Rectangle{}}.size(30.f, 10.f),
       std::move(config), &harness.runtime);
 
   REQUIRE(harness.window.overlayManager().find(id) != nullptr);
@@ -1415,15 +1415,15 @@ TEST_CASE("select popover anchors to focused trigger when opened from keyboard")
   RuntimeHarness harness;
   harness.setRoot(SelectKeyboardProbeRoot{});
 
-  harness.keyDown(lambda::keys::Tab);
-  std::optional<lambda::Rect> focusAnchor = harness.runtime.focusAnchor();
+  harness.keyDown(lambdaui::keys::Tab);
+  std::optional<lambdaui::Rect> focusAnchor = harness.runtime.focusAnchor();
   REQUIRE(focusAnchor.has_value());
-  std::optional<lambda::ComponentKey> focusKey = harness.runtime.focusTargetKey();
+  std::optional<lambdaui::ComponentKey> focusKey = harness.runtime.focusTargetKey();
   REQUIRE(focusKey.has_value());
 
-  harness.keyDown(lambda::keys::Return);
+  harness.keyDown(lambdaui::keys::Return);
 
-  lambda::OverlayEntry const* entry = harness.window.overlayManager().top();
+  lambdaui::OverlayEntry const* entry = harness.window.overlayManager().top();
   REQUIRE(entry != nullptr);
   REQUIRE(entry->config.anchor.has_value());
   CHECK(entry->config.anchor->x == doctest::Approx(focusAnchor->x));
@@ -1436,21 +1436,21 @@ TEST_CASE("select popover anchors to focused trigger when opened from keyboard")
 
 TEST_CASE("select option Enter commits and closes keyboard-opened popover") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<int> selected{-1};
+  lambdaui::Reactive::Signal<int> selected{-1};
   int changes = 0;
   harness.setRoot(SelectCommitProbeRoot{
       .selected = selected,
       .changeCount = &changes,
   });
 
-  harness.keyDown(lambda::keys::Tab);
-  harness.keyDown(lambda::keys::Return);
+  harness.keyDown(lambdaui::keys::Tab);
+  harness.keyDown(lambdaui::keys::Return);
   REQUIRE(harness.window.overlayManager().top() != nullptr);
 
-  harness.keyDown(lambda::keys::DownArrow);
+  harness.keyDown(lambdaui::keys::DownArrow);
   CHECK(selected.get() == -1);
 
-  harness.keyDown(lambda::keys::Return);
+  harness.keyDown(lambdaui::keys::Return);
 
   CHECK(harness.window.overlayManager().top() == nullptr);
   CHECK(selected.get() == 1);
@@ -1459,8 +1459,8 @@ TEST_CASE("select option Enter commits and closes keyboard-opened popover") {
 
 TEST_CASE("select option Tab commits closes popover and advances focus past trigger") {
   RuntimeHarness harness;
-  lambda::Reactive::Signal<int> selected{-1};
-  lambda::Reactive::Signal<bool> nextFocus;
+  lambdaui::Reactive::Signal<int> selected{-1};
+  lambdaui::Reactive::Signal<bool> nextFocus;
   int changes = 0;
   harness.setRoot(SelectCommitProbeRoot{
       .selected = selected,
@@ -1468,15 +1468,15 @@ TEST_CASE("select option Tab commits closes popover and advances focus past trig
       .changeCount = &changes,
   });
 
-  harness.keyDown(lambda::keys::Tab);
-  harness.keyDown(lambda::keys::Return);
+  harness.keyDown(lambdaui::keys::Tab);
+  harness.keyDown(lambdaui::keys::Return);
   REQUIRE(harness.window.overlayManager().top() != nullptr);
 
-  harness.keyDown(lambda::keys::DownArrow);
+  harness.keyDown(lambdaui::keys::DownArrow);
   CHECK(selected.get() == -1);
   CHECK_FALSE(nextFocus.get());
 
-  harness.keyDown(lambda::keys::Tab);
+  harness.keyDown(lambdaui::keys::Tab);
 
   CHECK(harness.window.overlayManager().top() == nullptr);
   CHECK(selected.get() == 1);
@@ -1490,14 +1490,14 @@ TEST_CASE("select popover scroll moves menu content") {
 
   harness.pointerDown({20.f, 20.f});
   harness.pointerUp({20.f, 20.f});
-  lambda::OverlayEntry const* entry = harness.window.overlayManager().top();
+  lambdaui::OverlayEntry const* entry = harness.window.overlayManager().top();
   REQUIRE(entry != nullptr);
   harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
 
-  lambda::scenegraph::SceneNode const* viewport = findScrollViewport(entry->sceneGraph.root());
+  lambdaui::scenegraph::SceneNode const* viewport = findScrollViewport(entry->sceneGraph.root());
   REQUIRE(viewport != nullptr);
   REQUIRE(viewport->children().size() >= 1);
-  lambda::scenegraph::SceneNode const* content = viewport->children()[0].get();
+  lambdaui::scenegraph::SceneNode const* content = viewport->children()[0].get();
   REQUIRE(content != nullptr);
   CHECK(content->position().y == doctest::Approx(0.f));
 
@@ -1525,21 +1525,21 @@ TEST_CASE("select popover scroll moves menu content") {
 
 TEST_CASE("select mouse hover drives stable active option highlight") {
   RuntimeHarness harness;
-  lambda::Theme theme = lambda::Theme::light();
+  lambdaui::Theme theme = lambdaui::Theme::light();
   theme.durationFast = 0.f;
   harness.window.setTheme(theme);
   harness.setRoot(LongSelectProbeRoot{});
 
   harness.pointerDown({20.f, 20.f});
   harness.pointerUp({20.f, 20.f});
-  lambda::OverlayEntry const* entry = harness.window.overlayManager().top();
+  lambdaui::OverlayEntry const* entry = harness.window.overlayManager().top();
   REQUIRE(entry != nullptr);
   harness.window.overlayManager().rebuild(harness.window.getSize(), harness.runtime);
 
-  std::vector<lambda::scenegraph::RectNode const*> rows;
+  std::vector<lambdaui::scenegraph::RectNode const*> rows;
   collectTapRects(entry->sceneGraph.root(), rows);
   REQUIRE(rows.size() >= 2);
-  lambda::Color idleFill = solidFillColor(*rows[1]);
+  lambdaui::Color idleFill = solidFillColor(*rows[1]);
   CHECK(idleFill.r == doctest::Approx(theme.rowHoverBackgroundColor.r));
   CHECK(idleFill.g == doctest::Approx(theme.rowHoverBackgroundColor.g));
   CHECK(idleFill.b == doctest::Approx(theme.rowHoverBackgroundColor.b));
@@ -1572,11 +1572,11 @@ TEST_CASE("overlay rebuild relayouts mounted content without remounting state") 
   RuntimeHarness harness;
   auto bodyCalls = std::make_shared<int>(0);
   auto cleanups = std::make_shared<int>(0);
-  lambda::Reactive::Signal<int> state;
+  lambdaui::Reactive::Signal<int> state;
 
-  lambda::OverlayId const id = harness.window.overlayManager().push(
+  lambdaui::OverlayId const id = harness.window.overlayManager().push(
       StatefulOverlayProbe{.bodyCalls = bodyCalls, .cleanups = cleanups, .state = &state},
-      lambda::OverlayConfig{}, &harness.runtime);
+      lambdaui::OverlayConfig{}, &harness.runtime);
 
   REQUIRE(id.isValid());
   REQUIRE(harness.window.overlayManager().find(id) != nullptr);
@@ -1593,13 +1593,13 @@ TEST_CASE("overlay rebuild relayouts mounted content without remounting state") 
 
 TEST_CASE("window background follows theme unless overridden") {
   RuntimeHarness harness;
-  checkSameColor(solidWindowBackground(harness.window), lambda::Theme::light().windowBackgroundColor);
+  checkSameColor(solidWindowBackground(harness.window), lambdaui::Theme::light().windowBackgroundColor);
 
-  harness.window.setTheme(lambda::Theme::dark());
-  checkSameColor(solidWindowBackground(harness.window), lambda::Theme::dark().windowBackgroundColor);
+  harness.window.setTheme(lambdaui::Theme::dark());
+  checkSameColor(solidWindowBackground(harness.window), lambdaui::Theme::dark().windowBackgroundColor);
 
-  lambda::Color const custom = lambda::Color::hex(0x123456);
-  harness.window.setBackground(lambda::WindowBackground::solid(custom));
-  harness.window.setTheme(lambda::Theme::light());
+  lambdaui::Color const custom = lambdaui::Color::hex(0x123456);
+  harness.window.setBackground(lambdaui::WindowBackground::solid(custom));
+  harness.window.setTheme(lambdaui::Theme::light());
   checkSameColor(solidWindowBackground(harness.window), custom);
 }

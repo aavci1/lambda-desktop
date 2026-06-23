@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 namespace {
 
 linux_platform::XkbState& xkbState() {
@@ -105,7 +105,7 @@ void KmsApplication::routePointer(Point position, InputEvent::Kind kind, MouseBu
                  static_cast<unsigned int>(pressedButtons_));
     std::fflush(stderr);
   }
-  ::lambda::Application::instance().eventQueue().post(InputEvent{.kind = kind,
+  ::lambdaui::Application::instance().eventQueue().post(InputEvent{.kind = kind,
                                                                .handle = window->handle(),
                                                                .position = localPosition,
                                                                .scrollDelta = scrollDelta,
@@ -121,7 +121,7 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
   xkb.updateKey(evdevKey, pressed);
   KeyCode const key = xkb.keyCodeForEvdevKey(evdevKey);
   Modifiers const modifiers = xkb.modifiers();
-  ::lambda::Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
+  ::lambdaui::Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
                                                                                 : InputEvent::Kind::KeyUp,
                                                                .handle = window->handle(),
                                                                .key = key,
@@ -129,7 +129,7 @@ void KmsApplication::routeKey(std::uint32_t evdevKey, bool pressed) {
   if (pressed && linux_platform::shouldEmitTextInputForModifiers(modifiers)) {
     std::string text = xkb.utf8ForEvdevKey(evdevKey);
     if (!text.empty()) {
-      ::lambda::Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::TextInput,
+      ::lambdaui::Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::TextInput,
                                                                    .handle = window->handle(),
                                                                    .text = std::move(text)});
     }
@@ -421,4 +421,4 @@ void KmsApplication::dispatchPendingInput() {
   }
 }
 
-} // namespace lambda
+} // namespace lambdaui

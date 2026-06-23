@@ -39,7 +39,7 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
-namespace lambda::platform {
+namespace lambdaui::platform {
 namespace {
 
 std::uint64_t monotonicNanoseconds() {
@@ -644,7 +644,7 @@ public:
 
   std::vector<KmsOutput> outputs(std::shared_ptr<Impl> self) const;
 
-  std::unique_ptr<lambda::KmsApplication> app_;
+  std::unique_ptr<lambdaui::KmsApplication> app_;
 };
 
 class KmsOutput::Impl {
@@ -754,7 +754,7 @@ public:
       syncModeStateFromKernel();
       gbm_ = gbm_create_device(fd_);
       if (!gbm_) throw std::runtime_error("gbm_create_device failed for KMS atomic presenter");
-      lambda::VulkanContext::instance().ensureInitialized();
+      lambdaui::VulkanContext::instance().ensureInitialized();
       directScanoutRender_ = directScanoutRenderForced_ || shouldUseAutomaticDirectScanoutRender();
       createCommandPool();
       try {
@@ -767,7 +767,7 @@ public:
         directScanoutRender_ = false;
         createBuffers();
       }
-      canvas_ = lambda::createVulkanRenderTargetCanvas(buffers_[0].spec, textSystem_);
+      canvas_ = lambdaui::createVulkanRenderTargetCanvas(buffers_[0].spec, textSystem_);
       if (!canvas_) throw std::runtime_error("Failed to create atomic KMS render-target canvas");
       if (directScanoutRender_) {
         std::fprintf(stderr,
@@ -786,7 +786,7 @@ public:
 
   void cleanup() {
     if (canvas_) canvas_.reset();
-    VkDevice device = lambda::VulkanContext::instance().device();
+    VkDevice device = lambdaui::VulkanContext::instance().device();
     // Intentional presenter teardown wait before destroying KMS buffers.
     if (device) vkDeviceWaitIdle(device);
     if (atomicRequest_) {
@@ -1179,7 +1179,7 @@ public:
     std::uint64_t const targetStart = kmsTraceStart();
     buffer.spec.initialLayout = partialFrame ? partialInitialLayout : VK_IMAGE_LAYOUT_UNDEFINED;
     buffer.spec.preserveContents = partialFrame;
-    if (!lambda::setVulkanRenderTargetSpecForCanvas(canvas_.get(), buffer.spec)) {
+    if (!lambdaui::setVulkanRenderTargetSpecForCanvas(canvas_.get(), buffer.spec)) {
       throw std::runtime_error("Failed to switch atomic KMS render target");
     }
     recordKmsTraceSince(KmsTraceBucket::SetTarget, targetStart);
@@ -1772,7 +1772,7 @@ public:
         DRM_FORMAT_XBGR8888,
     };
     std::vector<KmsDmabufFormatModifier> pairs;
-    VkPhysicalDevice physical = lambda::VulkanContext::instance().physicalDevice();
+    VkPhysicalDevice physical = lambdaui::VulkanContext::instance().physicalDevice();
     if (!physical) return pairs;
 
     for (std::uint32_t format : formats) {
@@ -2257,7 +2257,7 @@ private:
     if (!buffer.renderComplete) {
       throw std::runtime_error("KMS render buffer is still in use");
     }
-    VkDevice device = lambda::VulkanContext::instance().device();
+    VkDevice device = lambdaui::VulkanContext::instance().device();
     if (buffer.renderFinished) {
       vkDestroySemaphore(device, buffer.renderFinished, nullptr);
       buffer.renderFinished = VK_NULL_HANDLE;
@@ -2285,7 +2285,7 @@ private:
     if (buffer.renderComplete) return;
     if (buffer.renderFence) {
       VkResult const fenceStatus =
-          vkGetFenceStatus(lambda::VulkanContext::instance().device(), buffer.renderFence);
+          vkGetFenceStatus(lambdaui::VulkanContext::instance().device(), buffer.renderFence);
       if (fenceStatus == VK_SUCCESS) {
         markRenderWorkComplete(buffer);
         return;
@@ -2936,8 +2936,8 @@ private:
   void createCommandPool() {
     auto poolInfo = vkStructure<VkCommandPoolCreateInfo>(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO);
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    poolInfo.queueFamilyIndex = lambda::VulkanContext::instance().queueFamily();
-    vkCheck(vkCreateCommandPool(lambda::VulkanContext::instance().device(), &poolInfo, nullptr, &commandPool_),
+    poolInfo.queueFamilyIndex = lambdaui::VulkanContext::instance().queueFamily();
+    vkCheck(vkCreateCommandPool(lambdaui::VulkanContext::instance().device(), &poolInfo, nullptr, &commandPool_),
             "vkCreateCommandPool atomic KMS presenter");
   }
 
@@ -2955,7 +2955,7 @@ private:
   }
 
   void destroyBuffers() {
-    VkDevice device = lambda::VulkanContext::instance().device();
+    VkDevice device = lambdaui::VulkanContext::instance().device();
     // Intentional output-buffer teardown wait before freeing scanout images.
     if (device) vkDeviceWaitIdle(device);
     for (auto& buffer : buffers_) {
@@ -3075,7 +3075,7 @@ private:
                                                     planeId_,
                                                     DRM_FORMAT_ARGB8888,
                                                     VK_FORMAT_B8G8R8A8_UNORM,
-                                                    lambda::VulkanContext::instance().physicalDevice(),
+                                                    lambdaui::VulkanContext::instance().physicalDevice(),
                                                     directScanoutImageUsage(),
                                                     false);
     if (modifiers.empty()) return false;
@@ -3090,13 +3090,13 @@ private:
     if (forceLinearScanout()) return {DRM_FORMAT_MOD_LINEAR};
     std::vector<std::uint64_t> const planeModifiers = planeModifiersForFormat(fd_, planeId_, DRM_FORMAT_ARGB8888);
     std::vector<std::uint64_t> const vulkanModifiers = vulkanModifiersForFormat(
-        lambda::VulkanContext::instance().physicalDevice(), VK_FORMAT_B8G8R8A8_UNORM, scanoutImageUsage());
+        lambdaui::VulkanContext::instance().physicalDevice(), VK_FORMAT_B8G8R8A8_UNORM, scanoutImageUsage());
     std::vector<std::uint64_t> const modifiers =
         scanoutModifiersForUsage(fd_,
                                  planeId_,
                                  DRM_FORMAT_ARGB8888,
                                  VK_FORMAT_B8G8R8A8_UNORM,
-                                 lambda::VulkanContext::instance().physicalDevice(),
+                                 lambdaui::VulkanContext::instance().physicalDevice(),
                                  scanoutImageUsage(),
                                  true);
     if (!modifiers.empty()) {
@@ -3112,8 +3112,8 @@ private:
   }
 
   void createOffscreenTarget(Buffer& buffer) {
-    VkDevice device = lambda::VulkanContext::instance().device();
-    VkPhysicalDevice physical = lambda::VulkanContext::instance().physicalDevice();
+    VkDevice device = lambdaui::VulkanContext::instance().device();
+    VkPhysicalDevice physical = lambdaui::VulkanContext::instance().physicalDevice();
     auto imageInfo = vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -3156,14 +3156,14 @@ private:
     allocateInfo.commandPool = commandPool_;
     allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocateInfo.commandBufferCount = 1;
-    vkCheck(vkAllocateCommandBuffers(lambda::VulkanContext::instance().device(), &allocateInfo, &buffer.commandBuffer),
+    vkCheck(vkAllocateCommandBuffers(lambdaui::VulkanContext::instance().device(), &allocateInfo, &buffer.commandBuffer),
             "vkAllocateCommandBuffers atomic KMS presenter");
   }
 
   void createRenderFence(Buffer& buffer) {
     auto fenceInfo = vkStructure<VkFenceCreateInfo>(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-    vkCheck(vkCreateFence(lambda::VulkanContext::instance().device(), &fenceInfo, nullptr, &buffer.renderFence),
+    vkCheck(vkCreateFence(lambdaui::VulkanContext::instance().device(), &fenceInfo, nullptr, &buffer.renderFence),
             "vkCreateFence atomic KMS render fence");
   }
 
@@ -3282,17 +3282,17 @@ private:
     submit.signalSemaphoreInfoCount = buffer.renderFinished ? 1u : 0u;
     submit.pSignalSemaphoreInfos = buffer.renderFinished ? &signalSemaphore : nullptr;
     if (!buffer.renderFence) createRenderFence(buffer);
-    vkCheck(vkResetFences(lambda::VulkanContext::instance().device(), 1, &buffer.renderFence),
+    vkCheck(vkResetFences(lambdaui::VulkanContext::instance().device(), 1, &buffer.renderFence),
             "vkResetFences atomic KMS render fence");
     buffer.renderComplete = false;
     std::uint64_t const submitStart = kmsTraceStart();
     try {
-      vkCheck(vkQueueSubmit2(lambda::VulkanContext::instance().queue(), 1, &submit, buffer.renderFence),
+      vkCheck(vkQueueSubmit2(lambdaui::VulkanContext::instance().queue(), 1, &submit, buffer.renderFence),
               "vkQueueSubmit2 atomic KMS presenter");
     } catch (...) {
       throw;
     }
-    lambda::markVulkanRenderTargetCanvasSubmitted(canvas_.get());
+    lambdaui::markVulkanRenderTargetCanvasSubmitted(canvas_.get());
     recordKmsTraceSince(KmsTraceBucket::QueueSubmit, submitStart);
     if (!buffer.renderFinished) {
       if (!renderFenceFallbackLogged_) {
@@ -3301,14 +3301,14 @@ private:
         renderFenceFallbackLogged_ = true;
       }
       VkResult const waitResult =
-          vkWaitForFences(lambda::VulkanContext::instance().device(), 1, &buffer.renderFence, VK_TRUE, UINT64_MAX);
+          vkWaitForFences(lambdaui::VulkanContext::instance().device(), 1, &buffer.renderFence, VK_TRUE, UINT64_MAX);
       vkCheck(waitResult, "vkWaitForFences atomic KMS render fallback");
       markRenderWorkComplete(buffer);
     }
   }
 
   VkSemaphore createExportableSemaphore() {
-    VkDevice device = lambda::VulkanContext::instance().device();
+    VkDevice device = lambdaui::VulkanContext::instance().device();
     auto exportInfo = vkStructure<VkExportSemaphoreCreateInfo>(VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO);
     exportInfo.handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
     auto semaphoreInfo = vkStructure<VkSemaphoreCreateInfo>(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
@@ -3322,14 +3322,14 @@ private:
   int exportRenderSemaphoreFd(VkSemaphore semaphore) {
     KmsTraceScope trace(KmsTraceBucket::ExportFence);
     auto getSemaphoreFd =
-        reinterpret_cast<PFN_vkGetSemaphoreFdKHR>(vkGetDeviceProcAddr(lambda::VulkanContext::instance().device(),
+        reinterpret_cast<PFN_vkGetSemaphoreFdKHR>(vkGetDeviceProcAddr(lambdaui::VulkanContext::instance().device(),
                                                                        "vkGetSemaphoreFdKHR"));
     if (!getSemaphoreFd) throw std::runtime_error("vkGetSemaphoreFdKHR is unavailable");
     auto fdInfo = vkStructure<VkSemaphoreGetFdInfoKHR>(VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR);
     fdInfo.semaphore = semaphore;
     fdInfo.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
     int fd = -1;
-    vkCheck(getSemaphoreFd(lambda::VulkanContext::instance().device(), &fdInfo, &fd),
+    vkCheck(getSemaphoreFd(lambdaui::VulkanContext::instance().device(), &fdInfo, &fd),
             "vkGetSemaphoreFdKHR atomic KMS render fence");
     return fd;
   }
@@ -3372,8 +3372,8 @@ private:
   void importBufferToVulkan(Buffer& buffer) {
     int fd = gbm_bo_get_fd(buffer.bo);
     if (fd < 0) throw std::system_error(errno, std::generic_category(), "gbm_bo_get_fd");
-    VkDevice device = lambda::VulkanContext::instance().device();
-    VkPhysicalDevice physical = lambda::VulkanContext::instance().physicalDevice();
+    VkDevice device = lambdaui::VulkanContext::instance().device();
+    VkPhysicalDevice physical = lambdaui::VulkanContext::instance().physicalDevice();
     try {
       std::uint64_t const modifier = gbmModifier(buffer.bo);
       auto externalInfo =
@@ -3501,7 +3501,7 @@ private:
   }
 
   void destroyPartialBuffer(Buffer& buffer) {
-    VkDevice device = lambda::VulkanContext::instance().device();
+    VkDevice device = lambdaui::VulkanContext::instance().device();
     closeRenderFence(buffer);
     if (buffer.view) vkDestroyImageView(device, buffer.view, nullptr);
     if (buffer.renderFinished) vkDestroySemaphore(device, buffer.renderFinished, nullptr);
@@ -4032,7 +4032,7 @@ std::uint32_t KmsOutput::height() const noexcept {
 }
 
 std::uint32_t KmsOutput::refreshRateMilliHz() const noexcept {
-  return impl_ ? lambda::platform::refreshRateMilliHz(impl_->connector_.mode) : 0u;
+  return impl_ ? lambdaui::platform::refreshRateMilliHz(impl_->connector_.mode) : 0u;
 }
 
 std::uint32_t KmsOutput::cursorWidth() const noexcept {
@@ -4242,7 +4242,7 @@ KmsDevice::Impl::Impl(char const* devicePath) {
   if (devicePath && *devicePath) {
     throw std::runtime_error("KmsDevice::open(devicePath) is not implemented yet; pass nullptr");
   }
-  app_ = std::make_unique<lambda::KmsApplication>();
+  app_ = std::make_unique<lambdaui::KmsApplication>();
   app_->setApplicationName("lambda-window-manager");
   app_->initialize();
 }
@@ -4327,4 +4327,4 @@ KmsPollResult KmsDevice::pollEventDetails(int timeoutMs, std::span<int const> ex
   return impl_ && impl_->app_ ? impl_->app_->pollInputAndWakeDetailed(timeoutMs, extraFds) : KmsPollResult{};
 }
 
-} // namespace lambda::platform
+} // namespace lambdaui::platform

@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class Cursor : std::uint8_t {
   Inherit,
@@ -22,4 +22,4 @@ enum class Cursor : std::uint8_t {
   NotAllowed,
 };
 
-} // namespace lambda
+} // namespace lambdaui

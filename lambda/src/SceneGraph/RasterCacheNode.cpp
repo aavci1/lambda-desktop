@@ -8,7 +8,7 @@
 #include <cmath>
 #include <memory>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 RasterCacheNode::RasterCacheNode(Rect bounds)
     : SceneNode(SceneNodeKind::RasterCache, bounds) {}
@@ -99,4 +99,4 @@ bool RasterCacheNode::canPrepareRenderOps() const noexcept {
   return false;
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

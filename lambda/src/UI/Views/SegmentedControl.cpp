@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -234,4 +234,4 @@ Element SegmentedControl::body() const {
     return root;
 }
 
-} // namespace lambda
+} // namespace lambdaui

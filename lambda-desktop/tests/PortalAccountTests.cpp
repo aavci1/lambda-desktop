@@ -13,8 +13,8 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::startPrivateBus;
 
 template <typename Callback>
 class ScopeExit {
@@ -26,8 +26,8 @@ private:
   Callback callback_;
 };
 
-std::shared_ptr<lambda::dbus::VariantDictionary> options(std::string reason) {
-  auto value = std::make_shared<lambda::dbus::VariantDictionary>();
+std::shared_ptr<lambdaui::dbus::VariantDictionary> options(std::string reason) {
+  auto value = std::make_shared<lambdaui::dbus::VariantDictionary>();
   value->values["reason"] = std::move(reason);
   return value;
 }
@@ -47,13 +47,13 @@ TEST_CASE("PortalAccountService returns account information on a private bus") {
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::PortalAccountService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::PortalAccountService::serviceName);
 
-  lambda::system::PortalAccountService account(
+  lambdaui::system::PortalAccountService account(
       serviceBus,
-      lambda::system::PortalAccountState{
+      lambdaui::system::PortalAccountState{
           .id = "lambda-user",
           .name = "Lambda User",
           .imageUri = "file:///home/lambda/.face",
@@ -73,12 +73,12 @@ TEST_CASE("PortalAccountService returns account information on a private bus") {
     }
   });
 
-  auto reply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalAccountService::serviceName,
-      .path = lambda::system::PortalAccountService::objectPath,
-      .interface = lambda::system::PortalAccountService::interfaceName,
+  auto reply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalAccountService::serviceName,
+      .path = lambdaui::system::PortalAccountService::objectPath,
+      .interface = lambdaui::system::PortalAccountService::interfaceName,
       .member = "GetUserInformation",
-      .arguments = {lambda::dbus::ObjectPath{"/org/freedesktop/portal/desktop/request/1_1/account"},
+      .arguments = {lambdaui::dbus::ObjectPath{"/org/freedesktop/portal/desktop/request/1_1/account"},
                     std::string("org.lambda.TestApp"),
                     std::string("wayland:window"),
                     options("Share your name with the test app.")},

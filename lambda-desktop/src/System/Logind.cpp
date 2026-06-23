@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -143,4 +143,4 @@ dbus::Slot LogindClient::watchSessionSignal(std::string const& sessionPath,
       });
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

@@ -10,7 +10,7 @@
 #include <memory>
 #include <utility>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 class AtomicKmsPresenterAdapter final : public Presenter {
@@ -89,4 +89,4 @@ std::unique_ptr<Presenter> createPresenter(PresenterContext const& context) {
   return std::make_unique<AtomicKmsPresenterAdapter>(context.output, context.textSystem);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

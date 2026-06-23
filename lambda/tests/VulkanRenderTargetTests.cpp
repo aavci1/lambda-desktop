@@ -12,7 +12,7 @@
 #include <Lambda/SceneGraph/SceneRenderer.hpp>
 #include <Lambda/SceneGraph/TextNode.hpp>
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
@@ -36,8 +36,8 @@
 
 namespace {
 
-using namespace lambda;
-using namespace lambda::scenegraph;
+using namespace lambdaui;
+using namespace lambdaui::scenegraph;
 
 struct ScopedEnvOverride {
   char const* name = nullptr;
@@ -91,8 +91,8 @@ bool preparedGeometryExpected(VkPhysicalDevice physical) {
     return true;
   }
   auto driverProps =
-      lambda::vkStructure<VkPhysicalDeviceDriverProperties>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES);
-  auto props2 = lambda::vkStructure<VkPhysicalDeviceProperties2>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2);
+      lambdaui::vkStructure<VkPhysicalDeviceDriverProperties>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES);
+  auto props2 = lambdaui::vkStructure<VkPhysicalDeviceProperties2>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2);
   props2.pNext = &driverProps;
   vkGetPhysicalDeviceProperties2(physical, &props2);
   return driverProps.driverID != VK_DRIVER_ID_MESA_RADV;
@@ -136,7 +136,7 @@ struct VulkanImageTarget {
   VulkanImageTarget(VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
                     std::uint32_t targetWidth, std::uint32_t targetHeight)
       : device(logicalDevice), physical(physicalDevice), width(targetWidth), height(targetHeight) {
-    auto imageInfo = lambda::vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
+    auto imageInfo = lambdaui::vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.format = format;
     imageInfo.extent = {width, height, 1};
@@ -153,14 +153,14 @@ struct VulkanImageTarget {
     VkMemoryRequirements requirements{};
     vkGetImageMemoryRequirements(device, image, &requirements);
 
-    auto allocateInfo = lambda::vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
+    auto allocateInfo = lambdaui::vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
     allocateInfo.allocationSize = requirements.size;
     allocateInfo.memoryTypeIndex =
         findMemoryType(physical, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     vkCheck(vkAllocateMemory(device, &allocateInfo, nullptr, &memory), "vkAllocateMemory");
     vkCheck(vkBindImageMemory(device, image, memory, 0), "vkBindImageMemory");
 
-    auto viewInfo = lambda::vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
+    auto viewInfo = lambdaui::vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
     viewInfo.image = image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;
@@ -192,7 +192,7 @@ struct VulkanReadbackBuffer {
 
   VulkanReadbackBuffer(VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkDeviceSize byteSize)
       : device(logicalDevice), physical(physicalDevice), size(byteSize) {
-    auto bufferInfo = lambda::vkStructure<VkBufferCreateInfo>(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
+    auto bufferInfo = lambdaui::vkStructure<VkBufferCreateInfo>(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
     bufferInfo.size = size;
     bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -201,7 +201,7 @@ struct VulkanReadbackBuffer {
     VkMemoryRequirements requirements{};
     vkGetBufferMemoryRequirements(device, buffer, &requirements);
 
-    auto allocateInfo = lambda::vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
+    auto allocateInfo = lambdaui::vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
     allocateInfo.allocationSize = requirements.size;
     allocateInfo.memoryTypeIndex = findMemoryType(
         physical, requirements.memoryTypeBits,
@@ -229,20 +229,20 @@ struct VulkanCopyContext {
 
   VulkanCopyContext(VkDevice logicalDevice, VkQueue renderQueue, std::uint32_t queueFamily)
       : device(logicalDevice), queue(renderQueue) {
-    auto poolInfo = lambda::vkStructure<VkCommandPoolCreateInfo>(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO);
+    auto poolInfo = lambdaui::vkStructure<VkCommandPoolCreateInfo>(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO);
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     poolInfo.queueFamilyIndex = queueFamily;
     vkCheck(vkCreateCommandPool(device, &poolInfo, nullptr, &pool), "vkCreateCommandPool");
 
     auto allocateInfo =
-        lambda::vkStructure<VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
+        lambdaui::vkStructure<VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
     allocateInfo.commandPool = pool;
     allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocateInfo.commandBufferCount = 1;
     vkCheck(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer),
             "vkAllocateCommandBuffers");
 
-    auto fenceInfo = lambda::vkStructure<VkFenceCreateInfo>(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
+    auto fenceInfo = lambdaui::vkStructure<VkFenceCreateInfo>(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
     vkCheck(vkCreateFence(device, &fenceInfo, nullptr, &fence), "vkCreateFence");
   }
 
@@ -258,12 +258,12 @@ struct VulkanCopyContext {
   void copyImageToBuffer(VkImage image, VkBuffer buffer, std::uint32_t width, std::uint32_t height,
                          VkImageLayout* currentLayout = nullptr) {
     vkCheck(vkResetCommandBuffer(commandBuffer, 0), "vkResetCommandBuffer");
-    auto beginInfo = lambda::vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
+    auto beginInfo = lambdaui::vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer");
 
     if (currentLayout && *currentLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-      auto barrier = lambda::vkStructure<VkImageMemoryBarrier>(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER);
+      auto barrier = lambdaui::vkStructure<VkImageMemoryBarrier>(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER);
       barrier.oldLayout = *currentLayout;
       barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
       barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -290,7 +290,7 @@ struct VulkanCopyContext {
                            buffer, 1, &copy);
     vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
-    auto submit = lambda::vkStructure<VkSubmitInfo>(VK_STRUCTURE_TYPE_SUBMIT_INFO);
+    auto submit = lambdaui::vkStructure<VkSubmitInfo>(VK_STRUCTURE_TYPE_SUBMIT_INFO);
     submit.commandBufferCount = 1;
     submit.pCommandBuffers = &commandBuffer;
     vkCheck(vkResetFences(device, 1, &fence), "vkResetFences");
@@ -422,16 +422,16 @@ struct StressScene {
 
 static StressScene makeStressScene(FreeTypeTextSystem& textSystem, std::shared_ptr<Image> const& image) {
   auto graph = std::make_unique<SceneGraph>();
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 640.f, 480.f},
+      lambdaui::Rect{0.f, 0.f, 640.f, 480.f},
       FillStyle::solid(Color{0.08f, 0.09f, 0.11f, 1.f})));
 
-  auto animatedGroup = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+  auto animatedGroup = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
   SceneNode* animatedGroupPtr = animatedGroup.get();
   for (int i = 0; i < 256; ++i) {
     animatedGroup->appendChild(std::make_unique<RectNode>(
-        lambda::Rect{static_cast<float>((i % 32) * 18), static_cast<float>((i / 32) * 18),
+        lambdaui::Rect{static_cast<float>((i % 32) * 18), static_cast<float>((i / 32) * 18),
                    14.f, 14.f},
         FillStyle::solid(Color{static_cast<float>((17 * i) % 255) / 255.f,
                                static_cast<float>((37 * i) % 255) / 255.f,
@@ -440,7 +440,7 @@ static StressScene makeStressScene(FreeTypeTextSystem& textSystem, std::shared_p
   }
   for (int i = 0; i < 64; ++i) {
     animatedGroup->appendChild(std::make_unique<TextNode>(
-        lambda::Rect{static_cast<float>((i % 8) * 72),
+        lambdaui::Rect{static_cast<float>((i % 8) * 72),
                    170.f + static_cast<float>(i / 8) * 16.f, 64.f, 14.f},
         makeLabel(textSystem, "Row " + std::to_string(i))));
   }
@@ -450,14 +450,14 @@ static StressScene makeStressScene(FreeTypeTextSystem& textSystem, std::shared_p
   triangle.lineTo({-80.f, 140.f});
   triangle.close();
   animatedGroup->appendChild(std::make_unique<PathNode>(
-      lambda::Rect{320.f, 40.f, 180.f, 140.f}, triangle,
+      lambdaui::Rect{320.f, 40.f, 180.f, 140.f}, triangle,
       FillStyle::solid(Color{0.2f, 0.6f, 0.9f, 1.f}), StrokeStyle::none(),
       ShadowStyle::none()));
   if (image) {
     std::shared_ptr<Image const> constImage = image;
     for (int i = 0; i < 9; ++i) {
       animatedGroup->appendChild(std::make_unique<ImageNode>(
-          lambda::Rect{static_cast<float>((i % 3) * 88),
+          lambdaui::Rect{static_cast<float>((i % 3) * 88),
                      320.f + static_cast<float>(i / 3) * 88.f, 72.f, 72.f},
           constImage));
     }
@@ -576,7 +576,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
 
   VulkanFrameRecorder recorded;
   REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
-  canvas->drawRect(lambda::Rect{16.f, 16.f, 32.f, 32.f}, CornerRadius{},
+  canvas->drawRect(lambdaui::Rect{16.f, 16.f, 32.f, 32.f}, CornerRadius{},
                    FillStyle::solid(Color{1.f, 0.f, 0.f, 1.f}), StrokeStyle::none(), ShadowStyle::none());
   endRecordedOpsCaptureForCanvas(canvas.get());
   CHECK(recorded.ops.size() == 1);
@@ -616,7 +616,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   secondCanvas->beginFrame();
   secondCanvas->clear(Colors::black);
   secondCanvas->save();
-  secondCanvas->translate(lambda::Point{16.f, 0.f});
+  secondCanvas->translate(lambdaui::Point{16.f, 0.f});
   REQUIRE(replayRecordedLocalOpsForCanvas(secondCanvas.get(), recorded));
   secondCanvas->restore();
   checkPreparedRectState(recorded, expectPreparedGeometry);
@@ -776,8 +776,8 @@ TEST_CASE("VulkanFrameRecorder replays captured image texture") {
   REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
   Size const imageSize = image->size();
   canvas->drawImage(*image,
-                    lambda::Rect{0.f, 0.f, imageSize.width, imageSize.height},
-                    lambda::Rect{8.f, 8.f, 24.f, 24.f},
+                    lambdaui::Rect{0.f, 0.f, imageSize.width, imageSize.height},
+                    lambdaui::Rect{8.f, 8.f, 24.f, 24.f},
                     CornerRadius{},
                     1.f);
   endRecordedOpsCaptureForCanvas(canvas.get());
@@ -846,8 +846,8 @@ TEST_CASE("Vulkan image draw keeps pending upload after same-frame source destru
   canvas->clear(Colors::black);
   Size const imageSize = image->size();
   canvas->drawImage(*image,
-                    lambda::Rect{0.f, 0.f, imageSize.width, imageSize.height},
-                    lambda::Rect{8.f, 8.f, 24.f, 24.f},
+                    lambdaui::Rect{0.f, 0.f, imageSize.width, imageSize.height},
+                    lambdaui::Rect{8.f, 8.f, 24.f, 24.f},
                     CornerRadius{},
                     1.f);
   image.reset();
@@ -908,8 +908,8 @@ TEST_CASE("VulkanFrameRecorder replays captured image after recording canvas is 
     REQUIRE(beginRecordedOpsCaptureForCanvas(sourceCanvas.get(), &recorded));
     Size const imageSize = image->size();
     sourceCanvas->drawImage(*image,
-                            lambda::Rect{0.f, 0.f, imageSize.width, imageSize.height},
-                            lambda::Rect{8.f, 8.f, 24.f, 24.f},
+                            lambdaui::Rect{0.f, 0.f, imageSize.width, imageSize.height},
+                            lambdaui::Rect{8.f, 8.f, 24.f, 24.f},
                             CornerRadius{},
                             1.f);
     endRecordedOpsCaptureForCanvas(sourceCanvas.get());
@@ -976,7 +976,7 @@ TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {
   CHECK(externalImage->size().width == static_cast<float>(width));
   CHECK(externalImage->size().height == static_cast<float>(height));
 
-  lambda::RenderTarget target{lambda::VulkanRenderTargetSpec{
+  lambdaui::RenderTarget target{lambdaui::VulkanRenderTargetSpec{
       .image = targetImage.image,
       .view = targetImage.view,
       .format = targetImage.format,
@@ -987,11 +987,11 @@ TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {
   }};
 
   target.beginFrame();
-  target.canvas().clear(lambda::Colors::black);
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 64.f, 64.f});
+  target.canvas().clear(lambdaui::Colors::black);
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 64.f, 64.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{16.f, 16.f, 32.f, 32.f},
-      lambda::FillStyle::solid(lambda::Color{1.f, 0.f, 0.f, 1.f})));
+      lambdaui::Rect{16.f, 16.f, 32.f, 32.f},
+      lambdaui::FillStyle::solid(lambdaui::Color{1.f, 0.f, 0.f, 1.f})));
   SceneGraph graph{std::move(root)};
   target.renderScene(graph);
   target.endFrame();
@@ -1020,7 +1020,7 @@ TEST_CASE("Vulkan RenderTarget applies backdrop blur to previously rendered pixe
   constexpr std::uint32_t width = 128;
   constexpr std::uint32_t height = 64;
   VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
-  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambda::VulkanRenderTargetSpec{
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambdaui::VulkanRenderTargetSpec{
       .image = targetImage.image,
       .view = targetImage.view,
       .format = targetImage.format,
@@ -1074,7 +1074,7 @@ TEST_CASE("Vulkan RenderTarget renders multiple stress frames") {
   REQUIRE(scene.animatedGroup != nullptr);
 
   for (int frame = 0; frame < 18; ++frame) {
-    scene.animatedGroup->setPosition(lambda::Point{0.f, static_cast<float>(frame % 3)});
+    scene.animatedGroup->setPosition(lambdaui::Point{0.f, static_cast<float>(frame % 3)});
     target.render(textSystem, *scene.graph, Color{0.08f, 0.09f, 0.11f, 1.f});
   }
 
@@ -1093,10 +1093,10 @@ TEST_CASE("Vulkan RenderTarget renders glyph atlas text") {
   font.weight = 500.f;
   auto layout = textSystem.layout("Cached glyphs", font, Colors::white, 320.f, {});
 
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
-  root->appendChild(std::make_unique<TextNode>(lambda::Rect{20.f, 20.f, 320.f, 48.f}, layout));
+      lambdaui::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
+  root->appendChild(std::make_unique<TextNode>(lambdaui::Rect{20.f, 20.f, 320.f, 48.f}, layout));
   SceneGraph graph{std::move(root)};
   target.render(textSystem, graph, Colors::black);
   std::vector<std::uint8_t> pixels = target.readPixels();
@@ -1128,17 +1128,17 @@ TEST_CASE("Vulkan prepared text replay uses current clip after scroll translatio
   REQUIRE(layout->runs.size() > 0);
   REQUIRE(layout->lines.size() > 9);
 
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 220.f, 160.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 220.f, 160.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 220.f, 160.f}, FillStyle::solid(Colors::black)));
+      lambdaui::Rect{0.f, 0.f, 220.f, 160.f}, FillStyle::solid(Colors::black)));
 
   auto viewport = std::make_unique<RectNode>(
-      lambda::Rect{20.f, 20.f, 160.f, 80.f}, FillStyle::none());
+      lambdaui::Rect{20.f, 20.f, 160.f, 80.f}, FillStyle::none());
   viewport->setClipsContents(true);
 
-  auto content = std::make_unique<SceneNode>(lambda::Rect{0.f, -230.f, 160.f, 360.f});
+  auto content = std::make_unique<SceneNode>(lambdaui::Rect{0.f, -230.f, 160.f, 360.f});
   content->appendChild(std::make_unique<TextNode>(
-      lambda::Rect{0.f, 0.f, 160.f, 340.f}, layout));
+      lambdaui::Rect{0.f, 0.f, 160.f, 340.f}, layout));
   viewport->appendChild(std::move(content));
   root->appendChild(std::move(viewport));
 
@@ -1156,15 +1156,15 @@ TEST_CASE("Vulkan RenderTarget applies rounded clip masks to child content") {
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
+      lambdaui::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
   auto clip = std::make_unique<RectNode>(
-      lambda::Rect{20.f, 20.f, 80.f, 20.f}, FillStyle::none(), StrokeStyle::none(),
-      CornerRadius::pill(lambda::Rect::sharp(0.f, 0.f, 80.f, 20.f)));
+      lambdaui::Rect{20.f, 20.f, 80.f, 20.f}, FillStyle::none(), StrokeStyle::none(),
+      CornerRadius::pill(lambdaui::Rect::sharp(0.f, 0.f, 80.f, 20.f)));
   clip->setClipsContents(true);
   clip->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 80.f, 20.f}, FillStyle::solid(Colors::red)));
+      lambdaui::Rect{0.f, 0.f, 80.f, 20.f}, FillStyle::solid(Colors::red)));
   root->appendChild(std::move(clip));
   SceneGraph graph{std::move(root)};
   target.render(textSystem, graph, Colors::white);
@@ -1185,33 +1185,33 @@ TEST_CASE("Vulkan RenderTarget preserves nested rounded clip masks") {
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 240, 120, 1.f};
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 240.f, 120.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 240.f, 120.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 240.f, 120.f}, FillStyle::solid(Colors::white)));
+      lambdaui::Rect{0.f, 0.f, 240.f, 120.f}, FillStyle::solid(Colors::white)));
 
   auto outerFirst = std::make_unique<RectNode>(
-      lambda::Rect{20.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      lambdaui::Rect{20.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{36.f, 36.f, 36.f, 36.f});
   outerFirst->setClipsContents(true);
   auto innerFirst = std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      lambdaui::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{4.f, 4.f, 4.f, 4.f});
   innerFirst->setClipsContents(true);
   innerFirst->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::solid(Colors::red)));
+      lambdaui::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::solid(Colors::red)));
   outerFirst->appendChild(std::move(innerFirst));
   root->appendChild(std::move(outerFirst));
 
   auto innerFirstRestrictive = std::make_unique<RectNode>(
-      lambda::Rect{130.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      lambdaui::Rect{130.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{4.f, 4.f, 4.f, 4.f});
   innerFirstRestrictive->setClipsContents(true);
   auto innerSecond = std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      lambdaui::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{36.f, 36.f, 36.f, 36.f});
   innerSecond->setClipsContents(true);
   innerSecond->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::solid(Colors::red)));
+      lambdaui::Rect{0.f, 0.f, 80.f, 80.f}, FillStyle::solid(Colors::red)));
   innerFirstRestrictive->appendChild(std::move(innerSecond));
   root->appendChild(std::move(innerFirstRestrictive));
 
@@ -1247,15 +1247,15 @@ TEST_CASE("Vulkan RenderTarget masks image quads with rounded clips") {
   std::shared_ptr<Image> image = Image::fromRgbaPixels(80, 80, rgba, vk.device());
   REQUIRE(image);
 
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 140.f, 120.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 140.f, 120.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 140.f, 120.f}, FillStyle::solid(Colors::white)));
+      lambdaui::Rect{0.f, 0.f, 140.f, 120.f}, FillStyle::solid(Colors::white)));
   auto clip = std::make_unique<RectNode>(
-      lambda::Rect{20.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      lambdaui::Rect{20.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{36.f, 36.f, 36.f, 36.f});
   clip->setClipsContents(true);
   clip->appendChild(std::make_unique<ImageNode>(
-      lambda::Rect{0.f, 0.f, 80.f, 80.f}, image, ImageFillMode::Stretch));
+      lambdaui::Rect{0.f, 0.f, 80.f, 80.f}, image, ImageFillMode::Stretch));
   root->appendChild(std::move(clip));
 
   SceneGraph graph{std::move(root)};
@@ -1278,17 +1278,17 @@ TEST_CASE("Vulkan RenderTarget masks path rendering with rounded clips") {
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 140, 120, 1.f};
   Path path;
-  path.rect(lambda::Rect{0.f, 0.f, 80.f, 80.f}, CornerRadius{});
+  path.rect(lambdaui::Rect{0.f, 0.f, 80.f, 80.f}, CornerRadius{});
 
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 140.f, 120.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 140.f, 120.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 140.f, 120.f}, FillStyle::solid(Colors::white)));
+      lambdaui::Rect{0.f, 0.f, 140.f, 120.f}, FillStyle::solid(Colors::white)));
   auto clip = std::make_unique<RectNode>(
-      lambda::Rect{20.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      lambdaui::Rect{20.f, 20.f, 80.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{36.f, 36.f, 36.f, 36.f});
   clip->setClipsContents(true);
   clip->appendChild(std::make_unique<PathNode>(
-      lambda::Rect{0.f, 0.f, 80.f, 80.f}, path, FillStyle::solid(Colors::red)));
+      lambdaui::Rect{0.f, 0.f, 80.f, 80.f}, path, FillStyle::solid(Colors::red)));
   root->appendChild(std::move(clip));
 
   SceneGraph graph{std::move(root)};
@@ -1316,15 +1316,15 @@ TEST_CASE("Vulkan RenderTarget masks glyph quads with rounded clips") {
   font.weight = 700.f;
   auto layout = textSystem.layout("MMMM", font, Colors::black, 220.f, {});
 
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 180.f, 120.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 180.f, 120.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 180.f, 120.f}, FillStyle::solid(Colors::white)));
+      lambdaui::Rect{0.f, 0.f, 180.f, 120.f}, FillStyle::solid(Colors::white)));
   auto clip = std::make_unique<RectNode>(
-      lambda::Rect{20.f, 20.f, 120.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
+      lambdaui::Rect{20.f, 20.f, 120.f, 80.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{38.f, 38.f, 38.f, 38.f});
   clip->setClipsContents(true);
   clip->appendChild(std::make_unique<TextNode>(
-      lambda::Rect{-12.f, -8.f, 220.f, 100.f}, layout));
+      lambdaui::Rect{-12.f, -8.f, 220.f, 100.f}, layout));
   root->appendChild(std::move(clip));
 
   SceneGraph graph{std::move(root)};
@@ -1342,13 +1342,13 @@ TEST_CASE("Vulkan RenderTarget shades linear gradient rect fills") {
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
+      lambdaui::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{20.f, 20.f, 100.f, 40.f},
-      FillStyle::linearGradient(Colors::red, Colors::blue, lambda::Point{0.f, 0.f},
-                                lambda::Point{1.f, 0.f})));
+      lambdaui::Rect{20.f, 20.f, 100.f, 40.f},
+      FillStyle::linearGradient(Colors::red, Colors::blue, lambdaui::Point{0.f, 0.f},
+                                lambdaui::Point{1.f, 0.f})));
   SceneGraph graph{std::move(root)};
   target.render(textSystem, graph, Colors::black);
   std::vector<std::uint8_t> pixels = target.readPixels();
@@ -1366,14 +1366,14 @@ TEST_CASE("Vulkan RenderTarget shades radial and conical gradient rect fills") {
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
+      lambdaui::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::black)));
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{20.f, 80.f, 100.f, 100.f},
-      FillStyle::radialGradient(Colors::white, Colors::black, lambda::Point{0.5f, 0.5f}, 0.5f)));
+      lambdaui::Rect{20.f, 80.f, 100.f, 100.f},
+      FillStyle::radialGradient(Colors::white, Colors::black, lambdaui::Point{0.5f, 0.5f}, 0.5f)));
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{150.f, 80.f, 100.f, 100.f},
+      lambdaui::Rect{150.f, 80.f, 100.f, 100.f},
       FillStyle::conicalGradient({
           GradientStop{0.00f, Colors::red},
           GradientStop{0.33f, Colors::green},
@@ -1400,15 +1400,15 @@ TEST_CASE("Vulkan RenderTarget preserves rounded rect geometry when clipped by t
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
+      lambdaui::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
   auto clip = std::make_unique<RectNode>(
-      lambda::Rect{20.f, 30.f, 140.f, 120.f}, FillStyle::none(), StrokeStyle::none(),
+      lambdaui::Rect{20.f, 30.f, 140.f, 120.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{});
   clip->setClipsContents(true);
   clip->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, -10.f, 100.f, 80.f}, FillStyle::solid(Colors::red),
+      lambdaui::Rect{0.f, -10.f, 100.f, 80.f}, FillStyle::solid(Colors::red),
       StrokeStyle::none(), CornerRadius{28.f, 28.f, 28.f, 28.f}));
   root->appendChild(std::move(clip));
   SceneGraph graph{std::move(root)};
@@ -1494,7 +1494,7 @@ TEST_CASE("Vulkan external render-target frame capture waits for submitted compl
   VulkanCopyContext external{vk.device(), vk.queue(), vk.queueFamily()};
 
   vkCheck(vkResetCommandBuffer(external.commandBuffer, 0), "vkResetCommandBuffer external render target");
-  auto beginInfo = lambda::vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
+  auto beginInfo = lambdaui::vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
   beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
   vkCheck(vkBeginCommandBuffer(external.commandBuffer, &beginInfo), "vkBeginCommandBuffer external render target");
 
@@ -1531,7 +1531,7 @@ TEST_CASE("Vulkan external render-target frame capture waits for submitted compl
   CHECK_FALSE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
 
   vkCheck(vkEndCommandBuffer(external.commandBuffer), "vkEndCommandBuffer external render target");
-  auto submit = lambda::vkStructure<VkSubmitInfo>(VK_STRUCTURE_TYPE_SUBMIT_INFO);
+  auto submit = lambdaui::vkStructure<VkSubmitInfo>(VK_STRUCTURE_TYPE_SUBMIT_INFO);
   submit.commandBufferCount = 1;
   submit.pCommandBuffers = &external.commandBuffer;
   vkCheck(vkResetFences(vk.device(), 1, &external.fence), "vkResetFences external render target");
@@ -1560,11 +1560,11 @@ TEST_CASE("Vulkan RenderTarget preserves image sampling when clipped by the view
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget source{vk, 120, 160, 1.f};
-  auto sourceRoot = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 120.f, 160.f});
+  auto sourceRoot = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 120.f, 160.f});
   sourceRoot->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 120.f, 160.f},
-      FillStyle::linearGradient(Colors::red, Colors::blue, lambda::Point{0.f, 0.f},
-                                lambda::Point{1.f, 1.f})));
+      lambdaui::Rect{0.f, 0.f, 120.f, 160.f},
+      FillStyle::linearGradient(Colors::red, Colors::blue, lambdaui::Point{0.f, 0.f},
+                                lambdaui::Point{1.f, 1.f})));
   SceneGraph sourceGraph{std::move(sourceRoot)};
   source.render(textSystem, sourceGraph, Colors::transparent, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
   std::shared_ptr<Image> image = Image::fromExternalVulkan(
@@ -1573,17 +1573,17 @@ TEST_CASE("Vulkan RenderTarget preserves image sampling when clipped by the view
   REQUIRE(image);
 
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 640.f, 480.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 640.f, 480.f});
   root->appendChild(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
+      lambdaui::Rect{0.f, 0.f, 640.f, 480.f}, FillStyle::solid(Colors::white)));
   root->appendChild(std::make_unique<ImageNode>(
-      lambda::Rect{20.f, 20.f, 120.f, 160.f}, image, ImageFillMode::Stretch));
+      lambdaui::Rect{20.f, 20.f, 120.f, 160.f}, image, ImageFillMode::Stretch));
   auto clip = std::make_unique<RectNode>(
-      lambda::Rect{180.f, 40.f, 120.f, 140.f}, FillStyle::none(), StrokeStyle::none(),
+      lambdaui::Rect{180.f, 40.f, 120.f, 140.f}, FillStyle::none(), StrokeStyle::none(),
       CornerRadius{});
   clip->setClipsContents(true);
   clip->appendChild(std::make_unique<ImageNode>(
-      lambda::Rect{0.f, -20.f, 120.f, 160.f}, image, ImageFillMode::Stretch));
+      lambdaui::Rect{0.f, -20.f, 120.f, 160.f}, image, ImageFillMode::Stretch));
   root->appendChild(std::move(clip));
   SceneGraph graph{std::move(root)};
   target.render(textSystem, graph, Colors::white);
@@ -1599,21 +1599,21 @@ TEST_CASE("SceneRenderer rasterizes RasterCacheNode into a reusable Vulkan image
 
   FreeTypeTextSystem textSystem;
   HeadlessVulkanTarget target{vk, 640, 480};
-  auto root = std::make_unique<SceneNode>(lambda::Rect{0.f, 0.f, 160.f, 120.f});
-  auto raster = std::make_unique<RasterCacheNode>(lambda::Rect{20.f, 24.f, 80.f, 40.f});
+  auto root = std::make_unique<SceneNode>(lambdaui::Rect{0.f, 0.f, 160.f, 120.f});
+  auto raster = std::make_unique<RasterCacheNode>(lambdaui::Rect{20.f, 24.f, 80.f, 40.f});
   RasterCacheNode* rasterNode = raster.get();
   raster->setSubtree(std::make_unique<RectNode>(
-      lambda::Rect{0.f, 0.f, 80.f, 40.f}, FillStyle::solid(Colors::red)));
+      lambdaui::Rect{0.f, 0.f, 80.f, 40.f}, FillStyle::solid(Colors::red)));
   root->appendChild(std::move(raster));
   SceneGraph graph{std::move(root)};
 
   target.render(textSystem, graph, Colors::black);
   std::shared_ptr<Image> firstCache = rasterNode->cachedImage();
   REQUIRE(firstCache);
-  CHECK(firstCache->size() == lambda::Size{160.f, 80.f});
+  CHECK(firstCache->size() == lambdaui::Size{160.f, 80.f});
 
   target.render(textSystem, graph, Colors::black);
   CHECK(rasterNode->cachedImage() == firstCache);
 }
 
-#endif // LAMBDA_VULKAN
+#endif // LAMBDAUI_VULKAN

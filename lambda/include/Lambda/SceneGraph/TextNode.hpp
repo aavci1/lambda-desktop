@@ -9,7 +9,7 @@
 
 #include <memory>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 class TextNode final : public SceneNode {
   public:
@@ -28,4 +28,4 @@ class TextNode final : public SceneNode {
     std::shared_ptr<TextLayout const> layout_{};
 };
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

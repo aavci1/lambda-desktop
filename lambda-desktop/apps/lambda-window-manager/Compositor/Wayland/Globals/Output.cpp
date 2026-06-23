@@ -7,7 +7,7 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void outputRelease(wl_client*, wl_resource* resource) {
@@ -61,4 +61,4 @@ void bindOutput(wl_client* client, void* data, std::uint32_t version, std::uint3
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -3,7 +3,7 @@
 
 #include <utility>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 ImageNode::ImageNode(Rect bounds, std::shared_ptr<Image const> image, ImageFillMode fillMode)
     : SceneNode(SceneNodeKind::Image, bounds), image_(std::move(image)), fillMode_(fillMode) {}
@@ -41,4 +41,4 @@ void ImageNode::render(Renderer &renderer) const {
     renderer.drawImage(*image_, localBounds(), fillMode_);
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

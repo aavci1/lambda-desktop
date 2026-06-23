@@ -4,7 +4,7 @@
 #include <span>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kDmabufFeedbackTrancheFlagScanout = 1u;
 
@@ -27,4 +27,4 @@ struct DmabufFeedbackPlan {
     std::span<DmabufFeedbackPair const> rendererPairs,
     std::span<DmabufFeedbackPair const> scanoutPreferredPairs);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -5,7 +5,7 @@
 
 #include <algorithm>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -22,7 +22,7 @@ ProgressBar::Style resolveStyle(ProgressBar::Style const &style, Theme const &th
 } // namespace
 
 Element ProgressBar::body() const {
-    ProgressBar::Style const resolved = resolveStyle(style, lambda::useEnvironment<ThemeKey>()());
+    ProgressBar::Style const resolved = resolveStyle(style, lambdaui::useEnvironment<ThemeKey>()());
     float const clamped = std::clamp(progress, 0.f, 1.f);
     Rect const bounds = useBounds();
     float const componentWidth = bounds.width > 0.f ? bounds.width : kDefaultProgressBarWidth;
@@ -52,4 +52,4 @@ Element ProgressBar::body() const {
         .size(componentWidth, resolved.trackHeight);
 }
 
-} // namespace lambda
+} // namespace lambdaui

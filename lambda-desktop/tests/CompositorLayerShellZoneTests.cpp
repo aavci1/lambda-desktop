@@ -7,27 +7,27 @@
 #include <vector>
 
 TEST_CASE("layer shell reserved zones aggregate dock") {
-  std::vector<lambda::compositor::LayerShellReservedZoneInput> layers{
+  std::vector<lambdaui::compositor::LayerShellReservedZoneInput> layers{
       {.nameSpace = "lambda.dock",
        .exclusiveZone = 0,
-       .anchor = lambda::compositor::kLayerShellAnchorBottom,
+       .anchor = lambdaui::compositor::kLayerShellAnchorBottom,
        .marginBottom = 8,
        .extent = 64},
   };
-  auto const zones = lambda::compositor::aggregateLayerShellReservedZones(layers);
+  auto const zones = lambdaui::compositor::aggregateLayerShellReservedZones(layers);
   CHECK(zones.dock == 80);
 }
 
 TEST_CASE("layer shell reserved zones ignore unrelated namespaces") {
-  std::vector<lambda::compositor::LayerShellReservedZoneInput> layers{
+  std::vector<lambdaui::compositor::LayerShellReservedZoneInput> layers{
       {.nameSpace = "com.example.panel", .exclusiveZone = 48},
   };
-  auto const zones = lambda::compositor::aggregateLayerShellReservedZones(layers);
+  auto const zones = lambdaui::compositor::aggregateLayerShellReservedZones(layers);
   CHECK(zones.dock == 0);
 }
 
 TEST_CASE("layer shell reserved zones use committed dock anchors and margins") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   std::vector<LayerShellReservedZoneInput> layers{
       {.nameSpace = "lambda.dock",
@@ -50,7 +50,7 @@ TEST_CASE("layer shell reserved zones use committed dock anchors and margins") {
 }
 
 TEST_CASE("layer shell configure size resolves output-relative dimensions") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   auto const horizontal = resolveLayerShellConfigureSize({
       .requestedWidth = 0,
@@ -88,7 +88,7 @@ TEST_CASE("layer shell configure size resolves output-relative dimensions") {
 }
 
 TEST_CASE("layer shell placement resolves anchors and margins") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   auto const topLeft = resolveLayerShellPlacement({
       .anchor = kLayerShellAnchorTop | kLayerShellAnchorLeft,
@@ -138,7 +138,7 @@ TEST_CASE("layer shell placement resolves anchors and margins") {
 }
 
 TEST_CASE("layer shell placement applies logical output origin") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   auto const bottomRight = resolveLayerShellPlacement({
       .anchor = kLayerShellAnchorBottom | kLayerShellAnchorRight,
@@ -167,7 +167,7 @@ TEST_CASE("layer shell placement applies logical output origin") {
 }
 
 TEST_CASE("layer shell keyboard interactivity normalizes by protocol version") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   CHECK_FALSE(layerShellSupportsOnDemandKeyboardInteractivity(
       ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND_SINCE_VERSION - 1));
@@ -194,7 +194,7 @@ TEST_CASE("layer shell keyboard interactivity normalizes by protocol version") {
 }
 
 TEST_CASE("layer shell fullscreen hide policy is limited to dock panels") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   CHECK(layerShellNamespaceHidesForFullscreen("lambda.dock"));
   CHECK_FALSE(layerShellNamespaceHidesForFullscreen("lambda.command-launcher"));
@@ -207,7 +207,7 @@ TEST_CASE("layer shell fullscreen hide policy is limited to dock panels") {
 }
 
 TEST_CASE("layer shell command launcher modal focus policy requires mapped exclusive layer") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   CHECK(layerShellClaimsCommandLauncherModal("lambda.command-launcher",
                                              true,
@@ -227,7 +227,7 @@ TEST_CASE("layer shell command launcher modal focus policy requires mapped exclu
 }
 
 TEST_CASE("layer shell output geometry reconfigure waits for initialized resources") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   CHECK(layerShellShouldReconfigureForOutputGeometry(true, true, true));
   CHECK_FALSE(layerShellShouldReconfigureForOutputGeometry(false, true, true));
@@ -236,7 +236,7 @@ TEST_CASE("layer shell output geometry reconfigure waits for initialized resourc
 }
 
 TEST_CASE("layer shell pending state applies only on commit") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::LayerSurface layer;
   layer.width = 120;
@@ -278,7 +278,7 @@ TEST_CASE("layer shell pending state applies only on commit") {
 }
 
 TEST_CASE("layer shell dynamic layer changes apply on commit without configure") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::LayerSurface layer;
   layer.width = 120;
@@ -300,7 +300,7 @@ TEST_CASE("layer shell dynamic layer changes apply on commit without configure")
 }
 
 TEST_CASE("layer shell pending state rejects omitted dimensions without opposing anchors") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::LayerSurface layer;
   layer.width = 120;
@@ -318,7 +318,7 @@ TEST_CASE("layer shell pending state rejects omitted dimensions without opposing
 }
 
 TEST_CASE("layer shell zero size is valid when opposing anchors commit with it") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::LayerSurface layer;
   layer.width = 1;
@@ -343,7 +343,7 @@ TEST_CASE("layer shell zero size is valid when opposing anchors commit with it")
 }
 
 TEST_CASE("layer shell configure ack validates serials and applies on commit") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::LayerSurface layer;
   layer.width = 120;
@@ -376,7 +376,7 @@ TEST_CASE("layer shell configure ack validates serials and applies on commit") {
 }
 
 TEST_CASE("layer shell map and unmap reset configure state") {
-  using namespace lambda::compositor;
+  using namespace lambdaui::compositor;
 
   WaylandServer::Impl::LayerSurface layer;
   layer.initialized = true;

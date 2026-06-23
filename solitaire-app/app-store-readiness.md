@@ -22,7 +22,7 @@ This is well above demo quality. As an actual game it could ship.
 
 In rough order of importance:
 
-**1. Production signing and submission packaging.** `solitaire-app` now owns its `Solitaire.app` bundle path locally, including `Info.plist`, bundled fonts, icon conversion, entitlements, and package helper. App Store submission still needs Apple Distribution signing and the right certificates.
+**1. Production signing and submission packaging.** `lambda-solitaire` now owns its `Solitaire.app` bundle path locally, including `Info.plist`, bundled fonts, icon conversion, entitlements, and package helper. App Store submission still needs Apple Distribution signing and the right certificates.
 
 **2. No menu bar.** macOS apps must have at least a basic application menu (App / File / Edit / View / Window / Help). The framework has zero menu support — `NSMenu`/`setMainMenu` aren't referenced anywhere. **Without this, Cmd+Q doesn't quit, Cmd+M doesn't minimize, no About item, no Help menu.** App Store reviewers will reject. Two paths:
 - **Quick path**: Create a minimal NSMenu in the solitaire `main.cpp` directly using `<AppKit/AppKit.h>` after `[NSApplication sharedApplication]` runs. Hand-build the menu items. ~80 lines of Obj-C++.
@@ -84,7 +84,7 @@ A few things worth flagging that aren't blockers but you should know about:
 This is the path. Each step independent.
 
 **Phase 1: Finish bundle behavior** (week 1)
-1. Keep the existing `solitaire-app` `.app` bundle path green: `Info.plist`, `Contents/MacOS/Solitaire`, bundled fonts, and generated `.icns`.
+1. Keep the existing `lambda-solitaire` `.app` bundle path green: `Info.plist`, `Contents/MacOS/Solitaire`, bundled fonts, and generated `.icns`.
 2. Add minimal `NSMenu` setup in `main.cpp` (App menu with Quit/About/Hide; File menu with New Game; Edit with Undo; Window with Minimize/Zoom; Help). ~80 lines Obj-C++.
 3. Set `[window setContentMinSize:{800, 600}]` after window creation.
 4. Test bundle builds and runs as `.app`.

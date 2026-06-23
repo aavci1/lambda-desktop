@@ -2,14 +2,14 @@
 
 #include <Lambda/UI/Environment.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 LAMBDA_DEFINE_ENVIRONMENT_KEY(SharedEnvironmentTestKey, int, 17);
 
-} // namespace lambda
+} // namespace lambdaui
 
-namespace lambda::tests {
+namespace lambdaui::tests {
 
 std::uint16_t sharedEnvironmentTestKeyIndexFromOtherTranslationUnit();
 
-} // namespace lambda::tests
+} // namespace lambdaui::tests

@@ -93,7 +93,7 @@ struct SidebarVolumeCommand {
 struct SidebarPlace {
   std::string id;
   std::string label;
-  lambda::IconName icon = lambda::IconName::Folder;
+  lambdaui::IconName icon = lambdaui::IconName::Folder;
   std::filesystem::path path;
   SidebarPlaceKind kind = SidebarPlaceKind::Directory;
   std::string subtitle;
@@ -125,15 +125,15 @@ struct SidebarVolumeActionResult {
 };
 
 struct SidebarVolumeActionBackend {
-  std::function<lambda::system::UDisks2OperationResult(std::string const&)> mountFilesystem;
-  std::function<lambda::system::UDisks2OperationResult(std::string const&, bool)> unmountFilesystem;
-  std::function<lambda::system::UDisks2OperationResult(std::string const&)> ejectDrive;
-  std::function<lambda::system::UDisks2OperationResult(std::string const&)> cancelJob;
+  std::function<lambdaui::system::UDisks2OperationResult(std::string const&)> mountFilesystem;
+  std::function<lambdaui::system::UDisks2OperationResult(std::string const&, bool)> unmountFilesystem;
+  std::function<lambdaui::system::UDisks2OperationResult(std::string const&)> ejectDrive;
+  std::function<lambdaui::system::UDisks2OperationResult(std::string const&)> cancelJob;
 };
 
 struct FilesAutoMountRequest {
   std::string volumePath;
-  lambda::system::UDisks2MountOptions options;
+  lambdaui::system::UDisks2MountOptions options;
 };
 
 struct BreadcrumbCrumb {
@@ -345,14 +345,14 @@ std::map<std::string, std::filesystem::path> parseXdgUserDirs(std::string_view c
                                                               std::filesystem::path const& home);
 std::vector<SidebarPlace> const& sidebarPlaces();
 std::vector<SidebarPlace> sidebarPlacesWithVolumes(std::vector<SidebarPlace> places,
-                                                   lambda::system::UDisks2Snapshot const& snapshot);
+                                                   lambdaui::system::UDisks2Snapshot const& snapshot);
 std::vector<SidebarPlace> sidebarPlacesWithMountedVolumes();
 std::vector<SidebarVolumeCommand> sidebarVolumeContextCommands(SidebarPlace const& place);
-SidebarVolumeActionBackend udisksSidebarVolumeActionBackend(lambda::system::UDisks2Client& client);
+SidebarVolumeActionBackend udisksSidebarVolumeActionBackend(lambdaui::system::UDisks2Client& client);
 SidebarVolumeActionResult performSidebarVolumeAction(SidebarPlace const& place,
                                                      SidebarVolumeCommandKind command,
                                                      SidebarVolumeActionBackend const& backend);
-std::vector<FilesAutoMountRequest> autoMountRequestsForVolumes(lambda::system::UDisks2Snapshot const& snapshot,
+std::vector<FilesAutoMountRequest> autoMountRequestsForVolumes(lambdaui::system::UDisks2Snapshot const& snapshot,
                                                                FilesPreferences const& preferences);
 ListDirectoryResult listDirectory(std::filesystem::path const& directory, bool includeHidden = false);
 std::vector<FileEntry> sortedEntries(std::vector<FileEntry> entries,
@@ -410,7 +410,7 @@ FileSelectionState moveSelectionByOffset(FileSelectionState state,
 FilePointerSelectionResult selectionForPointerTap(FileSelectionState state,
                                                   std::vector<FileEntry> const& entries,
                                                   int index,
-                                                  lambda::Modifiers modifiers);
+                                                  lambdaui::Modifiers modifiers);
 std::vector<FileEntry> selectedEntries(std::vector<FileEntry> const& entries, FileSelectionState const& selection);
 std::vector<FileContextCommand> contextMenuCommands(std::vector<FileEntry> const& entries,
                                                     FileSelectionState const& selection,

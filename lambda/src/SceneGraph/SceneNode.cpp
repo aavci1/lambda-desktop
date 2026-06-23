@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 namespace {
 
@@ -215,7 +215,7 @@ bool SceneNode::relayout(LayoutConstraints const& constraints, bool storeConstra
     if (effectiveStoreConstraints) {
         setLayoutConstraints(constraints);
     }
-    bool const shouldDump = ::lambda::layoutDebugEnabled() && gRelayoutDepth == 0;
+    bool const shouldDump = ::lambdaui::layoutDebugEnabled() && gRelayoutDepth == 0;
     ++gRelayoutDepth;
     TransientRelayoutScope const transientScope{!storeConstraints};
     relayout_(constraints);
@@ -415,4 +415,4 @@ std::unique_ptr<PreparedRenderOps>& detail::SceneNodeAccess::preparedRenderOps(
     return node.preparedRenderOps_;
 }
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

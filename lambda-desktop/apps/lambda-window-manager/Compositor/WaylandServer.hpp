@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct CompositorKeyboardConfig {
   std::string rules;
@@ -31,8 +31,8 @@ struct CompositorInputConfig {
 
 class WaylandServer {
 public:
-  using ShortcutAction = lambda::compositor::ShortcutAction;
-  using ShortcutBinding = lambda::compositor::ShortcutBinding;
+  using ShortcutAction = lambdaui::compositor::ShortcutAction;
+  using ShortcutBinding = lambdaui::compositor::ShortcutBinding;
 
   explicit WaylandServer(WaylandOutputInfo output);
   ~WaylandServer();
@@ -111,4 +111,4 @@ private:
   std::unique_ptr<Impl> impl_;
 };
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

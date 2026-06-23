@@ -11,16 +11,16 @@
 
 #import <Cocoa/Cocoa.h>
 
-namespace lambda {
+namespace lambdaui {
 class MacApplication;
 }
 
 @interface LambdaAppDelegate : NSObject <NSApplicationDelegate, NSMenuDelegate>
-@property(nonatomic, assign) lambda::MacApplication* owner;
+@property(nonatomic, assign) lambdaui::MacApplication* owner;
 - (void)lambdaMenuAction:(id)sender;
 @end
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -241,7 +241,7 @@ class MacApplication final : public platform::Application {
 public:
   void initialize() override {
     [NSApplication sharedApplication];
-#if defined(LAMBDA_TESTING)
+#if defined(LAMBDAUI_TESTING)
     NSString* processName = [[NSProcessInfo processInfo] processName];
     bool const headlessTestProcess = processName && [processName isEqualToString:@"lambda-tests"];
     [NSApp setActivationPolicy:headlessTestProcess ? NSApplicationActivationPolicyProhibited
@@ -462,7 +462,7 @@ std::unique_ptr<Application> createApplication() {
 }
 } // namespace platform
 
-} // namespace lambda
+} // namespace lambdaui
 
 @implementation LambdaAppDelegate
 

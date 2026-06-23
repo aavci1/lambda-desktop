@@ -12,8 +12,8 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::startPrivateBus;
 
 template <typename Callback>
 class ScopeExit {
@@ -25,8 +25,8 @@ private:
   Callback callback_;
 };
 
-std::shared_ptr<lambda::dbus::VariantDictionary> options(std::string reason) {
-  auto value = std::make_shared<lambda::dbus::VariantDictionary>();
+std::shared_ptr<lambdaui::dbus::VariantDictionary> options(std::string reason) {
+  auto value = std::make_shared<lambdaui::dbus::VariantDictionary>();
   value->values["reason"] = std::move(reason);
   return value;
 }
@@ -46,11 +46,11 @@ TEST_CASE("PortalInhibitService tracks inhibit requests and monitor acknowledgem
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::PortalInhibitService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::PortalInhibitService::serviceName);
 
-  lambda::system::PortalInhibitService inhibit(serviceBus);
+  lambdaui::system::PortalInhibitService inhibit(serviceBus);
   auto slot = inhibit.exportObject();
 
   std::atomic<bool> serviceRunning = true;
@@ -67,12 +67,12 @@ TEST_CASE("PortalInhibitService tracks inhibit requests and monitor acknowledgem
   });
 
   std::string const requestPath = "/org/freedesktop/portal/desktop/request/1_1/inhibit";
-  auto inhibitReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalInhibitService::serviceName,
-      .path = lambda::system::PortalInhibitService::objectPath,
-      .interface = lambda::system::PortalInhibitService::interfaceName,
+  auto inhibitReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalInhibitService::serviceName,
+      .path = lambdaui::system::PortalInhibitService::objectPath,
+      .interface = lambdaui::system::PortalInhibitService::interfaceName,
       .member = "Inhibit",
-      .arguments = {lambda::dbus::ObjectPath{requestPath},
+      .arguments = {lambdaui::dbus::ObjectPath{requestPath},
                     std::string("org.lambda.TestApp"),
                     std::string("wayland:window"),
                     std::uint32_t(5),
@@ -87,10 +87,10 @@ TEST_CASE("PortalInhibitService tracks inhibit requests and monitor acknowledgem
   CHECK(request->reason == "Rendering a video");
   CHECK(!request->closed);
 
-  auto closeReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalInhibitService::serviceName,
+  auto closeReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalInhibitService::serviceName,
       .path = requestPath,
-      .interface = lambda::system::PortalInhibitService::requestInterfaceName,
+      .interface = lambdaui::system::PortalInhibitService::requestInterfaceName,
       .member = "Close",
   });
   CHECK(closeReply.valid());
@@ -100,13 +100,13 @@ TEST_CASE("PortalInhibitService tracks inhibit requests and monitor acknowledgem
 
   std::string const monitorRequestPath = "/org/freedesktop/portal/desktop/request/1_1/monitor";
   std::string const sessionPath = "/org/freedesktop/portal/desktop/session/1_1/session";
-  auto monitorReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalInhibitService::serviceName,
-      .path = lambda::system::PortalInhibitService::objectPath,
-      .interface = lambda::system::PortalInhibitService::interfaceName,
+  auto monitorReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalInhibitService::serviceName,
+      .path = lambdaui::system::PortalInhibitService::objectPath,
+      .interface = lambdaui::system::PortalInhibitService::interfaceName,
       .member = "CreateMonitor",
-      .arguments = {lambda::dbus::ObjectPath{monitorRequestPath},
-                    lambda::dbus::ObjectPath{sessionPath},
+      .arguments = {lambdaui::dbus::ObjectPath{monitorRequestPath},
+                    lambdaui::dbus::ObjectPath{sessionPath},
                     std::string("org.lambda.TestApp"),
                     std::string("wayland:window")},
   });
@@ -117,12 +117,12 @@ TEST_CASE("PortalInhibitService tracks inhibit requests and monitor acknowledgem
   CHECK(monitor->appId == "org.lambda.TestApp");
   CHECK(!monitor->queryEndAcknowledged);
 
-  auto queryReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::PortalInhibitService::serviceName,
-      .path = lambda::system::PortalInhibitService::objectPath,
-      .interface = lambda::system::PortalInhibitService::interfaceName,
+  auto queryReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::PortalInhibitService::serviceName,
+      .path = lambdaui::system::PortalInhibitService::objectPath,
+      .interface = lambdaui::system::PortalInhibitService::interfaceName,
       .member = "QueryEndResponse",
-      .arguments = {lambda::dbus::ObjectPath{sessionPath}},
+      .arguments = {lambdaui::dbus::ObjectPath{sessionPath}},
   });
   CHECK(queryReply.valid());
   monitor = inhibit.monitor(sessionPath);

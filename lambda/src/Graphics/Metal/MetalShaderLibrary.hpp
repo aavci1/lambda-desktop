@@ -2,9 +2,9 @@
 
 #import <Metal/Metal.h>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
-/// Loads the embedded `LambdaShaders.metallib` once per `MTLDevice` (cached).
-id<MTLLibrary> lambdaLoadShaderLibrary(id<MTLDevice> device);
+/// Loads the embedded `LambdaUIShaders.metallib` once per `MTLDevice` (cached).
+id<MTLLibrary> lambdauiLoadShaderLibrary(id<MTLDevice> device);
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

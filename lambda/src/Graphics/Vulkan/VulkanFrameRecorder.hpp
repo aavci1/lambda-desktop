@@ -11,7 +11,7 @@
 struct VmaAllocator_T;
 using VmaAllocator = VmaAllocator_T *;
 
-namespace lambda {
+namespace lambdaui {
 
 struct VulkanFrameRecorderResources {
   VmaAllocator allocator = VK_NULL_HANDLE;
@@ -34,7 +34,7 @@ void retireVulkanFrameRecorderResources(VulkanFrameRecorderResources resources) 
 void destroyVulkanFrameRecorderResourcesNow(VulkanFrameRecorderResources& resources) noexcept;
 bool deferVulkanFrameRecorderResourcesDestroy(VulkanFrameRecorderResources resources) noexcept;
 
-#if defined(LAMBDA_TESTING)
+#if defined(LAMBDAUI_TESTING)
 using VulkanFrameRecorderRetireHook =
     std::function<bool(VulkanFrameRecorderResources const& resources)>;
 void setVulkanFrameRecorderRetireHookForTesting(VulkanFrameRecorderRetireHook hook);
@@ -84,4 +84,4 @@ struct VulkanFrameRecorder {
   void clear();
 };
 
-} // namespace lambda
+} // namespace lambdaui

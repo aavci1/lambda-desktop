@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <memory>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 extern struct zwp_primary_selection_offer_v1_interface const primarySelectionOfferImpl;
@@ -671,4 +671,4 @@ void bindDataDeviceManager(wl_client* client, void* data, std::uint32_t version,
   bindDataDeviceManagerImpl(client, data, version, id);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

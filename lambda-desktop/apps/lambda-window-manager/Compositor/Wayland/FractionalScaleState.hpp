@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kFractionalScaleVersion = 1;
 
@@ -16,4 +16,4 @@ inline constexpr std::uint32_t kFractionalScaleVersion = 1;
   return static_cast<std::uint32_t>(std::clamp(std::lround(scale * 120.f), 60l, 480l));
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -4,7 +4,7 @@
 #include <Lambda/Graphics/RenderTarget.hpp>
 #include <Lambda/Graphics/VulkanContext.hpp>
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 
 #include "Compositor/Surface/CommittedSurfacePainter.hpp"
 #include "Graphics/Linux/FreeTypeTextSystem.hpp"
@@ -24,7 +24,7 @@
 
 namespace {
 
-using namespace lambda;
+using namespace lambdaui;
 
 std::uint32_t findMemoryType(VkPhysicalDevice physical, std::uint32_t typeBits,
                              VkMemoryPropertyFlags properties) {
@@ -54,7 +54,7 @@ struct VulkanImageTarget {
   VulkanImageTarget(VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
                     std::uint32_t targetWidth, std::uint32_t targetHeight)
       : device(logicalDevice), physical(physicalDevice), width(targetWidth), height(targetHeight) {
-    auto imageInfo = lambda::vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
+    auto imageInfo = lambdaui::vkStructure<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.format = format;
     imageInfo.extent = {width, height, 1};
@@ -71,14 +71,14 @@ struct VulkanImageTarget {
     VkMemoryRequirements requirements{};
     vkGetImageMemoryRequirements(device, image, &requirements);
 
-    auto allocateInfo = lambda::vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
+    auto allocateInfo = lambdaui::vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
     allocateInfo.allocationSize = requirements.size;
     allocateInfo.memoryTypeIndex =
         findMemoryType(physical, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     vkCheck(vkAllocateMemory(device, &allocateInfo, nullptr, &memory), "vkAllocateMemory");
     vkCheck(vkBindImageMemory(device, image, memory, 0), "vkBindImageMemory");
 
-    auto viewInfo = lambda::vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
+    auto viewInfo = lambdaui::vkStructure<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
     viewInfo.image = image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;
@@ -110,7 +110,7 @@ struct VulkanReadbackBuffer {
 
   VulkanReadbackBuffer(VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkDeviceSize byteSize)
       : device(logicalDevice), physical(physicalDevice), size(byteSize) {
-    auto bufferInfo = lambda::vkStructure<VkBufferCreateInfo>(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
+    auto bufferInfo = lambdaui::vkStructure<VkBufferCreateInfo>(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
     bufferInfo.size = size;
     bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -119,7 +119,7 @@ struct VulkanReadbackBuffer {
     VkMemoryRequirements requirements{};
     vkGetBufferMemoryRequirements(device, buffer, &requirements);
 
-    auto allocateInfo = lambda::vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
+    auto allocateInfo = lambdaui::vkStructure<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
     allocateInfo.allocationSize = requirements.size;
     allocateInfo.memoryTypeIndex = findMemoryType(
         physical, requirements.memoryTypeBits,
@@ -147,20 +147,20 @@ struct VulkanCopyContext {
 
   VulkanCopyContext(VkDevice logicalDevice, VkQueue renderQueue, std::uint32_t queueFamily)
       : device(logicalDevice), queue(renderQueue) {
-    auto poolInfo = lambda::vkStructure<VkCommandPoolCreateInfo>(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO);
+    auto poolInfo = lambdaui::vkStructure<VkCommandPoolCreateInfo>(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO);
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     poolInfo.queueFamilyIndex = queueFamily;
     vkCheck(vkCreateCommandPool(device, &poolInfo, nullptr, &pool), "vkCreateCommandPool");
 
     auto allocateInfo =
-        lambda::vkStructure<VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
+        lambdaui::vkStructure<VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
     allocateInfo.commandPool = pool;
     allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocateInfo.commandBufferCount = 1;
     vkCheck(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer),
             "vkAllocateCommandBuffers");
 
-    auto fenceInfo = lambda::vkStructure<VkFenceCreateInfo>(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
+    auto fenceInfo = lambdaui::vkStructure<VkFenceCreateInfo>(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
     vkCheck(vkCreateFence(device, &fenceInfo, nullptr, &fence), "vkCreateFence");
   }
 
@@ -175,7 +175,7 @@ struct VulkanCopyContext {
 
   void copyImageToBuffer(VkImage image, VkBuffer buffer, std::uint32_t width, std::uint32_t height) {
     vkCheck(vkResetCommandBuffer(commandBuffer, 0), "vkResetCommandBuffer");
-    auto beginInfo = lambda::vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
+    auto beginInfo = lambdaui::vkStructure<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer");
 
@@ -187,7 +187,7 @@ struct VulkanCopyContext {
                            buffer, 1, &copy);
     vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
-    auto submit = lambda::vkStructure<VkSubmitInfo>(VK_STRUCTURE_TYPE_SUBMIT_INFO);
+    auto submit = lambdaui::vkStructure<VkSubmitInfo>(VK_STRUCTURE_TYPE_SUBMIT_INFO);
     submit.commandBufferCount = 1;
     submit.pCommandBuffers = &commandBuffer;
     vkCheck(vkResetFences(device, 1, &fence), "vkResetFences");
@@ -239,7 +239,7 @@ TEST_CASE("Compositor glass material does not fade client content") {
   constexpr std::uint32_t width = 128;
   constexpr std::uint32_t height = 96;
   VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
-  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambda::VulkanRenderTargetSpec{
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambdaui::VulkanRenderTargetSpec{
       .image = targetImage.image,
       .view = targetImage.view,
       .format = targetImage.format,
@@ -264,9 +264,9 @@ TEST_CASE("Compositor glass material does not fade client content") {
       Image::fromRgbaPixels(clientWidth, clientHeight, rgba, canvas->gpuDevice());
   REQUIRE(clientImage);
 
-  lambda::compositor::ChromeConfig chrome{};
+  lambdaui::compositor::ChromeConfig chrome{};
 
-  lambda::compositor::CommittedSurfaceSnapshot surface{
+  lambdaui::compositor::CommittedSurfaceSnapshot surface{
       .id = 1,
       .x = 32,
       .y = 42,
@@ -284,21 +284,21 @@ TEST_CASE("Compositor glass material does not fade client content") {
       .title = "Opaque client",
       .serverSideDecorated = true,
       .focused = true,
-      .backgroundEffect = lambda::compositor::SurfaceBackgroundEffectSnapshot{
+      .backgroundEffect = lambdaui::compositor::SurfaceBackgroundEffectSnapshot{
           .blurRadius = 18.f,
           .baseColor = Color{1.f, 1.f, 1.f, 0.04f},
           .tint = Color{1.f, 1.f, 1.f, 0.18f},
           .borderColor = Colors::transparent,
       },
       .serial = 1,
-      .backgroundBlurRects = {lambda::compositor::CommittedSurfaceSnapshot::RegionRect{
+      .backgroundBlurRects = {lambdaui::compositor::CommittedSurfaceSnapshot::RegionRect{
           .x = 0,
           .y = 0,
           .width = clientWidth,
           .height = clientHeight,
       }},
   };
-  lambda::compositor::SurfaceVisualState visual{};
+  lambdaui::compositor::SurfaceVisualState visual{};
 
   canvas->resize(static_cast<int>(width), static_cast<int>(height));
   canvas->updateDpiScale(1.f, 1.f);
@@ -308,7 +308,7 @@ TEST_CASE("Compositor glass material does not fade client content") {
                    CornerRadius{},
                    FillStyle::linearGradient(Colors::red, Colors::blue, Point{0.f, 0.f}, Point{1.f, 1.f}),
                    StrokeStyle::none());
-  lambda::compositor::drawCommittedSurfaceSnapshot(*canvas,
+  lambdaui::compositor::drawCommittedSurfaceSnapshot(*canvas,
                                                    textSystem,
                                                    surface,
                                                    visual,
@@ -333,7 +333,7 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
   constexpr std::uint32_t width = 96;
   constexpr std::uint32_t height = 64;
   VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
-  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambda::VulkanRenderTargetSpec{
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambdaui::VulkanRenderTargetSpec{
       .image = targetImage.image,
       .view = targetImage.view,
       .format = targetImage.format,
@@ -352,9 +352,9 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
       Image::fromRgbaPixels(clientWidth, clientHeight, rgba, canvas->gpuDevice());
   REQUIRE(clientImage);
 
-  lambda::compositor::ChromeConfig chrome{};
+  lambdaui::compositor::ChromeConfig chrome{};
 
-  lambda::compositor::CommittedSurfaceSnapshot surface{
+  lambdaui::compositor::CommittedSurfaceSnapshot surface{
       .id = 1,
       .x = 24,
       .y = 16,
@@ -369,26 +369,26 @@ TEST_CASE("Compositor per-surface glass tints transparent window background") {
       .destinationWidth = clientWidth,
       .destinationHeight = clientHeight,
       .focused = true,
-      .backgroundEffect = lambda::compositor::SurfaceBackgroundEffectSnapshot{
+      .backgroundEffect = lambdaui::compositor::SurfaceBackgroundEffectSnapshot{
           .blurRadius = 18.f,
           .tint = Color{0.f, 0.f, 0.f, 0.5f},
           .borderColor = Color{1.f, 1.f, 1.f, 0.f},
       },
       .serial = 1,
-      .backgroundBlurRects = {lambda::compositor::CommittedSurfaceSnapshot::RegionRect{
+      .backgroundBlurRects = {lambdaui::compositor::CommittedSurfaceSnapshot::RegionRect{
           .x = 0,
           .y = 0,
           .width = clientWidth,
           .height = clientHeight,
       }},
   };
-  lambda::compositor::SurfaceVisualState visual{};
+  lambdaui::compositor::SurfaceVisualState visual{};
 
   canvas->resize(static_cast<int>(width), static_cast<int>(height));
   canvas->updateDpiScale(1.f, 1.f);
   canvas->beginFrame();
   canvas->clear(Colors::white);
-  lambda::compositor::drawCommittedSurfaceSnapshot(*canvas,
+  lambdaui::compositor::drawCommittedSurfaceSnapshot(*canvas,
                                                    textSystem,
                                                    surface,
                                                    visual,
@@ -413,7 +413,7 @@ TEST_CASE("Compositor system chrome material stays independent from client glass
   constexpr std::uint32_t width = 320;
   constexpr std::uint32_t height = 96;
   VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
-  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambda::VulkanRenderTargetSpec{
+  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambdaui::VulkanRenderTargetSpec{
       .image = targetImage.image,
       .view = targetImage.view,
       .format = targetImage.format,
@@ -432,13 +432,13 @@ TEST_CASE("Compositor system chrome material stays independent from client glass
       Image::fromRgbaPixels(clientWidth, clientHeight, transparent, canvas->gpuDevice());
   REQUIRE(clientImage);
 
-  lambda::compositor::ChromeConfig chrome{};
+  lambdaui::compositor::ChromeConfig chrome{};
   chrome.windowBorderColor = Colors::transparent;
   chrome.borderLineColor = Colors::transparent;
   chrome.focusedShadowColor = Colors::transparent;
   chrome.unfocusedShadowColor = Colors::transparent;
 
-  lambda::compositor::CommittedSurfaceSnapshot systemTitlebar{
+  lambdaui::compositor::CommittedSurfaceSnapshot systemTitlebar{
       .id = 1,
       .x = 16,
       .y = 40,
@@ -455,14 +455,14 @@ TEST_CASE("Compositor system chrome material stays independent from client glass
       .titleBarHeight = chrome.titleBarHeight,
       .serverSideDecorated = true,
       .focused = true,
-      .backgroundEffect = lambda::compositor::SurfaceBackgroundEffectSnapshot{
+      .backgroundEffect = lambdaui::compositor::SurfaceBackgroundEffectSnapshot{
           .blurRadius = 18.f,
           .baseColor = Color{1.f, 1.f, 1.f, 0.42f},
           .tint = Color{0.78f, 0.90f, 1.f, 0.34f},
           .borderColor = Colors::transparent,
       },
       .serial = 1,
-      .backgroundBlurRects = {lambda::compositor::CommittedSurfaceSnapshot::RegionRect{
+      .backgroundBlurRects = {lambdaui::compositor::CommittedSurfaceSnapshot::RegionRect{
           .x = 0,
           .y = 0,
           .width = clientWidth,
@@ -470,7 +470,7 @@ TEST_CASE("Compositor system chrome material stays independent from client glass
       }},
   };
 
-  lambda::compositor::CommittedSurfaceSnapshot integratedTitlebar = systemTitlebar;
+  lambdaui::compositor::CommittedSurfaceSnapshot integratedTitlebar = systemTitlebar;
   integratedTitlebar.id = 2;
   integratedTitlebar.x = 180;
   integratedTitlebar.y = 28;
@@ -478,14 +478,14 @@ TEST_CASE("Compositor system chrome material stays independent from client glass
   integratedTitlebar.cutoutsBound = true;
   integratedTitlebar.serial = 2;
 
-  lambda::compositor::SurfaceVisualState systemVisual{};
-  lambda::compositor::SurfaceVisualState integratedVisual{};
+  lambdaui::compositor::SurfaceVisualState systemVisual{};
+  lambdaui::compositor::SurfaceVisualState integratedVisual{};
 
   canvas->resize(static_cast<int>(width), static_cast<int>(height));
   canvas->updateDpiScale(1.f, 1.f);
   canvas->beginFrame();
   canvas->clear(Color{0.18f, 0.20f, 0.24f, 1.f});
-  lambda::compositor::drawCommittedSurfaceSnapshot(*canvas,
+  lambdaui::compositor::drawCommittedSurfaceSnapshot(*canvas,
                                                    textSystem,
                                                    systemTitlebar,
                                                    systemVisual,
@@ -493,7 +493,7 @@ TEST_CASE("Compositor system chrome material stays independent from client glass
                                                    std::chrono::steady_clock::now(),
                                                    chrome,
                                                    false);
-  lambda::compositor::drawCommittedSurfaceSnapshot(*canvas,
+  lambdaui::compositor::drawCommittedSurfaceSnapshot(*canvas,
                                                    textSystem,
                                                    integratedTitlebar,
                                                    integratedVisual,

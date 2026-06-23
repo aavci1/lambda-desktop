@@ -6,8 +6,8 @@
 
 #include <string>
 
-using namespace lambda;
-using namespace lambda::detail;
+using namespace lambdaui;
+using namespace lambdaui::detail;
 
 TEST_CASE("TextEditUtils: utf8 navigation") {
     std::string s = "a";

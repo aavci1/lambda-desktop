@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kValidDndActionMask =
     WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY |
@@ -98,4 +98,4 @@ inline bool dataOfferShouldCancelSourceOnDestroy(bool dnd, bool dropPerformed, b
   return dnd && dropPerformed && !finished;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

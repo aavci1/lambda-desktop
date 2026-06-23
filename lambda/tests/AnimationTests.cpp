@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-using namespace lambda;
+using namespace lambdaui;
 
 namespace {
 

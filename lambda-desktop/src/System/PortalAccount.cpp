@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -148,4 +148,4 @@ dbus::MethodReply PortalAccountService::getUserInformation(dbus::Message& messag
   return methodReply({responseSuccess, results});
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

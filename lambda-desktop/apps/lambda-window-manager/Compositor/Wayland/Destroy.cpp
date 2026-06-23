@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 void releaseOrDeferBufferRelease(WaylandServer::Impl* server, wl_resource* buffer) {
   if (!server || !buffer) return;
@@ -629,4 +629,4 @@ void WaylandServer::Impl::destroyActivationToken(ActivationToken* token) {
   eraseResource(activationTokens_, token);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

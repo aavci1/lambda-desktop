@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 inline float controlFiniteOrZero(float value) {
   return std::isfinite(value) ? std::max(0.f, value) : 0.f;
@@ -343,4 +343,4 @@ auto readSelectorCopy(Selector selector) {
   return readSelector(selector);
 }
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

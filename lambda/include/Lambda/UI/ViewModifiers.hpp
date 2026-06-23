@@ -20,7 +20,7 @@
 #include <functional>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 class Element;
 
@@ -98,4 +98,4 @@ struct ViewModifiers {
   Element environment(Reactive::Signal<typename EnvironmentKey<Key>::Value> signal) &&;
 };
 
-} // namespace lambda
+} // namespace lambdaui

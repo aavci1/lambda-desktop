@@ -4,7 +4,7 @@
 
 #include <optional>
 
-namespace lambda {
+namespace lambdaui {
 
 class WaylandScrollAccumulator {
   public:
@@ -37,4 +37,4 @@ class WaylandScrollAccumulator {
     bool pending_ = false;
 };
 
-} // namespace lambda
+} // namespace lambdaui

@@ -16,8 +16,8 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::startPrivateBus;
 
 template <typename Callback>
 class ScopeExit {
@@ -29,28 +29,28 @@ private:
   Callback callback_;
 };
 
-std::shared_ptr<lambda::dbus::VariantValue> variantString(std::string value) {
-  return std::make_shared<lambda::dbus::VariantValue>(
-      lambda::dbus::VariantValue{std::move(value)});
+std::shared_ptr<lambdaui::dbus::VariantValue> variantString(std::string value) {
+  return std::make_shared<lambdaui::dbus::VariantValue>(
+      lambdaui::dbus::VariantValue{std::move(value)});
 }
 
-std::shared_ptr<lambda::dbus::DictionaryValue>
+std::shared_ptr<lambdaui::dbus::DictionaryValue>
 attributes(std::map<std::string, std::string> values) {
-  std::vector<lambda::dbus::DictionaryEntry> entries;
+  std::vector<lambdaui::dbus::DictionaryEntry> entries;
   entries.reserve(values.size());
   for (auto& [key, value] : values) {
-    entries.push_back(lambda::dbus::DictionaryEntry{.key = std::move(key),
+    entries.push_back(lambdaui::dbus::DictionaryEntry{.key = std::move(key),
                                                    .value = std::move(value)});
   }
-  return std::make_shared<lambda::dbus::DictionaryValue>(
-      lambda::dbus::DictionaryValue{.keySignature = "s",
+  return std::make_shared<lambdaui::dbus::DictionaryValue>(
+      lambdaui::dbus::DictionaryValue{.keySignature = "s",
                                     .valueSignature = "s",
                                     .entries = std::move(entries)});
 }
 
-std::map<std::string, std::string> attributesFromValue(lambda::dbus::BasicValue const& value) {
+std::map<std::string, std::string> attributesFromValue(lambdaui::dbus::BasicValue const& value) {
   std::map<std::string, std::string> result;
-  auto dictionary = std::get<std::shared_ptr<lambda::dbus::DictionaryValue>>(value);
+  auto dictionary = std::get<std::shared_ptr<lambdaui::dbus::DictionaryValue>>(value);
   if (!dictionary) {
     return result;
   }
@@ -60,26 +60,26 @@ std::map<std::string, std::string> attributesFromValue(lambda::dbus::BasicValue 
   return result;
 }
 
-std::shared_ptr<lambda::dbus::VariantDictionary>
+std::shared_ptr<lambdaui::dbus::VariantDictionary>
 itemProperties(std::string label, std::map<std::string, std::string> itemAttributes) {
-  auto properties = std::make_shared<lambda::dbus::VariantDictionary>();
+  auto properties = std::make_shared<lambdaui::dbus::VariantDictionary>();
   properties->values["org.freedesktop.Secret.Item.Label"] = std::move(label);
   properties->values["org.freedesktop.Secret.Item.Attributes"] =
       attributes(std::move(itemAttributes));
   return properties;
 }
 
-lambda::dbus::ObjectPathArray paths(std::vector<std::string> values) {
-  lambda::dbus::ObjectPathArray array;
+lambdaui::dbus::ObjectPathArray paths(std::vector<std::string> values) {
+  lambdaui::dbus::ObjectPathArray array;
   array.values.reserve(values.size());
   for (auto& value : values) {
-    array.values.push_back(lambda::dbus::ObjectPath{std::move(value)});
+    array.values.push_back(lambdaui::dbus::ObjectPath{std::move(value)});
   }
   return array;
 }
 
-lambda::system::SecretValue secret(std::string sessionPath, std::string value) {
-  return lambda::system::SecretValue{
+lambdaui::system::SecretValue secret(std::string sessionPath, std::string value) {
+  return lambdaui::system::SecretValue{
       .sessionPath = std::move(sessionPath),
       .parameters = {},
       .value = std::vector<std::uint8_t>(value.begin(), value.end()),
@@ -102,11 +102,11 @@ TEST_CASE("SecretsService stores searches retrieves replaces and deletes items")
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::SecretsService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::SecretsService::serviceName);
 
-  lambda::system::SecretsService secrets(serviceBus);
+  lambdaui::system::SecretsService secrets(serviceBus);
   auto exports = secrets.exportObjects();
 
   std::atomic<bool> running = true;
@@ -122,10 +122,10 @@ TEST_CASE("SecretsService stores searches retrieves replaces and deletes items")
     }
   });
 
-  auto openReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::SecretsService::serviceName,
-      .path = lambda::system::SecretsService::objectPath,
-      .interface = lambda::system::SecretsService::serviceInterfaceName,
+  auto openReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::SecretsService::serviceName,
+      .path = lambdaui::system::SecretsService::objectPath,
+      .interface = lambdaui::system::SecretsService::serviceInterfaceName,
       .member = "OpenSession",
       .arguments = {std::string("plain"), variantString("")},
   });
@@ -133,45 +133,45 @@ TEST_CASE("SecretsService stores searches retrieves replaces and deletes items")
   std::string const sessionPath = openReply.readObjectPath().value;
   CHECK(sessionPath.find("/org/freedesktop/secrets/session/") == 0);
 
-  auto collections = std::get<lambda::dbus::ObjectPathArray>(
-      client.getProperty(lambda::dbus::PropertyAddress{
-                             .destination = lambda::system::SecretsService::serviceName,
-                             .path = lambda::system::SecretsService::objectPath,
-                             .interface = lambda::system::SecretsService::serviceInterfaceName,
+  auto collections = std::get<lambdaui::dbus::ObjectPathArray>(
+      client.getProperty(lambdaui::dbus::PropertyAddress{
+                             .destination = lambdaui::system::SecretsService::serviceName,
+                             .path = lambdaui::system::SecretsService::objectPath,
+                             .interface = lambdaui::system::SecretsService::serviceInterfaceName,
                              .name = "Collections",
                          },
                          "ao"));
   REQUIRE(collections.values.size() == 1);
-  CHECK(collections.values[0].value == lambda::system::SecretsService::defaultCollectionPath);
+  CHECK(collections.values[0].value == lambdaui::system::SecretsService::defaultCollectionPath);
 
-  auto aliasReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::SecretsService::serviceName,
-      .path = lambda::system::SecretsService::objectPath,
-      .interface = lambda::system::SecretsService::serviceInterfaceName,
+  auto aliasReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::SecretsService::serviceName,
+      .path = lambdaui::system::SecretsService::objectPath,
+      .interface = lambdaui::system::SecretsService::serviceInterfaceName,
       .member = "ReadAlias",
       .arguments = {std::string("default")},
   });
-  CHECK(aliasReply.readObjectPath().value == lambda::system::SecretsService::defaultCollectionPath);
+  CHECK(aliasReply.readObjectPath().value == lambdaui::system::SecretsService::defaultCollectionPath);
 
-  auto createReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::SecretsService::serviceName,
-      .path = lambda::system::SecretsService::defaultAliasPath,
-      .interface = lambda::system::SecretsService::collectionInterfaceName,
+  auto createReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::SecretsService::serviceName,
+      .path = lambdaui::system::SecretsService::defaultAliasPath,
+      .interface = lambdaui::system::SecretsService::collectionInterfaceName,
       .member = "CreateItem",
       .arguments = {itemProperties("Wi-Fi password",
                                    {{"application", "lambda-tests"},
                                     {"account", "test-network"}}),
-                    lambda::system::secretValueToDBus(secret(sessionPath, "first-secret")),
+                    lambdaui::system::secretValueToDBus(secret(sessionPath, "first-secret")),
                     true},
   });
   std::string const itemPath = createReply.readObjectPath().value;
-  CHECK(createReply.readObjectPath().value == lambda::system::SecretsService::promptNonePath);
-  CHECK(itemPath.find(lambda::system::SecretsService::defaultCollectionPath) == 0);
+  CHECK(createReply.readObjectPath().value == lambdaui::system::SecretsService::promptNonePath);
+  CHECK(itemPath.find(lambdaui::system::SecretsService::defaultCollectionPath) == 0);
 
-  auto searchReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::SecretsService::serviceName,
-      .path = lambda::system::SecretsService::objectPath,
-      .interface = lambda::system::SecretsService::serviceInterfaceName,
+  auto searchReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::SecretsService::serviceName,
+      .path = lambdaui::system::SecretsService::objectPath,
+      .interface = lambdaui::system::SecretsService::serviceInterfaceName,
       .member = "SearchItems",
       .arguments = {attributes({{"application", "lambda-tests"}})},
   });
@@ -181,77 +181,77 @@ TEST_CASE("SecretsService stores searches retrieves replaces and deletes items")
   CHECK(unlocked.values[0].value == itemPath);
   CHECK(locked.values.empty());
 
-  auto getReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::SecretsService::serviceName,
-      .path = lambda::system::SecretsService::objectPath,
-      .interface = lambda::system::SecretsService::serviceInterfaceName,
+  auto getReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::SecretsService::serviceName,
+      .path = lambdaui::system::SecretsService::objectPath,
+      .interface = lambdaui::system::SecretsService::serviceInterfaceName,
       .member = "GetSecrets",
-      .arguments = {paths({itemPath}), lambda::dbus::ObjectPath{sessionPath}},
+      .arguments = {paths({itemPath}), lambdaui::dbus::ObjectPath{sessionPath}},
   });
-  auto secretMap = std::get<std::shared_ptr<lambda::dbus::DictionaryValue>>(
+  auto secretMap = std::get<std::shared_ptr<lambdaui::dbus::DictionaryValue>>(
       getReply.readBasic("a{o(oayays)}"));
   REQUIRE(secretMap);
   REQUIRE(secretMap->entries.size() == 1);
-  CHECK(std::get<lambda::dbus::ObjectPath>(secretMap->entries[0].key).value == itemPath);
-  auto retrieved = lambda::system::secretValueFromDBus(secretMap->entries[0].value);
+  CHECK(std::get<lambdaui::dbus::ObjectPath>(secretMap->entries[0].key).value == itemPath);
+  auto retrieved = lambdaui::system::secretValueFromDBus(secretMap->entries[0].value);
   CHECK(retrieved.sessionPath == sessionPath);
   CHECK(retrieved.value == std::vector<std::uint8_t>({'f', 'i', 'r', 's', 't', '-', 's', 'e', 'c', 'r', 'e', 't'}));
 
   auto label = std::get<std::string>(
-      client.getProperty(lambda::dbus::PropertyAddress{
-                             .destination = lambda::system::SecretsService::serviceName,
+      client.getProperty(lambdaui::dbus::PropertyAddress{
+                             .destination = lambdaui::system::SecretsService::serviceName,
                              .path = itemPath,
-                             .interface = lambda::system::SecretsService::itemInterfaceName,
+                             .interface = lambdaui::system::SecretsService::itemInterfaceName,
                              .name = "Label",
                          },
                          "s"));
   CHECK(label == "Wi-Fi password");
   auto itemAttributes = attributesFromValue(
-      client.getProperty(lambda::dbus::PropertyAddress{
-                             .destination = lambda::system::SecretsService::serviceName,
+      client.getProperty(lambdaui::dbus::PropertyAddress{
+                             .destination = lambdaui::system::SecretsService::serviceName,
                              .path = itemPath,
-                             .interface = lambda::system::SecretsService::itemInterfaceName,
+                             .interface = lambdaui::system::SecretsService::itemInterfaceName,
                              .name = "Attributes",
                          },
                          "a{ss}"));
   CHECK(itemAttributes.at("account") == "test-network");
 
-  auto replaceReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::SecretsService::serviceName,
-      .path = lambda::system::SecretsService::defaultCollectionPath,
-      .interface = lambda::system::SecretsService::collectionInterfaceName,
+  auto replaceReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::SecretsService::serviceName,
+      .path = lambdaui::system::SecretsService::defaultCollectionPath,
+      .interface = lambdaui::system::SecretsService::collectionInterfaceName,
       .member = "CreateItem",
       .arguments = {itemProperties("Wi-Fi password updated",
                                    {{"application", "lambda-tests"},
                                     {"account", "test-network"}}),
-                    lambda::system::secretValueToDBus(secret(sessionPath, "second-secret")),
+                    lambdaui::system::secretValueToDBus(secret(sessionPath, "second-secret")),
                     true},
   });
   CHECK(replaceReply.readObjectPath().value == itemPath);
-  CHECK(replaceReply.readObjectPath().value == lambda::system::SecretsService::promptNonePath);
+  CHECK(replaceReply.readObjectPath().value == lambdaui::system::SecretsService::promptNonePath);
 
-  auto itemSecretReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::SecretsService::serviceName,
+  auto itemSecretReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::SecretsService::serviceName,
       .path = itemPath,
-      .interface = lambda::system::SecretsService::itemInterfaceName,
+      .interface = lambdaui::system::SecretsService::itemInterfaceName,
       .member = "GetSecret",
-      .arguments = {lambda::dbus::ObjectPath{sessionPath}},
+      .arguments = {lambdaui::dbus::ObjectPath{sessionPath}},
   });
-  auto replaced = lambda::system::secretValueFromDBus(itemSecretReply.readBasic("(oayays)"));
+  auto replaced = lambdaui::system::secretValueFromDBus(itemSecretReply.readBasic("(oayays)"));
   CHECK(replaced.value == std::vector<std::uint8_t>({'s', 'e', 'c', 'o', 'n', 'd', '-', 's', 'e', 'c', 'r', 'e', 't'}));
 
-  auto deleteReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::SecretsService::serviceName,
+  auto deleteReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::SecretsService::serviceName,
       .path = itemPath,
-      .interface = lambda::system::SecretsService::itemInterfaceName,
+      .interface = lambdaui::system::SecretsService::itemInterfaceName,
       .member = "Delete",
   });
-  CHECK(deleteReply.readObjectPath().value == lambda::system::SecretsService::promptNonePath);
+  CHECK(deleteReply.readObjectPath().value == lambdaui::system::SecretsService::promptNonePath);
 
-  auto emptySearch = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::SecretsService::serviceName,
-      .path = lambda::system::SecretsService::objectPath,
-      .interface = lambda::system::SecretsService::serviceInterfaceName,
+  auto emptySearch = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::SecretsService::serviceName,
+      .path = lambdaui::system::SecretsService::objectPath,
+      .interface = lambdaui::system::SecretsService::serviceInterfaceName,
       .member = "SearchItems",
       .arguments = {attributes({{"application", "lambda-tests"}})},
   });

@@ -65,7 +65,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [ ] [Manual] Clicking a supported image in Files currently opens it in Firefox, likely because app/MIME association falls through to the browser.
 - [x] [Auto] Supported image files resolve to `lambda-preview` without requiring Preview to be installed into the host system.
 - [x] [Auto] Solve this through Flux's local app registry/open-with path: the local development `lambda-preview` app entry advertises the MIME types Preview can open, and Files chooses it for those types.
-- [x] [Auto] Preview-supported MIME types include the formats handled by the current image loader and Files MIME detector: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, and `image/svg+xml`; add other formats only if `lambda::loadImage` can actually decode them.
+- [x] [Auto] Preview-supported MIME types include the formats handled by the current image loader and Files MIME detector: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, and `image/svg+xml`; add other formats only if `lambdaui::loadImage` can actually decode them.
 - [x] [Auto] Keep system `mimeapps.list` support for installed apps, while making local Flux app associations work in a build-tree/development run without writing desktop files to the user's system.
 - [x] [Auto] Added tests around local `lambda-preview` registration and Files default open-with resolution so supported images choose Preview instead of Firefox/browser fallback.
 - [ ] [Manual] Verify manually by running from the development build and opening PNG, JPEG, GIF, WebP, and SVG files from Files.
@@ -152,7 +152,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 ## TODO-020: Complete SVC-1 D-Bus capability details
 
-- [x] [Auto] Add a Linux `lambda::dbus` backend using `sd-bus` with session/system/custom-address connections, sync method calls, signal subscription, simple property get/set, object export, signal emission, and event-loop fd pumping hooks.
+- [x] [Auto] Add a Linux `lambdaui::dbus` backend using `sd-bus` with session/system/custom-address connections, sync method calls, signal subscription, simple property get/set, object export, signal emission, and event-loop fd pumping hooks.
 - [x] [Auto] Add focused integration coverage for `Peer.Ping`, exported method calls, exported property get/set, and signal delivery against a private real bus when the local environment allows `dbus-daemon` to bind a socket.
 - [x] [Auto] Add Unix-fd basic value support and focused fd round-trip coverage for fd-returning service APIs such as logind inhibitors.
 - [x] [Auto] Cover object-path reply plumbing through logind `GetSessionByPID` fixture tests.
@@ -167,11 +167,11 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 - [x] [Auto] Add first-class `PropertiesChanged` emit/read helpers for exported objects and service clients, and switch an existing client watcher to the typed reader.
 - [x] [Auto] Add async method calls and pending-call cancellation with private-bus coverage for success, method-error, and canceled replies.
 - [x] [Auto] Add broader generic type support needed by remaining portals and services: generic arrays, structs, dictionaries, nested variants, and portal-style request option maps now round-trip through the private-bus D-Bus fixture.
-- [x] [Auto] Add deterministic fixture tests for the first UPower client that consumes `lambda::dbus`.
-- [x] [Auto] Add deterministic fixture tests for the first NetworkManager client that consumes `lambda::dbus`.
-- [x] [Auto] Add deterministic fixture tests for the first BlueZ client that consumes `lambda::dbus`.
-- [x] [Auto] Add deterministic fixture tests for the first MPRIS client that consumes `lambda::dbus`.
-- [x] [Auto] Add deterministic fixture tests for the first UDisks2 client that consumes `lambda::dbus`.
+- [x] [Auto] Add deterministic fixture tests for the first UPower client that consumes `lambdaui::dbus`.
+- [x] [Auto] Add deterministic fixture tests for the first NetworkManager client that consumes `lambdaui::dbus`.
+- [x] [Auto] Add deterministic fixture tests for the first BlueZ client that consumes `lambdaui::dbus`.
+- [x] [Auto] Add deterministic fixture tests for the first MPRIS client that consumes `lambdaui::dbus`.
+- [x] [Auto] Add deterministic fixture tests for the first UDisks2 client that consumes `lambdaui::dbus`.
 - [x] [Auto] Add a shared `Bus::waitAndProcess` fd-pumping helper and switch first-party service daemons plus private-bus fixtures to it.
 - [x] [Auto] Harden Application-backed D-Bus fd pumping: `Application` poll sources now support dynamic event masks, safe unregister during callbacks, and `BusEventPump` follows `Bus::eventMask()` with a `POLLIN` fallback; private-bus tests cover an Application-serviced D-Bus method call.
 - [ ] [Auto + Manual] Wire remaining D-Bus fd pumping into direct KMS compositor runtime paths that will host in-process SVC-2/SVC-3/SVC-6+ work, and validate against the real session and system bus outside sandbox restrictions.
@@ -191,7 +191,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 ## TODO-022: Complete SVC-3 logind power/session integration
 
-- [x] [Auto] Add a basic `lambda::system::LogindClient` on top of `lambda::dbus` for `Suspend`, `Hibernate`, `PowerOff`, `Reboot`, fd-based `Inhibit`, `PrepareForSleep`, and session `Lock`/`Unlock` signals.
+- [x] [Auto] Add a basic `lambdaui::system::LogindClient` on top of `lambdaui::dbus` for `Suspend`, `Hibernate`, `PowerOff`, `Reboot`, fd-based `Inhibit`, `PrepareForSleep`, and session `Lock`/`Unlock` signals.
 - [x] [Auto] Add deterministic fake-bus coverage for logind power calls, inhibitor fd plumbing, sleep signal delivery, and session lock/unlock signal delivery.
 - [x] [Auto] Discover the active logind session path through `GetSessionByPID` instead of requiring callers to provide it manually, and add current-session lock/unlock watcher helpers.
 - [x] [Auto] Add search-driven Shell launcher actions for `Suspend`, `Hibernate`, `Reboot`, and `PowerOff` using `LogindClient`.
@@ -263,7 +263,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 ## TODO-031: Complete SVC-8 polkit authentication agent
 
 - [x] [Auto] Add a Linux `lambda-polkit-agent` system-bus process target.
-- [x] [Auto] Add reusable `lambda::system` polkit subject helpers for documented `unix-session` and `unix-process` D-Bus shapes.
+- [x] [Auto] Add reusable `lambdaui::system` polkit subject helpers for documented `unix-session` and `unix-process` D-Bus shapes.
 - [x] [Auto] Export `org.freedesktop.PolicyKit1.AuthenticationAgent` with `BeginAuthentication` and `CancelAuthentication` handlers.
 - [x] [Auto] Register and unregister the exported agent object with `org.freedesktop.PolicyKit1.Authority`.
 - [x] [Auto] Add deterministic private-bus coverage for subject serialization, authority registration/unregistration, `BeginAuthentication` parsing, and cancellation.
@@ -287,7 +287,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 ## TODO-026: Complete SVC-11 UPower power-status integration
 
-- [x] [Auto] Add a basic `lambda::system::UPowerClient` on top of `lambda::dbus` for `GetDisplayDevice`, display-device battery properties, manager `OnBattery`, and display-device `PropertiesChanged` signals.
+- [x] [Auto] Add a basic `lambdaui::system::UPowerClient` on top of `lambdaui::dbus` for `GetDisplayDevice`, display-device battery properties, manager `OnBattery`, and display-device `PropertiesChanged` signals.
 - [x] [Auto] Add deterministic fake-bus coverage for display-device reads, battery status formatting, and change-signal delivery.
 - [x] [Auto] Make Shell battery status prefer UPower on the real `/sys` path and preserve the existing sysfs fallback when UPower is unavailable or tests use a fixture sysroot.
 - [x] [Auto] Wire UPower display-device `PropertiesChanged` into production Shell through `BusEventPump` so battery percentage/status can refresh immediately instead of waiting for the polling timer.
@@ -298,7 +298,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 ## TODO-027: Complete SVC-9 NetworkManager connectivity integration
 
-- [x] [Auto] Add a basic `lambda::system::NetworkManagerClient` on top of `lambda::dbus` for `GetDevices`, manager `State`/`NetworkingEnabled`/`WirelessEnabled`/`WirelessHardwareEnabled`, device `Interface`/`DeviceType`/`State`, wireless `ActiveAccessPoint`, access-point `Ssid`/`Strength`, and a `WirelessEnabled` setter.
+- [x] [Auto] Add a basic `lambdaui::system::NetworkManagerClient` on top of `lambdaui::dbus` for `GetDevices`, manager `State`/`NetworkingEnabled`/`WirelessEnabled`/`WirelessHardwareEnabled`, device `Interface`/`DeviceType`/`State`, wireless `ActiveAccessPoint`, access-point `Ssid`/`Strength`, and a `WirelessEnabled` setter.
 - [x] [Auto] Add deterministic fake-bus coverage for device enumeration, connected Wi-Fi SSID/signal formatting, connecting/off mapping, and Wi-Fi toggle property writes.
 - [x] [Auto] Make Shell network/Wi-Fi status prefer NetworkManager on the real `/sys` path and preserve the existing sysfs fallback when NetworkManager is unavailable or tests use a fixture sysroot.
 - [x] [Auto] Route the Shell network docklet primary action to NetworkManager `WirelessEnabled` toggling when Wi-Fi hardware is available.
@@ -312,7 +312,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 ## TODO-028: Complete SVC-10 BlueZ Bluetooth integration
 
-- [x] [Auto] Add a basic `lambda::system::BlueZClient` on top of `lambda::dbus` for ObjectManager `GetManagedObjects`, adapter `Address`/`Alias`/`Powered`/`Discovering`, device `Address`/`Alias`/`Name`/`Adapter`/`Paired`/`Connected`, and an adapter `Powered` setter.
+- [x] [Auto] Add a basic `lambdaui::system::BlueZClient` on top of `lambdaui::dbus` for ObjectManager `GetManagedObjects`, adapter `Address`/`Alias`/`Powered`/`Discovering`, device `Address`/`Alias`/`Name`/`Adapter`/`Paired`/`Connected`, and an adapter `Powered` setter.
 - [x] [Auto] Add deterministic fake-bus coverage for adapter/device enumeration, connected-device status formatting, off/on/unavailable mapping, adapter power writes, and unsupported ObjectManager property skipping.
 - [x] [Auto] Make Shell Bluetooth status prefer BlueZ on the real `/sys` path and preserve the existing rfkill/sysfs fallback when BlueZ is unavailable or tests use a fixture sysroot.
 - [x] [Auto] Route the Shell Bluetooth docklet primary action to toggle all known BlueZ adapters powered on/off.
@@ -326,7 +326,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 ## TODO-029: Complete SVC-12 MPRIS media integration
 
-- [x] [Auto] Add a basic `lambda::system::MPRISClient` on top of `lambda::dbus` for session-bus player discovery, root `Identity`/`DesktopEntry`, player `PlaybackStatus`/`Metadata`/`Volume`/`Position`/capability properties, transport methods, and volume writes.
+- [x] [Auto] Add a basic `lambdaui::system::MPRISClient` on top of `lambdaui::dbus` for session-bus player discovery, root `Identity`/`DesktopEntry`, player `PlaybackStatus`/`Metadata`/`Volume`/`Position`/capability properties, transport methods, and volume writes.
 - [x] [Auto] Add deterministic fake-bus coverage for player discovery, metadata parsing, status formatting, `PlayPause`, `Next`, and volume property writes.
 - [x] [Auto] Make Shell system status read live MPRIS now-playing state, expose a media docklet, and route docklet play/pause/next/previous actions to the active controllable player while preserving deterministic unavailable status for fixture sysroots.
 - [x] [Auto] Wire MPRIS `PropertiesChanged`, `Seeked`, and name-owner changes into production Shell through `BusEventPump` so now-playing status updates without waiting for the polling timer.
@@ -337,7 +337,7 @@ Verification labels: `[Auto]` means the item can be automatically tested or veri
 
 ## TODO-030: Complete SVC-14 udisks2 removable-volume integration
 
-- [x] [Auto] Add a basic `lambda::system::UDisks2Client` on top of `lambda::dbus` for ObjectManager `GetManagedObjects`, drive snapshots, visible filesystem volume snapshots, UDisks byte-array path decoding, mounted mount-point decoding, `Filesystem.Mount`, `Filesystem.Unmount`, and `Drive.Eject`.
+- [x] [Auto] Add a basic `lambdaui::system::UDisks2Client` on top of `lambdaui::dbus` for ObjectManager `GetManagedObjects`, drive snapshots, visible filesystem volume snapshots, UDisks byte-array path decoding, mounted mount-point decoding, `Filesystem.Mount`, `Filesystem.Unmount`, and `Drive.Eject`.
 - [x] [Auto] Add deterministic fake-bus coverage for visible-volume filtering, drive/volume metadata, mount point decoding, volume-name formatting, mount/unmount calls, and eject calls.
 - [x] [Auto] Add UDisks2 ObjectManager/property signal watchers and wire Files to refresh mounted visible volume sidebar places through `BusEventPump` so mounted removable media can appear/disappear without polling.
 - [x] [Auto + Manual] Surface removable volumes in the Files sidebar, with open, mount, unmount, eject, and error states. Covered by `FilesStoreTests.cpp` for visible-volume rows and action/error mapping; real removable-media validation remains below.

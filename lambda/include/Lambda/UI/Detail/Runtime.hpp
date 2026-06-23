@@ -9,7 +9,7 @@
 #include <optional>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 struct RootHolder;
 class Window;
@@ -64,4 +64,4 @@ private:
   std::unique_ptr<Impl> d;
 };
 
-} // namespace lambda
+} // namespace lambdaui

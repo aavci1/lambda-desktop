@@ -35,7 +35,7 @@ namespace lambda_files {
 
 namespace detail {
 
-inline float resolvedFilesListWidth(lambda::LayoutConstraints const& constraints) {
+inline float resolvedFilesListWidth(lambdaui::LayoutConstraints const& constraints) {
   if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
     return constraints.maxWidth;
   }
@@ -80,21 +80,21 @@ inline std::string listSizeLabel(FileEntry const& entry) {
 }
 
 struct FilesListState {
-  lambda::Reactive::Signal<float> layoutWidth{0.f};
+  lambdaui::Reactive::Signal<float> layoutWidth{0.f};
 };
 
 struct FilesListRelayoutBridge {
   std::shared_ptr<FilesListState> state;
-  lambda::Element content;
+  lambdaui::Element content;
 
-  lambda::Size measure(lambda::MeasureContext& ctx, lambda::LayoutConstraints const& constraints,
-                     lambda::LayoutHints const& hints, lambda::TextSystem& textSystem) const {
+  lambdaui::Size measure(lambdaui::MeasureContext& ctx, lambdaui::LayoutConstraints const& constraints,
+                     lambdaui::LayoutHints const& hints, lambdaui::TextSystem& textSystem) const {
     double const startMs = trace::nowMs();
     float const width = resolvedFilesListWidth(constraints);
     if (width > 0.f) {
       state->layoutWidth.set(width);
     }
-    lambda::Size const size = content.measure(ctx, constraints, hints, textSystem);
+    lambdaui::Size const size = content.measure(ctx, constraints, hints, textSystem);
     LAMBDA_FILES_TRACE_EVENT("list bridge-measure width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                  width,
                  size.width,
@@ -103,16 +103,16 @@ struct FilesListRelayoutBridge {
     return size;
   }
 
-  std::unique_ptr<lambda::scenegraph::SceneNode> mount(lambda::MountContext& ctx) const {
-    auto wrapper = std::make_unique<lambda::scenegraph::SceneNode>(lambda::Rect{});
-    std::unique_ptr<lambda::scenegraph::SceneNode> child = content.mount(ctx);
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext& ctx) const {
+    auto wrapper = std::make_unique<lambdaui::scenegraph::SceneNode>(lambdaui::Rect{});
+    std::unique_ptr<lambdaui::scenegraph::SceneNode> child = content.mount(ctx);
     if (!child) {
       return wrapper;
     }
-    lambda::scenegraph::SceneNode* rawChild = child.get();
-    lambda::scenegraph::SceneNode* rawWrapper = wrapper.get();
+    lambdaui::scenegraph::SceneNode* rawChild = child.get();
+    lambdaui::scenegraph::SceneNode* rawWrapper = wrapper.get();
     wrapper->appendChild(std::move(child));
-    wrapper->setRelayout([state = state, rawChild, rawWrapper](lambda::LayoutConstraints const& constraints) {
+    wrapper->setRelayout([state = state, rawChild, rawWrapper](lambdaui::LayoutConstraints const& constraints) {
       double const startMs = trace::nowMs();
       float const width = resolvedFilesListWidth(constraints);
       if (width > 0.f) {
@@ -120,7 +120,7 @@ struct FilesListRelayoutBridge {
       }
       (void)rawChild->relayout(constraints);
       rawWrapper->setSize(rawChild->size());
-      lambda::Size const size = rawChild->size();
+      lambdaui::Size const size = rawChild->size();
       LAMBDA_FILES_TRACE_EVENT("list bridge-relayout width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                    width,
                    size.width,
@@ -137,8 +137,8 @@ struct FileListIcon {
   FileEntry entry;
   std::string iconPath;
 
-  lambda::Element body() const {
-    using namespace lambda;
+  lambdaui::Element body() const {
+    using namespace lambdaui;
     if (auto image = detail::themedFileIconImage(iconPath)) {
       return Element{views::Image{
                  .source = std::move(image),
@@ -160,10 +160,10 @@ struct FileListIcon {
 };
 
 struct FilesListHeaderRow {
-  lambda::Reactive::Bindable<float> width{0.f};
+  lambdaui::Reactive::Bindable<float> width{0.f};
 
-  lambda::Element body() const {
-    using namespace lambda;
+  lambdaui::Element body() const {
+    using namespace lambdaui;
     return HStack{
                .spacing = 12.f,
                .alignment = Alignment::Center,
@@ -200,13 +200,13 @@ struct FilesListHeaderRow {
 struct FileListRowView {
   FileEntry entry;
   std::string iconPath;
-  lambda::Reactive::Bindable<float> width{0.f};
-  lambda::Reactive::Bindable<bool> selected{false};
-  std::function<void(lambda::Modifiers)> onActivate;
+  lambdaui::Reactive::Bindable<float> width{0.f};
+  lambdaui::Reactive::Bindable<bool> selected{false};
+  std::function<void(lambdaui::Modifiers)> onActivate;
   std::function<void()> onContextMenu;
 
-  lambda::Element body() const {
-    using namespace lambda;
+  lambdaui::Element body() const {
+    using namespace lambdaui;
     auto hover = useHover();
     Reactive::Bindable<bool> const selectedBinding = selected;
 
@@ -277,19 +277,19 @@ struct FileListRowView {
 };
 
 struct FilesListView {
-  lambda::Reactive::Signal<std::vector<FileEntry>> entries;
-  lambda::Reactive::Signal<std::string> selectedPath;
-  lambda::Reactive::Signal<FileSelectionState> selection;
+  lambdaui::Reactive::Signal<std::vector<FileEntry>> entries;
+  lambdaui::Reactive::Signal<std::string> selectedPath;
+  lambdaui::Reactive::Signal<FileSelectionState> selection;
   std::vector<std::filesystem::path> iconThemeRoots;
   int iconSize = 48;
   std::function<void(FileEntry const&)> activateEntry;
-  std::function<void(FileEntry const&, lambda::Modifiers)> tapEntry;
+  std::function<void(FileEntry const&, lambdaui::Modifiers)> tapEntry;
   std::function<void(FileEntry const&)> showEntryContextMenu;
 
   mutable std::shared_ptr<detail::FilesListState> state = std::make_shared<detail::FilesListState>();
 
-  lambda::Size measure(lambda::MeasureContext&, lambda::LayoutConstraints const& constraints,
-                     lambda::LayoutHints const&, lambda::TextSystem&) const {
+  lambdaui::Size measure(lambdaui::MeasureContext&, lambdaui::LayoutConstraints const& constraints,
+                     lambdaui::LayoutHints const&, lambdaui::TextSystem&) const {
     double const startMs = trace::nowMs();
     float const width = detail::resolvedFilesListWidth(constraints);
     if (width > 0.f) {
@@ -298,7 +298,7 @@ struct FilesListView {
     std::size_t const count = entries.peek().size();
     float const rowsHeight = static_cast<float>(count) * FilesTheme::kListRowHeight;
     float const gaps = count > 0 ? static_cast<float>(count) * FilesTheme::kListRowGap : 0.f;
-    lambda::Size const size{width, FilesTheme::kListHeaderHeight + rowsHeight + gaps};
+    lambdaui::Size const size{width, FilesTheme::kListHeaderHeight + rowsHeight + gaps};
     LAMBDA_FILES_TRACE_EVENT("list measure entries=%zu width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                  count,
                  width,
@@ -308,8 +308,8 @@ struct FilesListView {
     return size;
   }
 
-  lambda::Element body() const {
-    using namespace lambda;
+  lambdaui::Element body() const {
+    using namespace lambdaui;
 
     Reactive::Signal<std::vector<FileEntry>> const entriesSignal = entries;
     Reactive::Signal<std::string> const selectedPathSignal = selectedPath;
@@ -387,8 +387,8 @@ struct FilesListView {
   }
 };
 
-inline lambda::Size measureFilesListView(FilesListView const& list,
-                                       lambda::LayoutConstraints const& constraints) {
+inline lambdaui::Size measureFilesListView(FilesListView const& list,
+                                       lambdaui::LayoutConstraints const& constraints) {
   double const startMs = trace::nowMs();
   float const width = detail::resolvedFilesListWidth(constraints);
   if (width > 0.f) {
@@ -397,7 +397,7 @@ inline lambda::Size measureFilesListView(FilesListView const& list,
   std::size_t const count = list.entries.peek().size();
   float const rowsHeight = static_cast<float>(count) * FilesTheme::kListRowHeight;
   float const gaps = count > 0 ? static_cast<float>(count) * FilesTheme::kListRowGap : 0.f;
-  lambda::Size const size{width, FilesTheme::kListHeaderHeight + rowsHeight + gaps};
+  lambdaui::Size const size{width, FilesTheme::kListHeaderHeight + rowsHeight + gaps};
   LAMBDA_FILES_TRACE_EVENT("list test-measure entries=%zu width=%.1f size=%.1fx%.1f elapsed=%.3fms\n",
                count,
                width,

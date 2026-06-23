@@ -4,7 +4,7 @@
 
 struct wl_client;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kShmVersion = 1;
 
@@ -14,4 +14,4 @@ constexpr std::uint32_t shmResourceVersion(std::uint32_t requestedVersion) noexc
 
 void bindShm(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

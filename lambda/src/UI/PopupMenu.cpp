@@ -5,7 +5,7 @@
 
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 std::function<bool(PopupMenu)> usePopupMenu() {
   Runtime* runtime = Runtime::current();
@@ -19,4 +19,4 @@ std::function<bool(PopupMenu)> usePopupMenu() {
   };
 }
 
-} // namespace lambda
+} // namespace lambdaui

@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -161,4 +161,4 @@ void layoutDebugDumpAttached(char const* reason) {
   layoutDebugEndPass();
 }
 
-} // namespace lambda
+} // namespace lambdaui

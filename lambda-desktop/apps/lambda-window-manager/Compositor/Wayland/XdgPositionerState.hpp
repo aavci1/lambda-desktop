@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct XdgPositionerRules {
   std::int32_t width = 0;
@@ -23,4 +23,4 @@ struct XdgPositionerRules {
   return rules.width > 0 && rules.anchorRectWidth > 0;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

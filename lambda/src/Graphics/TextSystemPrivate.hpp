@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 void normalizeOriginsToTopLeft(TextLayout& layout);
 
@@ -28,4 +28,4 @@ bool paragraphCacheLayoutsStructurallyEqual(TextLayout const& a, TextLayout cons
 bool hasNotdefGlyph(std::span<std::uint32_t const> gids) noexcept;
 void collectDrawableGlyphIndices(std::span<std::uint32_t const> gids, std::vector<std::size_t>& out);
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

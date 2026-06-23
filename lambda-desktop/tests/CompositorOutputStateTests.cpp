@@ -2,7 +2,7 @@
 
 #include <doctest/doctest.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 TEST_CASE("output resources use the implemented protocol version") {
   CHECK(kOutputVersion == 4);
@@ -46,4 +46,4 @@ TEST_CASE("selected output enter selection is scoped to active same-client resou
   CHECK_FALSE(surfaceShouldReceiveOutputEnter(false, false));
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -9,7 +9,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-namespace lambda::linux_platform {
+namespace lambdaui::linux_platform {
 
 [[nodiscard]] inline bool shouldEmitTextInputForModifiers(Modifiers modifiers) noexcept {
   return !any(modifiers & (Modifiers::Ctrl | Modifiers::Alt | Modifiers::Meta));
@@ -45,4 +45,4 @@ private:
   Modifiers modifiers_ = Modifiers::None;
 };
 
-} // namespace lambda::linux_platform
+} // namespace lambdaui::linux_platform

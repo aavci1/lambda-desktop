@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -18,14 +18,14 @@ platform::RenderTarget& checkedTarget(std::unique_ptr<platform::RenderTarget> co
 
 } // namespace
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 RenderTarget::RenderTarget(VulkanRenderTargetSpec const& spec)
     : impl_(platform::createRenderTarget(spec)) {
   checkedTarget(impl_);
 }
 #endif
 
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
 RenderTarget::RenderTarget(MetalRenderTargetSpec const& spec)
     : impl_(platform::createRenderTarget(spec)) {
   checkedTarget(impl_);
@@ -48,4 +48,4 @@ void RenderTarget::endFrame() {
   checkedTarget(impl_).endFrame();
 }
 
-} // namespace lambda
+} // namespace lambdaui

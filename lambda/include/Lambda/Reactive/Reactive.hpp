@@ -17,7 +17,7 @@
 #include <Lambda/Reactive/Signal.hpp>
 #include <Lambda/Reactive/Untrack.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 template<typename T>
 using Bindable = Reactive::Bindable<T>;
@@ -33,4 +33,4 @@ using Reactive::onCleanup;
 using Reactive::untrack;
 using Reactive::withOwner;
 
-} // namespace lambda
+} // namespace lambdaui

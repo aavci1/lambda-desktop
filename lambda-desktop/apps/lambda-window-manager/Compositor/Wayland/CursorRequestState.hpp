@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <deque>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::array kPointerCursorSerialKinds{
     SeatSerialKind::PointerEnter,
@@ -76,4 +76,4 @@ inline bool cursorRequestSerialValid(WaylandServer::Impl const* server,
   return cursorRequestValidationSurface(cursorRequestSeatState(server), client, serial) != nullptr;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

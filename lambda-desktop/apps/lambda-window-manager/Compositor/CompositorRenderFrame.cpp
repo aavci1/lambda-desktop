@@ -27,7 +27,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 bool diagnosticEnvEnabled(char const* name) {
@@ -651,7 +651,7 @@ std::vector<PresentationCompletion> pollVulkanDisplayPresentationCompletions(
 
 bool completeVulkanDisplayPendingFrameCallbacks(
     WaylandServer& wayland,
-    lambda::platform::KmsOutput const& output,
+    lambdaui::platform::KmsOutput const& output,
     std::vector<VulkanDisplayPendingFrameCallbacks>& pendingCallbacks,
     std::vector<PresentationCompletion> const& completions,
     std::uint32_t nowMs) {
@@ -1271,4 +1271,4 @@ void renderCompositorFrame(CompositorRenderFrameContext& ctx,
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

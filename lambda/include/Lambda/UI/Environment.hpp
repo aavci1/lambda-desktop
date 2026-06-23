@@ -10,7 +10,7 @@
 #include <concepts>
 #include <typeinfo>
 
-namespace lambda {
+namespace lambdaui {
 
 template<typename Tag>
 struct EnvironmentKey;
@@ -25,11 +25,11 @@ struct EnvironmentKey;
     static_assert(std::equality_comparable<Value>,                                        \
                   "Environment key values must define operator==.");                      \
     static Value defaultValue() { return (DefaultExpr); }                                 \
-    static ::lambda::detail::EnvironmentSlot const& slot() {                                \
-      static ::lambda::detail::EnvironmentSlot s{                                           \
-          ::lambda::detail::allocateEnvironmentSlot(typeid(KeyTag))};                       \
+    static ::lambdaui::detail::EnvironmentSlot const& slot() {                                \
+      static ::lambdaui::detail::EnvironmentSlot s{                                           \
+          ::lambdaui::detail::allocateEnvironmentSlot(typeid(KeyTag))};                       \
       return s;                                                                           \
     }                                                                                     \
   }
 
-} // namespace lambda
+} // namespace lambdaui

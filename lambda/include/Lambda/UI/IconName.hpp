@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Material Symbols Rounded — complete icon set.
 ///
@@ -3932,4 +3932,4 @@ enum class IconName : char32_t {
     ZoomOutMap = 0xE56B,
 };
 
-} // namespace lambda
+} // namespace lambdaui

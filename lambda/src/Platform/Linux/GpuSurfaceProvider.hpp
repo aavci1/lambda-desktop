@@ -4,7 +4,7 @@
 
 #include <vulkan/vulkan_core.h>
 
-namespace lambda::platform {
+namespace lambdaui::platform {
 
 class GpuSurfaceProvider {
 public:
@@ -14,4 +14,4 @@ public:
   virtual VkSurfaceKHR createSurface(VkInstance instance, void* nativeHandle) = 0;
 };
 
-} // namespace lambda::platform
+} // namespace lambdaui::platform

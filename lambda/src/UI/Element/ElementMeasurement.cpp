@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -160,4 +160,4 @@ Size Element::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   return sz;
 }
 
-} // namespace lambda
+} // namespace lambdaui

@@ -34,16 +34,16 @@ int envIntClamped(char const* name, int fallback, int minimum, int maximum) {
 }
 
 struct ProbeTextState {
-  lambda::Reactive::Signal<std::string> text;
-  lambda::Reactive::Signal<lambda::detail::TextEditSelection> selection;
+  lambdaui::Reactive::Signal<std::string> text;
+  lambdaui::Reactive::Signal<lambdaui::detail::TextEditSelection> selection;
   bool multiline = true;
 };
 
 struct ClipboardProbeRoot {
   std::shared_ptr<ProbeTextState> state;
 
-  lambda::Element body() const {
-    lambda::TextInput input;
+  lambdaui::Element body() const {
+    lambdaui::TextInput input;
     input.value = state->text;
     input.selection = state->selection;
     input.placeholder = "Clipboard probe";
@@ -54,8 +54,8 @@ struct ClipboardProbeRoot {
 
 struct DriverState {
   std::shared_ptr<ProbeTextState> textState;
-  lambda::Application* app = nullptr;
-  lambda::Window* window = nullptr;
+  lambdaui::Application* app = nullptr;
+  lambdaui::Window* window = nullptr;
   std::string role;
   std::string expected;
   std::uint64_t timerId = 0;
@@ -80,7 +80,7 @@ void finish(DriverState& state, int exitCode) {
   }
 }
 
-void handleTimer(DriverState& state, lambda::TimerEvent const& event) {
+void handleTimer(DriverState& state, lambdaui::TimerEvent const& event) {
   if (state.timerId == 0 || event.timerId != state.timerId) {
     return;
   }
@@ -138,7 +138,7 @@ void handleTimer(DriverState& state, lambda::TimerEvent const& event) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-  lambda::Application app(argc, argv);
+  lambdaui::Application app(argc, argv);
   app.setName("lambda-clipboard-probe");
 
   auto state = std::make_shared<DriverState>();
@@ -155,26 +155,26 @@ int main(int argc, char* argv[]) {
   state->textState = std::make_shared<ProbeTextState>();
   if (state->role == "source") {
     state->textState->text.set(state->expected);
-    state->textState->selection.set(lambda::detail::TextEditSelection{
+    state->textState->selection.set(lambdaui::detail::TextEditSelection{
         .caretByte = static_cast<int>(state->expected.size()),
         .anchorByte = 0,
     });
   } else {
     state->textState->text.set("");
-    state->textState->selection.set(lambda::detail::TextEditSelection{.caretByte = 0, .anchorByte = 0});
+    state->textState->selection.set(lambdaui::detail::TextEditSelection{.caretByte = 0, .anchorByte = 0});
   }
 
-  lambda::WindowConfig config;
+  lambdaui::WindowConfig config;
   config.size = {720.f, 320.f};
   config.title = state->role == "source" ? "Clipboard Source" : "Clipboard Sink";
-  config.titlebar = lambda::WindowTitlebarMode::System;
+  config.titlebar = lambdaui::WindowTitlebarMode::System;
   config.resizable = true;
-  auto& window = app.createWindow<lambda::Window>(config);
+  auto& window = app.createWindow<lambdaui::Window>(config);
   state->window = &window;
   window.setView<ClipboardProbeRoot>({.state = state->textState});
 
   state->timerId = app.scheduleRepeatingTimer(std::chrono::milliseconds{50}, window.handle());
-  app.eventQueue().on<lambda::TimerEvent>([state](lambda::TimerEvent const& event) {
+  app.eventQueue().on<lambdaui::TimerEvent>([state](lambdaui::TimerEvent const& event) {
     handleTimer(*state, event);
   });
 

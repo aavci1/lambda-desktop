@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 class SceneNode;
 
@@ -53,4 +53,4 @@ class SceneGraph {
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

@@ -8,7 +8,7 @@
 
 #include <optional>
 
-namespace lambda {
+namespace lambdaui {
 
 struct LayoutHints {
   std::optional<Alignment> hStackCrossAlign;
@@ -17,4 +17,4 @@ struct LayoutHints {
   std::optional<Alignment> zStackVerticalAlign;
 };
 
-} // namespace lambda
+} // namespace lambdaui

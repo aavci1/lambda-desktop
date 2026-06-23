@@ -11,7 +11,7 @@
 #include <memory>
 #include <utility>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -119,4 +119,4 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
   return group;
 }
 
-} // namespace lambda
+} // namespace lambdaui

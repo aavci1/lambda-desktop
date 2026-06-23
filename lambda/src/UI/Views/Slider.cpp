@@ -12,7 +12,7 @@
 #include <cmath>
 #include <limits>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -154,7 +154,7 @@ Element Slider::body() const {
     return ZStack {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
-        .children = lambda::children(
+        .children = lambdaui::children(
             Rectangle {}
                 .size(componentWidth, componentHeight),
             Rectangle {}
@@ -191,4 +191,4 @@ Element Slider::body() const {
         .onPointerMove(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {handleMove});
 }
 
-} // namespace lambda
+} // namespace lambdaui

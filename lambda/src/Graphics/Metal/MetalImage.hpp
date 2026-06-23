@@ -4,7 +4,7 @@
 
 #import <Metal/Metal.h>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Metal-backed `Image` (BGRA/RGBA texture from disk loader).
 class MetalImage final : public Image {
@@ -37,4 +37,4 @@ private:
 /// Returns null if `image` is not a `MetalImage`.
 MetalImage const* tryMetalImage(Image const& image);
 
-} // namespace lambda
+} // namespace lambdaui

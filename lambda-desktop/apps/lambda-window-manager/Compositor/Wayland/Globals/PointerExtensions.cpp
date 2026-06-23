@@ -11,7 +11,7 @@
 #include <memory>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 std::vector<PointerConstraintRegionRect> copyPointerConstraintRegion(wl_resource* regionResource) {
@@ -360,4 +360,4 @@ void bindPointerConstraints(wl_client* client, void* data, std::uint32_t version
   bindPointerConstraintsImpl(client, data, version, id);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -12,9 +12,9 @@
 
 namespace {
 
-using namespace lambda;
-using namespace lambda::examples::scenegraphdemo;
-using namespace lambda::scenegraph;
+using namespace lambdaui;
+using namespace lambdaui::examples::scenegraphdemo;
+using namespace lambdaui::scenegraph;
 
 class SceneGraphExampleWindow final : public Window {
   public:

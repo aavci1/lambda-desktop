@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct PointerButtonGrabRefs {
   WaylandServer::Impl::Surface** grabSurface = nullptr;
@@ -89,4 +89,4 @@ inline PointerButtonGrabTransition pointerButtonGrabUpdateForButton(
   return transition;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

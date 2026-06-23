@@ -25,10 +25,10 @@ namespace lambda_files {
 
 namespace detail {
 
-inline std::shared_ptr<lambda::Image> themedFileIconImage(std::string const& path) {
+inline std::shared_ptr<lambdaui::Image> themedFileIconImage(std::string const& path) {
   if (path.empty()) return nullptr;
   double const startMs = trace::nowMs();
-  static std::unordered_map<std::string, std::shared_ptr<lambda::Image>> cache;
+  static std::unordered_map<std::string, std::shared_ptr<lambdaui::Image>> cache;
   auto found = cache.find(path);
   if (found != cache.end()) {
     LAMBDA_FILES_TRACE_EVENT("icon-image cache-hit path=\"%s\" elapsed=%.3fms\n",
@@ -36,7 +36,7 @@ inline std::shared_ptr<lambda::Image> themedFileIconImage(std::string const& pat
                  trace::nowMs() - startMs);
     return found->second;
   }
-  auto image = lambda::loadImage(path);
+  auto image = lambdaui::loadImage(path);
   cache.emplace(path, image);
   LAMBDA_FILES_TRACE_EVENT("icon-image load path=\"%s\" ok=%d elapsed=%.3fms\n",
                path.c_str(),
@@ -48,8 +48,8 @@ inline std::shared_ptr<lambda::Image> themedFileIconImage(std::string const& pat
 } // namespace detail
 
 struct FolderGlyph {
-  lambda::Element body() const {
-    using namespace lambda;
+  lambdaui::Element body() const {
+    using namespace lambdaui;
     return ZStack{
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
@@ -75,8 +75,8 @@ struct FolderGlyph {
 struct FileDocGlyph {
   FileVisualKind kind = FileVisualKind::Generic;
 
-  lambda::Element body() const {
-    using namespace lambda;
+  lambdaui::Element body() const {
+    using namespace lambdaui;
     Color previewTop = Color::hex(0x4D94FF);
     Color previewBottom = Color::hex(0x99C2FF);
     if (kind == FileVisualKind::Pdf || kind == FileVisualKind::Sketch) {
@@ -118,16 +118,16 @@ struct FileDocGlyph {
 struct FileItemTile {
   FileEntry entry;
   std::string iconPath;
-  lambda::Reactive::Bindable<bool> selected{false};
-  std::function<void(lambda::Modifiers)> onActivate;
+  lambdaui::Reactive::Bindable<bool> selected{false};
+  std::function<void(lambdaui::Modifiers)> onActivate;
   std::function<void()> onContextMenu;
 
-  lambda::Element body() const {
-    using namespace lambda;
+  lambdaui::Element body() const {
+    using namespace lambdaui;
     auto hover = useHover();
-    lambda::Reactive::Bindable<bool> const selectedBinding = selected;
+    lambdaui::Reactive::Bindable<bool> const selectedBinding = selected;
 
-    lambda::Reactive::Bindable<FillStyle> const tileFill{[hover, selectedBinding] {
+    lambdaui::Reactive::Bindable<FillStyle> const tileFill{[hover, selectedBinding] {
       if (selectedBinding.evaluate()) {
         return FillStyle::solid(FilesTheme::selectFill);
       }
@@ -136,22 +136,22 @@ struct FileItemTile {
       }
       return FillStyle::solid(Colors::transparent);
     }};
-    lambda::Reactive::Bindable<StrokeStyle> const tileStroke{[selectedBinding] {
+    lambdaui::Reactive::Bindable<StrokeStyle> const tileStroke{[selectedBinding] {
       if (selectedBinding.evaluate()) {
         return StrokeStyle::solid(FilesTheme::selectBorder, 1.f);
       }
       return StrokeStyle::solid(Colors::transparent, 0.f);
     }};
 
-    lambda::Element glyph = [this] {
+    lambdaui::Element glyph = [this] {
       if (auto image = detail::themedFileIconImage(iconPath)) {
-        return lambda::Element{lambda::views::Image{
+        return lambdaui::Element{lambdaui::views::Image{
                    .source = std::move(image),
-                   .fillMode = lambda::ImageFillMode::Fit,
+                   .fillMode = lambdaui::ImageFillMode::Fit,
                }}
             .size(70.f, 66.f);
       }
-      return entry.isDirectory ? lambda::Element{FolderGlyph{}} : lambda::Element{FileDocGlyph{.kind = entry.visualKind}};
+      return entry.isDirectory ? lambdaui::Element{FolderGlyph{}} : lambdaui::Element{FileDocGlyph{.kind = entry.visualKind}};
     }();
 
     auto tile = VStack{
@@ -186,10 +186,10 @@ struct FileItemTile {
       auto activate = onActivate;
       auto contextMenu = onContextMenu;
       tile = std::move(tile).onTap(
-          [activate, contextMenu](lambda::MouseButton button, lambda::Modifiers modifiers) {
-        if (button == lambda::MouseButton::Left && activate) {
+          [activate, contextMenu](lambdaui::MouseButton button, lambdaui::Modifiers modifiers) {
+        if (button == lambdaui::MouseButton::Left && activate) {
           activate(modifiers);
-        } else if (button == lambda::MouseButton::Right && contextMenu) {
+        } else if (button == lambdaui::MouseButton::Right && contextMenu) {
           contextMenu();
         }
       });

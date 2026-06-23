@@ -1,6 +1,6 @@
-# Lambda
+# lambdaui workspace
 
-Lambda is a **C++23** UI framework and monorepo workspace. The current tree is split into a cross-platform core/framework, a Linux-only `lambda-desktop` app suite, and the standalone cross-platform `solitaire-app`.
+This workspace contains **lambdaui**, a C++23 UI framework, plus the Linux-only `lambda-desktop` app suite and the standalone cross-platform `lambda-solitaire` app.
 
 The framework provides a **Metal** canvas on macOS, Linux **Wayland/Vulkan** and **KMS/DRM/Vulkan** backends, vector paths tessellated through [libtess2](https://github.com/memononen/libtess2), platform text layout, and a retained declarative UI layer.
 
@@ -10,7 +10,7 @@ The v5 UI runtime mounts each view tree once, owns reactive state in scopes, and
 
 Requirements: **CMake 3.25+** and a C++23 compiler.
 
-macOS framework, demos, tests, benchmarks, and `solitaire-app` builds need **full Xcode selected as the active developer directory**, because Lambda compiles and embeds Metal shaders with `xcrun -sdk macosx metal`, `xcrun -sdk macosx metallib`, and `xxd`. Xcode Command Line Tools alone may configure a C++ compiler but still omit the Metal shader compiler. Install Xcode, then run:
+macOS framework, demos, tests, benchmarks, and `lambda-solitaire` builds need **full Xcode selected as the active developer directory**, because lambdaui compiles and embeds Metal shaders with `xcrun -sdk macosx metal`, `xcrun -sdk macosx metallib`, and `xxd`. Xcode Command Line Tools alone may configure a C++ compiler but still omit the Metal shader compiler. Install Xcode, then run:
 
 ```bash
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -25,25 +25,25 @@ Linux Wayland framework builds need `pkg-config`, `wayland-client`, `wayland-cur
 The Linux-only `lambda-desktop` product additionally needs `libsystemd` for its D-Bus/system-services layer. `tomlplusplus` is fetched only when `LAMBDA_BUILD_DESKTOP=ON`; `libvterm` is fetched only by `lambda-terminal` and needs `perl` to generate its encoding headers.
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLAMBDA_BUILD_TESTS=ON -DLAMBDA_BUILD_DEMOS=ON
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLAMBDAUI_BUILD_TESTS=ON -DLAMBDAUI_BUILD_DEMOS=ON
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-On macOS, the default build includes the framework and `solitaire-app`; desktop apps are not configured. Framework demos, tests, and benchmarks build as normal terminal executables on macOS rather than `.app` bundles. Solitaire owns its macOS bundle packaging under `solitaire-app/`. On Linux, `LAMBDA_BUILD_DESKTOP` defaults to `ON` and builds the desktop suite under `lambda-desktop/apps/`. Pass `-DLAMBDA_BUILD_DEMOS=ON` to build the demo executables under `lambda/demos/`.
+On macOS, the default build includes `lambdaui` and `lambda-solitaire`; desktop apps are not configured. Framework demos, tests, and benchmarks build as normal terminal executables on macOS rather than `.app` bundles. Solitaire owns its macOS bundle packaging under `solitaire-app/`. On Linux, `LAMBDA_BUILD_DESKTOP` defaults to `ON` and builds the desktop suite under `lambda-desktop/apps/`. Pass `-DLAMBDAUI_BUILD_DEMOS=ON` to build the demo executables under `lambda/demos/`.
 
 ## Layout
 
-- `lambda/` owns the cross-platform framework/library target, public headers, private sources, tests, benchmarks, and demos.
+- `lambda/` owns the `lambdaui` framework/library target, public headers, private sources, tests, benchmarks, and demos.
 - `lambda-desktop/` owns Linux desktop apps, services, DBus/system clients, and desktop-wide dependencies such as `tomlplusplus`.
 - `lambda-desktop/apps/lambda-terminal/` owns the terminal emulator and its `libvterm` dependency.
-- `solitaire-app/` is a standalone cross-platform app.
+- `solitaire-app/` owns the standalone cross-platform `lambda-solitaire` app.
 
 ## Apps
 
 Current standalone target:
 
-`solitaire-app`.
+`lambda-solitaire`.
 
 Linux desktop targets:
 
@@ -57,16 +57,16 @@ Current demo targets:
 
 ## Options
 
-- `LAMBDA_PLATFORM` - `AUTO` (default), `MACOS`, `LINUX_WAYLAND`, or `LINUX_KMS`.
+- `LAMBDAUI_PLATFORM` - `AUTO` (default), `MACOS`, `LINUX_WAYLAND`, or `LINUX_KMS`.
 - `LAMBDA_BUILD_DESKTOP` - default `ON` on Linux and `OFF` elsewhere; builds the Linux-only desktop suite.
 - `LAMBDA_BUILD_SOLITAIRE` - default `ON`; builds the standalone Solitaire app.
-- `LAMBDA_BUILD_DEMOS` - default `OFF`; set `ON` to build demos.
-- `LAMBDA_BUILD_TESTS` - default `OFF`; set `ON` to build unit and reactive tests.
-- `LAMBDA_BUILD_BENCHMARKS` - default `OFF`; set `ON` to build micro-benchmarks.
+- `LAMBDAUI_BUILD_DEMOS` - default `OFF`; set `ON` to build demos.
+- `LAMBDAUI_BUILD_TESTS` - default `OFF`; set `ON` to build unit and reactive tests.
+- `LAMBDAUI_BUILD_BENCHMARKS` - default `OFF`; set `ON` to build micro-benchmarks.
 - `LAMBDA_BUILD_TOOLS` - default `ON`; builds developer verification tools.
 - `LAMBDA_BUILD_WINDOW_MANAGER` - default `ON` on Linux; set `OFF` to skip `lambda-window-manager`.
-- `LAMBDA_ENABLE_ASAN` - default `OFF`; set `ON` for AddressSanitizer builds.
-- `LAMBDA_ENABLE_DEFAULT_EVENT_LOGGING` - default `OFF`; set `ON` to print default `Application` event handlers.
+- `LAMBDAUI_ENABLE_ASAN` - default `OFF`; set `ON` for AddressSanitizer builds.
+- `LAMBDAUI_ENABLE_DEFAULT_EVENT_LOGGING` - default `OFF`; set `ON` to print default `Application` event handlers.
 
 ## Documentation
 

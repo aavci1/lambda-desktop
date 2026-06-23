@@ -9,7 +9,7 @@
 #include <Lambda/UI/ViewModifiers.hpp>
 #include <Lambda/UI/Views/Rectangle.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 struct Spacer : ViewModifiers<Spacer> {
   Element body() const {
@@ -17,4 +17,4 @@ struct Spacer : ViewModifiers<Spacer> {
   }
 };
 
-} // namespace lambda
+} // namespace lambdaui

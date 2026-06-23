@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using PointerConstraintRegionRect = CommittedSurfaceSnapshot::RegionRect;
 
@@ -248,4 +248,4 @@ inline bool clampPointerConstraintGlobalPoint(WaylandServer::Impl::PointerConstr
   return true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

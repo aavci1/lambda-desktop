@@ -9,7 +9,7 @@
 
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 struct TooltipConfig {
   std::string text;
@@ -20,4 +20,4 @@ struct TooltipConfig {
 void useTooltip(TooltipConfig const& config);
 void useTooltip(std::string text);
 
-} // namespace lambda
+} // namespace lambdaui

@@ -29,7 +29,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -1012,4 +1012,4 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
 }
 
 } // namespace detail
-} // namespace lambda
+} // namespace lambdaui

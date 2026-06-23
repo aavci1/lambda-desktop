@@ -140,7 +140,7 @@ bool launcherPointerInsideContent(int width,
 struct TrayStatusItem {
   std::string id;
   std::string label;
-  lambda::IconName icon = lambda::IconName::Widgets;
+  lambdaui::IconName icon = lambdaui::IconName::Widgets;
 
   bool operator==(TrayStatusItem const& other) const = default;
 };
@@ -212,7 +212,7 @@ enum class DockStatusAction : std::uint8_t {
 
 struct DockletStatusItem {
   std::string id;
-  lambda::IconName icon = lambda::IconName::Circle;
+  lambdaui::IconName icon = lambdaui::IconName::Circle;
   std::string label;
   StatusAvailability availability = StatusAvailability::Unavailable;
   bool active = false;
@@ -225,14 +225,14 @@ std::string dockClockDateText(std::string_view timeText);
 std::string dockClockTimeText(std::string_view timeText);
 
 struct DockProps {
-  lambda::Signal<std::vector<DockItem>> items;
-  lambda::Signal<std::string> timeText;
-  lambda::Signal<int> clockWidth;
-  lambda::Signal<int> itemSize{kDockIconSize};
-  lambda::Reactive::Bindable<SystemStatus> system{SystemStatus{}};
+  lambdaui::Signal<std::vector<DockItem>> items;
+  lambdaui::Signal<std::string> timeText;
+  lambdaui::Signal<int> clockWidth;
+  lambdaui::Signal<int> itemSize{kDockIconSize};
+  lambdaui::Reactive::Bindable<SystemStatus> system{SystemStatus{}};
   int hoverIndex = -1;
   bool fullWidth = false;
-  lambda::Reactive::Bindable<int> width{1};
+  lambdaui::Reactive::Bindable<int> width{1};
   std::function<void()> onOpenLauncher;
   std::function<void(DockItem const&)> onActivateItem;
   std::function<void(DockItem const&)> onShowMenu;
@@ -261,11 +261,11 @@ struct SessionMenuProps {
 };
 
 struct CommandLauncherProps {
-  lambda::Signal<std::vector<DockItem>> results;
-  lambda::Signal<std::string> query;
-  lambda::Reactive::Bindable<int> highlighted{0};
-  lambda::Reactive::Bindable<int> width{1};
-  lambda::Reactive::Bindable<int> height{1};
+  lambdaui::Signal<std::vector<DockItem>> results;
+  lambdaui::Signal<std::string> query;
+  lambdaui::Reactive::Bindable<int> highlighted{0};
+  lambdaui::Reactive::Bindable<int> width{1};
+  lambdaui::Reactive::Bindable<int> height{1};
   std::function<void(DockItem const&)> onActivateResult;
   std::function<void()> onDismiss;
 };

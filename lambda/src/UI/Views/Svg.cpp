@@ -16,7 +16,7 @@
 #include <utility>
 #include <variant>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -424,4 +424,4 @@ std::unique_ptr<scenegraph::SceneNode> Svg::mount(MountContext& ctx) const {
   return rasterNode;
 }
 
-} // namespace lambda
+} // namespace lambdaui

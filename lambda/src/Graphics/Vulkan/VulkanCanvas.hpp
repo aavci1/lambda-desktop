@@ -10,7 +10,7 @@
 
 #include <vulkan/vulkan.h>
 
-namespace lambda {
+namespace lambdaui {
 
 class TextSystem;
 struct VulkanFrameRecorder;
@@ -85,4 +85,4 @@ bool vulkanCanvasUsesMailboxPresentMode(Canvas* canvas);
 std::uint32_t lastVulkanCanvasPresentId(Canvas* canvas);
 std::vector<VulkanPastPresentationTiming> pollVulkanCanvasPastPresentationTimings(Canvas* canvas);
 
-} // namespace lambda
+} // namespace lambdaui

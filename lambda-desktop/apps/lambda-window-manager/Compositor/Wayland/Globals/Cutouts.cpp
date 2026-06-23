@@ -9,7 +9,7 @@
 #include <memory>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void cutoutsManagerDestroy(wl_client*, wl_resource* resource) {
@@ -125,4 +125,4 @@ void bindCutoutsManager(wl_client* client, void* data, std::uint32_t version, st
   wl_resource_set_implementation(resource, &cutoutsManagerImpl, data, nullptr);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -8,7 +8,7 @@
 #include <cstdlib>
 #include <ctime>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 inline bool resizeTraceEnabled() {
   static bool const enabled = [] {
@@ -68,11 +68,11 @@ inline void resizeTrace(char const* prefix, char const* format, ...) {
   va_end(args);
 }
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail
 
 #define LAMBDA_RESIZE_TRACE(...)                   \
   do {                                             \
-    if (::lambda::detail::resizeTraceEnabled()) { \
-      ::lambda::detail::resizeTrace(__VA_ARGS__); \
+    if (::lambdaui::detail::resizeTraceEnabled()) { \
+      ::lambdaui::detail::resizeTrace(__VA_ARGS__); \
     }                                              \
   } while (false)

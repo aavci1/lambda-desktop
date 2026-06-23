@@ -7,7 +7,7 @@
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/Theme.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 struct Divider : ViewModifiers<Divider> {
     enum class Orientation : std::uint8_t {
@@ -34,4 +34,4 @@ struct Divider : ViewModifiers<Divider> {
     Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

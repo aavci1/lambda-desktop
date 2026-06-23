@@ -16,9 +16,9 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::pumpUntil;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::pumpUntil;
+using lambdaui::testing::dbus::startPrivateBus;
 
 template <typename Callback>
 class ScopeExit {
@@ -30,18 +30,18 @@ private:
   Callback callback_;
 };
 
-std::shared_ptr<lambda::dbus::VariantDictionary>
+std::shared_ptr<lambdaui::dbus::VariantDictionary>
 metadata(std::string title = "Test Song",
          std::string trackId = "/org/mpris/MediaPlayer2/Track/1") {
-  auto values = std::make_shared<lambda::dbus::VariantDictionary>();
-  values->values["mpris:trackid"] = lambda::dbus::ObjectPath{std::move(trackId)};
+  auto values = std::make_shared<lambdaui::dbus::VariantDictionary>();
+  values->values["mpris:trackid"] = lambdaui::dbus::ObjectPath{std::move(trackId)};
   values->values["xesam:title"] = std::move(title);
   values->values["xesam:album"] = std::string("Test Album");
   values->values["xesam:artist"] =
-      lambda::dbus::StringArray{.values = {"Lambda Artist", "Second Artist"}};
+      lambdaui::dbus::StringArray{.values = {"Lambda Artist", "Second Artist"}};
   values->values["xesam:albumArtist"] =
-      lambda::dbus::StringArray{.values = {"Lambda Album Artist"}};
-  values->values["xesam:genre"] = lambda::dbus::StringArray{.values = {"Electronic"}};
+      lambdaui::dbus::StringArray{.values = {"Lambda Album Artist"}};
+  values->values["xesam:genre"] = lambdaui::dbus::StringArray{.values = {"Electronic"}};
   values->values["mpris:artUrl"] = std::string("file:///tmp/test-song.png");
   values->values["xesam:url"] = std::string("file:///music/test-song.flac");
   values->values["xesam:contentCreated"] = std::string("2026-06-17T12:00:00Z");
@@ -51,10 +51,10 @@ metadata(std::string title = "Test Song",
   return values;
 }
 
-std::shared_ptr<lambda::dbus::ArrayValue>
-trackMetadataArray(std::vector<lambda::dbus::BasicValue> values) {
-  return std::make_shared<lambda::dbus::ArrayValue>(
-      lambda::dbus::ArrayValue{.elementSignature = "a{sv}", .values = std::move(values)});
+std::shared_ptr<lambdaui::dbus::ArrayValue>
+trackMetadataArray(std::vector<lambdaui::dbus::BasicValue> values) {
+  return std::make_shared<lambdaui::dbus::ArrayValue>(
+      lambdaui::dbus::ArrayValue{.elementSignature = "a{sv}", .values = std::move(values)});
 }
 
 } // namespace
@@ -64,31 +64,31 @@ TEST_CASE("MPRIS support is compile-time declared") {
 }
 
 TEST_CASE("MPRIS active player policy prunes stale players and gates capabilities") {
-  lambda::system::MPRISPlayerSnapshot stale{
+  lambdaui::system::MPRISPlayerSnapshot stale{
       .serviceName = "org.mpris.MediaPlayer2.stale",
       .playbackStatus = "",
       .canPlay = true,
       .canControl = true,
   };
-  lambda::system::MPRISPlayerSnapshot paused{
+  lambdaui::system::MPRISPlayerSnapshot paused{
       .serviceName = "org.mpris.MediaPlayer2.paused",
       .playbackStatus = "Paused",
       .canPlay = true,
       .canControl = true,
   };
-  lambda::system::MPRISPlayerSnapshot uncontrolledPlaying{
+  lambdaui::system::MPRISPlayerSnapshot uncontrolledPlaying{
       .serviceName = "org.mpris.MediaPlayer2.uncontrolled",
       .playbackStatus = "Playing",
       .canPause = true,
       .canControl = false,
   };
-  lambda::system::MPRISPlayerSnapshot playingWithoutToggle{
+  lambdaui::system::MPRISPlayerSnapshot playingWithoutToggle{
       .serviceName = "org.mpris.MediaPlayer2.playing-next-only",
       .playbackStatus = "Playing",
       .canGoNext = true,
       .canControl = true,
   };
-  lambda::system::MPRISPlayerSnapshot playing{
+  lambdaui::system::MPRISPlayerSnapshot playing{
       .serviceName = "org.mpris.MediaPlayer2.playing",
       .playbackStatus = "Playing",
       .canGoNext = true,
@@ -96,31 +96,31 @@ TEST_CASE("MPRIS active player policy prunes stale players and gates capabilitie
       .canControl = true,
   };
 
-  CHECK(lambda::system::isStaleMPRISPlayer(stale));
-  CHECK_FALSE(lambda::system::isStaleMPRISPlayer(playing));
-  CHECK(lambda::system::mprisPlayerSupportsAction(
-      playing, lambda::system::MPRISPlayerAction::PlayPause));
-  CHECK(lambda::system::mprisPlayerSupportsAction(
-      playing, lambda::system::MPRISPlayerAction::Next));
-  CHECK_FALSE(lambda::system::mprisPlayerSupportsAction(
-      playing, lambda::system::MPRISPlayerAction::Previous));
-  CHECK_FALSE(lambda::system::mprisPlayerSupportsAction(
-      uncontrolledPlaying, lambda::system::MPRISPlayerAction::PlayPause));
-  CHECK_FALSE(lambda::system::mprisPlayerSupportsAction(
-      stale, lambda::system::MPRISPlayerAction::PlayPause));
+  CHECK(lambdaui::system::isStaleMPRISPlayer(stale));
+  CHECK_FALSE(lambdaui::system::isStaleMPRISPlayer(playing));
+  CHECK(lambdaui::system::mprisPlayerSupportsAction(
+      playing, lambdaui::system::MPRISPlayerAction::PlayPause));
+  CHECK(lambdaui::system::mprisPlayerSupportsAction(
+      playing, lambdaui::system::MPRISPlayerAction::Next));
+  CHECK_FALSE(lambdaui::system::mprisPlayerSupportsAction(
+      playing, lambdaui::system::MPRISPlayerAction::Previous));
+  CHECK_FALSE(lambdaui::system::mprisPlayerSupportsAction(
+      uncontrolledPlaying, lambdaui::system::MPRISPlayerAction::PlayPause));
+  CHECK_FALSE(lambdaui::system::mprisPlayerSupportsAction(
+      stale, lambdaui::system::MPRISPlayerAction::PlayPause));
 
   auto active =
-      lambda::system::activeMPRISPlayer({stale, paused, uncontrolledPlaying, playing});
+      lambdaui::system::activeMPRISPlayer({stale, paused, uncontrolledPlaying, playing});
   REQUIRE(active);
   CHECK(active->serviceName == "org.mpris.MediaPlayer2.playing");
-  CHECK(lambda::system::activeMPRISPlayerService({stale, paused, uncontrolledPlaying, playing}) ==
+  CHECK(lambdaui::system::activeMPRISPlayerService({stale, paused, uncontrolledPlaying, playing}) ==
         "org.mpris.MediaPlayer2.playing");
-  CHECK(lambda::system::activeMPRISPlayerService({stale, paused, uncontrolledPlaying}) ==
+  CHECK(lambdaui::system::activeMPRISPlayerService({stale, paused, uncontrolledPlaying}) ==
         "org.mpris.MediaPlayer2.paused");
-  CHECK(lambda::system::activeMPRISPlayerService({playingWithoutToggle, paused}) ==
+  CHECK(lambdaui::system::activeMPRISPlayerService({playingWithoutToggle, paused}) ==
         "org.mpris.MediaPlayer2.playing-next-only");
-  CHECK_FALSE(lambda::system::activeMPRISPlayerService({uncontrolledPlaying}).has_value());
-  CHECK(lambda::system::formatMPRISStatus({stale}) == "unavailable");
+  CHECK_FALSE(lambdaui::system::activeMPRISPlayerService({uncontrolledPlaying}).has_value());
+  CHECK(lambdaui::system::formatMPRISStatus({stale}) == "unavailable");
 }
 
 #if LAMBDA_HAS_DBUS
@@ -132,9 +132,9 @@ TEST_CASE("MPRISClient discovers players reads metadata and sends controls") {
     return;
   }
 
-  auto service = lambda::dbus::Bus::openAddress(privateBus->address);
-  lambda::system::MPRISClient client(lambda::dbus::Bus::openAddress(privateBus->address));
-  std::string const serviceName = std::string(lambda::system::MPRISClient::servicePrefix) +
+  auto service = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  lambdaui::system::MPRISClient client(lambdaui::dbus::Bus::openAddress(privateBus->address));
+  std::string const serviceName = std::string(lambdaui::system::MPRISClient::servicePrefix) +
                                   "lambdaTest" +
                                   std::to_string(static_cast<unsigned long long>(getpid()));
   service.requestName(serviceName);
@@ -142,156 +142,156 @@ TEST_CASE("MPRISClient discovers players reads metadata and sends controls") {
   std::string playbackStatus = "Playing";
   double volume = 0.8;
   std::int64_t position = 4000000;
-  lambda::dbus::ObjectPathArray trackIds{
+  lambdaui::dbus::ObjectPathArray trackIds{
       .values = {
-          lambda::dbus::ObjectPath{"/org/mpris/MediaPlayer2/Track/1"},
-          lambda::dbus::ObjectPath{"/org/mpris/MediaPlayer2/Track/2"},
+          lambdaui::dbus::ObjectPath{"/org/mpris/MediaPlayer2/Track/1"},
+          lambdaui::dbus::ObjectPath{"/org/mpris/MediaPlayer2/Track/2"},
       },
   };
   int playPauseCalls = 0;
   int nextCalls = 0;
 
   auto objectSlot = service.exportObject(
-      lambda::system::MPRISClient::objectPath,
-      lambda::dbus::ObjectDefinition{
+      lambdaui::system::MPRISClient::objectPath,
+      lambdaui::dbus::ObjectDefinition{
           .methods = {
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .member = "PlayPause",
-                  .handler = [&](lambda::dbus::Message&) {
+                  .handler = [&](lambdaui::dbus::Message&) {
                     ++playPauseCalls;
                     playbackStatus = playbackStatus == "Playing" ? "Paused" : "Playing";
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .member = "Next",
-                  .handler = [&](lambda::dbus::Message&) {
+                  .handler = [&](lambdaui::dbus::Message&) {
                     ++nextCalls;
                     position = 0;
-                    return lambda::dbus::MethodReply{};
+                    return lambdaui::dbus::MethodReply{};
                   },
               },
-              lambda::dbus::ExportedMethod{
-                  .interface = lambda::system::MPRISClient::trackListInterfaceName,
+              lambdaui::dbus::ExportedMethod{
+                  .interface = lambdaui::system::MPRISClient::trackListInterfaceName,
                   .member = "GetTracksMetadata",
-                  .handler = [&](lambda::dbus::Message& message) {
+                  .handler = [&](lambdaui::dbus::Message& message) {
                     auto requested = message.readObjectPathArray();
-                    std::vector<lambda::dbus::BasicValue> values;
+                    std::vector<lambdaui::dbus::BasicValue> values;
                     for (auto const& track : requested.values) {
                       if (track.value.ends_with("/2")) {
-                        values.push_back(lambda::dbus::BasicValue(
+                        values.push_back(lambdaui::dbus::BasicValue(
                             metadata("Second Song", "/org/mpris/MediaPlayer2/Track/2")));
                       } else {
-                        values.push_back(lambda::dbus::BasicValue(metadata()));
+                        values.push_back(lambdaui::dbus::BasicValue(metadata()));
                       }
                     }
-                    return lambda::dbus::MethodReply{.values = {trackMetadataArray(std::move(values))}};
+                    return lambdaui::dbus::MethodReply{.values = {trackMetadataArray(std::move(values))}};
                   },
               },
           },
           .properties = {
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::rootInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::rootInterfaceName,
                   .name = "Identity",
                   .value = std::string("Lambda Player"),
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::rootInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::rootInterfaceName,
                   .name = "DesktopEntry",
                   .value = std::string("lambda-player"),
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "PlaybackStatus",
                   .value = std::string("Playing"),
-                  .getter = [&] { return lambda::dbus::BasicValue(playbackStatus); },
+                  .getter = [&] { return lambdaui::dbus::BasicValue(playbackStatus); },
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "Metadata",
                   .value = metadata(),
-                  .getter = [] { return lambda::dbus::BasicValue(metadata()); },
+                  .getter = [] { return lambdaui::dbus::BasicValue(metadata()); },
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "Volume",
                   .value = 0.8,
                   .writable = true,
-                  .getter = [&] { return lambda::dbus::BasicValue(volume); },
-                  .setter = [&](lambda::dbus::BasicValue const& value) {
+                  .getter = [&] { return lambdaui::dbus::BasicValue(volume); },
+                  .setter = [&](lambdaui::dbus::BasicValue const& value) {
                     volume = std::get<double>(value);
                   },
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "Position",
                   .value = std::int64_t(0),
-                  .getter = [&] { return lambda::dbus::BasicValue(position); },
+                  .getter = [&] { return lambdaui::dbus::BasicValue(position); },
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "LoopStatus",
                   .value = std::string("None"),
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "Rate",
                   .value = 1.25,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "MinimumRate",
                   .value = 0.5,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "MaximumRate",
                   .value = 2.0,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "Shuffle",
                   .value = true,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "CanGoNext",
                   .value = true,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "CanGoPrevious",
                   .value = true,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "CanPlay",
                   .value = true,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "CanPause",
                   .value = true,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "CanSeek",
                   .value = true,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::playerInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::playerInterfaceName,
                   .name = "CanControl",
                   .value = true,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::trackListInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::trackListInterfaceName,
                   .name = "Tracks",
                   .value = trackIds,
               },
-              lambda::dbus::ExportedProperty{
-                  .interface = lambda::system::MPRISClient::trackListInterfaceName,
+              lambdaui::dbus::ExportedProperty{
+                  .interface = lambdaui::system::MPRISClient::trackListInterfaceName,
                   .name = "CanEditTracks",
                   .value = false,
               },
@@ -349,30 +349,30 @@ TEST_CASE("MPRISClient discovers players reads metadata and sends controls") {
                                                                "/org/mpris/MediaPlayer2/Track/2"});
   REQUIRE(player.trackList.tracks.size() == 2);
   CHECK(player.trackList.tracks[1].title == "Second Song");
-  CHECK(lambda::system::mprisDesktopIconName("lambda-player.desktop", serviceName) ==
+  CHECK(lambdaui::system::mprisDesktopIconName("lambda-player.desktop", serviceName) ==
         "lambda-player");
-  CHECK(lambda::system::mprisDesktopIconName("", serviceName).starts_with("lambdaTest"));
-  CHECK(lambda::system::mprisTrackProgress(player) == player.progress);
-  CHECK(lambda::system::activeMPRISPlayerService({player}) == serviceName);
-  CHECK(lambda::system::formatMPRISStatus({player}) == "Lambda Artist - Test Song");
+  CHECK(lambdaui::system::mprisDesktopIconName("", serviceName).starts_with("lambdaTest"));
+  CHECK(lambdaui::system::mprisTrackProgress(player) == player.progress);
+  CHECK(lambdaui::system::activeMPRISPlayerService({player}) == serviceName);
+  CHECK(lambdaui::system::formatMPRISStatus({player}) == "Lambda Artist - Test Song");
 
   int playerChanges = 0;
   auto playerChangedWatch = client.watchPlayerChanges([&] {
     ++playerChanges;
   });
   service.emitPropertiesChanged(
-      lambda::system::MPRISClient::objectPath,
-      lambda::system::MPRISClient::playerInterfaceName,
-      lambda::dbus::VariantDictionary{
-          .values = {{"PlaybackStatus", lambda::dbus::BasicValue(playbackStatus)}},
+      lambdaui::system::MPRISClient::objectPath,
+      lambdaui::system::MPRISClient::playerInterfaceName,
+      lambdaui::dbus::VariantDictionary{
+          .values = {{"PlaybackStatus", lambdaui::dbus::BasicValue(playbackStatus)}},
       });
   service.flush();
   CHECK(pumpUntil(client.bus(),
                   [&] { return playerChanges == 1; },
                   std::chrono::milliseconds(500)));
 
-  service.emitSignal(lambda::system::MPRISClient::objectPath,
-                     lambda::system::MPRISClient::playerInterfaceName,
+  service.emitSignal(lambdaui::system::MPRISClient::objectPath,
+                     lambdaui::system::MPRISClient::playerInterfaceName,
                      "Seeked",
                      {std::int64_t(12000000)});
   service.flush();
@@ -381,27 +381,27 @@ TEST_CASE("MPRISClient discovers players reads metadata and sends controls") {
                   std::chrono::milliseconds(500)));
 
   service.emitPropertiesChanged(
-      lambda::system::MPRISClient::objectPath,
-      lambda::system::MPRISClient::trackListInterfaceName,
-      lambda::dbus::VariantDictionary{
-          .values = {{"Tracks", lambda::dbus::BasicValue(trackIds)}},
+      lambdaui::system::MPRISClient::objectPath,
+      lambdaui::system::MPRISClient::trackListInterfaceName,
+      lambdaui::dbus::VariantDictionary{
+          .values = {{"Tracks", lambdaui::dbus::BasicValue(trackIds)}},
       });
   service.flush();
   CHECK(pumpUntil(client.bus(),
                   [&] { return playerChanges == 3; },
                   std::chrono::milliseconds(500)));
 
-  service.emitSignal(lambda::system::MPRISClient::objectPath,
-                     lambda::system::MPRISClient::trackListInterfaceName,
+  service.emitSignal(lambdaui::system::MPRISClient::objectPath,
+                     lambdaui::system::MPRISClient::trackListInterfaceName,
                      "TrackMetadataChanged",
-                     {lambda::dbus::ObjectPath{"/org/mpris/MediaPlayer2/Track/2"},
+                     {lambdaui::dbus::ObjectPath{"/org/mpris/MediaPlayer2/Track/2"},
                       metadata("Second Song", "/org/mpris/MediaPlayer2/Track/2")});
   service.flush();
   CHECK(pumpUntil(client.bus(),
                   [&] { return playerChanges == 4; },
                   std::chrono::milliseconds(500)));
 
-  auto transientPlayer = lambda::dbus::Bus::openAddress(privateBus->address);
+  auto transientPlayer = lambdaui::dbus::Bus::openAddress(privateBus->address);
   transientPlayer.requestName(serviceName + ".transient");
   CHECK(pumpUntil(client.bus(),
                   [&] { return playerChanges == 5; },
@@ -411,12 +411,12 @@ TEST_CASE("MPRISClient discovers players reads metadata and sends controls") {
   CHECK(playPauseCalls == 1);
   player = client.readPlayer(serviceName);
   CHECK(player.playbackStatus == "Paused");
-  CHECK(lambda::system::formatMPRISStatus({player}) == "paused: Lambda Artist - Test Song");
-  CHECK(lambda::system::activeMPRISPlayerService({player}) == serviceName);
+  CHECK(lambdaui::system::formatMPRISStatus({player}) == "paused: Lambda Artist - Test Song");
+  CHECK(lambdaui::system::activeMPRISPlayerService({player}) == serviceName);
 
   auto uncontrolled = player;
   uncontrolled.canControl = false;
-  CHECK_FALSE(lambda::system::activeMPRISPlayerService({uncontrolled}).has_value());
+  CHECK_FALSE(lambdaui::system::activeMPRISPlayerService({uncontrolled}).has_value());
 
   client.next(serviceName);
   CHECK(nextCalls == 1);
@@ -424,7 +424,7 @@ TEST_CASE("MPRISClient discovers players reads metadata and sends controls") {
 
   client.setVolume(serviceName, 0.42);
   CHECK(volume == doctest::Approx(0.42));
-  CHECK(lambda::system::formatMPRISStatus({}) == "unavailable");
+  CHECK(lambdaui::system::formatMPRISStatus({}) == "unavailable");
 }
 
 #endif

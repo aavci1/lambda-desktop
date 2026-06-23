@@ -18,26 +18,26 @@
 
 namespace {
 
-class FakeTextSystem final : public lambda::TextSystem {
+class FakeTextSystem final : public lambdaui::TextSystem {
 public:
-  std::shared_ptr<lambda::TextLayout const>
-  layout(lambda::AttributedString const&, float, lambda::TextLayoutOptions const&) override {
-    return std::make_shared<lambda::TextLayout>();
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(lambdaui::AttributedString const&, float, lambdaui::TextLayoutOptions const&) override {
+    return std::make_shared<lambdaui::TextLayout>();
   }
 
-  std::shared_ptr<lambda::TextLayout const>
-  layout(std::string_view, lambda::Font const&, lambda::Color const&, float,
-         lambda::TextLayoutOptions const&) override {
-    return std::make_shared<lambda::TextLayout>();
+  std::shared_ptr<lambdaui::TextLayout const>
+  layout(std::string_view, lambdaui::Font const&, lambdaui::Color const&, float,
+         lambdaui::TextLayoutOptions const&) override {
+    return std::make_shared<lambdaui::TextLayout>();
   }
 
-  lambda::Size measure(lambda::AttributedString const&, float,
-                       lambda::TextLayoutOptions const&) override {
+  lambdaui::Size measure(lambdaui::AttributedString const&, float,
+                       lambdaui::TextLayoutOptions const&) override {
     return {0.f, 0.f};
   }
 
-  lambda::Size measure(std::string_view, lambda::Font const&, lambda::Color const&, float,
-                       lambda::TextLayoutOptions const&) override {
+  lambdaui::Size measure(std::string_view, lambdaui::Font const&, lambdaui::Color const&, float,
+                       lambdaui::TextLayoutOptions const&) override {
     return {64.f, 18.f};
   }
 
@@ -46,7 +46,7 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t, float,
                                            std::uint32_t& outWidth,
                                            std::uint32_t& outHeight,
-                                           lambda::Point& outBearing) override {
+                                           lambdaui::Point& outBearing) override {
     outWidth = 0;
     outHeight = 0;
     outBearing = {};
@@ -54,8 +54,8 @@ public:
   }
 };
 
-lambda::EnvironmentBinding testEnvironment() {
-  return lambda::EnvironmentBinding{}.withValue<lambda::ThemeKey>(lambda::Theme::light());
+lambdaui::EnvironmentBinding testEnvironment() {
+  return lambdaui::EnvironmentBinding{}.withValue<lambdaui::ThemeKey>(lambdaui::Theme::light());
 }
 
 lambda_shell::DockItem launcherItem() {
@@ -98,29 +98,29 @@ std::vector<lambda_shell::DockItem> dockItemsWithToggle() {
 }
 
 struct DockRoot {
-  lambda::Signal<std::vector<lambda_shell::DockItem>> items;
-  lambda::Signal<std::string> timeText;
-  lambda::Signal<int> clockWidth;
-  lambda::Signal<int> itemSize{lambda_shell::kDockIconSize};
+  lambdaui::Signal<std::vector<lambda_shell::DockItem>> items;
+  lambdaui::Signal<std::string> timeText;
+  lambdaui::Signal<int> clockWidth;
+  lambdaui::Signal<int> itemSize{lambda_shell::kDockIconSize};
   bool fullWidth = false;
 
-  lambda::Element body() const {
-    lambda::Reactive::Bindable<int> width{[items = items, clockWidth = clockWidth, itemSize = itemSize] {
+  lambdaui::Element body() const {
+    lambdaui::Reactive::Bindable<int> width{[items = items, clockWidth = clockWidth, itemSize = itemSize] {
       return lambda_shell::dockWidth(items(), clockWidth(), itemSize());
     }};
-    return lambda::Element{lambda_shell::LambdaDock{lambda_shell::DockProps{
+    return lambdaui::Element{lambda_shell::LambdaDock{lambda_shell::DockProps{
         .items = items,
         .timeText = timeText,
         .clockWidth = clockWidth,
         .itemSize = itemSize,
-        .system = lambda::Reactive::Bindable<lambda_shell::SystemStatus>{lambda_shell::SystemStatus{}},
+        .system = lambdaui::Reactive::Bindable<lambda_shell::SystemStatus>{lambda_shell::SystemStatus{}},
         .fullWidth = fullWidth,
         .width = width,
     }}};
   }
 };
 
-void checkDockAppSection(lambda::scenegraph::SceneGraph const& sceneGraph,
+void checkDockAppSection(lambdaui::scenegraph::SceneGraph const& sceneGraph,
                          std::vector<lambda_shell::DockItem> const& expectedItems,
                          int itemSize = lambda_shell::kDockIconSize) {
   auto const& root = sceneGraph.root();
@@ -166,18 +166,18 @@ TEST_CASE("LambdaDock app section does not keep stale blank item slots") {
   auto pinned = pinnedDockItems();
   auto withToggle = dockItemsWithToggle();
 
-  lambda::Signal<std::vector<lambda_shell::DockItem>> items{pinned};
-  lambda::Signal<std::string> timeText{"Sat 30 May, 18:31"};
-  lambda::Signal<int> clockWidth{116};
+  lambdaui::Signal<std::vector<lambda_shell::DockItem>> items{pinned};
+  lambdaui::Signal<std::string> timeText{"Sat 30 May, 18:31"};
+  lambdaui::Signal<int> clockWidth{116};
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<DockRoot>>(
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<DockRoot>>(
           std::in_place, DockRoot{items, timeText, clockWidth}),
       textSystem,
       testEnvironment(),
-      lambda::Size{900.f, static_cast<float>(lambda_shell::dockHeight())},
+      lambdaui::Size{900.f, static_cast<float>(lambda_shell::dockHeight())},
   };
 
   root.mount(sceneGraph);
@@ -193,19 +193,19 @@ TEST_CASE("LambdaDock app section does not keep stale blank item slots") {
 TEST_CASE("LambdaDock switches status and clock docklets to single row for compact item size") {
   auto pinned = pinnedDockItems();
 
-  lambda::Signal<std::vector<lambda_shell::DockItem>> items{pinned};
-  lambda::Signal<std::string> timeText{"Sat 30 May, 18:31"};
-  lambda::Signal<int> clockWidth{148};
-  lambda::Signal<int> itemSize{36};
+  lambdaui::Signal<std::vector<lambda_shell::DockItem>> items{pinned};
+  lambdaui::Signal<std::string> timeText{"Sat 30 May, 18:31"};
+  lambdaui::Signal<int> clockWidth{148};
+  lambdaui::Signal<int> itemSize{36};
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<DockRoot>>(
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<DockRoot>>(
           std::in_place, DockRoot{items, timeText, clockWidth, itemSize}),
       textSystem,
       testEnvironment(),
-      lambda::Size{1100.f, static_cast<float>(lambda_shell::dockHeight(36))},
+      lambdaui::Size{1100.f, static_cast<float>(lambda_shell::dockHeight(36))},
   };
 
   root.mount(sceneGraph);
@@ -242,19 +242,19 @@ TEST_CASE("LambdaDock switches status and clock docklets to single row for compa
 TEST_CASE("LambdaDock full-width layout reserves space before status docklets") {
   auto pinned = pinnedDockItems();
 
-  lambda::Signal<std::vector<lambda_shell::DockItem>> items{pinned};
-  lambda::Signal<std::string> timeText{"Sat 30 May, 18:31"};
-  lambda::Signal<int> clockWidth{148};
-  lambda::Signal<int> itemSize{48};
+  lambdaui::Signal<std::vector<lambda_shell::DockItem>> items{pinned};
+  lambdaui::Signal<std::string> timeText{"Sat 30 May, 18:31"};
+  lambdaui::Signal<int> clockWidth{148};
+  lambdaui::Signal<int> itemSize{48};
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<DockRoot>>(
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<DockRoot>>(
           std::in_place, DockRoot{items, timeText, clockWidth, itemSize, true}),
       textSystem,
       testEnvironment(),
-      lambda::Size{1100.f, static_cast<float>(lambda_shell::dockHeight(48))},
+      lambdaui::Size{1100.f, static_cast<float>(lambda_shell::dockHeight(48))},
   };
 
   root.mount(sceneGraph);
@@ -298,13 +298,13 @@ TEST_CASE("LambdaSessionMenu mounts all power and session actions") {
   };
 
   FakeTextSystem textSystem;
-  lambda::scenegraph::SceneGraph sceneGraph;
-  lambda::MountRoot root{
-      std::make_unique<lambda::TypedRootHolder<lambda_shell::LambdaSessionMenu>>(
+  lambdaui::scenegraph::SceneGraph sceneGraph;
+  lambdaui::MountRoot root{
+      std::make_unique<lambdaui::TypedRootHolder<lambda_shell::LambdaSessionMenu>>(
           std::in_place, lambda_shell::LambdaSessionMenu{props}),
       textSystem,
       testEnvironment(),
-      lambda::Size{static_cast<float>(lambda_shell::kSessionMenuSurfaceWidth),
+      lambdaui::Size{static_cast<float>(lambda_shell::kSessionMenuSurfaceWidth),
                    static_cast<float>(lambda_shell::kSessionMenuSurfaceHeight)},
   };
 

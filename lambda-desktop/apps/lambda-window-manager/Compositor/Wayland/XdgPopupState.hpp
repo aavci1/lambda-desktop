@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <span>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 struct XdgPopupReparentInput {
   std::int32_t oldParentX = 0;
@@ -157,4 +157,4 @@ inline bool xdgPopupGrabClearForSeatResource(WaylandServer::Impl::XdgPopupGrab& 
   return true;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

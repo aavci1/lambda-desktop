@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <unistd.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 class MockPresenter final : public Presenter {
@@ -19,7 +19,7 @@ public:
   void updateOutputGeometry(float, std::int32_t, std::int32_t) override {}
 
   [[nodiscard]] std::uint32_t lastVulkanPresentId() const override { return lastPresentId_; }
-  [[nodiscard]] std::vector<lambda::VulkanPastPresentationTiming> pollVulkanPresentationTimings() override {
+  [[nodiscard]] std::vector<lambdaui::VulkanPastPresentationTiming> pollVulkanPresentationTimings() override {
     return timings_;
   }
   void enqueueTiming(std::uint32_t presentId, std::uint64_t actualPresentTime) {
@@ -29,7 +29,7 @@ public:
 
 private:
   std::uint32_t lastPresentId_ = 0;
-  std::vector<lambda::VulkanPastPresentationTiming> timings_;
+  std::vector<lambdaui::VulkanPastPresentationTiming> timings_;
 };
 
 } // namespace
@@ -175,4 +175,4 @@ TEST_CASE("forceVulkanDisplayPresenter respects environment flag") {
   unsetenv("LAMBDA_WINDOW_MANAGER_PRESENT");
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

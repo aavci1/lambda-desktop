@@ -423,4 +423,4 @@ void vulkanContextEnsureInitialized() {
 
 } // namespace detail
 
-} // namespace lambda
+} // namespace lambdaui

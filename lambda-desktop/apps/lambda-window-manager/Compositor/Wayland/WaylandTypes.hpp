@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 enum class BackgroundEffectShape : std::uint8_t {
   RoundedRect,
@@ -200,4 +200,4 @@ struct ShortcutBinding {
   bool shift = false;
 };
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

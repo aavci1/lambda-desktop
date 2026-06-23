@@ -58,7 +58,7 @@ TEST_CASE("compositor config creates a default file when missing") {
   std::filesystem::remove_all(path.parent_path());
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = lambda::compositor::loadConfigWithMetadata();
+  auto loaded = lambdaui::compositor::loadConfigWithMetadata();
 
   CHECK(loaded.path == path.string());
   CHECK(loaded.hasModifiedAt);
@@ -106,7 +106,7 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = lambda::compositor::loadConfigWithMetadata();
+  auto loaded = lambdaui::compositor::loadConfigWithMetadata();
   auto const& config = loaded.config;
   CHECK(loaded.path == path.string());
   CHECK(loaded.hasModifiedAt);
@@ -115,13 +115,13 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
   CHECK(config.backgroundColor.b == doctest::Approx(51.f / 255.f));
   CHECK(config.backgroundColor.a == doctest::Approx(1.f));
   CHECK(config.wallpaperPath == "/tmp/wallpaper.png");
-  CHECK(config.wallpaperMode == lambda::ImageFillMode::Fit);
+  CHECK(config.wallpaperMode == lambdaui::ImageFillMode::Fit);
   CHECK(config.scale == doctest::Approx(1.5f));
   CHECK_FALSE(config.animationsEnabled);
   CHECK_FALSE(config.hardwareCursorEnabled);
 
   auto snapLeft = std::find_if(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
-    return binding.action == lambda::compositor::WaylandServer::ShortcutAction::SnapLeft;
+    return binding.action == lambdaui::compositor::WaylandServer::ShortcutAction::SnapLeft;
   });
   REQUIRE(snapLeft != config.shortcutBindings.end());
   CHECK(snapLeft->ctrl);
@@ -130,14 +130,14 @@ TEST_CASE("compositor config parses colors, wallpaper, and keybindings") {
 
   auto cycleForward =
       std::find_if(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
-        return binding.action == lambda::compositor::WaylandServer::ShortcutAction::CycleFocus &&
+        return binding.action == lambdaui::compositor::WaylandServer::ShortcutAction::CycleFocus &&
                binding.key == KEY_TAB && binding.meta && !binding.shift;
       });
   CHECK(cycleForward != config.shortcutBindings.end());
 
   auto cycleBackward =
       std::find_if(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
-        return binding.action == lambda::compositor::WaylandServer::ShortcutAction::CycleFocus &&
+        return binding.action == lambdaui::compositor::WaylandServer::ShortcutAction::CycleFocus &&
                binding.key == KEY_TAB && binding.meta && binding.shift;
       });
   CHECK(cycleBackward != config.shortcutBindings.end());
@@ -166,7 +166,7 @@ TEST_CASE("compositor config resolves wallpaper paths from home and config direc
     file << "wallpaper = \"~/Pictures/wallpaper.png\"\n";
   }
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
-  auto homeLoaded = lambda::compositor::loadConfigWithMetadata();
+  auto homeLoaded = lambdaui::compositor::loadConfigWithMetadata();
   REQUIRE(homeLoaded.config.wallpaperPath);
   CHECK(*homeLoaded.config.wallpaperPath == (homeDir / "Pictures/wallpaper.png").lexically_normal().string());
 
@@ -174,7 +174,7 @@ TEST_CASE("compositor config resolves wallpaper paths from home and config direc
     std::ofstream file(path);
     file << "wallpaper = \"images/wallpaper.png\"\n";
   }
-  auto relativeLoaded = lambda::compositor::loadConfigWithMetadata();
+  auto relativeLoaded = lambdaui::compositor::loadConfigWithMetadata();
   REQUIRE(relativeLoaded.config.wallpaperPath);
   CHECK(*relativeLoaded.config.wallpaperPath == (configDir / "images/wallpaper.png").lexically_normal().string());
 
@@ -191,7 +191,7 @@ TEST_CASE("compositor config parses shorthand and alpha colors") {
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = lambda::compositor::loadConfigWithMetadata();
+  auto loaded = lambdaui::compositor::loadConfigWithMetadata();
   auto const& config = loaded.config;
   CHECK(config.backgroundColor.r == doctest::Approx(17.f / 255.f));
   CHECK(config.backgroundColor.g == doctest::Approx(34.f / 255.f));
@@ -244,7 +244,7 @@ TEST_CASE("compositor config parses chrome section") {
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = lambda::compositor::loadConfigWithMetadata();
+  auto loaded = lambdaui::compositor::loadConfigWithMetadata();
   auto const& chrome = loaded.config.chrome;
   CHECK(chrome.titleBarHeight == 44);
   CHECK(chrome.controlsWidth == 96);
@@ -279,16 +279,16 @@ TEST_CASE("compositor config parses chrome section") {
 }
 
 TEST_CASE("chrome controls scale and center with title bar height") {
-  lambda::compositor::ChromeConfig chrome;
+  lambdaui::compositor::ChromeConfig chrome;
   chrome.titleBarHeight = 56;
 
-  auto const metrics = lambda::compositor::chromeControlsMetrics(chrome);
+  auto const metrics = lambdaui::compositor::chromeControlsMetrics(chrome);
   CHECK(metrics.buttonSize == doctest::Approx(32.f));
   CHECK(metrics.controlsWidth == doctest::Approx(168.f));
   CHECK(metrics.controlWidth == doctest::Approx(56.f));
   CHECK(metrics.insetTop == doctest::Approx(12.f));
 
-  auto const rects = lambda::compositor::chromeControlRects(chrome, 10.f, 20.f, 300.f, 56.f);
+  auto const rects = lambdaui::compositor::chromeControlRects(chrome, 10.f, 20.f, 300.f, 56.f);
   CHECK(rects.controls.x == doctest::Approx(142.f));
   CHECK(rects.minimizeButton.x == doctest::Approx(142.f));
   CHECK(rects.maximizeButton.x == doctest::Approx(198.f));
@@ -312,7 +312,7 @@ TEST_CASE("compositor config parses rendering backdrop blur settings") {
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = lambda::compositor::loadConfigWithMetadata();
+  auto loaded = lambdaui::compositor::loadConfigWithMetadata();
 
   CHECK(loaded.config.rendering.backdropBlurBaseDownsample == 3);
 
@@ -330,10 +330,10 @@ TEST_CASE("compositor config reports file changes") {
   }
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = lambda::compositor::loadConfigWithMetadata();
-  CHECK_FALSE(lambda::compositor::configChanged(loaded));
+  auto loaded = lambdaui::compositor::loadConfigWithMetadata();
+  CHECK_FALSE(lambdaui::compositor::configChanged(loaded));
   std::filesystem::remove(path);
-  CHECK(lambda::compositor::configChanged(loaded));
+  CHECK(lambdaui::compositor::configChanged(loaded));
 }
 
 TEST_CASE("compositor config parses gradient aliases and scale aliases") {
@@ -353,7 +353,7 @@ TEST_CASE("compositor config parses gradient aliases and scale aliases") {
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = lambda::compositor::loadConfigWithMetadata();
+  auto loaded = lambdaui::compositor::loadConfigWithMetadata();
   auto const& config = loaded.config;
   CHECK(config.backgroundColor.r == doctest::Approx(1.f / 255.f));
   CHECK(config.backgroundColor.g == doctest::Approx(2.f / 255.f));
@@ -362,7 +362,7 @@ TEST_CASE("compositor config parses gradient aliases and scale aliases") {
   CHECK(config.backgroundGradientEnd->r == doctest::Approx(160.f / 255.f));
   CHECK(config.backgroundGradientEnd->g == doctest::Approx(176.f / 255.f));
   CHECK(config.backgroundGradientEnd->b == doctest::Approx(192.f / 255.f));
-  CHECK(config.wallpaperMode == lambda::ImageFillMode::Tile);
+  CHECK(config.wallpaperMode == lambdaui::ImageFillMode::Tile);
   REQUIRE(config.cursorTheme);
   CHECK(*config.cursorTheme == "Adwaita");
   CHECK(config.cursorSize == 32);
@@ -392,16 +392,16 @@ TEST_CASE("compositor config supports per-output scale overrides") {
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = lambda::compositor::loadConfigWithMetadata();
+  auto loaded = lambdaui::compositor::loadConfigWithMetadata();
   auto const& config = loaded.config;
   CHECK(config.scale == doctest::Approx(1.0f));
   REQUIRE(config.outputScales.contains("eDP-1"));
   REQUIRE(config.outputScales.contains("DP-1"));
   CHECK(config.outputScales.at("eDP-1") == doctest::Approx(1.25f));
   CHECK(config.outputScales.at("DP-1") == doctest::Approx(2.0f));
-  CHECK(lambda::compositor::scaleForOutput(config, "eDP-1") == doctest::Approx(1.25f));
-  CHECK(lambda::compositor::scaleForOutput(config, "DP-1") == doctest::Approx(2.0f));
-  CHECK(lambda::compositor::scaleForOutput(config, "HDMI-A-1") == doctest::Approx(1.0f));
+  CHECK(lambdaui::compositor::scaleForOutput(config, "eDP-1") == doctest::Approx(1.25f));
+  CHECK(lambdaui::compositor::scaleForOutput(config, "DP-1") == doctest::Approx(2.0f));
+  CHECK(lambdaui::compositor::scaleForOutput(config, "HDMI-A-1") == doctest::Approx(1.0f));
 
   std::filesystem::remove(path);
 }
@@ -432,13 +432,13 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto loaded = lambda::compositor::loadConfigWithMetadata();
+  auto loaded = lambdaui::compositor::loadConfigWithMetadata();
   auto const& config = loaded.config;
   CHECK(config.backgroundColor.r == doctest::Approx(0.20f));
   CHECK(config.backgroundColor.g == doctest::Approx(0.50f));
   CHECK(config.backgroundColor.b == doctest::Approx(0.95f));
   CHECK_FALSE(config.backgroundGradientEnd);
-  CHECK(config.wallpaperMode == lambda::ImageFillMode::Cover);
+  CHECK(config.wallpaperMode == lambdaui::ImageFillMode::Cover);
   CHECK_FALSE(config.cursorTheme);
   CHECK(config.cursorSize == 0);
   CHECK(config.scale == doctest::Approx(2.0f));
@@ -450,7 +450,7 @@ TEST_CASE("compositor config ignores invalid values and preserves defaults") {
   CHECK(config.keyboard.repeatDelayMs == 600);
 
   auto snapLeft = std::find_if(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
-    return binding.action == lambda::compositor::WaylandServer::ShortcutAction::SnapLeft;
+    return binding.action == lambdaui::compositor::WaylandServer::ShortcutAction::SnapLeft;
   });
   REQUIRE(snapLeft != config.shortcutBindings.end());
   CHECK(snapLeft->meta);
@@ -478,7 +478,7 @@ TEST_CASE("compositor config parses keyboard input settings") {
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto const config = lambda::compositor::loadConfigWithMetadata().config;
+  auto const config = lambdaui::compositor::loadConfigWithMetadata().config;
   CHECK(config.popupGrabs);
   CHECK(config.keyboard.layout == "tr");
   CHECK(config.keyboard.variant == "f");
@@ -507,50 +507,50 @@ TEST_CASE("compositor config supports shortcut aliases and replacement") {
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto const config = lambda::compositor::loadConfigWithMetadata().config;
-  auto findAction = [&](lambda::compositor::WaylandServer::ShortcutAction action) {
+  auto const config = lambdaui::compositor::loadConfigWithMetadata().config;
+  auto findAction = [&](lambdaui::compositor::WaylandServer::ShortcutAction action) {
     return std::find_if(config.shortcutBindings.begin(), config.shortcutBindings.end(), [&](auto const& binding) {
       return binding.action == action;
     });
   };
 
-  auto close = findAction(lambda::compositor::WaylandServer::ShortcutAction::CloseFocused);
+  auto close = findAction(lambdaui::compositor::WaylandServer::ShortcutAction::CloseFocused);
   REQUIRE(close != config.shortcutBindings.end());
   CHECK(close->meta);
   CHECK(close->shift);
   CHECK(close->key == KEY_Q);
 
-  auto cycle = findAction(lambda::compositor::WaylandServer::ShortcutAction::CycleFocus);
+  auto cycle = findAction(lambdaui::compositor::WaylandServer::ShortcutAction::CycleFocus);
   REQUIRE(cycle != config.shortcutBindings.end());
   CHECK(cycle->alt);
   CHECK_FALSE(cycle->meta);
   CHECK(cycle->key == KEY_TAB);
 
-  auto launch = findAction(lambda::compositor::WaylandServer::ShortcutAction::LaunchCommand);
+  auto launch = findAction(lambdaui::compositor::WaylandServer::ShortcutAction::LaunchCommand);
   REQUIRE(launch != config.shortcutBindings.end());
   CHECK(launch->ctrl);
   CHECK_FALSE(launch->meta);
   CHECK(launch->key == KEY_SPACE);
 
-  auto terminate = findAction(lambda::compositor::WaylandServer::ShortcutAction::Terminate);
+  auto terminate = findAction(lambdaui::compositor::WaylandServer::ShortcutAction::Terminate);
   REQUIRE(terminate != config.shortcutBindings.end());
   CHECK(terminate->ctrl);
   CHECK(terminate->alt);
   CHECK(terminate->key == KEY_DELETE);
 
-  auto screenshot = findAction(lambda::compositor::WaylandServer::ShortcutAction::Screenshot);
+  auto screenshot = findAction(lambdaui::compositor::WaylandServer::ShortcutAction::Screenshot);
   REQUIRE(screenshot != config.shortcutBindings.end());
   CHECK(screenshot->meta);
   CHECK(screenshot->shift);
   CHECK(screenshot->key == KEY_3);
 
-  auto screenshotRegion = findAction(lambda::compositor::WaylandServer::ShortcutAction::ScreenshotRegion);
+  auto screenshotRegion = findAction(lambdaui::compositor::WaylandServer::ShortcutAction::ScreenshotRegion);
   REQUIRE(screenshotRegion != config.shortcutBindings.end());
   CHECK(screenshotRegion->meta);
   CHECK(screenshotRegion->shift);
   CHECK(screenshotRegion->key == KEY_4);
 
-  auto screenshotActiveWindow = findAction(lambda::compositor::WaylandServer::ShortcutAction::ScreenshotActiveWindow);
+  auto screenshotActiveWindow = findAction(lambdaui::compositor::WaylandServer::ShortcutAction::ScreenshotActiveWindow);
   REQUIRE(screenshotActiveWindow != config.shortcutBindings.end());
   CHECK(screenshotActiveWindow->alt);
   CHECK_FALSE(screenshotActiveWindow->meta);
@@ -571,18 +571,18 @@ TEST_CASE("compositor config supports multiple shortcuts per action") {
   file.close();
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
 
-  auto const config = lambda::compositor::loadConfigWithMetadata().config;
-  auto countAction = [&](lambda::compositor::WaylandServer::ShortcutAction action) {
+  auto const config = lambdaui::compositor::loadConfigWithMetadata().config;
+  auto countAction = [&](lambdaui::compositor::WaylandServer::ShortcutAction action) {
     return std::count_if(config.shortcutBindings.begin(), config.shortcutBindings.end(), [&](auto const& binding) {
       return binding.action == action;
     });
   };
-  CHECK(countAction(lambda::compositor::WaylandServer::ShortcutAction::Screenshot) == 2);
-  CHECK(countAction(lambda::compositor::WaylandServer::ShortcutAction::ScreenshotActiveWindow) == 2);
+  CHECK(countAction(lambdaui::compositor::WaylandServer::ShortcutAction::Screenshot) == 2);
+  CHECK(countAction(lambdaui::compositor::WaylandServer::ShortcutAction::ScreenshotActiveWindow) == 2);
 
   auto const hasSysRqScreenshot =
       std::any_of(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
-        return binding.action == lambda::compositor::WaylandServer::ShortcutAction::Screenshot &&
+        return binding.action == lambdaui::compositor::WaylandServer::ShortcutAction::Screenshot &&
                binding.key == KEY_SYSRQ &&
                !binding.meta &&
                !binding.alt &&
@@ -592,7 +592,7 @@ TEST_CASE("compositor config supports multiple shortcuts per action") {
 
   auto const hasAltPrintWindow =
       std::any_of(config.shortcutBindings.begin(), config.shortcutBindings.end(), [](auto const& binding) {
-        return binding.action == lambda::compositor::WaylandServer::ShortcutAction::ScreenshotActiveWindow &&
+        return binding.action == lambdaui::compositor::WaylandServer::ShortcutAction::ScreenshotActiveWindow &&
                binding.key == KEY_PRINT &&
                binding.alt &&
                !binding.meta;
@@ -612,7 +612,7 @@ TEST_CASE("compositor config allows output environment override") {
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
   setenv("LAMBDA_WINDOW_MANAGER_OUTPUT", "secondary", 1);
 
-  auto const config = lambda::compositor::loadConfigWithMetadata().config;
+  auto const config = lambdaui::compositor::loadConfigWithMetadata().config;
   REQUIRE(config.outputSelector);
   CHECK(*config.outputSelector == "secondary");
 
@@ -629,7 +629,7 @@ TEST_CASE("compositor config applies output environment override when config is 
   setenv("LAMBDA_WINDOW_MANAGER_CONFIG", path.c_str(), 1);
   setenv("LAMBDA_WINDOW_MANAGER_OUTPUT", "DP-1", 1);
 
-  auto const config = lambda::compositor::loadConfigWithMetadata().config;
+  auto const config = lambdaui::compositor::loadConfigWithMetadata().config;
   REQUIRE(config.outputSelector);
   CHECK(*config.outputSelector == "DP-1");
 

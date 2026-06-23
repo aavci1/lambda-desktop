@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using SurfaceUploadDamageRect = CommittedSurfaceSnapshot::RegionRect;
 
@@ -81,4 +81,4 @@ inline void buildSurfaceUploadDamageRects(std::vector<SurfaceUploadDamageRect> c
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

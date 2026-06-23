@@ -14,7 +14,7 @@
 #include <variant>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -150,4 +150,4 @@ void detail::EventQueueImplAccess::dispatchOne(EventQueue& q, Event& event) {
       event);
 }
 
-} // namespace lambda
+} // namespace lambdaui

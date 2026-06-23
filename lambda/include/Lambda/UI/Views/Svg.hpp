@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 class MountContext;
 namespace scenegraph {
@@ -88,4 +88,4 @@ struct Svg : ViewModifiers<Svg> {
   bool operator==(Svg const&) const = default;
 };
 
-} // namespace lambda
+} // namespace lambdaui

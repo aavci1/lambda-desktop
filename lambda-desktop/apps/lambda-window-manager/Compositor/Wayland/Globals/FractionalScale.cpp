@@ -9,7 +9,7 @@
 #include <memory>
 #include <wayland-server-core.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 void fractionalScaleManagerDestroy(wl_client*, wl_resource* resource) {
@@ -84,4 +84,4 @@ void bindFractionalScaleManager(wl_client* client, void* data, std::uint32_t ver
   bindFractionalScaleManagerImpl(client, data, version, id);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

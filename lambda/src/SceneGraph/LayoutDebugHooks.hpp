@@ -1,8 +1,8 @@
 #pragma once
 
-namespace lambda {
+namespace lambdaui {
 
 bool layoutDebugEnabled();
 void layoutDebugDumpAttached(char const* reason);
 
-} // namespace lambda
+} // namespace lambdaui

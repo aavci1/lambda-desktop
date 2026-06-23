@@ -17,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 struct AnimationOptions {
   static constexpr int kRepeatForever = -1;
@@ -183,7 +183,7 @@ public:
     status_ = TimelineClipStatus::Cancelled;
   }
 
-#if defined(LAMBDA_TESTING)
+#if defined(LAMBDAUI_TESTING)
   void testSetStartedAt(double startedAt) { startedAt_ = startedAt; }
 #endif
 
@@ -271,7 +271,7 @@ public:
     AnimationClock::instance().unregisterAnimation(state_.get());
   }
 
-#if defined(LAMBDA_TESTING)
+#if defined(LAMBDAUI_TESTING)
   T testValueAt(double nowSeconds) const { return state_ ? state_->sample(nowSeconds) : T{}; }
   bool testTick(double nowSeconds) const {
     if (!state_) {
@@ -400,7 +400,7 @@ public:
   bool isRunning() const { return state().running; }
   bool isPaused() const { return state().paused; }
 
-#if defined(LAMBDA_TESTING)
+#if defined(LAMBDAUI_TESTING)
   void testSetStartTime(double startTime) const { state().startTime = startTime; }
   bool testTick(double nowSeconds) const { return state().tick(nowSeconds); }
 #endif
@@ -476,4 +476,4 @@ private:
   std::shared_ptr<State> state_;
 };
 
-} // namespace lambda
+} // namespace lambdaui

@@ -148,10 +148,10 @@ int lineEndIncludingNewline(std::string const &text, int byte) {
 }
 
 ByteRange lineRangeForSelection(std::string const &text,
-                                lambda::detail::TextEditSelection selection) {
+                                lambdaui::detail::TextEditSelection selection) {
     int const size = static_cast<int>(text.size());
-    lambda::detail::TextEditSelection const clamped =
-        lambda::detail::clampSelection(text, selection);
+    lambdaui::detail::TextEditSelection const clamped =
+        lambdaui::detail::clampSelection(text, selection);
     auto const [orderedStart, orderedEnd] = clamped.ordered();
     int const endProbe = orderedEnd > orderedStart ? std::max(0, orderedEnd - 1) : orderedEnd;
     return ByteRange{
@@ -160,10 +160,10 @@ ByteRange lineRangeForSelection(std::string const &text,
     };
 }
 
-lambda::detail::TextEditSelection shiftSelection(std::string const &text,
-                                                 lambda::detail::TextEditSelection selection,
+lambdaui::detail::TextEditSelection shiftSelection(std::string const &text,
+                                                 lambdaui::detail::TextEditSelection selection,
                                                  int delta) {
-    return lambda::detail::clampSelection(text, lambda::detail::TextEditSelection{
+    return lambdaui::detail::clampSelection(text, lambdaui::detail::TextEditSelection{
         .caretByte = selection.caretByte + delta,
         .anchorByte = selection.anchorByte + delta,
     });
@@ -255,7 +255,7 @@ int utf8NextWordImpl(std::string const &s, int pos) {
     return p;
 }
 
-float caretXInRun(lambda::TextLayout::PlacedRun const &pr, int byteOffset) {
+float caretXInRun(lambdaui::TextLayout::PlacedRun const &pr, int byteOffset) {
     int const b0 = static_cast<int>(pr.utf8Begin);
     int const b1 = static_cast<int>(pr.utf8End);
     int const nB = b1 - b0;
@@ -281,7 +281,7 @@ float caretXInRun(lambda::TextLayout::PlacedRun const &pr, int byteOffset) {
     return pr.origin.x + t * pr.run.width;
 }
 
-int glyphIndexForLocalX(lambda::TextRun const &run, float localX) {
+int glyphIndexForLocalX(lambdaui::TextRun const &run, float localX) {
     int const nG = static_cast<int>(run.positions.size());
     if (nG == 0) {
         return 0;
@@ -298,7 +298,7 @@ int glyphIndexForLocalX(lambda::TextRun const &run, float localX) {
     return nG - 1;
 }
 
-int byteAtLocalXInRun(lambda::TextLayout::PlacedRun const &pr, float localX, std::string const &buf) {
+int byteAtLocalXInRun(lambdaui::TextLayout::PlacedRun const &pr, float localX, std::string const &buf) {
     int const b0 = static_cast<int>(pr.utf8Begin);
     int const b1 = static_cast<int>(pr.utf8End);
     int const nBytes = b1 - b0;
@@ -315,27 +315,27 @@ int byteAtLocalXInRun(lambda::TextLayout::PlacedRun const &pr, float localX, std
         int p = b0;
         int remaining = std::clamp(idx, 0, nBytes);
         while (remaining-- > 0 && p < b1) {
-            p = lambda::detail::utf8NextChar(buf, p);
+            p = lambdaui::detail::utf8NextChar(buf, p);
             if (p > b1) {
                 p = b1;
                 break;
             }
         }
-        return lambda::detail::utf8Clamp(buf, std::min(p, b1));
+        return lambdaui::detail::utf8Clamp(buf, std::min(p, b1));
     }
 
     int const g = glyphIndexForLocalX(pr.run, localX);
     int p = b0;
     for (int i = 0; i < g && p < b1; ++i) {
-        p = lambda::detail::utf8NextChar(buf, p);
+        p = lambdaui::detail::utf8NextChar(buf, p);
     }
-    return lambda::detail::utf8Clamp(buf, std::min(p, b1));
+    return lambdaui::detail::utf8Clamp(buf, std::min(p, b1));
 }
 
-int visualLineEndByte(lambda::detail::LineMetrics const &line, std::string const &buf) {
-    int end = lambda::detail::utf8Clamp(buf, line.byteEnd);
+int visualLineEndByte(lambdaui::detail::LineMetrics const &line, std::string const &buf) {
+    int end = lambdaui::detail::utf8Clamp(buf, line.byteEnd);
     while (end > line.byteStart) {
-        int const prev = lambda::detail::utf8PrevChar(buf, end);
+        int const prev = lambdaui::detail::utf8PrevChar(buf, end);
         char32_t cp = 0;
         int len = 1;
         if (!utf8DecodeAt(buf, prev, cp, len)) {
@@ -351,7 +351,7 @@ int visualLineEndByte(lambda::detail::LineMetrics const &line, std::string const
 
 } // namespace
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 int utf8NextChar(std::string const &s, int pos) noexcept {
     return utf8NextCharImpl(s, pos);
@@ -1379,4 +1379,4 @@ std::vector<Rect> selectionRects(TextEditLayoutResult const &result, TextEditSel
     return rects;
 }
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

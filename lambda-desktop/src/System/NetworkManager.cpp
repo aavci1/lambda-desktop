@@ -5,7 +5,7 @@
 #include <string_view>
 #include <utility>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -710,4 +710,4 @@ std::string formatWifiStatus(NetworkManagerSnapshot const& snapshot) {
   return hasWifi ? "off" : "unavailable";
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

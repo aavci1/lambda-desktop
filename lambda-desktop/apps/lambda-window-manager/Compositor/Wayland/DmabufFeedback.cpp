@@ -4,7 +4,7 @@
 #include <limits>
 #include <optional>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 namespace {
 
 bool samePair(DmabufFeedbackPair const& lhs, DmabufFeedbackPair const& rhs) {
@@ -66,4 +66,4 @@ DmabufFeedbackPlan buildDmabufFeedbackPlan(std::span<DmabufFeedbackPair const> r
   return plan;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

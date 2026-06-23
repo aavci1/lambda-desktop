@@ -5,7 +5,7 @@
 #include <memory>
 #include <utility>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -166,4 +166,4 @@ std::string formatUPowerBatteryStatus(UPowerDisplayDevice const& device) {
   return std::to_string(rounded) + "%";
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

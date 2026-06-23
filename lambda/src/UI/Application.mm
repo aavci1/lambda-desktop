@@ -38,7 +38,7 @@
 #import <CoreText/CoreText.h>
 #import <dispatch/dispatch.h>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace detail {
 namespace {
@@ -892,4 +892,4 @@ Application& Application::instance() {
 
 bool Application::hasInstance() { return gCurrent != nullptr; }
 
-} // namespace lambda
+} // namespace lambdaui

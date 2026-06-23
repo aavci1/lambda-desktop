@@ -10,7 +10,7 @@
 
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Overlays children in one stack. There is no padding field on `ZStack`: inset via **`.padding()`** on
 /// the wrapping `Element`, another stack, or the outer frame in the tree if you need margins.
@@ -42,4 +42,4 @@ struct ZStack : ViewModifiers<ZStack> {
 
 };
 
-} // namespace lambda
+} // namespace lambdaui

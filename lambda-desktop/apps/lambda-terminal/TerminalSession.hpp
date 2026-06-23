@@ -2,13 +2,13 @@
 
 #include "TerminalCore.hpp"
 
-namespace lambda {
+namespace lambdaui {
 class Application;
 class Window;
-} // namespace lambda
+} // namespace lambdaui
 
 namespace lambda_terminal {
 
-void installTerminalView(lambda::Application& app, lambda::Window& window, TerminalConfig config);
+void installTerminalView(lambdaui::Application& app, lambdaui::Window& window, TerminalConfig config);
 
 } // namespace lambda_terminal

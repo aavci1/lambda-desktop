@@ -30,7 +30,7 @@
 #include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon.h>
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 WaylandServer::Impl::Surface* subsurfaceAt(WaylandServer::Impl* server,
                                            WaylandServer::Impl::Surface* parent,
@@ -64,9 +64,9 @@ WaylandServer::Impl::Surface* subsurfaceAt(WaylandServer::Impl* server,
   return nullptr;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using wm::aboveWindowLayerAt;
 using wm::ChromeHitContext;
@@ -147,9 +147,9 @@ WaylandServer::Impl::Surface* surfaceAt(WaylandServer::Impl* server, float x, fl
   return nullptr;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 WaylandServer::Impl::Surface* titlebarAt(WaylandServer::Impl* server, float x, float y) {
   auto context = topChromeHitContext(server, x, y);
@@ -160,9 +160,9 @@ WaylandServer::Impl::Surface* titlebarAt(WaylandServer::Impl* server, float x, f
              : nullptr;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 WaylandServer::Impl::Surface* closeButtonAt(WaylandServer::Impl* server, float x, float y) {
   auto context = topChromeHitContext(server, x, y);
@@ -170,9 +170,9 @@ WaylandServer::Impl::Surface* closeButtonAt(WaylandServer::Impl* server, float x
   return chromeButtonAt(*context, x, y) == ChromeButton::Close ? context->surface : nullptr;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 WaylandServer::Impl::Surface* minimizeButtonAt(WaylandServer::Impl* server, float x, float y) {
   auto context = topChromeHitContext(server, x, y);
@@ -180,9 +180,9 @@ WaylandServer::Impl::Surface* minimizeButtonAt(WaylandServer::Impl* server, floa
   return chromeButtonAt(*context, x, y) == ChromeButton::Minimize ? context->surface : nullptr;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 WaylandServer::Impl::Surface* maximizeButtonAt(WaylandServer::Impl* server, float x, float y) {
   auto context = topChromeHitContext(server, x, y);
@@ -190,9 +190,9 @@ WaylandServer::Impl::Surface* maximizeButtonAt(WaylandServer::Impl* server, floa
   return chromeButtonAt(*context, x, y) == ChromeButton::Maximize ? context->surface : nullptr;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 WaylandServer::Impl::Surface* resizeGripAt(WaylandServer::Impl* server, float x, float y, std::uint32_t& edges) {
   edges = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
@@ -204,9 +204,9 @@ WaylandServer::Impl::Surface* resizeGripAt(WaylandServer::Impl* server, float x,
   return context->surface;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 WaylandServer::Impl::Surface* resizeOrCloseChromeAt(WaylandServer::Impl* server,
                                                     float x,
@@ -229,9 +229,9 @@ WaylandServer::Impl::Surface* resizeOrCloseChromeAt(WaylandServer::Impl* server,
   return context->surface;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void setCompositorCursorOverride(WaylandServer::Impl* server, CursorShape shape) {
   if (!server) return;
@@ -239,9 +239,9 @@ void setCompositorCursorOverride(WaylandServer::Impl* server, CursorShape shape)
   server->compositorCursorShape_ = shape;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void clearCompositorCursorOverride(WaylandServer::Impl* server) {
   if (!server) return;
@@ -249,9 +249,9 @@ void clearCompositorCursorOverride(WaylandServer::Impl* server) {
   server->compositorCursorShape_ = CursorShape::Arrow;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void updateCompositorCursorForPointer(WaylandServer::Impl* server) {
   if (!server) return;
@@ -276,18 +276,18 @@ void updateCompositorCursorForPointer(WaylandServer::Impl* server) {
   clearCompositorCursorOverride(server);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool resourceBelongsToSurfaceClient(wl_resource* resource, WaylandServer::Impl::Surface const* surface) {
   return resource && surface && surface->resource &&
          wl_resource_get_client(resource) == wl_resource_get_client(surface->resource);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 namespace {
 
@@ -359,9 +359,9 @@ void sendPointerFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   updatePointerConstraintsForFocus(server);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using wm::popupForSurface;
 using wm::popupIsDescendantOf;
@@ -376,9 +376,9 @@ bool surfaceInGrabSubtree(WaylandServer::Impl* server, WaylandServer::Impl::Surf
   return popup && popupIsDescendantOf(server, popup, grabPopup);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using wm::popupForSurface;
 using wm::popupTrace;
@@ -402,9 +402,9 @@ void releasePopupGrab(WaylandServer::Impl* server, WaylandServer::Impl::XdgPopup
   }
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 using wm::dismissPopup;
 using wm::popupForSurface;
@@ -503,9 +503,9 @@ void establishPopupGrab(WaylandServer::Impl* server,
              serial);
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void sendRelativePointerMotion(WaylandServer::Impl* server, double dx, double dy, std::uint32_t timeMs) {
   if (!server->pointerFocus_ || (dx == 0.0 && dy == 0.0)) return;
@@ -528,9 +528,9 @@ void sendRelativePointerMotion(WaylandServer::Impl* server, double dx, double dy
   }
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 WaylandServer::Impl::XdgPopup* topmostPopup(WaylandServer::Impl* server) {
   for (auto it = server->popups_.rbegin(); it != server->popups_.rend(); ++it) {
@@ -541,9 +541,9 @@ WaylandServer::Impl::XdgPopup* topmostPopup(WaylandServer::Impl* server) {
   return nullptr;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool surfaceBelongsToPopup(WaylandServer::Impl::Surface* surface, WaylandServer::Impl::XdgPopup* popup) {
   if (!surface || !popup || !popup->xdgSurface || !popup->xdgSurface->surface) return false;
@@ -558,9 +558,9 @@ bool surfaceBelongsToPopup(WaylandServer::Impl::Surface* surface, WaylandServer:
   return false;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool dismissPopup(WaylandServer::Impl::XdgPopup* popup) {
   if (!popup || popup->dismissed) return false;
@@ -578,9 +578,9 @@ bool dismissPopup(WaylandServer::Impl::XdgPopup* popup) {
   return reset;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool dismissPopupGrab(WaylandServer::Impl* server) {
   if (!server || !server->popupGrabsEnabled_ || server->popupGrab_.popups.empty()) return false;
@@ -597,9 +597,9 @@ bool dismissPopupGrab(WaylandServer::Impl* server) {
   return true;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool dismissTopPopup(WaylandServer::Impl* server) {
   if (keyboardDismissShouldClearPopupGrab({
@@ -612,9 +612,9 @@ bool dismissTopPopup(WaylandServer::Impl* server) {
   return dismissPopup(topmostPopup(server));
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 bool dismissTopPopupOutside(WaylandServer::Impl* server, WaylandServer::Impl::Surface* target) {
   if (server->popupGrabsEnabled_ && xdgPopupGrabSyncTop(server->popupGrab_, server->grabPopup_)) {
@@ -627,9 +627,9 @@ bool dismissTopPopupOutside(WaylandServer::Impl* server, WaylandServer::Impl::Su
   return dismissPopup(popup);
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface* next) {
   if (!server) return;
@@ -677,18 +677,18 @@ void setKeyboardFocus(WaylandServer::Impl* server, WaylandServer::Impl::Surface*
   }
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 std::uint32_t modifierBit(std::uint32_t index, bool active) {
   if (!active || index == kInvalidModifierIndex || index >= 32u) return 0u;
   return 1u << index;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 std::uint32_t keyboardModifierMask(WaylandServer::Impl* server) {
   if (server && server->xkbState_) {
@@ -718,4 +718,4 @@ std::uint32_t keyboardLayoutIndex(WaylandServer::Impl* server) {
              : 0u;
 }
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm

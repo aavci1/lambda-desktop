@@ -8,7 +8,7 @@
 #include <cstddef>
 #include <limits>
 
-namespace lambda::layout {
+namespace lambdaui::layout {
 
 /// When the parent assigned a frame (width/height > 0), use it; otherwise use the finite constraint span.
 inline float assignedSpan(float parentSpan, float outerSpan) {
@@ -77,4 +77,4 @@ inline float vAlignOffset(float childH, float innerH, Alignment a) {
 
 constexpr float kFlexEpsilon = 1e-4f;
 
-} // namespace lambda::layout
+} // namespace lambdaui::layout

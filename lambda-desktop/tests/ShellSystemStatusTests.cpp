@@ -80,12 +80,12 @@ TEST_CASE("Shell system status reports unavailable or off states from shell prov
 
 #if LAMBDA_HAS_DBUS
 TEST_CASE("Shell battery status maps UPower display-device details") {
-  lambda::system::UPowerDisplayDevice device{
+  lambdaui::system::UPowerDisplayDevice device{
       .present = true,
       .onBattery = false,
       .percentage = 92.4,
-      .state = lambda::system::UPowerDeviceState::Charging,
-      .warningLevel = lambda::system::UPowerWarningLevel::None,
+      .state = lambdaui::system::UPowerDeviceState::Charging,
+      .warningLevel = lambdaui::system::UPowerWarningLevel::None,
       .timeToEmptySeconds = 0,
       .timeToFullSeconds = 1800,
       .iconName = "battery-full-charging-symbolic",

@@ -10,7 +10,7 @@
 #include <optional>
 #include <string>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 struct PortalAppChooserRequest {
   dbus::ObjectPath handle;
@@ -48,4 +48,4 @@ private:
   std::map<std::string, dbus::StringArray> updatedChoices_;
 };
 
-} // namespace lambda::system
+} // namespace lambdaui::system

@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kIdleInhibitVersion = 1;
 
@@ -21,4 +21,4 @@ inline constexpr std::uint32_t kIdleInhibitVersion = 1;
          surface->height > 0;
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

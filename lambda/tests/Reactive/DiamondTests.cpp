@@ -4,7 +4,7 @@
 
 #include <doctest/doctest.h>
 
-using namespace lambda::Reactive;
+using namespace lambdaui::Reactive;
 
 TEST_CASE("Reactive diamond graph is glitch-free") {
   Signal<int> source(1);

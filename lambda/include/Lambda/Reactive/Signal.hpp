@@ -2,9 +2,9 @@
 
 #include <Lambda/Reactive/Detail/Core.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 template<typename T>
 using Signal = Reactive::Signal<T>;
 
-} // namespace lambda
+} // namespace lambdaui

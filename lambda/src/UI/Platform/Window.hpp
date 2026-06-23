@@ -12,7 +12,7 @@
 #include <Lambda/UI/WindowChrome.hpp>
 #include <Lambda/UI/Window.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 class Window;
 class Canvas;
@@ -26,14 +26,14 @@ class Window {
 public:
   virtual ~Window() = default;
 
-  virtual void setLambdaWindow(::lambda::Window* window) = 0;
+  virtual void setLambdaWindow(::lambdaui::Window* window) = 0;
 
   /// Present the native window after the Lambda `Window` is registered and `setLambdaWindow` has run.
   /// Implementations should not order the window on screen before this (so lifecycle callbacks see a
   /// valid `Window*`). Default: no-op.
   virtual void show() {}
 
-  virtual std::unique_ptr<::lambda::Canvas> createCanvas(::lambda::Window& owner) = 0;
+  virtual std::unique_ptr<::lambdaui::Canvas> createCanvas(::lambdaui::Window& owner) = 0;
 
   virtual void resize(const Size& newSize) = 0;
   virtual void setMinSize(Size /*size*/) {}
@@ -96,4 +96,4 @@ public:
 };
 
 } // namespace platform
-} // namespace lambda
+} // namespace lambdaui

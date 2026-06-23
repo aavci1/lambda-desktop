@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda {
+namespace lambdaui {
 
 Toggle::Style resolveStyle(Toggle::Style const &style, Theme const &theme) {
     return Toggle::Style {
@@ -104,7 +104,7 @@ Element Toggle::body() const {
         .child = ZStack {
             .horizontalAlignment = Alignment::Start,
             .verticalAlignment = Alignment::Start,
-            .children = lambda::children(
+            .children = lambdaui::children(
                 Rectangle {}
                     .fill([trackFillAnim] {
                         return trackFillAnim();
@@ -133,4 +133,4 @@ Element Toggle::body() const {
     };
 }
 
-} // namespace lambda
+} // namespace lambdaui

@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lambda {
+namespace lambdaui {
 
 Size Rectangle::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                         LayoutHints const&, TextSystem&) const {
@@ -15,4 +15,4 @@ Size Rectangle::measure(MeasureContext& ctx, LayoutConstraints const& constraint
   return Size{width, height};
 }
 
-} // namespace lambda
+} // namespace lambdaui

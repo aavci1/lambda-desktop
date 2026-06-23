@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-using namespace lambda;
+using namespace lambdaui;
 using namespace lambda_editor;
 
 namespace {

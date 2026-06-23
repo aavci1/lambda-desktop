@@ -14,11 +14,11 @@
 #include <string_view>
 #include <vector>
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
 #include <vulkan/vulkan.h>
 #endif
 
-namespace lambda {
+namespace lambdaui {
 
 /// Abstract image reference; pixel dimensions drive UV normalization in `Canvas::drawImage`.
 class Image : public std::enable_shared_from_this<Image> {
@@ -75,7 +75,7 @@ public:
                                            PixelFormat format,
                                            void* gpuDevice = nullptr);
 
-#if LAMBDA_VULKAN
+#if LAMBDAUI_VULKAN
   struct DmabufPlane {
     int fd = -1;
     std::uint32_t offset = 0;
@@ -95,13 +95,13 @@ public:
   static std::shared_ptr<Image> fromExternalVulkan(VkImage image, VkImageView view, VkFormat format,
                                                    std::uint32_t width, std::uint32_t height);
 
-  /// Import a single-plane Linux dma-buf as a Vulkan sampled image on Linux (LAMBDA_VULKAN).
-  /// Not available on macOS/Metal builds: callers must guard with `#if LAMBDA_VULKAN` or platform checks.
+  /// Import a single-plane Linux dma-buf as a Vulkan sampled image on Linux (LAMBDAUI_VULKAN).
+  /// Not available on macOS/Metal builds: callers must guard with `#if LAMBDAUI_VULKAN` or platform checks.
   /// The supplied plane fd is consumed by this call whether import succeeds or fails.
   static std::shared_ptr<Image> fromDmabuf(DmabufImageSpec const& spec);
 #endif
 
-#if LAMBDA_METAL
+#if LAMBDAUI_METAL
   /// Create an image reference backed by a caller-owned id<MTLTexture>.
   /// The texture must outlive all rendering that references the returned Image.
   static std::shared_ptr<Image> fromExternalMetal(void* texture, std::uint32_t width, std::uint32_t height);
@@ -119,7 +119,7 @@ struct DecodedImageRgba {
 };
 
 /// Downscales decoded RGBA pixels so the longest edge is at most \p maxLongEdge.
-[[nodiscard]] lambda::DecodedImageRgba downscaleDecodedImageRgba(lambda::DecodedImageRgba image,
+[[nodiscard]] lambdaui::DecodedImageRgba downscaleDecodedImageRgba(lambdaui::DecodedImageRgba image,
                                                                std::uint32_t maxLongEdge);
 
 /// Decodes an image file to tightly packed RGBA pixels without creating a GPU image.
@@ -136,4 +136,4 @@ struct DecodedImageRgba {
 std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice = nullptr);
 std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice, std::uint32_t maxLongEdge);
 
-} // namespace lambda
+} // namespace lambdaui

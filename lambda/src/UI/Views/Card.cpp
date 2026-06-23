@@ -1,7 +1,7 @@
 #include <Lambda/UI/Views/Card.hpp>
 #include <Lambda/UI/Hooks.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -45,4 +45,4 @@ Element Card::body() const {
       .shadow(resolved.shadow);
 }
 
-} // namespace lambda
+} // namespace lambdaui

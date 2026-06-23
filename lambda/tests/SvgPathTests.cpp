@@ -2,7 +2,7 @@
 
 #include <doctest/doctest.h>
 
-using namespace lambda;
+using namespace lambdaui;
 
 namespace {
 

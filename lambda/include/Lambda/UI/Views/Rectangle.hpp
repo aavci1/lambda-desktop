@@ -9,7 +9,7 @@
 #include <Lambda/UI/Detail/PrimitiveForwards.hpp>
 #include <Lambda/UI/ViewModifiers.hpp>
 
-namespace lambda {
+namespace lambdaui {
 
 /// Axis-aligned rounded rect leaf. Size, layout-space position, flex, corners, paint, and interaction use
 /// \ref Element / \ref ViewModifiers (e.g. \c size, \c position, \c fill, \c stroke).
@@ -19,4 +19,4 @@ struct Rectangle : ViewModifiers<Rectangle> {
   constexpr bool operator==(Rectangle const&) const noexcept { return true; }
 };
 
-} // namespace lambda
+} // namespace lambdaui

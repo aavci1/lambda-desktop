@@ -23,7 +23,7 @@
 #include <optional>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -643,4 +643,4 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   return wrapper;
 }
 
-} // namespace lambda
+} // namespace lambdaui

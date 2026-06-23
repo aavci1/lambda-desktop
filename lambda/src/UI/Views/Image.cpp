@@ -8,7 +8,7 @@
 #include <cmath>
 #include <memory>
 
-namespace lambda::views {
+namespace lambdaui::views {
 
 namespace {
 
@@ -16,7 +16,7 @@ float finiteDimension(float value, float fallback) {
   return std::isfinite(value) ? std::max(0.f, value) : fallback;
 }
 
-Size naturalSize(std::shared_ptr<lambda::Image> const& image) {
+Size naturalSize(std::shared_ptr<lambdaui::Image> const& image) {
   if (!image) {
     return Size{};
   }
@@ -64,7 +64,7 @@ std::unique_ptr<scenegraph::SceneNode> Image::mount(MountContext& ctx) const {
   auto node = std::make_unique<scenegraph::ImageNode>(
       Rect{0.f, 0.f, frameSize.width, frameSize.height}, source, fillMode);
   auto* rawNode = node.get();
-  std::shared_ptr<lambda::Image> imageSource = source;
+  std::shared_ptr<lambdaui::Image> imageSource = source;
   rawNode->setLayoutConstraints(ctx.constraints());
   rawNode->setRelayout([rawNode, imageSource = std::move(imageSource)](
                            LayoutConstraints const& constraints) {
@@ -74,4 +74,4 @@ std::unique_ptr<scenegraph::SceneNode> Image::mount(MountContext& ctx) const {
   return node;
 }
 
-} // namespace lambda::views
+} // namespace lambdaui::views

@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-using namespace lambda;
+using namespace lambdaui;
 
 struct OutputRoot {
   std::string title;

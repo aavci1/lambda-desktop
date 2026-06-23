@@ -5,7 +5,7 @@
 
 struct wl_client;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kBackgroundEffectVersion = 4;
 
@@ -15,4 +15,4 @@ inline constexpr std::uint32_t kBackgroundEffectVersion = 4;
 
 void bindBackgroundEffectManager(wl_client* client, void* data, std::uint32_t version, std::uint32_t id);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

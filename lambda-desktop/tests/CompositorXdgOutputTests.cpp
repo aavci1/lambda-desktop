@@ -2,7 +2,7 @@
 
 #include <doctest/doctest.h>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 TEST_CASE("xdg output resources use the implemented protocol version") {
   CHECK(kXdgOutputVersion == 3);
@@ -35,4 +35,4 @@ TEST_CASE("xdg output logical-geometry updates include layout position") {
   CHECK(xdgOutputLogicalGeometryChanged(0, 0, 1920, 1080, 0, 0, 1920, 1440));
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

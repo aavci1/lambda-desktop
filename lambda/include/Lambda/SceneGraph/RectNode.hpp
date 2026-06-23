@@ -7,7 +7,7 @@
 #include <Lambda/Graphics/Styles.hpp>
 #include <Lambda/SceneGraph/SceneNode.hpp>
 
-namespace lambda::scenegraph {
+namespace lambdaui::scenegraph {
 
 class RectNode final : public SceneNode {
   public:
@@ -40,4 +40,4 @@ class RectNode final : public SceneNode {
     float opacity_ = 1.f;
 };
 
-} // namespace lambda::scenegraph
+} // namespace lambdaui::scenegraph

@@ -11,7 +11,7 @@
 #include <functional>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class FileDialogMode {
   Open,
@@ -29,4 +29,4 @@ struct FileDialog : ViewModifiers<FileDialog> {
   Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

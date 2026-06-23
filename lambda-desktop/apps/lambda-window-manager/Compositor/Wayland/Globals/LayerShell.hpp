@@ -6,7 +6,7 @@
 
 struct wl_client;
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 inline constexpr std::uint32_t kLayerShellVersion = 4;
 
@@ -18,4 +18,4 @@ void bindLayerShell(wl_client* client, void* data, std::uint32_t version, std::u
 void refreshShellReservedZones(WaylandServer::Impl* server);
 bool reconfigureLayerSurfacesForOutputGeometry(WaylandServer::Impl* server);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

@@ -10,7 +10,7 @@
 #include <string_view>
 #include <vector>
 
-namespace lambda::shell {
+namespace lambdaui::shell {
 
 enum class ShellMessageKind : std::uint8_t {
   Unknown,
@@ -91,4 +91,4 @@ std::string serializeWindowManagerError(std::string_view code,
                                         std::string_view message,
                                         std::uint64_t requestId = 0);
 
-} // namespace lambda::shell
+} // namespace lambdaui::shell

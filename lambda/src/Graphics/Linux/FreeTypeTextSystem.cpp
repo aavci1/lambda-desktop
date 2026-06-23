@@ -29,7 +29,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -800,4 +800,4 @@ std::vector<std::uint8_t> FreeTypeTextSystem::rasterizeGlyph(std::uint32_t fontI
   return out;
 }
 
-} // namespace lambda
+} // namespace lambdaui

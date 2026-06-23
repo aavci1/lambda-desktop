@@ -17,7 +17,7 @@
 #include <tuple>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 struct AlertButton {
   /// Button label text.
@@ -94,4 +94,4 @@ private:
 /// Must be called inside body() like other hooks.
 std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert();
 
-} // namespace lambda
+} // namespace lambdaui

@@ -12,7 +12,7 @@
 namespace lambda_shell {
 
 #if LAMBDA_HAS_DBUS
-[[nodiscard]] BatteryStatus batteryStatusFromUPower(lambda::system::UPowerDisplayDevice const& device);
+[[nodiscard]] BatteryStatus batteryStatusFromUPower(lambdaui::system::UPowerDisplayDevice const& device);
 #endif
 [[nodiscard]] SystemStatus readShellSystemStatus(std::filesystem::path sysRoot = "/sys");
 [[nodiscard]] SystemStatus readShellSystemStatus(std::filesystem::path sysRoot,

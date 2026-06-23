@@ -31,7 +31,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -1125,4 +1125,4 @@ Element FileDialog::body() const {
       .fill(FillStyle::solid(Color::windowBackground()));
 }
 
-} // namespace lambda
+} // namespace lambdaui

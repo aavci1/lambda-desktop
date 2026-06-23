@@ -8,7 +8,7 @@
 #include <optional>
 #include <vector>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 class TraversalContext {
 public:
@@ -72,4 +72,4 @@ private:
   bool useMeasurementRootKey_{false};
 };
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

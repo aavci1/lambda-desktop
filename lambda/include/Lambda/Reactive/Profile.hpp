@@ -2,16 +2,16 @@
 
 #include <cstdint>
 
-#ifndef LAMBDA_PROFILE_REACTIVE
-#define LAMBDA_PROFILE_REACTIVE 0
+#ifndef LAMBDAUI_PROFILE_REACTIVE
+#define LAMBDAUI_PROFILE_REACTIVE 0
 #endif
 
-#if LAMBDA_PROFILE_REACTIVE
+#if LAMBDAUI_PROFILE_REACTIVE
 #include <cstdio>
 #include <mach/mach_time.h>
 #endif
 
-namespace lambda::Reactive::detail::profile {
+namespace lambdaui::Reactive::detail::profile {
 
 enum class Bucket : std::uint8_t {
   SignalSet,
@@ -22,7 +22,7 @@ enum class Bucket : std::uint8_t {
   Count,
 };
 
-#if LAMBDA_PROFILE_REACTIVE
+#if LAMBDAUI_PROFILE_REACTIVE
 
 namespace detail {
 
@@ -178,4 +178,4 @@ inline void frameBoundary() {}
 
 #endif
 
-} // namespace lambda::Reactive::detail::profile
+} // namespace lambdaui::Reactive::detail::profile

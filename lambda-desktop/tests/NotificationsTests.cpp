@@ -16,9 +16,9 @@
 
 namespace {
 
-using lambda::testing::dbus::pollBus;
-using lambda::testing::dbus::pumpUntil;
-using lambda::testing::dbus::startPrivateBus;
+using lambdaui::testing::dbus::pollBus;
+using lambdaui::testing::dbus::pumpUntil;
+using lambdaui::testing::dbus::startPrivateBus;
 
 template <typename Callback>
 class ScopeExit {
@@ -30,20 +30,20 @@ private:
   Callback callback_;
 };
 
-std::shared_ptr<lambda::dbus::StructValue> notificationImageData() {
-  return std::make_shared<lambda::dbus::StructValue>(
-      lambda::dbus::StructValue{.signature = "iiibiiay",
+std::shared_ptr<lambdaui::dbus::StructValue> notificationImageData() {
+  return std::make_shared<lambdaui::dbus::StructValue>(
+      lambdaui::dbus::StructValue{.signature = "iiibiiay",
                                 .fields = {std::int32_t(1),
                                            std::int32_t(1),
                                            std::int32_t(4),
                                            true,
                                            std::int32_t(8),
                                            std::int32_t(4),
-                                           lambda::dbus::ByteArray{{0x11, 0x22, 0x33, 0xff}}}});
+                                           lambdaui::dbus::ByteArray{{0x11, 0x22, 0x33, 0xff}}}});
 }
 
-std::shared_ptr<lambda::dbus::VariantDictionary> notificationHints() {
-  auto hints = std::make_shared<lambda::dbus::VariantDictionary>();
+std::shared_ptr<lambdaui::dbus::VariantDictionary> notificationHints() {
+  auto hints = std::make_shared<lambdaui::dbus::VariantDictionary>();
   hints->values["urgency"] = std::uint8_t(2);
   hints->values["category"] = std::string("device.added");
   hints->values["desktop-entry"] = std::string("lambda-files");
@@ -60,8 +60,8 @@ std::shared_ptr<lambda::dbus::VariantDictionary> notificationHints() {
   return hints;
 }
 
-lambda::dbus::VariantDictionary policyHints(bool resident = false, bool transient = false) {
-  lambda::dbus::VariantDictionary hints;
+lambdaui::dbus::VariantDictionary policyHints(bool resident = false, bool transient = false) {
+  lambdaui::dbus::VariantDictionary hints;
   if (resident) {
     hints.values["resident"] = true;
   }
@@ -86,11 +86,11 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::NotificationsService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::NotificationsService::serviceName);
 
-  lambda::system::NotificationsService service(serviceBus, 4);
+  lambdaui::system::NotificationsService service(serviceBus, 4);
   auto objectSlot = service.exportObject();
 
   std::atomic<bool> running = true;
@@ -106,20 +106,20 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
     }
   });
 
-  auto capabilitiesReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::NotificationsService::serviceName,
-      .path = lambda::system::NotificationsService::objectPath,
-      .interface = lambda::system::NotificationsService::interfaceName,
+  auto capabilitiesReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::NotificationsService::serviceName,
+      .path = lambdaui::system::NotificationsService::objectPath,
+      .interface = lambdaui::system::NotificationsService::interfaceName,
       .member = "GetCapabilities",
   });
   auto capabilities = capabilitiesReply.readStringArray().values;
   CHECK(std::find(capabilities.begin(), capabilities.end(), "body") != capabilities.end());
   CHECK(std::find(capabilities.begin(), capabilities.end(), "actions") != capabilities.end());
 
-  auto serverReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::NotificationsService::serviceName,
-      .path = lambda::system::NotificationsService::objectPath,
-      .interface = lambda::system::NotificationsService::interfaceName,
+  auto serverReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::NotificationsService::serviceName,
+      .path = lambdaui::system::NotificationsService::objectPath,
+      .interface = lambdaui::system::NotificationsService::interfaceName,
       .member = "GetServerInformation",
   });
   CHECK(serverReply.readString() == "Lambda Notifications");
@@ -127,34 +127,34 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   CHECK(serverReply.readString() == "1.0");
   CHECK(serverReply.readString() == "1.2");
 
-  std::vector<lambda::system::NotificationPosted> postedSignals;
+  std::vector<lambdaui::system::NotificationPosted> postedSignals;
   auto postedSlot = client.matchSignal(
-      lambda::dbus::SignalMatch{
-          .sender = lambda::system::NotificationsService::serviceName,
-          .path = lambda::system::NotificationsService::objectPath,
-          .interface = lambda::system::NotificationsService::monitorInterfaceName,
-          .member = lambda::system::NotificationsService::postedSignalName,
+      lambdaui::dbus::SignalMatch{
+          .sender = lambdaui::system::NotificationsService::serviceName,
+          .path = lambdaui::system::NotificationsService::objectPath,
+          .interface = lambdaui::system::NotificationsService::monitorInterfaceName,
+          .member = lambdaui::system::NotificationsService::postedSignalName,
       },
-      [&](lambda::dbus::Message& message) {
+      [&](lambdaui::dbus::Message& message) {
         std::uint32_t const id = message.readUint32();
         std::string appName = message.readString();
         std::string appIcon = message.readString();
         std::string summary = message.readString();
         std::string body = message.readString();
         std::int32_t const expireTimeoutMs = message.readInt32();
-        std::vector<lambda::system::NotificationAction> actions;
+        std::vector<lambdaui::system::NotificationAction> actions;
         auto rawActions = message.readStringArray();
         for (std::size_t i = 0; i + 1u < rawActions.values.size(); i += 2u) {
-          actions.push_back(lambda::system::NotificationAction{
+          actions.push_back(lambdaui::system::NotificationAction{
               .key = rawActions.values[i],
               .label = rawActions.values[i + 1u],
           });
         }
-        lambda::system::NotificationHints hints;
+        lambdaui::system::NotificationHints hints;
         CHECK(message.signature(false).ends_with("a{sv}"));
         if (message.signature(false).ends_with("a{sv}")) {
           auto rawHints = message.readVariantDictionary();
-          hints.urgency = static_cast<lambda::system::NotificationUrgency>(
+          hints.urgency = static_cast<lambdaui::system::NotificationUrgency>(
               std::get<std::uint8_t>(rawHints.values.at("urgency")));
           if (auto it = rawHints.values.find("category"); it != rawHints.values.end()) {
             if (auto category = std::get_if<std::string>(&it->second)) {
@@ -177,7 +177,7 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
             }
           }
         }
-        postedSignals.push_back(lambda::system::NotificationPosted{
+        postedSignals.push_back(lambdaui::system::NotificationPosted{
             .id = id,
             .appName = std::move(appName),
             .appIcon = std::move(appIcon),
@@ -189,17 +189,17 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
         });
       });
 
-  auto notifyReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::NotificationsService::serviceName,
-      .path = lambda::system::NotificationsService::objectPath,
-      .interface = lambda::system::NotificationsService::interfaceName,
+  auto notifyReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::NotificationsService::serviceName,
+      .path = lambdaui::system::NotificationsService::objectPath,
+      .interface = lambdaui::system::NotificationsService::interfaceName,
       .member = "Notify",
       .arguments = {std::string("notify-send"),
                     std::uint32_t(0),
                     std::string("dialog-information"),
                     std::string("Build complete"),
                     std::string("Tests passed"),
-                    lambda::dbus::StringArray{{"default", "Open"}},
+                    lambdaui::dbus::StringArray{{"default", "Open"}},
                     notificationHints(),
                     std::int32_t(5000)},
   });
@@ -212,7 +212,7 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   REQUIRE(record->actions.size() == 1);
   CHECK(record->actions[0].key == "default");
   CHECK(record->actions[0].label == "Open");
-  CHECK(record->hints.urgency == lambda::system::NotificationUrgency::Critical);
+  CHECK(record->hints.urgency == lambdaui::system::NotificationUrgency::Critical);
   CHECK(record->hints.category == "device.added");
   CHECK(record->hints.desktopEntry == "lambda-files");
   CHECK(record->hints.imagePath == "file:///tmp/notification.png");
@@ -244,26 +244,26 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   CHECK(postedSignals.back().summary == "Build complete");
   CHECK(postedSignals.back().body == "Tests passed");
   CHECK(postedSignals.back().expireTimeoutMs == 5000);
-  CHECK(postedSignals.back().actions == std::vector<lambda::system::NotificationAction>{{.key = "default",
+  CHECK(postedSignals.back().actions == std::vector<lambdaui::system::NotificationAction>{{.key = "default",
                                                                                          .label = "Open"}});
-  CHECK(postedSignals.back().hints.urgency == lambda::system::NotificationUrgency::Critical);
+  CHECK(postedSignals.back().hints.urgency == lambdaui::system::NotificationUrgency::Critical);
   CHECK(postedSignals.back().hints.category == "device.added");
   CHECK(postedSignals.back().hints.desktopEntry == "lambda-files");
   CHECK(postedSignals.back().hints.suppressSound);
   CHECK(postedSignals.back().hints.transient);
 
-  auto replaceReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::NotificationsService::serviceName,
-      .path = lambda::system::NotificationsService::objectPath,
-      .interface = lambda::system::NotificationsService::interfaceName,
+  auto replaceReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::NotificationsService::serviceName,
+      .path = lambdaui::system::NotificationsService::objectPath,
+      .interface = lambdaui::system::NotificationsService::interfaceName,
       .member = "Notify",
       .arguments = {std::string("notify-send"),
                     id,
                     std::string("dialog-information"),
                     std::string("Build failed"),
                     std::string("One test failed"),
-                    lambda::dbus::StringArray{},
-                    lambda::dbus::EmptyVariantDictionary{},
+                    lambdaui::dbus::StringArray{},
+                    lambdaui::dbus::EmptyVariantDictionary{},
                     std::int32_t(-1)},
   });
   CHECK(replaceReply.readUint32() == id);
@@ -271,7 +271,7 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   REQUIRE(record);
   CHECK(record->summary == "Build failed");
   CHECK(record->body == "One test failed");
-  CHECK(record->hints.urgency == lambda::system::NotificationUrgency::Normal);
+  CHECK(record->hints.urgency == lambdaui::system::NotificationUrgency::Normal);
   CHECK(record->hints.category.empty());
   CHECK_FALSE(record->hints.imageData);
   CHECK_FALSE(record->hints.transient);
@@ -287,21 +287,21 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
   std::uint32_t closedId = 0;
   std::uint32_t closeReason = 0;
   auto closedSlot = client.matchSignal(
-      lambda::dbus::SignalMatch{
-          .sender = lambda::system::NotificationsService::serviceName,
-          .path = lambda::system::NotificationsService::objectPath,
-          .interface = lambda::system::NotificationsService::interfaceName,
+      lambdaui::dbus::SignalMatch{
+          .sender = lambdaui::system::NotificationsService::serviceName,
+          .path = lambdaui::system::NotificationsService::objectPath,
+          .interface = lambdaui::system::NotificationsService::interfaceName,
           .member = "NotificationClosed",
       },
-      [&](lambda::dbus::Message& message) {
+      [&](lambdaui::dbus::Message& message) {
         closedId = message.readUint32();
         closeReason = message.readUint32();
       });
 
-  auto closeReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::NotificationsService::serviceName,
-      .path = lambda::system::NotificationsService::objectPath,
-      .interface = lambda::system::NotificationsService::interfaceName,
+  auto closeReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::NotificationsService::serviceName,
+      .path = lambdaui::system::NotificationsService::objectPath,
+      .interface = lambdaui::system::NotificationsService::interfaceName,
       .member = "CloseNotification",
       .arguments = {id},
   });
@@ -316,18 +316,18 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
                                  "",
                                  "Action",
                                  "Body",
-                                 lambda::dbus::StringArray{{"default", "Open"}},
+                                 lambdaui::dbus::StringArray{{"default", "Open"}},
                                  -1);
   std::uint32_t invokedId = 0;
   std::string invokedAction;
   auto actionSlot = client.matchSignal(
-      lambda::dbus::SignalMatch{
-          .sender = lambda::system::NotificationsService::serviceName,
-          .path = lambda::system::NotificationsService::objectPath,
-          .interface = lambda::system::NotificationsService::interfaceName,
+      lambdaui::dbus::SignalMatch{
+          .sender = lambdaui::system::NotificationsService::serviceName,
+          .path = lambdaui::system::NotificationsService::objectPath,
+          .interface = lambdaui::system::NotificationsService::interfaceName,
           .member = "ActionInvoked",
       },
-      [&](lambda::dbus::Message& message) {
+      [&](lambdaui::dbus::Message& message) {
         invokedId = message.readUint32();
         invokedAction = message.readString();
       });
@@ -340,11 +340,11 @@ TEST_CASE("NotificationsService implements Freedesktop notification methods and 
 
   invokedId = 0;
   invokedAction.clear();
-  auto privateActionReply = client.call(lambda::dbus::MethodCall{
-      .destination = lambda::system::NotificationsService::serviceName,
-      .path = lambda::system::NotificationsService::objectPath,
-      .interface = lambda::system::NotificationsService::monitorInterfaceName,
-      .member = lambda::system::NotificationsService::invokeActionMethodName,
+  auto privateActionReply = client.call(lambdaui::dbus::MethodCall{
+      .destination = lambdaui::system::NotificationsService::serviceName,
+      .path = lambdaui::system::NotificationsService::objectPath,
+      .interface = lambdaui::system::NotificationsService::monitorInterfaceName,
+      .member = lambdaui::system::NotificationsService::invokeActionMethodName,
       .arguments = {actionId, std::string("default")},
   });
   CHECK(privateActionReply.valid());
@@ -362,25 +362,25 @@ TEST_CASE("NotificationsService expires and clears daemon history by policy") {
     return;
   }
 
-  auto serviceBus = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto client = lambda::dbus::Bus::openAddress(privateBus->address);
-  auto controlClient = lambda::dbus::Bus::openAddress(privateBus->address);
-  serviceBus.requestName(lambda::system::NotificationsService::serviceName);
+  auto serviceBus = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto client = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  auto controlClient = lambdaui::dbus::Bus::openAddress(privateBus->address);
+  serviceBus.requestName(lambdaui::system::NotificationsService::serviceName);
 
-  lambda::system::NotificationsService service(serviceBus, 8);
+  lambdaui::system::NotificationsService service(serviceBus, 8);
   auto objectSlot = service.exportObject();
 
-  std::vector<std::pair<std::uint32_t, lambda::system::NotificationCloseReason>> closedSignals;
+  std::vector<std::pair<std::uint32_t, lambdaui::system::NotificationCloseReason>> closedSignals;
   auto closedSlot = client.matchSignal(
-      lambda::dbus::SignalMatch{
-          .sender = lambda::system::NotificationsService::serviceName,
-          .path = lambda::system::NotificationsService::objectPath,
-          .interface = lambda::system::NotificationsService::interfaceName,
+      lambdaui::dbus::SignalMatch{
+          .sender = lambdaui::system::NotificationsService::serviceName,
+          .path = lambdaui::system::NotificationsService::objectPath,
+          .interface = lambdaui::system::NotificationsService::interfaceName,
           .member = "NotificationClosed",
       },
-      [&](lambda::dbus::Message& message) {
+      [&](lambdaui::dbus::Message& message) {
         closedSignals.push_back({message.readUint32(),
-                                 static_cast<lambda::system::NotificationCloseReason>(message.readUint32())});
+                                 static_cast<lambdaui::system::NotificationCloseReason>(message.readUint32())});
       });
 
   auto expiring = service.notify("app",
@@ -388,7 +388,7 @@ TEST_CASE("NotificationsService expires and clears daemon history by policy") {
                                  "",
                                  "Expiring",
                                  "Body",
-                                 lambda::dbus::StringArray{},
+                                 lambdaui::dbus::StringArray{},
                                  policyHints(),
                                  10);
   auto resident = service.notify("app",
@@ -396,7 +396,7 @@ TEST_CASE("NotificationsService expires and clears daemon history by policy") {
                                  "",
                                  "Resident",
                                  "Body",
-                                 lambda::dbus::StringArray{},
+                                 lambdaui::dbus::StringArray{},
                                  policyHints(true, false),
                                  10);
   auto sticky = service.notify("app",
@@ -404,7 +404,7 @@ TEST_CASE("NotificationsService expires and clears daemon history by policy") {
                                "",
                                "Sticky",
                                "Body",
-                               lambda::dbus::StringArray{},
+                               lambdaui::dbus::StringArray{},
                                policyHints(),
                                0);
   auto transient = service.notify("app",
@@ -412,7 +412,7 @@ TEST_CASE("NotificationsService expires and clears daemon history by policy") {
                                   "",
                                   "Transient",
                                   "Body",
-                                  lambda::dbus::StringArray{},
+                                  lambdaui::dbus::StringArray{},
                                   policyHints(false, true),
                                   10);
 
@@ -427,7 +427,7 @@ TEST_CASE("NotificationsService expires and clears daemon history by policy") {
   auto expiringRecord = service.notification(expiring);
   REQUIRE(expiringRecord);
   CHECK(expiringRecord->closed);
-  CHECK(expiringRecord->closeReason == lambda::system::NotificationCloseReason::Expired);
+  CHECK(expiringRecord->closeReason == lambdaui::system::NotificationCloseReason::Expired);
   auto residentRecord = service.notification(resident);
   REQUIRE(residentRecord);
   CHECK_FALSE(residentRecord->closed);
@@ -449,7 +449,7 @@ TEST_CASE("NotificationsService expires and clears daemon history by policy") {
     }
   });
 
-  std::uint32_t const cleared = lambda::system::NotificationsClient(std::move(controlClient)).clearHistory();
+  std::uint32_t const cleared = lambdaui::system::NotificationsClient(std::move(controlClient)).clearHistory();
   running = false;
   if (serviceThread.joinable()) {
     serviceThread.join();

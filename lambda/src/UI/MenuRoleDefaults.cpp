@@ -2,7 +2,7 @@
 
 #include <Lambda/UI/KeyCodes.hpp>
 
-namespace lambda::detail {
+namespace lambdaui::detail {
 
 std::string standardRoleActionName(MenuRole role) {
   switch (role) {
@@ -33,4 +33,4 @@ Shortcut standardRoleShortcut(MenuRole role) {
   }
 }
 
-} // namespace lambda::detail
+} // namespace lambdaui::detail

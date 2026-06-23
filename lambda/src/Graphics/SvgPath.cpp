@@ -7,7 +7,7 @@
 #include <numbers>
 #include <string>
 
-namespace lambda {
+namespace lambdaui {
 
 namespace {
 
@@ -444,4 +444,4 @@ Path parseSvgPath(std::string_view d, SvgPathParseError* error) {
   return Parser{d}.parse(error);
 }
 
-} // namespace lambda
+} // namespace lambdaui

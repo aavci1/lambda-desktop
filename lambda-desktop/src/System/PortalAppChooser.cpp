@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 namespace {
 
@@ -116,4 +116,4 @@ std::optional<std::string> PortalAppChooserService::choose(dbus::StringArray con
   return choices.values.front();
 }
 
-} // namespace lambda::system
+} // namespace lambdaui::system

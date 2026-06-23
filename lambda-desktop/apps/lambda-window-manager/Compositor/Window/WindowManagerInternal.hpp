@@ -14,7 +14,7 @@
 
 struct wl_resource;
 
-namespace lambda::compositor::wm {
+namespace lambdaui::compositor::wm {
 
 constexpr std::int32_t kTitleBarHeight = kCompositorTitleBarHeight;
 constexpr std::int32_t kMinWindowWidth = kCompositorMinWindowWidth;
@@ -53,20 +53,20 @@ ChromeButton chromeButtonAt(ChromeHitContext const& context, float x, float y);
 
 bool isManagedToplevel(WaylandServer::Impl::Surface const* surface);
 inline bool toplevelHasPendingUncommittedFrame(WaylandServer::Impl::Surface const* surface) {
-  return lambda::compositor::surfaceHasPendingUncommittedFrame(surface);
+  return lambdaui::compositor::surfaceHasPendingUncommittedFrame(surface);
 }
 inline FrameDisplaySize liveFrameDisplaySize(WaylandServer::Impl::Surface const* surface) {
-  SurfaceDisplaySize const size = lambda::compositor::surfaceLiveDisplaySize(surface);
+  SurfaceDisplaySize const size = lambdaui::compositor::surfaceLiveDisplaySize(surface);
   return {
       .width = size.width,
       .height = size.height,
   };
 }
 inline bool surfaceHasCommittedDisplaySize(WaylandServer::Impl::Surface const* surface) {
-  return lambda::compositor::surfaceHasCommittedDisplaySize(surface);
+  return lambdaui::compositor::surfaceHasCommittedDisplaySize(surface);
 }
 inline FrameDisplaySize interactiveFrameDisplaySize(WaylandServer::Impl::Surface const* surface) {
-  SurfaceDisplaySize const size = lambda::compositor::surfaceInteractiveDisplaySize(surface);
+  SurfaceDisplaySize const size = lambdaui::compositor::surfaceInteractiveDisplaySize(surface);
   return {
       .width = size.width,
       .height = size.height,
@@ -392,4 +392,4 @@ bool handleScreenshotSelectionKey(WaylandServer::Impl* server,
                                   bool pressed,
                                   std::uint32_t timeMs);
 
-} // namespace lambda::compositor::wm
+} // namespace lambdaui::compositor::wm

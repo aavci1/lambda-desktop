@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class MenuRole : std::uint8_t {
   None,
@@ -85,4 +85,4 @@ struct PopupMenu {
   std::vector<MenuItem> items;
 };
 
-} // namespace lambda
+} // namespace lambdaui

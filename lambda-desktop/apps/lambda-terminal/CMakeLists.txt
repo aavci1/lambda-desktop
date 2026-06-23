@@ -50,7 +50,7 @@ if(APPLE)
   set_target_properties(libvterm_static PROPERTIES OSX_ARCHITECTURES "arm64;x86_64")
 endif()
 
-lambda_add_app(lambda-terminal
+lambdaui_add_app(lambda-terminal
   APP_NAME "Lambda Terminal"
   BUNDLE_IDENTIFIER "io.lambda.terminal"
   COMMENT "Terminal emulator for Lambda Desktop"
@@ -58,8 +58,8 @@ lambda_add_app(lambda-terminal
     main.cpp
     TerminalCore.cpp
     TerminalSession.cpp
-    ${PROJECT_SOURCE_DIR}/lambda-desktop/apps/lambda-shell/Shell/ShellAppRegistry.cpp)
+    ${LAMBDA_DESKTOP_SOURCE_DIR}/apps/lambda-shell/Shell/ShellAppRegistry.cpp)
 
 target_include_directories(lambda-terminal PRIVATE
-  ${PROJECT_SOURCE_DIR}/lambda-desktop/apps/lambda-shell)
+  ${LAMBDA_DESKTOP_SOURCE_DIR}/apps/lambda-shell)
 target_link_libraries(lambda-terminal PRIVATE libvterm_static tomlplusplus::tomlplusplus util)

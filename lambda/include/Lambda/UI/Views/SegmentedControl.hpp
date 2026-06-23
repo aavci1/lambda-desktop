@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda {
+namespace lambdaui {
 
 struct SegmentedControlOption {
     /// Segment label text.
@@ -65,4 +65,4 @@ struct SegmentedControl : ViewModifiers<SegmentedControl> {
     Element body() const;
 };
 
-} // namespace lambda
+} // namespace lambdaui

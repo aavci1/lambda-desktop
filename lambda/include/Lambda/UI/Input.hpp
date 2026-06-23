@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace lambda {
+namespace lambdaui {
 
 enum class FocusInputKind : std::uint8_t { Pointer, Keyboard };
 
@@ -34,4 +34,4 @@ constexpr bool any(Modifiers m) {
   return static_cast<std::uint32_t>(m) != 0;
 }
 
-} // namespace lambda
+} // namespace lambdaui

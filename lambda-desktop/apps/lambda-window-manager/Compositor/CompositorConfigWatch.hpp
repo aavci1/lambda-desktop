@@ -10,7 +10,7 @@
 #include <filesystem>
 #include <functional>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 class AsyncWallpaperLoader;
 
@@ -19,7 +19,7 @@ struct CompositorConfigWatchContext {
   AppliedCompositorConfig& appliedConfig;
   WaylandServer& wayland;
   Presenter& presenter;
-  lambda::Canvas& canvas;
+  lambdaui::Canvas& canvas;
   std::function<CompositorConfig()> effectiveConfig;
   std::function<void(bool forceOutputScale)> applyOutputScale;
   AsyncWallpaperLoader* wallpaperLoader = nullptr;
@@ -32,4 +32,4 @@ bool maybeReloadCompositorConfig(CompositorConfigWatchContext& ctx);
 
 void applyCompositorRuntimeConfig(CompositorConfigWatchContext& ctx, bool forceOutputScale = false);
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

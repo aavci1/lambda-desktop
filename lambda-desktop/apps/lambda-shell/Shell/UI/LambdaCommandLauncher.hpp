@@ -9,7 +9,7 @@ namespace lambda_shell {
 struct LambdaCommandLauncher {
   CommandLauncherProps props;
 
-  lambda::Element body() const;
+  lambdaui::Element body() const;
 };
 
 } // namespace lambda_shell

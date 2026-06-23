@@ -3,7 +3,7 @@
 
 #include <algorithm>
 
-namespace lambda {
+namespace lambdaui {
 
 Font resolveFont(Font const& override, Font const& themeValue) {
   if (override.semanticToken() == 1) {
@@ -519,4 +519,4 @@ Theme Theme::withDensity(float d) const {
   return t;
 }
 
-} // namespace lambda
+} // namespace lambdaui

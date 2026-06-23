@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-namespace lambda::system {
+namespace lambdaui::system {
 
 struct MPRISMetadata {
   std::string trackId;
@@ -147,4 +147,4 @@ private:
     std::vector<MPRISPlayerSnapshot> const& players);
 [[nodiscard]] std::string formatMPRISStatus(std::vector<MPRISPlayerSnapshot> const& players);
 
-} // namespace lambda::system
+} // namespace lambdaui::system

@@ -24,12 +24,12 @@ void printUsage(char const* argv0) {
 } // namespace
 
 int main(int argc, char** argv) {
-  lambda::compositor::diagnostics::initializeCrashLog();
-  lambda::compositor::diagnostics::installCrashHandlers();
-  lambda::compositor::diagnostics::initializeCpuSampler();
-  lambda::compositor::diagnostics::crashLog("main argc=%d", argc);
+  lambdaui::compositor::diagnostics::initializeCrashLog();
+  lambdaui::compositor::diagnostics::installCrashHandlers();
+  lambdaui::compositor::diagnostics::initializeCpuSampler();
+  lambdaui::compositor::diagnostics::crashLog("main argc=%d", argc);
 
-  lambda::compositor::KmsCompositorOptions options{};
+  lambdaui::compositor::KmsCompositorOptions options{};
   for (int i = 1; i < argc; ++i) {
     std::string_view const arg(argv[i] ? argv[i] : "");
     if (arg == "--help" || arg == "-h") {
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
   // Ctrl+C belongs to the focused Wayland client. The compositor exits via
   // SIGTERM or its configured terminate shortcut.
   std::signal(SIGINT, SIG_IGN);
-  int const status = lambda::compositor::runKmsCompositor(gRunning, options);
-  lambda::compositor::diagnostics::crashLog("main exit status=%d", status);
+  int const status = lambdaui::compositor::runKmsCompositor(gRunning, options);
+  lambdaui::compositor::diagnostics::crashLog("main exit status=%d", status);
   return status;
 }

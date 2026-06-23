@@ -8,7 +8,7 @@
 
 #include <cstring>
 
-namespace lambda::linux_platform {
+namespace lambdaui::linux_platform {
 
 static KeyCode keyCodeFromXkbKeysym(xkb_keysym_t sym);
 static std::string utf8FromXkbKeysym(xkb_keysym_t sym);
@@ -248,4 +248,4 @@ static std::string utf8FromXkbKeysym(xkb_keysym_t sym) {
   return std::string(buffer, static_cast<std::size_t>(n - 1));
 }
 
-} // namespace lambda::linux_platform
+} // namespace lambdaui::linux_platform

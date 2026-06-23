@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda::compositor::presentation {
+namespace lambdaui::compositor::presentation {
 
 PresentationTiming presentationTimingFromVblank(platform::KmsOutput::VblankTiming const& vblank,
                                                 std::uint32_t refreshMilliHz,
@@ -20,7 +20,7 @@ PresentationTiming presentationTimingFromVblank(platform::KmsOutput::VblankTimin
   };
 }
 
-void printOutputs(std::vector<lambda::platform::KmsOutput> const& outputs) {
+void printOutputs(std::vector<lambdaui::platform::KmsOutput> const& outputs) {
   std::fprintf(stderr, "lambda-window-manager: connected KMS outputs:\n");
   for (std::size_t i = 0; i < outputs.size(); ++i) {
     auto const& output = outputs[i];
@@ -34,7 +34,7 @@ void printOutputs(std::vector<lambda::platform::KmsOutput> const& outputs) {
   }
 }
 
-std::optional<std::size_t> selectOutputIndex(std::vector<lambda::platform::KmsOutput> const& outputs,
+std::optional<std::size_t> selectOutputIndex(std::vector<lambdaui::platform::KmsOutput> const& outputs,
                                              std::optional<std::string> const& selector) {
   std::vector<std::string> names;
   names.reserve(outputs.size());
@@ -42,4 +42,4 @@ std::optional<std::size_t> selectOutputIndex(std::vector<lambda::platform::KmsOu
   return selectOutputNameIndex(std::span<std::string const>(names.data(), names.size()), selector);
 }
 
-} // namespace lambda::compositor::presentation
+} // namespace lambdaui::compositor::presentation

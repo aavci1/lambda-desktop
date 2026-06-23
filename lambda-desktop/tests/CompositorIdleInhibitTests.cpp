@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace lambda::compositor {
+namespace lambdaui::compositor {
 
 TEST_CASE("idle inhibit resources use the implemented protocol version") {
   CHECK(kIdleInhibitVersion == 1);
@@ -39,4 +39,4 @@ TEST_CASE("idle inhibitor policy requires an active surface") {
   CHECK_FALSE(idleInhibitorSurfaceActive(&surface));
 }
 
-} // namespace lambda::compositor
+} // namespace lambdaui::compositor

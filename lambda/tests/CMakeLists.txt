@@ -1,4 +1,4 @@
-target_compile_definitions(lambda PRIVATE LAMBDA_TESTING=1)
+target_compile_definitions(lambdaui PRIVATE LAMBDAUI_TESTING=1)
 
 set(CMAKE_POLICY_VERSION_MINIMUM 3.10 CACHE STRING "" FORCE)
 if(POLICY CMP0127)
@@ -43,11 +43,11 @@ set(_lambda_test_sources
   TextInputScrollTests.cpp
   ThemeReactivityTests.cpp)
 
-if(LAMBDA_PLATFORM_MACOS)
+if(LAMBDAUI_PLATFORM_MACOS)
   list(APPEND _lambda_test_sources MetalCanvasTests.mm)
 endif()
 
-if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND OR LAMBDAUI_PLATFORM_LINUX_KMS)
   list(APPEND _lambda_test_sources
     FreeTypeTextSystemTests.cpp
     VulkanRenderTargetTests.cpp
@@ -56,14 +56,14 @@ endif()
 
 add_executable(lambda-tests ${_lambda_test_sources})
 target_include_directories(lambda-tests PRIVATE
-  ${LAMBDA_FRAMEWORK_INCLUDE_DIR}
-  ${LAMBDA_FRAMEWORK_SOURCE_DIR}
-  ${LAMBDA_FRAMEWORK_PROTOCOL_DIR}/wayland)
+  ${LAMBDAUI_FRAMEWORK_INCLUDE_DIR}
+  ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}
+  ${LAMBDAUI_FRAMEWORK_PROTOCOL_DIR}/wayland)
 target_link_libraries(lambda-tests PRIVATE
-  lambda
+  lambdaui
   doctest::doctest)
 
-if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND OR LAMBDAUI_PLATFORM_LINUX_KMS)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
   pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
@@ -77,15 +77,15 @@ if(LAMBDA_PLATFORM_LINUX_WAYLAND OR LAMBDA_PLATFORM_LINUX_KMS)
   endif()
 endif()
 
-if(LAMBDA_PLATFORM_MACOS)
+if(LAMBDAUI_PLATFORM_MACOS)
   target_link_libraries(lambda-tests PRIVATE
     "-framework Foundation"
     "-framework Metal")
 endif()
 
-target_compile_definitions(lambda-tests PRIVATE LAMBDA_TESTING=1)
+target_compile_definitions(lambda-tests PRIVATE LAMBDAUI_TESTING=1)
 set_target_properties(lambda-tests PROPERTIES CXX_STANDARD 23)
-if(LAMBDA_ENABLE_ASAN)
+if(LAMBDAUI_ENABLE_ASAN)
   target_compile_options(lambda-tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
   target_link_options(lambda-tests PRIVATE -fsanitize=address)
 endif()
