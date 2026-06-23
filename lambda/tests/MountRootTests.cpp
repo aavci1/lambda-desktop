@@ -918,6 +918,42 @@ TEST_CASE("MountRoot repeated resize applies each viewport synchronously without
   CHECK(bodyCalls == 1);
 }
 
+TEST_CASE("centered stack text keeps intrinsic width while resizing") {
+  struct Root {
+    lambda::Element body() const {
+      return lambda::VStack{
+          .alignment = lambda::Alignment::Center,
+          .children = lambda::children(lambda::Text{
+              .text = "Title",
+              .font = lambda::Font::largeTitle(),
+          }),
+      };
+    }
+  };
+
+  MeasuringTextSystem textSystem;
+  lambda::scenegraph::SceneGraph sceneGraph;
+  lambda::MountRoot root{
+      std::make_unique<lambda::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      lambda::Size{200.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == lambda::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().children().size() == 1);
+  auto const& title = *sceneGraph.root().children()[0];
+  CHECK(title.size().width == doctest::Approx(30.f));
+  CHECK(title.position().x == doctest::Approx(85.f));
+
+  root.resize(lambda::Size{320.f, 100.f}, sceneGraph);
+
+  CHECK(title.size().width == doctest::Approx(30.f));
+  CHECK(title.position().x == doctest::Approx(145.f));
+}
+
 TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
   struct Root {
     lambda::Element body() const {

@@ -122,6 +122,32 @@ bool fixedFiniteHeight(LayoutConstraints const& constraints) {
   return positiveFinite(constraints.maxHeight) && constraints.minHeight >= constraints.maxHeight - 1e-4f;
 }
 
+float textMeasureWidth(TextWrapping wrapping, LayoutConstraints const& constraints) {
+  if (wrapping == TextWrapping::NoWrap) {
+    return 0.f;
+  }
+  return std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
+}
+
+Size measuredTextFrameSize(TextSystem& textSystem,
+                           std::string const& text,
+                           Font const& font,
+                           Color const& color,
+                           TextLayoutOptions const& options,
+                           TextWrapping wrapping,
+                           LayoutConstraints const& constraints) {
+  Size size = textSystem.measure(text, font, color, textMeasureWidth(wrapping, constraints), options);
+  if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
+    size.width = std::min(size.width, constraints.maxWidth);
+  }
+  if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
+    size.height = std::min(size.height, constraints.maxHeight);
+  }
+  size.width = std::max(size.width, constraints.minWidth);
+  size.height = std::max(size.height, constraints.minHeight);
+  return size;
+}
+
 bool finiteHeightIsConstrained(LayoutConstraints const& constraints, LayoutHints const& hints) {
   return axisStretches(hints.zStackVerticalAlign) ||
          (!hints.zStackVerticalAlign.has_value() && fixedFiniteHeight(constraints));
@@ -391,16 +417,8 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
   TextLayoutOptions const options = textLayoutOptions(text);
   std::string const initialText = text.text.evaluate();
 
-  Size frameSize = assignedSize(ctx.constraints());
-  if (frameSize.width <= 0.f || frameSize.height <= 0.f) {
-    float maxWidth = std::isfinite(ctx.constraints().maxWidth) ? ctx.constraints().maxWidth : 0.f;
-    if (text.wrapping == TextWrapping::NoWrap) {
-      maxWidth = 0.f;
-    }
-    Size measured = ctx.textSystem().measure(initialText, font, color, maxWidth, options);
-    frameSize.width = frameSize.width > 0.f ? frameSize.width : measured.width;
-    frameSize.height = frameSize.height > 0.f ? frameSize.height : measured.height;
-  }
+  Size frameSize = measuredTextFrameSize(ctx.textSystem(), initialText, font, color, options,
+                                         text.wrapping, ctx.constraints());
 
   Rect const box{0.f, 0.f, finiteOrZero(frameSize.width), finiteOrZero(frameSize.height)};
   auto layout = canUseDirectTextLayout(options)
@@ -423,17 +441,8 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
     std::string const currentText = relayoutTextBinding.evaluate();
     Color const currentColor =
         resolveColor(relayoutColorBinding.evaluate(), currentTheme.labelColor, currentTheme);
-    Size currentSize = assignedSize(constraints);
-    if (currentSize.width <= 0.f || currentSize.height <= 0.f) {
-      float maxWidth = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
-      if (wrapping == TextWrapping::NoWrap) {
-        maxWidth = 0.f;
-      }
-      Size const measured =
-          textSystemForRelayout->measure(currentText, currentFont, currentColor, maxWidth, options);
-      currentSize.width = currentSize.width > 0.f ? currentSize.width : measured.width;
-      currentSize.height = currentSize.height > 0.f ? currentSize.height : measured.height;
-    }
+    Size currentSize = measuredTextFrameSize(*textSystemForRelayout, currentText, currentFont,
+                                             currentColor, options, wrapping, constraints);
     Rect const currentBox{0.f, 0.f, finiteOrZero(currentSize.width), finiteOrZero(currentSize.height)};
     rawNode->setSize(Size{currentBox.width, currentBox.height});
     if (currentText == lastText && currentColor == lastColor && currentFont == lastFont &&
@@ -478,13 +487,8 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
         lastFont = currentFont;
         Size currentSize = rawNode->size();
         if (currentSize.width <= 0.f || currentSize.height <= 0.f) {
-          float maxWidth = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
-          if (wrapping == TextWrapping::NoWrap) {
-            maxWidth = 0.f;
-          }
-          Size const measured = textSystem->measure(currentText, currentFont, currentColor, maxWidth, options);
-          currentSize.width = currentSize.width > 0.f ? currentSize.width : measured.width;
-          currentSize.height = currentSize.height > 0.f ? currentSize.height : measured.height;
+          currentSize = measuredTextFrameSize(*textSystem, currentText, currentFont, currentColor,
+                                              options, wrapping, constraints);
           rawNode->setSize(currentSize);
         }
         Rect const currentBox{0.f, 0.f, finiteOrZero(currentSize.width), finiteOrZero(currentSize.height)};

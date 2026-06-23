@@ -141,4 +141,4 @@ Lambda v5 mounts UI once and updates retained scene nodes through reactive depen
 
 ## Examples
 
-Demos are intentionally small and are registered by `lambda_add_demo()` in [`lambda/demos/CMakeLists.txt`](../lambda/demos/CMakeLists.txt). Shared v5 demo scaffolding lives in [`lambda/demos/common/V5ExampleApp.hpp`](../lambda/demos/common/V5ExampleApp.hpp).
+Demos are intentionally small and are registered by `lambda_add_demo()` in [`lambda/demos/CMakeLists.txt`](../lambda/demos/CMakeLists.txt).

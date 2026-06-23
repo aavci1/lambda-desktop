@@ -133,11 +133,13 @@ struct ToggleDemoRoot {
                             .text = "Toggle Demo",
                             .font = Font::largeTitle(),
                             .color = Color::primary(),
+                            .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
                             .text = "A cleaner toggle showcase with realistic settings rows, styling variations, and compact control density.",
                             .font = Font::body(),
                             .color = Color::secondary(),
+                            .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
                         makeSectionCard(
